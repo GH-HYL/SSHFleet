@@ -217,6 +217,7 @@ def go_to_go(args: argparse.Namespace, config: SSHExecConfig, nodesinfo: List[Di
         exe_path = config.paths.exe.batch_tool_windows
     elif os.name == 'posix':
         exe_path = config.paths.exe.batch_tool_linux
+        os.chmod(exe_path, 0o755)
     else:
         utils.print_error_informantion_and_exit("gotogo.go_to_go", f"不支持的平台: {os.name}")
     
