@@ -261,13 +261,13 @@ def go_to_go(args: argparse.Namespace, config: SSHExecConfig, nodesinfo: List[Di
         completion_event = threading.Event()
 
         # 创建新线程专门处理与Go程序的网络通信
-        conn_thread = threading.Thread(
+        monitor_thread = threading.Thread(
             target=handle_go_connection, 
             args=(conn, completion_event, node_progress, node_task, total_nodes, results),
             name="SSHExecMonitorServerThread",
             daemon=True  # 设置为守护线程，主线程退出时自动结束
         )
-        conn_thread.start()
+        monitor_thread.start()
 
         # 等待Go程序进程执行完成
         tlog.debug(f"日志内容轮转到文件: {exec_log_dir}/{config.paths.logs.exec}")
@@ -275,9 +275,9 @@ def go_to_go(args: argparse.Namespace, config: SSHExecConfig, nodesinfo: List[Di
         tlog.info("Go程序 - “执行”进程已退出")
 
         # 等待连接处理线程完成，最多等待10秒
-        conn_thread.join(timeout=10.0)
+        monitor_thread.join(timeout=10.0)
         
-        if conn_thread.is_alive():
+        if monitor_thread.is_alive():
             tlog.warning("Monitor Server - 线程超时，强制结束")
         else:
             tlog.info("Monitor Server - 线程已正常结束")

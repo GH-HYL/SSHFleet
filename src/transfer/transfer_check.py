@@ -100,16 +100,16 @@ def check_single_path_writable(conn: Connection, current_path: str, use_sudo: bo
     
     # 检查路径是否可写
     try:
-        if use_sudo:
-            conn.sudo(f"touch {test_file}", hide=True, encoding="utf-8")
-            conn.sudo(f"rm -f {test_file}", hide=True, encoding="utf-8")
-        else:
-            conn.run(f"touch {test_file}", hide=True, encoding="utf-8")
-            conn.run(f"rm -f {test_file}", hide=True, encoding="utf-8")
+        # if use_sudo:
+        #     conn.sudo(f"touch {test_file}", hide=True, encoding="utf-8")
+        #     conn.sudo(f"rm -f {test_file}", hide=True, encoding="utf-8")
+        # else:
+        #     conn.run(f"touch {test_file}", hide=True, encoding="utf-8")
+        conn.run(f"test -w {test_file}", hide=True, encoding="utf-8")
         elog.info(f"可写性检查 - 路径可写: {current_path}")
     except UnexpectedExit as e:
-        elog.error(f"可写性检查 - 创建或删除测试文件{test_file}失败\n异常类型：\n{type(e)}\n异常信息：\n{e}")
-        raise Exception("创建测试文件失败")
+        elog.error(f"可写性检查 - 目标路径{test_file}不可写\n异常类型：\n{type(e)}\n异常信息：\n{e}")
+        raise Exception("目标不可写")
 
 
 def perform_pre_checks(conn: Connection, remote_path: str, original_size: int, use_sudo: bool, result: Dict[str, Any]) -> None:
