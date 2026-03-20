@@ -100,12 +100,12 @@ def check_single_path_writable(conn: Connection, current_path: str, use_sudo: bo
     
     # 检查路径是否可写
     try:
-        # if use_sudo:
-        #     conn.sudo(f"touch {test_file}", hide=True, encoding="utf-8")
-        #     conn.sudo(f"rm -f {test_file}", hide=True, encoding="utf-8")
-        # else:
-        #     conn.run(f"touch {test_file}", hide=True, encoding="utf-8")
-        conn.run(f"test -w {test_file}", hide=True, encoding="utf-8")
+        if use_sudo:
+            conn.sudo(f"touch {test_file}", hide=True, encoding="utf-8")
+            conn.sudo(f"rm -f {test_file}", hide=True, encoding="utf-8")
+        else:
+            conn.run(f"touch {test_file}", hide=True, encoding="utf-8")
+        # conn.run(f"test -w {test_file}", hide=True, encoding="utf-8")
         elog.info(f"可写性检查 - 路径可写: {current_path}")
     except UnexpectedExit as e:
         elog.error(f"可写性检查 - 目标路径{test_file}不可写\n异常类型：\n{type(e)}\n异常信息：\n{e}")

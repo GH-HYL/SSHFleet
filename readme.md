@@ -55,8 +55,7 @@ SSHexec是一款企业级？SSH批量运维工具，基于Python 3.14开发，�
 └── src/                          # 源代码文件夹
     ├── go/                       # go语言的执行器文件夹
     │   ├── batch_ssh             # 执行器（linux可执行文件）
-    │   ├── batch_ssh.exe         # 执行器（windows可执行文件）
-    │   └── go.py                 # 执行器入口
+    │   └── batch_ssh.exe         # 执行器（windows可执行文件）
     ├── transfer/                 # 传输模块
     │   ├── transfer_check.py     # 传输检查文件
     │   ├── transfer_utils.py     # 传输工具文件
@@ -68,6 +67,7 @@ SSHexec是一款企业级？SSH批量运维工具，基于Python 3.14开发，�
     ├── check.py                  # 检查文件
     ├── color.py                  # 颜色文件
     ├── core.py                   # 核心代码文件
+    ├── gotogo.py                 # go to GO 文件
     ├── dicts.py                  # 字典文件
     ├── output.py                 # 打印结果文件
     ├── toml.py                   # 配置读取文件
