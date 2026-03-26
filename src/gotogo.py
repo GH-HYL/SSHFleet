@@ -8,6 +8,7 @@ import os
 import socket
 import subprocess
 import threading
+from threading import Thread
 from typing import List, Dict
 from rich.console import Console
 from rich.live import Live
@@ -117,7 +118,7 @@ def handle_go_connection(conn: socket.socket, completion_event: threading.Event,
             pass
 
 
-def capture_subprocess_output(process: subprocess.Popen) -> None:
+def capture_subprocess_output(process: subprocess.Popen) -> tuple[Thread, Thread]:
     """
     功能：
         捕获Go子进程的标准输出和错误输出，并实时显示在控制台
@@ -129,7 +130,6 @@ def capture_subprocess_output(process: subprocess.Popen) -> None:
         无返回值
     """
 
-    # noinspection PyUnusedLocal
     def read_stream(stream, is_error=False):
         """
         内部函数：读取流数据的线程函数
@@ -142,7 +142,8 @@ def capture_subprocess_output(process: subprocess.Popen) -> None:
                 if not line:
                     break
                 # 直接输出到控制台
-                print(line.strip(), flush=True)
+                # print(line.strip(), flush=True)
+                print(line.strip())
         except Exception:
             pass
     
@@ -151,7 +152,7 @@ def capture_subprocess_output(process: subprocess.Popen) -> None:
     stderr_thread = threading.Thread(target=read_stream, args=(process.stderr, True), daemon=True)
     stdout_thread.start()
     stderr_thread.start()
-
+    return stdout_thread, stderr_thread
 
 def go_to_go(args: argparse.Namespace, config: SSHExecConfig, nodesinfo: List[Dict], exec_log_dir: str, error_keywords: Dict[str, List[str]]) -> List[Dict]:
     """
@@ -192,10 +193,11 @@ def go_to_go(args: argparse.Namespace, config: SSHExecConfig, nodesinfo: List[Di
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     # 绑定到本地回环地址和随机可用端口
     server.bind(('127.0.0.1', 0))
+    # 只允许一个连接，Go程序执行完成后会断开连接
     server.listen(1)
     # Monitor Server 连接超时时间设置为 10 秒
     server.settimeout(10)
-    # 获取系统分配的随机端口号
+    # 获取系统分配给的端口号
     port = server.getsockname()[1]
 
     # 构建发送给Go程序的请求数据
@@ -247,10 +249,10 @@ def go_to_go(args: argparse.Namespace, config: SSHExecConfig, nodesinfo: List[Di
         process.stdin.close()                     # pyright: ignore[reportOptionalMemberAccess]
 
         # 启动输出捕获线程，实时显示Go程序的输出
-        capture_subprocess_output(process)
+        stdout_thread, stderr_thread = capture_subprocess_output(process)
 
         # 使用Live组件动态显示进度条
-        live = Live(node_progress, console=console, refresh_per_second=25)
+        live = Live(node_progress, console=console, refresh_per_second=20)
         live.start()
         
         # 等待Go程序连接到监控服务器
@@ -278,15 +280,29 @@ def go_to_go(args: argparse.Namespace, config: SSHExecConfig, nodesinfo: List[Di
         monitor_thread.join(timeout=10.0)
         
         if monitor_thread.is_alive():
-            tlog.warning("Monitor Server - 线程超时，强制结束")
+            print("Monitor Server - 进度条监控线程超时，强制结束")
+            tlog.warning("Monitor Server - 进度条监控线程超时，强制结束")
         else:
-            tlog.info("Monitor Server - 线程已正常结束")
+            print("Monitor Server - 进度条监控线程已正常结束")
+            tlog.info("Monitor Server - 进度条监控线程已正常结束")
+
+        # 等待读取线程退出
+        stdout_thread.join(timeout=30)
+        stderr_thread.join(timeout=30)
+        if stdout_thread.is_alive() or stderr_thread.is_alive():
+            print("Monitor Server - 捕获输出线程超时，强制结束")
+            tlog.warning("Monitor Server - 捕获输出线程超时，强制结束")
+        else:
+            print("Monitor Server - 捕获输出线程已正常结束")
+            tlog.info("Monitor Server - 捕获输出线程已正常结束")
+        
 
         # 停止Live显示
         live.stop()
 
         # 检查是否成功接收到完成信号
         if not completion_event.is_set():
+            print("Monitor Server - 未收到完成信号，可能执行异常")
             tlog.warning("Monitor Server - 未收到完成信号，可能执行异常")
         
         # 统计执行结果信息
