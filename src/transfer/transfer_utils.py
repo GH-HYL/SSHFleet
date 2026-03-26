@@ -230,14 +230,24 @@ def initialize_result_dict(node_info: Dict[str, Any], args: Any, upload: bool = 
     return result
 
 
-def handle_interrupt():
-    """全局中断信号处理器"""
+# def handle_interrupt(signum=None, frame=None):
+#     """全局中断信号处理器"""
+#     global transfer_interrupted
+#     if not transfer_interrupted:
+#         transfer_interrupted = True
+#         # 关键一步：立即屏蔽后续所有Ctrl+C
+#         signal.signal(signal.SIGINT, signal.SIG_IGN)
+#         elog.info("收到中断信号...")
+#         print(f"{color.COLOR_RED}收到中断信号，正在停止任务...{color.COLOR_RESET}")
+
+def handle_interrupt(signum=None, frame=None):
     global transfer_interrupted
     if not transfer_interrupted:
         transfer_interrupted = True
-        # 关键一步：立即屏蔽后续所有Ctrl+C
-        signal.signal(signal.SIGINT, signal.SIG_IGN)
-        elog.info("收到中断信号...")
-        print(f"{color.COLOR_RED}收到中断信号，正在停止任务...{color.COLOR_RESET}")
-
-
+        signal.signal(signal.SIGINT, signal.SIG_IGN)  # 屏蔽后续
+        elog.info("收到中断信号，正在优雅停止...")
+        print(f"{color.COLOR_RED}收到中断信号，正在停止任务（再次按Ctrl+C强制退出）...{color.COLOR_RESET}")
+    else:
+        # 第二次 Ctrl+C → 强制退出
+        print(f"{color.COLOR_RED}强制退出！{color.COLOR_RESET}")
+        os._exit(1)  # 强制终止，不走清理流程

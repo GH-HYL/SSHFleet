@@ -59,6 +59,8 @@ def sftp_upload(conn: Connection, node_info: Dict[str, Any], local_path: str, re
     def progress_callback(bytes_sent, _):
         """回调函数：基于累计字节数更新进度"""
         transfer_progress.update(task_id, completed=bytes_sent)
+        if transfer_utils.transfer_interrupted: 
+            raise Exception("用户中断传输")  # ← 通过异常中断 sftp.put
 
 
     try:
@@ -362,7 +364,16 @@ def upload_file_or_dir(node_info: Dict[str, Any], args: Any, result: Dict[str, A
     """
 
     result["thread_start_time"] = datetime.now()
-    
+
+    # 新增：创建连接前先检查中断
+    if transfer_utils.transfer_interrupted:
+        result.update({
+            "connect_bool": False,
+            "exit_bool": False,
+            "result_category": "传输被Ctrl+C中断"
+        })
+        return result
+        
     try:
         # 创建连接对象并使用with语句管理
         with transfer_utils.create_ssh_connection(node_info, args) as conn:
