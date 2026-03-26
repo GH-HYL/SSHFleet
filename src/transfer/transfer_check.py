@@ -47,6 +47,8 @@ def check_disk_space(conn: Connection, current_path: str, original_size: int) ->
     """
     # 构造命令获取指定路径的剩余空间(KB)
     df_command = f"df -Pk {current_path} | tail -n 1 | awk '{{print $4}}'"
+    # 声明disk_free
+    disk_free = 0
     
     try:
         # 获取磁盘剩余空间
@@ -57,6 +59,7 @@ def check_disk_space(conn: Connection, current_path: str, original_size: int) ->
         raise Exception("剩余空间获取 - 获取磁盘信息失败")
     
     try:
+        
         disk_free = int(disk_free_result.stdout.strip())
     except ValueError as e:
         elog.error(f"剩余空间获取 - 磁盘空间信息转换失败: {disk_free_result.stdout.strip()}\n异常类型：\n{type(e)}\n异常信息：\n{e}")
