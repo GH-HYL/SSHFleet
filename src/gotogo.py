@@ -135,18 +135,33 @@ def capture_subprocess_output(process: subprocess.Popen) -> tuple[Thread, Thread
         内部函数：读取流数据的线程函数
         PS: is_error=False 表示标准输出，True 表示错误输出，不能删除，否则会报错
         """
+        # try:
+        #     while True:
+        #         # 逐行读取流数据
+        #         line = stream.readline()
+        #         if not line:
+        #             break
+        #         # 直接输出到控制台
+        #         # print(line.strip(), flush=True)
+        #         print(line.strip())
+        # except Exception:
+        #     pass
+        
         try:
             while True:
-                # 逐行读取流数据
-                line = stream.readline()
-                if not line:
+                # 关键优化1：尝试一次性读取较大块的数据（如8KB），而非逐行。
+                # 这会显著减少循环次数和系统调用开销。
+                chunk = stream.read(1024)  # 读取8KB块
+                if not chunk:
                     break
-                # 直接输出到控制台
-                # print(line.strip(), flush=True)
-                print(line.strip())
+                # 关键优化2：直接输出整个数据块，不做行分割。
+                # `print` 默认会添加换行，但`end=''`可以避免额外换行。
+                # 由于Go的输出本身包含换行符，直接输出块可以保持原格式。
+                print(chunk, end='', flush=True)  # 使用flush确保立即输出
         except Exception:
             pass
-    
+
+
     # 创建两个线程分别读取标准输出和错误输出
     stdout_thread = threading.Thread(target=read_stream, args=(process.stdout, False), daemon=True)
     stderr_thread = threading.Thread(target=read_stream, args=(process.stderr, True), daemon=True)
