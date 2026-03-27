@@ -69,63 +69,36 @@ def main():
     tlog.debug(f"{ '-' * 20}SSHExec工具 - 准备阶段{ '-' * 20}")
 
     # 检查代码文件是否都存在
-    try:
-        check.check_files_exist()
-        tlog.success("[check] 检查代码文件存在性成功")
-    except Exception as e:
-        tlog.error(f"[check] 检查代码文件存在性失败\n异常类型：\n{type(e)}\n异常信息：\n{e}")
-        utils.print_error_informantion_and_exit("check.check_files_exist", f"检查代码文件存在性失败\n异常类型：\n{type(e)}\n异常信息：\n{e}")
+    check.check_files_exist()
+    tlog.success("检查代码文件存在性成功")
 
     # 参数解析
-    try:
-        args = core.parse_args(config)
-        tlog.success(f"参数解析成功,解析结果: {args}")
-    except Exception as e:
-        tlog.error(f"参数解析失败\n异常类型：\n{type(e)}\n异常信息：\n{e}")
-        utils.print_error_informantion_and_exit("core.parse_args", f"参数解析失败\n异常类型：\n{type(e)}\n异常信息：\n{e}")
+    args = core.parse_args(config)
+    tlog.success(f"参数解析成功,解析结果: {args}")
 
     # 参数合规性检查
-    try:
-        check.check_arguments(args)
-        tlog.success("[check] 输入的参数合规性检查成功")
-    except Exception as e:
-        tlog.error(f"[check] 输入的参数合规性检查失败\n异常类型：\n{type(e)}\n异常信息：\n{e}")
-        utils.print_error_informantion_and_exit("check.check_arguments", f"输入的参数合规性检查失败\n异常类型：\n{type(e)}\n异常信息：\n{e}")
+    check.check_arguments(args)
+    tlog.success("输入的参数合规性检查成功")
 
     # 执行打包历史记录
     if args.z:
-        try:
-            core.zip_latest_history(args, config)
-            tlog.success("打包历史记录成功")
-            tlog.info("SSHExec工具已退出")
-            sys.exit(0)
-        except Exception as e:
-            tlog.error(f"打包历史记录失败\n异常类型：\n{type(e)}\n异常信息：\n{e}")
-            utils.print_error_informantion_and_exit("core.zip_latest_history", f"打包历史记录失败\n异常类型：\n{type(e)}\n异常信息：\n{e}")
+        core.zip_latest_history(args, config)
+        tlog.success("打包历史记录成功")
+        tlog.info("SSHExec工具已退出")
+        sys.exit(0)
 
-    try:
-        check.check_dangerous_content(args)
-        tlog.success("[check] 执行危险字典内容检查成功")
-    except Exception as e:
-        tlog.error(f"[check] 执行危险字典内容检查失败\n异常类型：\n{type(e)}\n异常信息：\n{e}")
-        utils.print_error_informantion_and_exit("check.check_dangerous_content", f"危险字典内容检查失败\n异常类型：\n{type(e)}\n异常信息：\n{e}")
+    # 执行危险字典内容检查
+    check.check_dangerous_content(args)
+    tlog.success("[check] 执行危险字典内容检查成功")
 
     # 读取节点信息
-    try:
-        nodesinfos = core.read_nodes_infos(args.f, config)
-        tlog.success("读取节点信息成功")
-    except Exception as e:
-        tlog.error(f"读取节点信息失败\n异常类型：\n{type(e)}\n异常信息：\n{e}")
-        utils.print_error_informantion_and_exit("core.read_nodes_infos", f"读取节点信息失败\n异常类型：\n{type(e)}\n异常信息：\n{e}")
+    nodesinfos = core.read_nodes_infos(args.f, config)
+    tlog.success("读取节点信息成功")
 
     # 参数信息确认
-    try:
-        tlog.info("开始进行参数信息确认")
-        core.arguments_confirm(args,nodesinfos)
-        tlog.info("用户已核实通过参数信息")
-    except Exception as e:
-        tlog.error(f"参数信息确认失败\n异常类型：\n{type(e)}\n异常信息：\n{e}")
-        utils.print_error_informantion_and_exit("utils.arguments_confirm", f"参数信息确认失败\n异常类型：\n{type(e)}\n异常信息：\n{e}")
+    tlog.info("开始进行参数信息确认")
+    core.arguments_confirm(args,nodesinfos)
+    tlog.info("用户已核实通过参数信息")
 
     tlog.debug(f"{'-' * 20}SSHExec工具 - 准备结束{'-' * 20}\n")
     tlog.debug(f"{'=' * 30}SSHExec工具 - 执行阶段{'=' * 30}")
@@ -144,43 +117,28 @@ def main():
     tlog.info(f"全局开始时间: {global_start_time}")
 
     # 生成日志目录
-    try:
-        exec_log_dir = utils.create_exec_log_dir(args, config)
-        tlog.success(f"生成日志目录成功: {exec_log_dir}")
-    except Exception as e:
-        tlog.error(f"生成日志目录失败\n异常类型：\n{type(e)}\n异常信息：\n{e}")
-        utils.print_error_informantion_and_exit("utils.create_exec_log_dir", f"生成日志目录失败\n异常类型：\n{type(e)}\n异常信息：\n{e}")
-        sys.exit(1)
+    exec_log_dir = utils.create_exec_log_dir(args, config)
+    tlog.success(f"生成日志目录成功: {exec_log_dir}")
 
     if args.c or args.s:
-        try:
-            tlog.info("进入“执行”主执行器")
-            final_results =  gotogo.go_to_go(args, config, nodesinfos, exec_log_dir, error_keywords)
-            tlog.success("go_to_go主执行器执行完成")
-        except Exception as e:
-            print(f"go_to_go运行出现未分类异常\n异常类型：\n{type(e)}\n异常信息：\n{e}")
+        tlog.info("进入“执行”主执行器")
+        final_results =  gotogo.go_to_go(args, config, nodesinfos, exec_log_dir, error_keywords)
+        tlog.success("go_to_go主执行器执行完成")
 
     # 进入transfer主执行器
     if args.u or args.d:
         # 初始化执行日志记录器
-        try:
-            tlog.info("进入“传输”主执行器")
-            tlog.debug(f"日志内容轮转到文件: {exec_log_dir}/{config.paths.logs.exec}")
-            utils.init_execution_logger(exec_log_dir, config.paths.logs.exec)
-            tlog.success("初始化执行日志记录器成功")
-        except Exception as e:
-            tlog.error(f"初始化执行日志记录器失败\n异常类型：\n{type(e)}\n异常信息：\n{e}")
-            utils.print_error_informantion_and_exit("log.init_execution_logger", f"配置loguru日志记录器失败\n异常类型：\n{type(e)}\n异常信息：\n{e}")
+        tlog.info("进入“传输”主执行器")
+        tlog.debug(f"日志内容轮转到文件: {exec_log_dir}/{config.paths.logs.exec}")
+        utils.init_execution_logger(exec_log_dir, config.paths.logs.exec)
+        tlog.success("初始化执行日志记录器成功")
 
         # 开始传输文件
-        try:
-            import src.transfer.transfer as transfer
-            tlog.info("进入transfer主执行器")
-            tlog.debug(f"日志内容轮转到文件: {exec_log_dir}/{config.paths.logs.exec}")
-            final_results = transfer.execute_transfer(args, nodesinfos)
-            tlog.success("transfer主执行器执行完成")
-        except Exception as e:
-            print(f"execute_transfer运行出现未分类异常\n异常类型：\n{type(e)}\n异常信息：\n{e}")
+        import src.transfer.transfer as transfer
+        tlog.info("进入transfer主执行器")
+        tlog.debug(f"日志内容轮转到文件: {exec_log_dir}/{config.paths.logs.exec}")
+        final_results = transfer.execute_transfer(args, nodesinfos)
+        tlog.success("transfer主执行器执行完成")
 
     # “全局”结束时间计时
     global_stop_time = datetime.now()
@@ -196,62 +154,35 @@ def main():
 
     # 格式化终端输出到Excel文件（转换output.txt格式）
     if config.enable.output_to_xlsx:
-        try:
-            output.format_output_to_xlsx(exec_log_dir, config)
-            tlog.success("格式化output.txt到Excel文件成功")
-        except Exception as e:
-            tlog.error(f"格式化output.txt到Excel文件失败\n异常类型：\n{type(e)}\n异常信息：\n{e}")
-            utils.print_error_informantion_and_exit("output.format_output_to_xlsx", f"打印output.txt到Excel文件失败\n异常类型：\n{type(e)}\n异常信息：\n{e}", False)
+        output.format_output_to_xlsx(exec_log_dir, config)
+        tlog.success("格式化output.txt到Excel文件成功")
 
     # 输出results字典列表到xlsx文件
     if config.enable.results_to_xlsx:
-        try:
-            output.format_dict_list_to_xlsx(final_results, exec_log_dir, config)
-            tlog.success("格式化results字典列表到Excel文件成功")
-        except Exception as e:
-            tlog.error(f"格式化results字典列表到Excel文件失败\n异常类型：\n{type(e)}\n异常信息：\n{e}")
-            utils.print_error_informantion_and_exit("output.format_dict_list_to_xlsx", f"打印字典列表失败\n异常类型：\n{type(e)}\n异常信息：\n{e}", False)
+        output.format_dict_list_to_xlsx(final_results, exec_log_dir, config)
+        tlog.success("格式化results字典列表到Excel文件成功")
 
     # 计算统计结果信息
-    try:
-        results_statistic = core.results_statistics(final_results, nodesinfos, args, global_start_time, global_stop_time)
-        tlog.success("计算统计结果信息成功")
-    except Exception as e:
-        tlog.error(f"计算统计结果信息失败\n异常类型：\n{type(e)}\n异常信息：\n{e}")
-        utils.print_error_informantion_and_exit("core.results_statistics", f"计算统计结果信息失败\n异常类型：\n{type(e)}\n异常信息：\n{e}", False)
+    results_statistic = core.results_statistics(final_results, nodesinfos, args, global_start_time, global_stop_time)
+    tlog.success("计算统计结果信息成功")
 
     # 格式化统计结果信息输出到终端
-    try:
-        output.format_statistic_results_to_terminal(results_statistic)
-        tlog.success("格式化统计结果信息输出到终端成功")
-    except Exception as e:
-        tlog.error(f"格式化统计结果信息输出到终端失败\n异常类型：\n{type(e)}\n异常信息：\n{e}")
-        utils.print_error_informantion_and_exit("output.format_statistic_results_to_terminal", f"格式化统计结果信息输出到终端失败\n异常类型：\n{type(e)}\n异常信息：\n{e}", False)
+    output.format_statistic_results_to_terminal(results_statistic)
+    tlog.success("格式化统计结果信息输出到终端成功")
 
 
     # 格式化统计结果信息输出到报告文件
-    try:
-        output.format_statistic_results_to_report(results_statistic, exec_log_dir, args, config)
-        tlog.success("格式化统计结果信息输出到报告文件成功")
-    except Exception as e:
-        tlog.error(f"格式化统计结果信息输出到报告文件失败\n异常类型：\n{type(e)}\n异常信息：\n{e}")
-        utils.print_error_informantion_and_exit("output.format_statistic_results_to_report", f"格式化统计结果信息输出到报告文件失败\n异常类型：\n{type(e)}\n异常信息：\n{e}", False)
+    output.format_statistic_results_to_report(results_statistic, exec_log_dir, args, config)
+    tlog.success("格式化统计结果信息输出到报告文件成功")
 
     # 保存执行资源文件
-    try:
-        core.save_execute_resource_files(args, exec_log_dir, config)
-        tlog.success("保存执行资源文件成功")
-    except Exception as e:
-        tlog.error(f"保存执行资源文件失败\n异常类型：\n{type(e)}\n异常信息：\n{e}")
-        utils.print_error_informantion_and_exit("core.save_execute_resource_files", f"保存执行资源文件失败\n异常类型：\n{type(e)}\n异常信息：\n{e}", False)
+    core.save_execute_resource_files(args, exec_log_dir, config)
+    tlog.success("保存执行资源文件成功")
 
     # 创建最新日志符号链接
-    try:
-        utils.create_latest_log_symlink(config)
-        tlog.success("创建最新日志符号链接函数执行成功")
-    except Exception as e:
-        tlog.error(f"创建最新日志符号链接失败\n异常类型：\n{type(e)}\n异常信息：\n{e}")
-        utils.print_error_informantion_and_exit("utils.create_latest_log_symlink", f"创建最新日志符号链接失败\n异常类型：\n{type(e)}\n异常信息：\n{e}", False)
+    utils.create_latest_log_symlink(config)
+    tlog.success("创建最新日志符号链接函数执行成功")
+
 
     tlog.debug(f"{'-' * 20}SSHExec工具 - 整理结束{'-' * 20}")
 

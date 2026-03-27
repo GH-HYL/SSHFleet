@@ -14,6 +14,7 @@ import src.dicts as dicts
 import src.utils as utils
 
 
+@utils.error_and_exit_handling_decorator("check_dangerous_content", "危险字典内容检查失败")
 def check_dangerous_content(args):
 
     # 执行危险字典内容检查
@@ -30,6 +31,7 @@ def check_dangerous_content(args):
         utils.print_error_informantion_and_exit("check_dangerous_patterns", f" 危险命令检查失败: {str(e)}")
 
 
+@utils.error_and_exit_handling_decorator("check_arguments", "参数合规性检查失败")
 def check_arguments(args):
     """检查命令行参数的有效性"""
     
@@ -176,7 +178,7 @@ def check_script_file(script_path):
         if b'\r\n' in data:
             utils.print_error_informantion_and_exit("check_script_file", f" 错误: {script_path} 不是LF换行符(Unix格式)")
 
-
+@utils.error_and_exit_handling_decorator("check_files_exist", "检查代码文件存在性失败")
 def check_files_exist() -> None:
     """检查所有代码文件必须存在"""
     # 检查当前脚本所在目录

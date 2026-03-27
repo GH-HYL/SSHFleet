@@ -519,7 +519,7 @@ def download_file_or_dir(node_info: Dict[str, Any], args: Any, result: Dict[str,
     return result
 
 
-
+@utils.error_and_exit_handling_decorator("execute_transfer", "执行传输任务失败")
 def execute_transfer(args: Any, nodesinfos: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
     功能：

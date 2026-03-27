@@ -154,6 +154,8 @@ def capture_subprocess_output(process: subprocess.Popen) -> tuple[Thread, Thread
     stderr_thread.start()
     return stdout_thread, stderr_thread
 
+
+@utils.error_and_exit_handling_decorator("go_to_go", "Go程序批量任务执行失败")
 def go_to_go(args: argparse.Namespace, config: SSHExecConfig, nodesinfo: List[Dict], exec_log_dir: str, error_keywords: Dict[str, List[str]]) -> List[Dict]:
     """
     功能：
@@ -283,7 +285,6 @@ def go_to_go(args: argparse.Namespace, config: SSHExecConfig, nodesinfo: List[Di
             print("Monitor Server - 进度条监控线程超时，强制结束")
             tlog.warning("Monitor Server - 进度条监控线程超时，强制结束")
         else:
-            print("Monitor Server - 进度条监控线程已正常结束")
             tlog.info("Monitor Server - 进度条监控线程已正常结束")
 
         # 等待读取线程退出
@@ -293,10 +294,8 @@ def go_to_go(args: argparse.Namespace, config: SSHExecConfig, nodesinfo: List[Di
             print("Monitor Server - 捕获输出线程超时，强制结束")
             tlog.warning("Monitor Server - 捕获输出线程超时，强制结束")
         else:
-            print("Monitor Server - 捕获输出线程已正常结束")
             tlog.info("Monitor Server - 捕获输出线程已正常结束")
         
-
         # 停止Live显示
         live.stop()
 

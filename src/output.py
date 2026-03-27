@@ -17,7 +17,7 @@ from src.toml import SSHExecConfig
 from src.utils import tlog
 
 
-
+@utils.error_and_exit_handling_decorator("format_output_to_xlsx", "格式化输出结果到Excel文件失败", isexit=True)
 def format_output_to_xlsx(log_dir: str, config: SSHExecConfig) -> None:
     """
     功能：
@@ -143,6 +143,7 @@ def format_output_to_xlsx(log_dir: str, config: SSHExecConfig) -> None:
         wb.close()
 
 
+@utils.error_and_exit_handling_decorator("format_dict_list_to_xlsx", "格式化字典列表到Excel文件失败", isexit=False)
 def format_dict_list_to_xlsx(final_results: List[Dict[str, Any]], log_dir: str, config: SSHExecConfig) -> None:
     """
     功能：
@@ -235,7 +236,7 @@ def format_dict_list_to_xlsx(final_results: List[Dict[str, Any]], log_dir: str, 
         if wb is not None:
             wb.close()
 
-
+@utils.error_and_exit_handling_decorator("format_statistic_results_to_terminal", "格式化统计结果信息输出到终端失败", isexit=True)
 def format_statistic_results_to_terminal(results_statistic: dict) -> None:
     """
     功能：
@@ -267,6 +268,8 @@ def format_statistic_results_to_terminal(results_statistic: dict) -> None:
     
     return
 
+
+@utils.error_and_exit_handling_decorator("format_statistic_results_to_report", "格式化统计结果信息输出到报告文件失败", isexit=True)
 def format_statistic_results_to_report(results_statistic: dict, log_dir: str, args: argparse.Namespace, config: SSHExecConfig) -> None:
     """
     功能：

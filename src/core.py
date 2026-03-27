@@ -23,6 +23,7 @@ from src.toml import SSHExecConfig
 from src.utils import tlog
 
 
+@utils.error_and_exit_handling_decorator("parse_args", "参数解析失败")
 def parse_args(config: SSHExecConfig) -> argparse.Namespace:
     """
     功能：
@@ -118,6 +119,8 @@ def parse_args(config: SSHExecConfig) -> argparse.Namespace:
 
     return args
 
+
+@utils.error_and_exit_handling_decorator("read_nodes_infos", "读取节点信息失败")
 def read_nodes_infos(csv_path: str, config: SSHExecConfig) -> List[Dict[str, str]]:
     """
     功能：
@@ -299,7 +302,7 @@ def read_nodes_infos(csv_path: str, config: SSHExecConfig) -> List[Dict[str, str
     
     return node_infos
 
-
+@utils.error_and_exit_handling_decorator("arguments_confirm", "确认执行参数失败")
 def arguments_confirm( args, nodes ):
     """
     功能：
@@ -428,6 +431,7 @@ def arguments_confirm( args, nodes ):
     print(f"{'=' * 50}")
 
 
+@utils.error_and_exit_handling_decorator("save_execute_resource_files", "保存执行资源文件失败", isexit=True)
 def save_execute_resource_files(args: argparse.Namespace, log_dir: str, config: SSHExecConfig) -> None:
     """
     功能：
@@ -470,6 +474,8 @@ def save_execute_resource_files(args: argparse.Namespace, log_dir: str, config: 
             dst_path = Path(resources_dir) / src_path.name
             shutil.copy2(src_path, dst_path)
 
+
+@utils.error_and_exit_handling_decorator("results_statistics", "计算统计结果信息失败", isexit=True)
 def results_statistics(results: list, node_infos: list, args: argparse.Namespace, global_start_time: datetime, global_stop_time: datetime) -> dict:
     """
     功能：
@@ -554,7 +560,7 @@ def results_statistics(results: list, node_infos: list, args: argparse.Namespace
 
 
 
-
+@utils.error_and_exit_handling_decorator("zip_latest_history", "打包历史记录失败")
 def zip_latest_history(args, config: SSHExecConfig):
     """
     功能：
