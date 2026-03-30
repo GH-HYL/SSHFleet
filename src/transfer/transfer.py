@@ -7,7 +7,7 @@ import os
 import signal
 from collections import Counter
 from datetime import datetime
-from typing import List, Dict, Any, Tuple, Optional
+from typing import Any, Tuple, Optional
 
 from fabric import Connection
 from rich.console import Console
@@ -25,7 +25,7 @@ from src.utils import elog
 console=Console()
 
 
-def sftp_upload(conn: Connection, node_info: Dict[str, Any], local_path: str, remote_path: str, transfer_progress: Progress, task_id: TaskID, info_progress: Progress, info_task: TaskID, callable_tar_result: Tuple[int, int, Optional[str]], use_sudo: bool) -> None:
+def sftp_upload(conn: Connection, node_info: dict[str, Any], local_path: str, remote_path: str, transfer_progress: Progress, task_id: TaskID, info_progress: Progress, info_task: TaskID, callable_tar_result: Tuple[int, int, Optional[str]], use_sudo: bool, error_keywords: dict[str, list[str]]) -> None:
     """
     功能：
         使用SFTP上传文件的核心函数
@@ -39,7 +39,8 @@ def sftp_upload(conn: Connection, node_info: Dict[str, Any], local_path: str, re
         task_id: 进度条任务ID
         info_progress: 进度条对象
         info_task: 进度条任务ID
-        use_sudo: 是否使用sudo
+        use_sudo: 是否使用sudo权限
+        error_keywords: 错误分类字典，用于根据错误文本分类错误
 
     返回：
         None
@@ -249,7 +250,7 @@ def sftp_upload(conn: Connection, node_info: Dict[str, Any], local_path: str, re
 # noinspection PyUnusedLocal
 def sftp_download(
     conn: Connection,
-    node_info: Dict[str, Any],
+    node_info: dict[str, Any],
     remote_path: str,
     local_path: str,
     transfer_progress: Progress,
@@ -342,8 +343,8 @@ def sftp_download(
         raise Exception(f"下载失败: {e}")
 
 
-def upload_file_or_dir(node_info: Dict[str, Any], args: Any, result: Dict[str, Any], transfer_progress: Progress, task_id: TaskID, 
-                        info_progress: Progress, info_task: TaskID, callable_tar_result: Tuple[int, int, Optional[str]], use_sudo: bool) -> Dict[str, Any]:
+def upload_file_or_dir(node_info: dict[str, Any], args: Any, result: dict[str, Any], transfer_progress: Progress, task_id: TaskID, 
+                        info_progress: Progress, info_task: TaskID, callable_tar_result: Tuple[int, int, Optional[str]], use_sudo: bool, error_keywords: dict[str, list[str]]) -> dict[str, Any]:
     """
     功能：
         上传文件或目录到远程节点
@@ -357,7 +358,8 @@ def upload_file_or_dir(node_info: Dict[str, Any], args: Any, result: Dict[str, A
         info_progress: 进度条对象
         info_task: 进度条任务ID
         callable_tar_result: 传输文件的原始大小, 压缩后大小, 临时压缩文件路径
-        use_sudo: 是否使用sudo
+        use_sudo: 是否使用sudo权限
+        error_keywords: 错误分类字典，用于根据错误文本分类错误
 
     返回：
         包含传输结果的字典
@@ -385,7 +387,7 @@ def upload_file_or_dir(node_info: Dict[str, Any], args: Any, result: Dict[str, A
                 elog.error(f"建立连接失败\n异常类型：\n{type(e)}\n异常信息：\n{e}")
                 result["connect_bool"] = False
                 result["exit_bool"] = False
-                result["result_category"] = utils.error_classify(node_info.get('ip', '未知IP'), str(e))
+                result["result_category"] = utils.error_classify(node_info.get('ip', '未知IP'), str(e), error_keywords)
                 return result
             
             info_progress.update(info_task, status='检查中')
@@ -402,7 +404,7 @@ def upload_file_or_dir(node_info: Dict[str, Any], args: Any, result: Dict[str, A
             
             # 开始上传
             try:
-                sftp_upload(conn, node_info, args.u, args.p, transfer_progress, task_id, info_progress, info_task, callable_tar_result, use_sudo)
+                sftp_upload(conn, node_info, args.u, args.p, transfer_progress, task_id, info_progress, info_task, callable_tar_result, use_sudo, error_keywords)
                 elog.info("单个节点的上传文件或目录任务成功完成")
                 result["exit_bool"] = True
                 result["result_category"] = "传输成功"
@@ -425,7 +427,7 @@ def upload_file_or_dir(node_info: Dict[str, Any], args: Any, result: Dict[str, A
 
 
 # noinspection PyUnusedLocal
-def download_file_or_dir(node_info: Dict[str, Any], args: Any, result: Dict[str, Any], transfer_progress: Progress, task_id: TaskID, use_sudo: bool) -> Dict[str, Any]:
+def download_file_or_dir(node_info: dict[str, Any], args: Any, result: dict[str, Any], transfer_progress: Progress, task_id: TaskID, use_sudo: bool, error_keywords: dict[str, list[str]]) -> dict[str, Any]:
     """
     从远程节点下载文件或目录
     Args:
@@ -434,7 +436,8 @@ def download_file_or_dir(node_info: Dict[str, Any], args: Any, result: Dict[str,
         result: 结果字典
         transfer_progress: 进度条对象
         task_id: 进度条任务ID
-        use_sudo: 是否使用sudo
+        use_sudo: 是否使用sudo权限
+        error_keywords: 错误分类字典，用于根据错误文本分类错误
     Returns:
         包含传输结果的字典
     """
@@ -460,7 +463,7 @@ def download_file_or_dir(node_info: Dict[str, Any], args: Any, result: Dict[str,
             elog.error(f"建立连接失败，异常信息：{e}")
             result["connect_bool"] = False
             result["exit_bool"] = False
-            result["result_category"] = utils.error_classify(node_info.get('ip', '未知IP'), str(e))
+            result["result_category"] = utils.error_classify(node_info.get('ip', '未知IP'), str(e), error_keywords)
             return result
 
         # 检查远程操作系统
@@ -520,13 +523,14 @@ def download_file_or_dir(node_info: Dict[str, Any], args: Any, result: Dict[str,
 
 
 @utils.error_and_exit_handling_decorator("execute_transfer", "执行传输任务失败")
-def execute_transfer(args: Any, nodesinfos: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def execute_transfer(args: Any, nodesinfos: list[dict[str, Any]], error_keywords: dict[str, list[str]]) -> list[dict[str, Any]]:
     """
     功能：
         执行文件或目录的传输任务
     参数：
         args: 命令行参数
         nodesinfos: 节点信息列表
+        error_keywords: 错误分类字典，用于根据错误文本分类错误
 
     返回：
         包含传输结果的字典列表
@@ -622,10 +626,10 @@ def execute_transfer(args: Any, nodesinfos: List[Dict[str, Any]]) -> List[Dict[s
                     if hasattr(args, 'u') and args.u:
                         transfer_progress.update(transfer_task, completed=0, total=callable_tar_result[1])
                         elog.info("开始上传文件或目录")
-                        result = upload_file_or_dir(node_info, args, result, transfer_progress, transfer_task, info_progress, info_task, callable_tar_result, use_sudo)
+                        result = upload_file_or_dir(node_info, args, result, transfer_progress, transfer_task, info_progress, info_task, callable_tar_result, use_sudo, error_keywords)
                     elif hasattr(args, 'd') and args.d:
                         elog.info("开始下载文件或目录")
-                        result = download_file_or_dir(node_info, args, result, transfer_progress, transfer_task, use_sudo)
+                        result = download_file_or_dir(node_info, args, result, transfer_progress, transfer_task, use_sudo, error_keywords)
                     else:
                         elog.error(f"参数错误,请联系开发者检查args.u和.args.d值的有效性，当前值：{args.u},{args.d}")
                         utils.print_error_informantion_and_exit("execute_transfer", f"参数错误,请联系开发者检查args.u和.args.d值的有效性，当前值：{args.u},{args.d}")

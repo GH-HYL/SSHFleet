@@ -14,7 +14,6 @@ from collections import Counter
 from datetime import datetime
 from pathlib import Path
 from posixpath import join as posix_join
-from typing import List, Dict
 
 # 自定义模块
 import src.color as color
@@ -121,7 +120,7 @@ def parse_args(config: SSHExecConfig) -> argparse.Namespace:
 
 
 @utils.error_and_exit_handling_decorator("read_nodes_infos", "读取节点信息失败")
-def read_nodes_infos(csv_path: str, config: SSHExecConfig) -> List[Dict[str, str]]:
+def read_nodes_infos(csv_path: str, config: SSHExecConfig) -> list[dict[str, str]]:
     """
     功能：
         从CSV文件中读取节点信息，并进行数据验证和处理
@@ -131,7 +130,7 @@ def read_nodes_infos(csv_path: str, config: SSHExecConfig) -> List[Dict[str, str
         config (SSHExecConfig): 配置对象
 
     返回：
-        List[Dict[str, str]]: 处理后的节点信息列表，每个节点是一个字典，包含ip、port、user和password字段
+        list[dict[str, str]]: 处理后的节点信息列表，每个节点是一个字典，包含ip、port、user和password字段
     """
 
     # debug=true，将不再检查重复ip

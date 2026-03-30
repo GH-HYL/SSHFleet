@@ -9,7 +9,7 @@ import signal
 import tarfile
 import tempfile
 from fabric import Connection
-from typing import Dict, Any
+from typing import dict, Any
 from typing import Tuple, Optional
 
 
@@ -22,7 +22,7 @@ from src.utils import elog
 transfer_interrupted = False 
 
 
-def create_ssh_connection(node_info: Dict[str, Any], args: Any) -> Connection:
+def create_ssh_connection(node_info: dict[str, Any], args: Any) -> Connection:
     """
     功能：
         创建SSH连接对象 - 适配Fabric 3.x版本
@@ -196,7 +196,7 @@ def create_dir(conn, path, use_sudo):
         
 
 
-def initialize_result_dict(node_info: Dict[str, Any], args: Any, upload: bool = False, download: bool = False) -> Dict[str, Any]:
+def initialize_result_dict(node_info: dict[str, Any], args: Any, upload: bool = False, download: bool = False) -> dict[str, Any]:
     """初始化结果字典"""
     result = {
         "ip": node_info.get("ip"),

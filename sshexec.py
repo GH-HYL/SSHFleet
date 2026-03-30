@@ -137,7 +137,7 @@ def main():
         import src.transfer.transfer as transfer
         tlog.info("进入transfer主执行器")
         tlog.debug(f"日志内容轮转到文件: {exec_log_dir}/{config.paths.logs.exec}")
-        final_results = transfer.execute_transfer(args, nodesinfos)
+        final_results = transfer.execute_transfer(args, nodesinfos, error_keywords)
         tlog.success("transfer主执行器执行完成")
 
     # “全局”结束时间计时
