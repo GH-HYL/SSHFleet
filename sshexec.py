@@ -72,6 +72,16 @@ def main():
     check.check_files_exist()
     tlog.success("检查代码文件存在性成功")
 
+
+    # 获取危险命令分类正则关键字
+    if os.path.exists(config.paths.jsons.dangerous_keywords):
+        try:
+            with open(config.paths.jsons.dangerous_keywords, 'r', encoding='utf-8') as f:
+                dangerous_keywords = json.load(f)
+        except Exception as e:
+            tlog.error(f"JSON文件{config.paths.jsons.dangerous_keywords}读取内容失败\n异常类型：\n{type(e)}\n异常信息：\n{e}")
+            utils.print_error_informantion_and_exit("gotogo.go_to_go", f"JSON文件{config.paths.jsons.dangerous_keywords}读取内容失败\n异常类型：\n{type(e)}\n异常信息：\n{e}")
+            
     # 参数解析
     args = core.parse_args(config)
     tlog.success(f"参数解析成功,解析结果: {args}")
@@ -88,7 +98,7 @@ def main():
         sys.exit(0)
 
     # 执行危险字典内容检查
-    check.check_dangerous_content(args)
+    check.check_dangerous_content(args, dangerous_keywords)
     tlog.success("[check] 执行危险字典内容检查成功")
 
     # 读取节点信息

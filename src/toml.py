@@ -4,7 +4,6 @@
 
 # 系统或第三方模块
 import base64
-from gc import enable
 import os
 import sys
 
@@ -31,6 +30,7 @@ class Exe(BaseModel):
 
 class Jsons(BaseModel):
     error_keywords: str
+    dangerous_keywords: str
 
 class Paths(BaseModel):
     jsons: Jsons

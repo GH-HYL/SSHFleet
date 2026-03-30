@@ -9,24 +9,23 @@ import sys
 from posixpath import join as posix_join
 
 import src.color as color
-import src.dicts as dicts
 # 源代码模块
 import src.utils as utils
 
 
 @utils.error_and_exit_handling_decorator("check_dangerous_content", "危险字典内容检查失败")
-def check_dangerous_content(args):
+def check_dangerous_content(args, dangerous_keywords: list):
 
     # 执行危险字典内容检查
     try:
-        check_dangerous_dict(dicts.DANGEROUS_PATTERNS)
+        check_dangerous_dict(dangerous_keywords)
     except Exception as e:
         utils.print_error_informantion_and_exit("check_dangerous_dict", f" 危险命令筛查失败: {str(e)}")
 
     # 执行危险命令检查
     try:
         if args.c or args.s:
-            check_dangerous_patterns(args, dicts.DANGEROUS_PATTERNS)
+            check_dangerous_patterns(args, dangerous_keywords)
     except Exception as e:
         utils.print_error_informantion_and_exit("check_dangerous_patterns", f" 危险命令检查失败: {str(e)}")
 
@@ -214,10 +213,18 @@ def check_files_exist() -> None:
         utils.print_error_informantion_and_exit("check_files_exist", f" 代码文件缺失: {', '.join(missing_files)}")
 
 
-def check_dangerous_dict(dangerous_patterns, validation_code=None):
+def check_dangerous_dict(dangerous_patterns: list, validation_code=None):
     """
-    检查命令或脚本内容是否包含危险模式
-    包含规则完整性检查和防篡改验证
+    功能：
+        检查命令或脚本内容是否包含危险模式
+        包含规则完整性检查和防篡改验证
+
+    参数：
+        dangerous_patterns: 危险命令检测规则列表
+        validation_code: 验证码（可选）
+
+    返回：
+        None
     """
     
     # 1. 检查规则是否为空
@@ -265,7 +272,7 @@ def check_dangerous_dict(dangerous_patterns, validation_code=None):
     # check_command_dangerous_patterns(args, DANGEROUS_PATTERNS, validation_code=validation_code)
 
 
-def check_dangerous_patterns(args, dangerous_dict, disinteractive=False):
+def check_dangerous_patterns(args, dangerous_keywords: list, disinteractive=False):
     """检查命令或脚本内容是否包含危险模式"""
     
     is_script = True if args.s else False
@@ -333,7 +340,7 @@ def check_dangerous_patterns(args, dangerous_dict, disinteractive=False):
         line_num, command = line_info
         
         # 检查每个危险模式
-        for pattern in dangerous_dict:
+        for pattern in dangerous_keywords:
             # 跳过注释掉的正则规则
             if pattern['regex'].strip().startswith('#'):
                 continue
