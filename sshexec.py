@@ -69,7 +69,7 @@ def main():
     tlog.debug(f"{ '-' * 20}SSHExec工具 - 准备阶段{ '-' * 20}")
 
     # 检查代码文件是否都存在
-    check.check_files_exist()
+    check.check_files_exist(config)
     tlog.success("检查代码文件存在性成功")
 
 

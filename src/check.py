@@ -10,6 +10,7 @@ from posixpath import join as posix_join
 
 import src.color as color
 # 源代码模块
+from src.toml import SSHExecConfig
 import src.utils as utils
 
 
@@ -178,7 +179,7 @@ def check_script_file(script_path):
             utils.print_error_informantion_and_exit("check_script_file", f" 错误: {script_path} 不是LF换行符(Unix格式)")
 
 @utils.error_and_exit_handling_decorator("check_files_exist", "检查代码文件存在性失败")
-def check_files_exist() -> None:
+def check_files_exist(config:SSHExecConfig) -> None:
     """检查所有代码文件必须存在"""
     # 检查当前脚本所在目录
     current_dir = os.getcwd()
@@ -200,7 +201,8 @@ def check_files_exist() -> None:
 
     code_files = [
         "src/config/sshexec.ini",
-        "src/dicts.py",
+        config.paths.jsons.dangerous_keywords,
+        config.paths.jsons.error_keywords,
     ]
 
     # 循环检查文件，然后把所有缺失文件打印出来
