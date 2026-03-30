@@ -200,6 +200,8 @@ def read_nodes_infos(csv_path: str, config: SSHExecConfig) -> List[Dict[str, str
         if port:  # CSV中有值，最高优先级
             if not port.isdigit() or not (1 <= int(port) <= 65535):
                 errors.append("端口必须是1-65535之间的整数，当前值为：" + port)
+            else:
+                port = int(port)
         elif config.account.port and config.account.port != 'None':  # 使用配置的默认值
             port = config.account.port
             # 验证配置的默认端口
@@ -217,7 +219,7 @@ def read_nodes_infos(csv_path: str, config: SSHExecConfig) -> List[Dict[str, str
                         if not port_use_input and idx < len(csv_infos):  # 检查是否还有后续节点
                             if utils.get_user_confirmation(f"\n{color.COLOR_YELLOW}是否将此端口号应用于所有后续端口为空的节点？{color.COLOR_RESET}", yorn=True):
                                 port_use_input = True
-                                port_input_value = port
+                                port_input_value = int(port)
                         break
                     else:
                         print("端口必须是1-65535之间的整数")

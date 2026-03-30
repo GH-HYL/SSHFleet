@@ -7,9 +7,12 @@ import json
 import os
 import socket
 import subprocess
+import sys
 import threading
+import time
 from threading import Thread
 from typing import List, Dict
+from queue import Queue, Empty
 from rich.console import Console
 from rich.live import Live
 from rich.progress import Progress, BarColumn, TextColumn, TimeElapsedColumn
@@ -17,6 +20,7 @@ from rich.progress import Progress, BarColumn, TextColumn, TimeElapsedColumn
 from src import utils
 from src.toml import SSHExecConfig
 from src.utils import tlog
+
 
 # 全局控制台输出对象，用于美化命令行输出
 console = Console()
@@ -129,45 +133,61 @@ def capture_subprocess_output(process: subprocess.Popen) -> tuple[Thread, Thread
     返回：
         无返回值
     """
-
-    def read_stream(stream, is_error=False):
-        """
-        内部函数：读取流数据的线程函数
-        PS: is_error=False 表示标准输出，True 表示错误输出，不能删除，否则会报错
-        """
-        # try:
-        #     while True:
-        #         # 逐行读取流数据
-        #         line = stream.readline()
-        #         if not line:
-        #             break
-        #         # 直接输出到控制台
-        #         # print(line.strip(), flush=True)
-        #         print(line.strip())
-        # except Exception:
-        #     pass
-        
+    def read_stream(stream, output_queue):
+        """读线程：只管读，扔队列，不阻塞"""
         try:
             while True:
-                # 关键优化1：尝试一次性读取较大块的数据（如8KB），而非逐行。
-                # 这会显著减少循环次数和系统调用开销。
-                chunk = stream.read(1024)  # 读取8KB块
-                if not chunk:
+                line = stream.readline()
+                if not line:
+                    output_queue.put(None)  # 结束信号
                     break
-                # 关键优化2：直接输出整个数据块，不做行分割。
-                # `print` 默认会添加换行，但`end=''`可以避免额外换行。
-                # 由于Go的输出本身包含换行符，直接输出块可以保持原格式。
-                print(chunk, end='', flush=True)  # 使用flush确保立即输出
+                output_queue.put(line)
         except Exception:
-            pass
+            output_queue.put(None)
 
+    def flush_output(output_queue):
+        """输出线程：按时间间隔批量刷，控制重绘频率"""
+        FLUSH_INTERVAL = 0.05  # 50ms刷一次，平衡速度和实时性
+        last_flush = time.time()
+        batch = []
 
-    # 创建两个线程分别读取标准输出和错误输出
-    stdout_thread = threading.Thread(target=read_stream, args=(process.stdout, False), daemon=True)
-    stderr_thread = threading.Thread(target=read_stream, args=(process.stderr, True), daemon=True)
-    stdout_thread.start()
-    stderr_thread.start()
-    return stdout_thread, stderr_thread
+        while True:
+            try:
+                # 最多等50ms拿一条数据
+                line = output_queue.get(timeout=FLUSH_INTERVAL)
+                if line is None:
+                    # 结束信号，刷完剩余
+                    if batch:
+                        sys.stdout.write(''.join(batch))
+                        sys.stdout.flush()
+                    break
+                batch.append(line)
+            except Empty:
+                pass
+
+            # 时间到了就刷，或者累积太多也刷
+            now = time.time()
+            if batch and (now - last_flush >= FLUSH_INTERVAL or len(batch) >= 200):
+                sys.stdout.write(''.join(batch))
+                sys.stdout.flush()
+                batch.clear()
+                last_flush = now
+
+    stdout_queue = Queue()
+    stderr_queue = Queue()
+
+    # 每个流：1个读线程 + 1个输出线程
+    stdout_reader = threading.Thread(target=read_stream, args=(process.stdout, stdout_queue), daemon=True)
+    stdout_flusher = threading.Thread(target=flush_output, args=(stdout_queue,), daemon=True)
+    stderr_reader = threading.Thread(target=read_stream, args=(process.stderr, stderr_queue), daemon=True)
+    stderr_flusher = threading.Thread(target=flush_output, args=(stderr_queue,), daemon=True)
+
+    stdout_reader.start()
+    stdout_flusher.start()
+    stderr_reader.start()
+    stderr_flusher.start()
+
+    return stdout_flusher, stderr_flusher
 
 
 @utils.error_and_exit_handling_decorator("go_to_go", "Go程序批量任务执行失败")
@@ -230,6 +250,9 @@ def go_to_go(args: argparse.Namespace, config: SSHExecConfig, nodesinfo: List[Di
 
     # 将请求数据序列化为JSON格式
     request_json = json.dumps(request_data, ensure_ascii=False, indent=4)
+
+    # print(request_json)
+    # sys.exit(1)
 
     # 根据操作系统类型选择对应的Go可执行文件路径
     if os.name == 'nt':
