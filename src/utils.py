@@ -14,7 +14,6 @@ from datetime import datetime
 from posixpath import join as posix_join
 
 from loguru import logger
-from paramiko.util import safe_string
 
 # 自定义模块
 import src.color as color
