@@ -5,7 +5,7 @@
 # 系统或第三方模块
 import os
 from posixpath import join as posix_join
-from typing import dict, Any
+from typing import Dict, Any
 from fabric import Connection
 from invoke.exceptions import UnexpectedExit
 
@@ -115,7 +115,7 @@ def check_single_path_writable(conn: Connection, current_path: str, use_sudo: bo
         raise Exception("目标不可写")
 
 
-def perform_pre_checks(conn: Connection, remote_path: str, original_size: int, use_sudo: bool, result: dict[str, Any]) -> None:
+def perform_pre_checks(conn: Connection, remote_path: str, original_size: int, use_sudo: bool, result: Dict[str, Any]) -> None:
     """
     功能：
         执行所有预检查，包括路径是否存在、磁盘空间是否充足、路径是否可写
@@ -125,7 +125,7 @@ def perform_pre_checks(conn: Connection, remote_path: str, original_size: int, u
         remote_path: str - 要检查的远程路径
         original_size: int - 原始文件大小（字节）
         use_sudo: bool - 是否使用sudo权限执行命令
-        result: dict[str, Any] - 存储检查结果的字典
+        result: Dict[str, Any] - 存储检查结果的字典
     
     返回：
         None

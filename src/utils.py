@@ -9,6 +9,7 @@ import re
 import shlex
 import sys
 import time
+from typing import Dict, List
 from datetime import datetime
 from posixpath import join as posix_join
 
@@ -109,7 +110,7 @@ def remove_command_fist_last_same_symbol(cmd_str):
         return None, cmd_str
 
 
-def error_classify(ip: str, error_text: str, error_keywords: dict[str, list[str]]) -> str:
+def error_classify(ip: str, error_text: str, error_keywords: Dict[str, List[str]]) -> str:
     """
     功能：
         根据错误文本内容进行分类

@@ -7,7 +7,7 @@ import argparse
 import os
 import re
 import sys
-from typing import Any
+from typing import Dict, List, Any
 from posixpath import join as posix_join
 
 import src.color as color
@@ -144,7 +144,7 @@ def format_output_to_xlsx(log_dir: str, config: SSHExecConfig) -> None:
 
 
 @utils.error_and_exit_handling_decorator("format_dict_list_to_xlsx", "格式化字典列表到Excel文件失败", isexit=False)
-def format_dict_list_to_xlsx(final_results: list[dict[str, Any]], log_dir: str, config: SSHExecConfig) -> None:
+def format_dict_list_to_xlsx(final_results: List[Dict[str, Any]], log_dir: str, config: SSHExecConfig) -> None:
     """
     功能：
         格式化字典列表为xlsx文件
@@ -237,7 +237,7 @@ def format_dict_list_to_xlsx(final_results: list[dict[str, Any]], log_dir: str, 
             wb.close()
 
 @utils.error_and_exit_handling_decorator("format_statistic_results_to_terminal", "格式化统计结果信息输出到终端失败", isexit=True)
-def format_statistic_results_to_terminal(results_statistic: dict) -> None:
+def format_statistic_results_to_terminal(results_statistic: Dict) -> None:
     """
     功能：
         格式化统计结果信息输出到终端
@@ -270,7 +270,7 @@ def format_statistic_results_to_terminal(results_statistic: dict) -> None:
 
 
 @utils.error_and_exit_handling_decorator("format_statistic_results_to_report", "格式化统计结果信息输出到报告文件失败", isexit=True)
-def format_statistic_results_to_report(results_statistic: dict, log_dir: str, args: argparse.Namespace, config: SSHExecConfig) -> None:
+def format_statistic_results_to_report(results_statistic: Dict, log_dir: str, args: argparse.Namespace, config: SSHExecConfig) -> None:
     """
     功能：
         格式化统计结果信息输出到报告文件

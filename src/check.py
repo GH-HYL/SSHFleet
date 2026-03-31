@@ -6,6 +6,7 @@ import os
 # 系统或第三方模块
 import re
 import sys
+from typing import List
 from posixpath import join as posix_join
 
 import src.color as color
@@ -15,7 +16,7 @@ import src.utils as utils
 
 
 @utils.error_and_exit_handling_decorator("check_dangerous_content", "危险字典内容检查失败")
-def check_dangerous_content(args, dangerous_keywords: list):
+def check_dangerous_content(args, dangerous_keywords: List):
 
     # 执行危险字典内容检查
     try:
@@ -215,7 +216,7 @@ def check_files_exist(config:SSHExecConfig) -> None:
         utils.print_error_informantion_and_exit("check_files_exist", f" 代码文件缺失: {', '.join(missing_files)}")
 
 
-def check_dangerous_dict(dangerous_patterns: list, validation_code=None):
+def check_dangerous_dict(dangerous_patterns: List, validation_code=None):
     """
     功能：
         检查命令或脚本内容是否包含危险模式
@@ -274,7 +275,7 @@ def check_dangerous_dict(dangerous_patterns: list, validation_code=None):
     # check_command_dangerous_patterns(args, DANGEROUS_PATTERNS, validation_code=validation_code)
 
 
-def check_dangerous_patterns(args, dangerous_keywords: list, disinteractive=False):
+def check_dangerous_patterns(args, dangerous_keywords: List, disinteractive=False):
     """检查命令或脚本内容是否包含危险模式"""
     
     is_script = True if args.s else False

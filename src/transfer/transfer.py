@@ -5,6 +5,7 @@
 # 系统或第三方模块
 import os
 import signal
+from typing import Dict, List
 from collections import Counter
 from datetime import datetime
 from typing import Any, Tuple, Optional
@@ -25,7 +26,7 @@ from src.utils import elog
 console=Console()
 
 
-def sftp_upload(conn: Connection, node_info: dict[str, Any], local_path: str, remote_path: str, transfer_progress: Progress, task_id: TaskID, info_progress: Progress, info_task: TaskID, callable_tar_result: Tuple[int, int, Optional[str]], use_sudo: bool, error_keywords: dict[str, list[str]]) -> None:
+def sftp_upload(conn: Connection, node_info: Dict[str, Any], local_path: str, remote_path: str, transfer_progress: Progress, task_id: TaskID, info_progress: Progress, info_task: TaskID, callable_tar_result: Tuple[int, int, Optional[str]], use_sudo: bool, error_keywords: Dict[str, List[str]]) -> None:
     """
     功能：
         使用SFTP上传文件的核心函数
@@ -250,7 +251,7 @@ def sftp_upload(conn: Connection, node_info: dict[str, Any], local_path: str, re
 # noinspection PyUnusedLocal
 def sftp_download(
     conn: Connection,
-    node_info: dict[str, Any],
+    node_info: Dict[str, Any],
     remote_path: str,
     local_path: str,
     transfer_progress: Progress,
@@ -343,8 +344,8 @@ def sftp_download(
         raise Exception(f"下载失败: {e}")
 
 
-def upload_file_or_dir(node_info: dict[str, Any], args: Any, result: dict[str, Any], transfer_progress: Progress, task_id: TaskID, 
-                        info_progress: Progress, info_task: TaskID, callable_tar_result: Tuple[int, int, Optional[str]], use_sudo: bool, error_keywords: dict[str, list[str]]) -> dict[str, Any]:
+def upload_file_or_dir(node_info: Dict[str, Any], args: Any, result: Dict[str, Any], transfer_progress: Progress, task_id: TaskID, 
+                        info_progress: Progress, info_task: TaskID, callable_tar_result: Tuple[int, int, Optional[str]], use_sudo: bool, error_keywords: Dict[str, List[str]]) -> Dict[str, Any]:
     """
     功能：
         上传文件或目录到远程节点
@@ -427,7 +428,7 @@ def upload_file_or_dir(node_info: dict[str, Any], args: Any, result: dict[str, A
 
 
 # noinspection PyUnusedLocal
-def download_file_or_dir(node_info: dict[str, Any], args: Any, result: dict[str, Any], transfer_progress: Progress, task_id: TaskID, use_sudo: bool, error_keywords: dict[str, list[str]]) -> dict[str, Any]:
+def download_file_or_dir(node_info: Dict[str, Any], args: Any, result: Dict[str, Any], transfer_progress: Progress, task_id: TaskID, use_sudo: bool, error_keywords: Dict[str, List[str]]) -> Dict[str, Any]:
     """
     从远程节点下载文件或目录
     Args:
@@ -523,7 +524,7 @@ def download_file_or_dir(node_info: dict[str, Any], args: Any, result: dict[str,
 
 
 # @utils.error_and_exit_handling_decorator("execute_transfer", "执行传输任务失败")
-def execute_transfer(args: Any, nodesinfos: list[dict[str, Any]], error_keywords: dict[str, list[str]]) -> list[dict[str, Any]]:
+def execute_transfer(args: Any, nodesinfos: List[Dict[str, Any]], error_keywords: Dict[str, List[str]]) -> List[Dict[str, Any]]:
     """
     功能：
         执行文件或目录的传输任务

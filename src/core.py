@@ -10,6 +10,7 @@ import re
 import shutil
 # 系统或第三方模块
 import sys
+from typing import Dict, List
 from collections import Counter
 from datetime import datetime
 from pathlib import Path
@@ -120,7 +121,7 @@ def parse_args(config: SSHExecConfig) -> argparse.Namespace:
 
 
 @utils.error_and_exit_handling_decorator("read_nodes_infos", "读取节点信息失败")
-def read_nodes_infos(csv_path: str, config: SSHExecConfig) -> list[dict[str, str]]:
+def read_nodes_infos(csv_path: str, config: SSHExecConfig) -> List[Dict[str, str]]:
     """
     功能：
         从CSV文件中读取节点信息，并进行数据验证和处理
@@ -130,7 +131,7 @@ def read_nodes_infos(csv_path: str, config: SSHExecConfig) -> list[dict[str, str
         config (SSHExecConfig): 配置对象
 
     返回：
-        list[dict[str, str]]: 处理后的节点信息列表，每个节点是一个字典，包含ip、port、user和password字段
+        List[Dict[str, str]]: 处理后的节点信息列表，每个节点是一个字典，包含ip、port、user和password字段
     """
 
     # debug=true，将不再检查重复ip
@@ -477,7 +478,7 @@ def save_execute_resource_files(args: argparse.Namespace, log_dir: str, config: 
 
 
 @utils.error_and_exit_handling_decorator("results_statistics", "计算统计结果信息失败", isexit=True)
-def results_statistics(results: list, node_infos: list, args: argparse.Namespace, global_start_time: datetime, global_stop_time: datetime) -> dict:
+def results_statistics(results: List, node_infos: List, args: argparse.Namespace, global_start_time: datetime, global_stop_time: datetime) -> Dict:
     """
     功能：
         计算统计结果信息

@@ -10,6 +10,7 @@ import subprocess
 import sys
 import threading
 import time
+from typing import Dict, List
 from threading import Thread
 from queue import Queue, Empty
 from rich.console import Console
@@ -25,7 +26,7 @@ from src.utils import tlog
 console = Console()
 
 
-def handle_go_connection(conn: socket.socket, completion_event: threading.Event, node_progress, node_task, total_nodes: int, results: list[dict]) -> None:
+def handle_go_connection(conn: socket.socket, completion_event: threading.Event, node_progress, node_task, total_nodes: int, results: List[Dict]) -> None:
     """
     功能：
         处理与Go程序建立的网络连接，接收实时进度和结果数据
@@ -190,7 +191,7 @@ def capture_subprocess_output(process: subprocess.Popen) -> tuple[Thread, Thread
 
 
 # @utils.error_and_exit_handling_decorator("go_to_go", "Go程序批量任务执行失败")
-def go_to_go(args: argparse.Namespace, config: SSHExecConfig, nodesinfo: list[dict], exec_log_dir: str, error_keywords: dict[str, list[str]]) -> list[dict]:
+def go_to_go(args: argparse.Namespace, config: SSHExecConfig, nodesinfo: List[Dict], exec_log_dir: str, error_keywords: Dict[str, List[str]]) -> List[Dict]:
     """
     功能：
         主执行函数 - 启动Go程序执行SSH批量任务，通过网络套接字实时监控进度
@@ -203,7 +204,7 @@ def go_to_go(args: argparse.Namespace, config: SSHExecConfig, nodesinfo: list[di
         error_keywords: 错误关键词字典，用于结果分析
     
     返回：
-        list[dict]: 执行结果列表，包含每个节点的执行状态和输出
+        List[Dict]: 执行结果列表，包含每个节点的执行状态和输出
     """
     tlog.info("开始执行Go程序批量任务（网络套接字版本）")
     

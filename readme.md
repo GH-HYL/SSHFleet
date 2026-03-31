@@ -161,7 +161,7 @@ optional arguments:
 
 ## 10. 安全规则示例（错误分类规则同理，不再赘述）
 
-工具内置的部分安全检测规则（错误分类规则），可酌情增删改，详见./src/dict.py：
+工具内置的部分安全检测规则（错误分类规则），可酌情增删改，详见./src/Dict.py：
 
 ```python
 DANGEROUS_PATTERNS = [
