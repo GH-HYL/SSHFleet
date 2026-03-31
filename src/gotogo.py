@@ -189,7 +189,7 @@ def capture_subprocess_output(process: subprocess.Popen) -> tuple[Thread, Thread
     return stdout_flusher, stderr_flusher
 
 
-@utils.error_and_exit_handling_decorator("go_to_go", "Go程序批量任务执行失败")
+# @utils.error_and_exit_handling_decorator("go_to_go", "Go程序批量任务执行失败")
 def go_to_go(args: argparse.Namespace, config: SSHExecConfig, nodesinfo: list[dict], exec_log_dir: str, error_keywords: dict[str, list[str]]) -> list[dict]:
     """
     功能：
