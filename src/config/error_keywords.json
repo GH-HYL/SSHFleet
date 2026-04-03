@@ -5,7 +5,7 @@
 	"端口不可达":   ["unable to connect to port", "端口不可达"],
 	"目标不可达":   ["connect call failed", "目标不可达"],
 	"密码过期":     ["password expired", "change your password now", "has expired", "密码过期"],
-	"连接超时":     ["连接超时", "connect timeout", "connection timeout", "i/o timeout"],
+	"连接超时":     ["连接超时", "connect timeout", "connection timeout", "authentication timeout", "i/o timeout"],
 	"执行超时":     ["命令执行超时"],
 	"连接中断":     ["connection lost", "connection closed", "disconnected", "broken pipe", "socket closed", "连接中断", "连接已断开", "管道破裂"],
 	"拒绝网络连接":  ["connection refused", "connection reset", "refused", "connect refused", "拒绝连接", "连接被拒绝", "拒绝网络连接", "conn refused", "reset by peer"],
