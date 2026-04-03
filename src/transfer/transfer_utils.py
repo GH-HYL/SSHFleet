@@ -37,9 +37,9 @@ def create_ssh_connection(node_info: Dict[str, Any], args: Any) -> Connection:
 
     # 准备连接参数 - 只保留必要的参数
     connect_kwargs = {
-        "timeout": getattr(args, 'T', 5),  # TCP连接超时
-        "auth_timeout": getattr(args, 'T', 5),  # SSH认证超时
-        "banner_timeout": getattr(args, 'T', 5),  # SSH banner接收超时
+        "timeout": getattr(args, 'T', 5),           # 建立 TCP 网络连接的超时时间
+        "auth_timeout": getattr(args, 'T', 5),      # SSH 认证过程的超时时间
+        "banner_timeout": getattr(args, 'T', 5),    # 接收 SSH 欢迎横幅（Banner）的超时时间
     }
 
     # 添加认证信息
