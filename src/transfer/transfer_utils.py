@@ -9,7 +9,6 @@ import signal
 import tarfile
 import tempfile
 from fabric import Connection
-from fabric.config import Config
 from typing import Dict, Any
 from typing import Tuple, Optional
 
@@ -21,6 +20,9 @@ from src.utils import elog
 
 # 全局中断标志
 transfer_interrupted = False 
+
+# 禁用系统SSH配置加载
+os.environ["PARAMIKO_CONFIG_FILE"] = ""
 
 
 def create_ssh_connection(node_info: Dict[str, Any], args: Any) -> Connection:
@@ -58,12 +60,6 @@ def create_ssh_connection(node_info: Dict[str, Any], args: Any) -> Connection:
             "look_for_keys": False,
             "allow_agent": False,
         })
-    
-    # ====================== 关键修复：关闭系统SSH配置加载 ======================
-    # 这两行是解决 openEuler 报错的核心，不影响任何功能
-    config = Config()
-    config.load_system_host_keys = False  # 禁止加载系统 /etc/ssh/ssh_config
-    # ========================================================================
 
     # 创建连接对象
     try:
@@ -72,7 +68,6 @@ def create_ssh_connection(node_info: Dict[str, Any], args: Any) -> Connection:
             port=node_info["port"],
             user=node_info["user"],
             connect_kwargs=connect_kwargs,
-            config=config,
         )
 
         elog.info(f"创建SSH连接成功: {node_info['ip']}:{node_info['port']} 账号：{node_info['user']}")
