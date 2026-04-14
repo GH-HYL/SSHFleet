@@ -414,10 +414,12 @@ def upload_file_or_dir(node_info: Dict[str, Any], args: Any, result: Dict[str, A
                 result["exit_bool"] = False
                 result["result_category"] = str(e)
                 return result
-            
+
     except Exception as e:
         elog.error(f"上传文件或目录失败，出现未识别的异常信息：\n异常类型：\n{type(e)}\n异常信息：\n{e}")
-        result["result_category"] = "出现未识别异常" if not result["result_category"] else result["result_category"]
+        result["connect_bool"] = False
+        result["exit_bool"] = False
+        result["result_category"] = utils.error_classify(node_info.get('ip', '未知IP'), str(e), error_keywords)
             
     finally:
         # 不再需要手动清理资源，with语句已处理

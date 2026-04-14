@@ -21,9 +21,6 @@ from src.utils import elog
 # 全局中断标志
 transfer_interrupted = False 
 
-# 禁用系统SSH配置加载
-os.environ["PARAMIKO_CONFIG_FILE"] = ""
-
 
 def create_ssh_connection(node_info: Dict[str, Any], args: Any) -> Connection:
     """

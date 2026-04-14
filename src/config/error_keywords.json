@@ -18,5 +18,6 @@
 	"主机名验证失败": ["hostname verification failed", "hostname mismatch", "主机名验证失败"],
 	"连接数限制":   ["too many connections", "connection limit exceeded", "连接数过多", "达到连接限制"],
 	"网络配置错误":  ["network configuration error", "invalid network config", "网络配置错误"],
-	"SSH协议错误": ["ssh protocol error", "incompatible ssh version", "ssh handshake failed", "ssh: handshake failed: eof", "protocol mismatch", "协议错误"]
+	"SSH协议错误": ["ssh protocol error", "incompatible ssh version", "ssh handshake failed", "ssh: handshake failed: eof", "protocol mismatch", "协议错误"],
+	"本地客户端配置错误": ["match does not allow"]
 }
