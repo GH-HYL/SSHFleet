@@ -105,8 +105,10 @@ def parse_args(config: SSHExecConfig) -> argparse.Namespace:
     # 处理备注参数，如果不指定，默认使用空字符串
     if not args.r:  # 用户未输入备注
         if args.c:
-            # 取c值的第一个字段内容
-            args.r = args.c.split()[0]
+            # 取c值的第一个字段内容,如果这个字段长度超过8，则截取前8个字符
+            # 截取后的内容只允许包含字母、数字、下划线和短横线
+            args.r = args.c.split()[0][:8].replace(' ', '_').replace('/', '_').replace(':', '_').replace('*', '_').replace('?', '_').replace('"', '_').replace('<', '_').replace('>', '_').replace('|', '_').replace('\\', '_').replace('/', '_')
+            
         elif args.s:
             # 取s路径的文件名部分作为备注
             args.r = os.path.basename(args.s)
