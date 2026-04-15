@@ -249,17 +249,27 @@ def build_final_command(args: argparse.Namespace) -> str:
         safe_command = shlex.quote(args.c)
         components.append(f"bash -c {safe_command}")
     elif args.s:
+        import base64
+
+        # 脚本解释器选择
         interpreter = 'python3' if args.s.endswith('.py') else 'bash'
 
         # 读取脚本内容并正确使用heredoc
         with open(args.s, 'r', encoding='utf-8') as f:
             script_content = f.read().strip()
 
-        # 正确的heredoc语法
-        heredoc_tag = f"EOF_{int(time.time())}"
-        heredoc_command = f"{interpreter} << '{heredoc_tag}'\n{script_content}\n{heredoc_tag}"
+        # 编码为base64
+        encoded_content = base64.b64encode(script_content.encode('utf-8')).decode('utf-8')
 
-        components.append(heredoc_command)
+        # 构建命令：使用printf输出base64字符串，然后解码并执行
+        # base64编码字符集安全，不包含引号，因此使用单引号包裹
+        if interpreter == 'bash':
+            command = f"printf '%s' '{encoded_content}' | base64 -d | bash"
+        else:  # python3
+            command = f"printf '%s' '{encoded_content}' | base64 -d | python3"
+
+        components.append(command)
+
     else:
         tlog.error("参数出现严重异常，args.c 和 args.s 不能同时为空")
         print_error_informantion_and_exit("add_env_sudo_to_commands", "参数出现严重异常，args.c 和 args.s 不能同时为空")
