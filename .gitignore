@@ -5,6 +5,8 @@
 !sshexec.py
 !readme.md
 
+!other/
+!other/*
 
 !src/
 !src/*

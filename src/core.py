@@ -34,25 +34,25 @@ def parse_args(config: SSHExecConfig) -> argparse.Namespace:
     """
     
     parser = argparse.ArgumentParser(
-        description="\n基于Python3.9的 AsyncSSH 和 Paramiko 工具库的批量执行和传输工具\n"
+        description="\n基于 Python3.12 的 Paramiko 工具库的批量执行和传输工具\n"
                     "\n功能说明:\n"
                     "  执行模式: c、s、u、p、z\n"
-                    "  模式说明：执行命令、执行脚本、上传文件、下载文件、打包最新日志\n"
+                    "  模式说明：执行命令、执行脚本、上传文件、下载文件（暂未完成）、打包最新日志\n"
                     "\n示例：\n"
                     "  命令模式: python3 sshexec.py -f nodes.csv -c \"ls -l\"\n"
                     "  脚本模式: python3 sshexec.py -f nodes.csv -s script.sh\n"
-                    "  上传模式: python3 sshexec.py -f nodes.csv -u /local/path -p /remote/path\n"
+                    "  上传模式: python3 sshexec.py -f nodes.csv -u /local/path  -p /remote/path\n"
                     "  下载模式: python3 sshexec.py -f nodes.csv -d /remote/path -p /local/path\n"
                     "  打包模式: python3 sshexec.py -z\n",
         formatter_class=argparse.RawTextHelpFormatter,
         usage="\npython3 sshexec.py  ( -c | -s | -u | -d | -z )  ( -f ) ( -p ) [其他可选参数]\n"
     )
     try:
-        parser.add_argument('-c', metavar='command', help='     （命令模式）          远程执行命令')
-        parser.add_argument('-s', metavar='script', help='     （脚本模式）          远程执行脚本')
-        parser.add_argument('-u', metavar='upload', help='     （上传模式）          本地上传文件或目录路径')
-        parser.add_argument('-d', metavar='download', help='     （下载模式）          远程下载文件或目录路径（绝对路径）')
-        parser.add_argument('-z', action='store_true', help='     （打包模式）          打包最新日志到当前路径，注意：打包前会删除当前旧打包文件')
+        parser.add_argument('-c', metavar='command', help='    （命令模式）           远程执行命令')
+        parser.add_argument('-s', metavar='script', help='    （脚本模式）           远程执行脚本')
+        parser.add_argument('-u', metavar='upload', help='    （上传模式）           本地上传文件或目录路径')
+        parser.add_argument('-d', metavar='download', help='    （下载模式）           远程下载文件或目录路径（绝对路径）')
+        parser.add_argument('-z', action='store_true', help='    （打包模式）           打包最新日志到当前路径，注意：打包前会删除当前旧打包文件')
         parser.add_argument('-f', metavar='csv_file', help='                           节点信息的 CSV 文件 （ -c 或 -s 或 -u 或 -d 时必填）')
         parser.add_argument('-p', metavar='path', help='                           上传文件或目录的路径、下载文件存放的目录路径（ -u 或 -d 时必填）')
         # parser.add_argument('-tc', metavar='transfer_command', help=f'     传输模式专用，传输完成后远程执行命令')

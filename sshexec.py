@@ -6,8 +6,8 @@
 # ├── sshexec.py                    # 主程序
 # └── src/                          # 源代码文件夹
 #     ├── go/                       # go语言的执行器文件夹
-#     │   ├── batch_ssh             # 执行器（linux可执行文件）
-#     │   ├── batch_ssh.exe         # 执行器（windows可执行文件）
+#     │   ├── batch_ssh             # 执行器（Linux可执行文件）
+#     │   ├── batch_ssh.exe         # 执行器（Windows可执行文件）
 #     │   └── gotogo.py             # 执行器入口
 #     ├── transfer/                 # 传输模块
 #     │   ├── transfer_check.py     # 传输检查文件
@@ -20,7 +20,6 @@
 #     ├── check.py                  # 检查文件
 #     ├── color.py                  # 颜色文件
 #     ├── core.py                   # 核心代码文件
-#     ├── dicts.py                  # 字典文件
 #     ├── output.py                 # 打印结果文件
 #     ├── toml.py                   # 读取配置文件
 #     └── utils.py                  # 工具文件
