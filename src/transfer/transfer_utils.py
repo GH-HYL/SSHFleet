@@ -8,7 +8,8 @@ import os
 import signal
 import tarfile
 import tempfile
-from fabric import Connection
+from fabric import Connection, Config
+from paramiko.config import SSHConfig
 from typing import Dict, Any
 from typing import Tuple, Optional
 
@@ -65,6 +66,7 @@ def create_ssh_connection(node_info: Dict[str, Any], args: Any) -> Connection:
             port=node_info["port"],
             user=node_info["user"],
             connect_kwargs=connect_kwargs,
+            config=Config(ssh_config=SSHConfig()),
         )
 
         elog.info(f"创建SSH连接成功: {node_info['ip']}:{node_info['port']} 账号：{node_info['user']}")
