@@ -248,7 +248,6 @@ def sftp_upload(conn: Connection, node_info: Dict[str, Any], local_path: str, re
             elog.error(f'删除目标临时目录失败 {clear_dir}\n异常类型：\n{type(e)}\n异常信息：\n{e}')
 
 
-# noinspection PyUnusedLocal
 def sftp_download(
     conn: Connection,
     node_info: Dict[str, Any],
@@ -256,6 +255,8 @@ def sftp_download(
     local_path: str,
     transfer_progress: Progress,
     task_id: TaskID,
+    info_progress: Progress,
+    info_task: TaskID,
     use_sudo: bool = False
 ) -> None:
     """
@@ -264,83 +265,139 @@ def sftp_download(
         conn: 已建立的SSH连接
         node_info: 节点信息字典
         remote_path: 远程路径
-        local_path: 本地存储路径
+        local_path: 本地存储路径（final_local_path，已含 _ip 后缀）
         transfer_progress: 进度条对象
         task_id: 进度条任务ID
+        info_progress: 进度条对象
+        info_task: 进度条任务ID
         use_sudo: 是否使用sudo
     """
-    # 初始化变量
-    # base_name = os.path.basename(remote_path.rstrip('/'))
-    # renamed_local_path = f"{base_name}_{conn.host}"
-    # final_local_path = posix_join(local_path, renamed_local_path)
-    
-    try:
-        with conn.sftp():
-            elog.info('打开sftp成功')
-            
-            # 检查远程路径是否存在
-            test_command = f"test -e '{remote_path}'"
-            if use_sudo:
-                test_result = conn.sudo(test_command, hide=True, warn=True)
-            else:
-                test_result = conn.run(test_command, hide=True, warn=True)
-                
-            if not test_result.ok:
-                elog.error(f'远程路径不存在：{remote_path}')
-                raise Exception("远程路径不存在")
-                
-            elog.info(f'远程路径存在：{remote_path}')
-            
-            # 创建本地目录（如果不存在）
-            os.makedirs(local_path, exist_ok=True)
-            elog.info(f'创建本地目录成功：{local_path}')
+    large_file_threshold = 100 * 1024 * 1024  # 100MB
+    cumulative_transferred = 0
 
-            # def process_item(remote_item: str, local_item: str) -> None:
-            #     """递归处理远程项目(文件/目录)"""
-            #     nonlocal interrupted
-            #     if interrupted:
-            #         raise Exception("传输被中断")
-                    
-            #     attrs = sftp.stat(remote_item)
-                
-            #     # 处理符号链接
-            #     if attrs.st_mode & 0o170000 == 0o120000:
-            #         link_target = sftp.readlink(remote_item)
-            #         if not link_target.startswith(('..', '/')):
-            #             os.symlink(link_target, local_item)
-            #         transfer_progress.update(task_id, advance=1)
-            #         elog.debug(f'处理符号链接成功：{remote_item} -> {local_item}')
-            #         return
-                
-            #     # 处理目录
-            #     if attrs.st_mode & 0o40000:
-            #         os.makedirs(local_item, exist_ok=True)
-            #         elog.debug(f'创建本地目录：{local_item}')
-            #         for item in sftp.listdir(remote_item):
-            #             process_item(
-            #                 posix_join(remote_item, item),
-            #                 posix_join(local_item, item)
-            #             )
-                
-            #     # 处理文件
-            #     else:
-            #         with sftp.file(remote_item, 'rb') as remote_f:
-            #             with open(local_item, 'wb') as local_f:
-            #                 while True:
-            #                     if interrupted:
-            #                         raise Exception("传输被中断")
-            #                     data = remote_f.read(32768)
-            #                     if not data:
-            #                         break
-            #                     local_f.write(data)
-            #                     transfer_progress.update(task_id, advance=len(data))
-            #         elog.info(f'下载文件成功：{remote_item} -> {local_item}')
-            
-            # process_item(remote_path, final_local_path)
-            # elog.info(f'下载完成：{remote_path} -> {final_local_path}')
+    def progress_callback(bytes_received, _):
+        """回调函数：基于累计字节数更新进度"""
+        transfer_progress.update(task_id, completed=cumulative_transferred + bytes_received)
+        if transfer_utils.transfer_interrupted:
+            raise Exception("用户中断传输")
+
+    try:
+        info_progress.update(info_task, status='传输中')
+
+        # 1. 判断远程路径是文件还是目录
+        check_type_cmd = f"test -d '{remote_path}'"
+        if use_sudo:
+            type_result = conn.sudo(check_type_cmd, hide=True, warn=True)
+        else:
+            type_result = conn.run(check_type_cmd, hide=True, warn=True)
+        is_dir = type_result.ok
+        elog.info(f'远程路径类型检查：{remote_path} 是{"目录" if is_dir else "文件"}')
+
+        with conn.sftp() as sftp:
+            elog.info('打开sftp成功')
+
+            if is_dir:
+                # 2. 获取远程文件列表和总大小
+                find_cmd = f"find '{remote_path}' -not -type l -type f -printf '%s %P\\n'"
+                if use_sudo:
+                    find_result = conn.sudo(find_cmd, hide=True, warn=True)
+                else:
+                    find_result = conn.run(find_cmd, hide=True, warn=True)
+
+                # 解析结果，得到 [(相对路径, 文件大小), ...]
+                file_list = []
+                for line in find_result.stdout.strip().split('\n'):
+                    if not line.strip():
+                        continue
+                    parts = line.strip().split(' ', 1)
+                    if len(parts) != 2:
+                        continue
+                    file_size = int(parts[0])
+                    rel_path = parts[1].lstrip()
+                    file_list.append((rel_path, file_size))
+
+                total_size = sum(size for _, size in file_list)
+                elog.info(f'获取远程文件列表成功，共{len(file_list)}个文件，总大小：{transfer_utils.format_size(total_size)}')
+
+                # 3. 更新进度条 total
+                transfer_progress.update(task_id, total=total_size)
+
+                # 4. 逐文件下载
+                for rel_path, file_size in file_list:
+                    if transfer_utils.transfer_interrupted:
+                        raise Exception("用户中断传输")
+
+                    remote_file = f"{remote_path}/{rel_path}"
+                    local_file = os.path.join(local_path, rel_path.replace('/', os.sep))
+
+                    # 确保本地父目录存在
+                    local_parent_dir = os.path.dirname(local_file)
+                    if local_parent_dir:
+                        os.makedirs(local_parent_dir, exist_ok=True)
+
+                    if file_size > large_file_threshold:
+                        # 流式下载大文件
+                        elog.info(f'下载大文件（流式）：{remote_file}，大小：{transfer_utils.format_size(file_size)}')
+                        with sftp.open(remote_file, 'rb') as remote_f:
+                            with open(local_file, 'wb') as local_f:
+                                while True:
+                                    if transfer_utils.transfer_interrupted:
+                                        raise Exception("用户中断传输")
+                                    data = remote_f.read(32768)
+                                    if not data:
+                                        break
+                                    local_f.write(data)
+                                    cumulative_transferred += len(data)
+                                    transfer_progress.update(task_id, completed=cumulative_transferred)
+                    else:
+                        # 普通下载
+                        sftp.get(remote_file, local_file, callback=progress_callback)
+                        cumulative_transferred += file_size
+
+                    elog.debug(f'下载文件成功：{remote_file} -> {local_file}')
+
+                elog.info(f'目录下载完成：{remote_path} -> {local_path}')
+
+            else:
+                # 单文件下载
+                stat_cmd = f"stat -c '%s' '{remote_path}'"
+                if use_sudo:
+                    size_result = conn.sudo(stat_cmd, hide=True, warn=True)
+                else:
+                    size_result = conn.run(stat_cmd, hide=True, warn=True)
+                total_size = int(size_result.stdout.strip())
+
+                # 更新进度条 total
+                transfer_progress.update(task_id, total=total_size)
+                elog.info(f'获取远程文件大小成功：{transfer_utils.format_size(total_size)}')
+
+                # 单文件：重命名为 {filename}_{ip}
+                base_name = os.path.basename(remote_path)
+                local_file = os.path.join(local_path, f"{base_name}_{node_info['ip']}")
+                elog.info(f'单文件下载，重命名为：{local_file}')
+
+                if total_size > large_file_threshold:
+                    # 流式下载大文件
+                    elog.info(f'下载大文件（流式）：{remote_path}，大小：{transfer_utils.format_size(total_size)}')
+                    with sftp.open(remote_path, 'rb') as remote_f:
+                        with open(local_file, 'wb') as local_f:
+                            while True:
+                                if transfer_utils.transfer_interrupted:
+                                    raise Exception("用户中断传输")
+                                data = remote_f.read(32768)
+                                if not data:
+                                    break
+                                local_f.write(data)
+                                cumulative_transferred += len(data)
+                                transfer_progress.update(task_id, completed=cumulative_transferred)
+                else:
+                    # 普通下载
+                    sftp.get(remote_path, local_file, callback=progress_callback)
+
+                elog.info(f'文件下载完成：{remote_path} -> {local_file}')
 
     except Exception as e:
-        elog.error(f'下载过程中出现异常：{e}')
+        elog.error(f'下载过程中出现异常\n异常类型：\n{type(e)}\n异常信息：\n{e}')
         raise Exception(f"下载失败: {e}")
 
 
@@ -429,8 +486,17 @@ def upload_file_or_dir(node_info: Dict[str, Any], args: Any, result: Dict[str, A
     return result
 
 
-# noinspection PyUnusedLocal
-def download_file_or_dir(node_info: Dict[str, Any], args: Any, result: Dict[str, Any], transfer_progress: Progress, task_id: TaskID, use_sudo: bool, error_keywords: Dict[str, List[str]]) -> Dict[str, Any]:
+def download_file_or_dir(
+    node_info: Dict[str, Any],
+    args: Any,
+    result: Dict[str, Any],
+    transfer_progress: Progress,
+    task_id: TaskID,
+    info_progress: Progress,
+    info_task: TaskID,
+    use_sudo: bool,
+    error_keywords: Dict[str, List[str]]
+) -> Dict[str, Any]:
     """
     从远程节点下载文件或目录
     Args:
@@ -439,89 +505,81 @@ def download_file_or_dir(node_info: Dict[str, Any], args: Any, result: Dict[str,
         result: 结果字典
         transfer_progress: 进度条对象
         task_id: 进度条任务ID
+        info_progress: 进度条对象
+        info_task: 进度条任务ID
         use_sudo: 是否使用sudo权限
         error_keywords: 错误分类字典，用于根据错误文本分类错误
     Returns:
         包含传输结果的字典
     """
-    # 结果字典初始化
-    result = transfer_utils.initialize_result_dict(node_info, args, download=True)
     result["thread_start_time"] = datetime.now()
-    
+
+    # 检查中断标志
+    if transfer_utils.transfer_interrupted:
+        result.update({
+            "connect_bool": False,
+            "exit_bool": False,
+            "result_category": "传输被Ctrl+C中断"
+        })
+        return result
+
     try:
-        # 创建连接对象
-        try:
-            conn = transfer_utils.create_ssh_connection(node_info, args)
-            elog.debug("创建连接对象成功")
-        except Exception as e:
-            elog.error(f"创建连接对象失败，异常信息：{e}")
-            utils.print_error_informantion_and_exit('create_ssh_connection',f'创建连接对象失败：{e}')
-        
-        # 建立连接
-        try:
-            conn.open()
-            result["connect_bool"] = True
-            elog.info("建立连接成功")
-        except Exception as e:
-            elog.error(f"建立连接失败，异常信息：{e}")
-            result["connect_bool"] = False
-            result["exit_bool"] = False
-            result["result_category"] = utils.error_classify(node_info.get('ip', '未知IP'), str(e), error_keywords)
-            return result
+        # 创建连接对象并使用with语句管理
+        with transfer_utils.create_ssh_connection(node_info, args) as conn:
+            try:
+                conn_result = conn.run(":", hide=True)
+                elog.info("建立连接成功")
+                elog.info(f"检查连接返回信息：{conn_result.stdout.strip()}")
+            except Exception as e:
+                elog.error(f"建立连接失败\n异常类型：\n{type(e)}\n异常信息：\n{e}")
+                result["connect_bool"] = False
+                result["exit_bool"] = False
+                result["result_category"] = utils.error_classify(node_info.get('ip', '未知IP'), str(e), error_keywords)
+                return result
 
-        # 检查远程操作系统
-        # try:
-        #     transfer_check.check_unix_os(conn)
-        #     elog.debug("检查远程操作系统成功")
-        # except Exception as e:
-        #     elog.error(f"检查远程操作系统失败，非Unix系统，检查/bin和/usr目录是否存在，异常信息：{e}")
-        #     result["exit_bool"] = False
-        #     result["result_category"] = "非Unix系统"
-        #     return result
-        
-        # 检查下载路径是否存在
-        try:
-            transfer_check.check_path_exists(conn, args.d)
-            elog.info("下载路径存在")
-        except Exception as e:
-            elog.error(f"下载路径不存在，异常信息：{e}")
-            result["exit_bool"] = False
-            result["result_category"] = "下载路径不存在"
-            return result
+            info_progress.update(info_task, status='检查中')
 
-        # 估算远程文件大小
-        try:
-            size_cmd = f"sudo du -sb {args.d} | cut -f1" if use_sudo else f"du -sb {args.d} | cut -f1"
-            size_result = conn.run(size_cmd, hide=True)
-            total_size = int(size_result.stdout.strip())
-            elog.info(f'估算远程文件大小成功：{total_size}字节')
-        except Exception as e:
-            elog.error(f'估算远程文件大小失败，异常信息：{e}')
-            result["exit_bool"] = False
-            result["result_category"] = "估算文件大小失败"
-            return result
-        
-        # 更新进度条
-        transfer_progress.update(task_id, description=f"下载 {node_info['ip']}", total=total_size, ip=node_info["ip"])
-        
-        # 执行下载
-        try:
-            sftp_download(conn, node_info, args.d, args.p, transfer_progress, task_id, use_sudo)
-            elog.info("单个节点的下载文件或目录任务成功完成")
-            result["exit_bool"] = True
-            result["result_category"] = "传输成功"
-            
-        except Exception as e:
-            elog.error(f"下载文件或目录失败，异常信息：{e}")
-            result["exit_bool"] = False
-            result["result_category"] = str(e)
-            return result
-        
+            # 判断远程路径是文件还是目录，拼装 final_local_path
+            check_type_cmd = f"test -d '{args.d}'"
+            if use_sudo:
+                type_result = conn.sudo(check_type_cmd, hide=True, warn=True)
+            else:
+                type_result = conn.run(check_type_cmd, hide=True, warn=True)
+            is_remote_dir = type_result.ok
+
+            base_name = os.path.basename(args.d.rstrip('/'))
+            if is_remote_dir:
+                # 目录：创建 {dirname}_{ip} 目录
+                final_local_path = os.path.join(args.p, f"{base_name}_{node_info['ip']}")
+                os.makedirs(final_local_path, exist_ok=True)
+            else:
+                # 文件：创建目标目录，文件将重命名为 {filename}_{ip}
+                os.makedirs(args.p, exist_ok=True)
+                final_local_path = args.p  # 目录路径传给 sftp_download
+            elog.info(f'最终本地路径：{final_local_path}')
+
+            # 执行下载
+            try:
+                sftp_download(conn, node_info, args.d, final_local_path, transfer_progress, task_id, info_progress, info_task, use_sudo)
+                elog.info("单个节点的下载文件或目录任务成功完成")
+                result["exit_bool"] = True
+                result["result_category"] = "传输成功"
+            except Exception as e:
+                elog.error(f"下载文件或目录失败\n异常类型：\n{type(e)}\n异常信息：\n{e}")
+                result["exit_bool"] = False
+                result["result_category"] = str(e)
+                return result
+
+    except Exception as e:
+        elog.error(f"下载文件或目录失败，出现未识别的异常信息：\n异常类型：\n{type(e)}\n异常信息：\n{e}")
+        result["connect_bool"] = False
+        result["exit_bool"] = False
+        result["result_category"] = utils.error_classify(node_info.get('ip', '未知IP'), str(e), error_keywords)
+
     finally:
-        # transfer_utils.cleanup_resources(conn)
         result["thread_end_time"] = datetime.now()
         result["thread_cost_time"] = round((result["thread_end_time"] - result["thread_start_time"]).total_seconds(), 3)
-    
+
     return result
 
 
@@ -632,7 +690,11 @@ def execute_transfer(args: Any, nodesinfos: List[Dict[str, Any]], error_keywords
                         result = upload_file_or_dir(node_info, args, result, transfer_progress, transfer_task, info_progress, info_task, callable_tar_result, use_sudo, error_keywords)
                     elif hasattr(args, 'd') and args.d:
                         elog.info("开始下载文件或目录")
-                        result = download_file_or_dir(node_info, args, result, transfer_progress, transfer_task, use_sudo, error_keywords)
+                        result = download_file_or_dir(
+                            node_info, args, result, transfer_progress, transfer_task,
+                            info_progress, info_task,
+                            use_sudo, error_keywords
+                        )
                     else:
                         elog.error(f"参数错误,请联系开发者检查args.u和.args.d值的有效性，当前值：{args.u},{args.d}")
                         utils.print_error_informantion_and_exit("execute_transfer", f"参数错误,请联系开发者检查args.u和.args.d值的有效性，当前值：{args.u},{args.d}")
