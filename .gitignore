@@ -1,19 +1,23 @@
+# 忽略所有
 *
 
 !.gitignore
+!sshexec.py
+!readme.md
 
-!*.txt
+!others/
+!others/*
 
-!go.*
-!*.go
-!*/*go
-
-!internal/
-!internal/*/
-!internal/*/*go
-
-# !vendor/
-# !vendor/**
+!src/
+!src/*
+!src/config/
+!src/config/*
+!src/go/
+!src/go/*
+!src/transfer/
+!src/transfer/*
 
 !notes/
 !notes/memo.txt
+
+
