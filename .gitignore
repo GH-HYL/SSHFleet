@@ -14,10 +14,9 @@
 !src/config/*
 !src/go/
 !src/go/*
+!src/go/**
 !src/transfer/
 !src/transfer/*
 
 !notes/
 !notes/memo.txt
-
-
