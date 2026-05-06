@@ -50,7 +50,9 @@ def main():
     try:
         config = toml.load_config(config_path)
     except Exception as e:
-        print(f"\033[91m[ERROR]\033[0m\033[93m [function:load_config]\033[0m 加载配置文件失败\n异常类型：\n{type(e)}\n异常信息：\n{e}")
+        print(
+            f"\033[91m[ERROR]\033[0m\033[93m [function:load_config]\033[0m 加载配置文件失败\n异常类型：\n{type(e)}\n异常信息：\n{e}"
+        )
         sys.exit(1)
 
     # 初始化工具日志
@@ -59,28 +61,38 @@ def main():
         tlog.debug(f"{ '-' * 50}分割线{ '-' * 50}")
         tlog.success("初始化工具日志成功")
     except Exception as e:
-        print(f"\033[91m[ERROR]\033[0m\033[93m [function:init_tool_logger]\033[0m 初始化工具日志失败\n异常类型：\n{type(e)}\n异常信息：\n{e}")
+        print(
+            f"\033[91m[ERROR]\033[0m\033[93m [function:init_tool_logger]\033[0m 初始化工具日志失败\n异常类型：\n{type(e)}\n异常信息：\n{e}"
+        )
 
     tlog.info(f"SSHExec工具开始执行，时间：{datetime.now()}")
     tlog.info(f"工作路径：{os.getcwd()}")
     tlog.info(f"原始命令行参数：{sys.argv}")
-    tlog.info(f"日志目录：{config.paths.logs.historys}，工具日志文件名：{config.paths.logs.tool}")
+    tlog.info(
+        f"日志目录：{config.paths.logs.historys}，工具日志文件名：{config.paths.logs.tool}"
+    )
     tlog.debug(f"{ '-' * 20}SSHExec工具 - 准备阶段{ '-' * 20}")
 
     # 检查代码文件是否都存在
     check.check_files_exist(config)
     tlog.success("检查代码文件存在性成功")
 
-
     # 获取危险命令分类正则关键字
     if os.path.exists(config.paths.jsons.dangerous_keywords):
         try:
-            with open(config.paths.jsons.dangerous_keywords, 'r', encoding='utf-8') as f:
+            with open(
+                config.paths.jsons.dangerous_keywords, "r", encoding="utf-8"
+            ) as f:
                 dangerous_keywords = json.load(f)
         except Exception as e:
-            tlog.error(f"JSON文件{config.paths.jsons.dangerous_keywords}读取内容失败\n异常类型：\n{type(e)}\n异常信息：\n{e}")
-            utils.print_error_informantion_and_exit("gotogo.go_to_go", f"JSON文件{config.paths.jsons.dangerous_keywords}读取内容失败\n异常类型：\n{type(e)}\n异常信息：\n{e}")
-            
+            tlog.error(
+                f"JSON文件{config.paths.jsons.dangerous_keywords}读取内容失败\n异常类型：\n{type(e)}\n异常信息：\n{e}"
+            )
+            utils.print_error_informantion_and_exit(
+                "gotogo.go_to_go",
+                f"JSON文件{config.paths.jsons.dangerous_keywords}读取内容失败\n异常类型：\n{type(e)}\n异常信息：\n{e}",
+            )
+
     # 参数解析
     args = core.parse_args(config)
     tlog.success(f"参数解析成功,解析结果: {args}")
@@ -106,7 +118,7 @@ def main():
 
     # 参数信息确认
     tlog.info("开始进行参数信息确认")
-    core.arguments_confirm(args,nodesinfos)
+    core.arguments_confirm(args, nodesinfos)
     tlog.info("用户已核实通过参数信息")
 
     tlog.debug(f"{'-' * 20}SSHExec工具 - 准备结束{'-' * 20}\n")
@@ -115,11 +127,16 @@ def main():
     # 获取错误分类关键字
     if os.path.exists(config.paths.jsons.error_keywords):
         try:
-            with open(config.paths.jsons.error_keywords, 'r', encoding='utf-8') as f:
+            with open(config.paths.jsons.error_keywords, "r", encoding="utf-8") as f:
                 error_keywords = json.load(f)
         except Exception as e:
-            tlog.error(f"JSON文件{config.paths.exe.batch_tool_windows}读取内容失败\n异常类型：\n{type(e)}\n异常信息：\n{e}")
-            utils.print_error_informantion_and_exit("gotogo.go_to_go", f"JSON文件{config.paths.exe.batch_tool_windows}读取内容失败\n异常类型：\n{type(e)}\n异常信息：\n{e}")
+            tlog.error(
+                f"JSON文件{config.paths.exe.batch_tool_windows}读取内容失败\n异常类型：\n{type(e)}\n异常信息：\n{e}"
+            )
+            utils.print_error_informantion_and_exit(
+                "gotogo.go_to_go",
+                f"JSON文件{config.paths.exe.batch_tool_windows}读取内容失败\n异常类型：\n{type(e)}\n异常信息：\n{e}",
+            )
 
     # “全局”开始时间计时
     global_start_time = datetime.now()
@@ -131,7 +148,9 @@ def main():
 
     if args.c or args.s:
         tlog.info("进入“执行”主执行器")
-        final_results =  gotogo.go_to_go(args, config, nodesinfos, exec_log_dir, error_keywords)
+        final_results = gotogo.go_to_go(
+            args, config, nodesinfos, exec_log_dir, error_keywords
+        )
         tlog.success("go_to_go主执行器执行完成")
 
     # 进入transfer主执行器
@@ -144,6 +163,7 @@ def main():
 
         # 开始传输文件
         import src.transfer.transfer as transfer
+
         tlog.info("进入transfer主执行器")
         tlog.debug(f"日志内容轮转到文件: {exec_log_dir}/{config.paths.logs.exec}")
         final_results = transfer.execute_transfer(args, nodesinfos, error_keywords)
@@ -151,15 +171,20 @@ def main():
 
     # “全局”结束时间计时
     global_stop_time = datetime.now()
-    tlog.info(f"全局结束时间: {global_stop_time}，全局执行时间: {round((global_stop_time - global_start_time).total_seconds(), 3)}秒")
+    tlog.info(
+        f"全局结束时间: {global_stop_time}，全局执行时间: {round((global_stop_time - global_start_time).total_seconds(), 3)}秒"
+    )
 
     print(f"{'═' * 60}")
     print(f"SSHExec工具{color.COLOR_GREEN}正在整理{color.COLOR_RESET}......")
     tlog.debug(f"{'=' * 30}SSHExec工具 - 执行结束{'=' * 30}\n")
     tlog.debug(f"{'-' * 20}SSHExec工具 - 整理阶段{'-' * 20}")
-    
+
     if not final_results:
-        utils.print_error_informantion_and_exit("main", f"{color.COLOR_RED}results结果未能正常生成，跳过整理阶段{color.COLOR_RESET}")
+        utils.print_error_informantion_and_exit(
+            "main",
+            f"{color.COLOR_RED}results结果未能正常生成，跳过整理阶段{color.COLOR_RESET}",
+        )
 
     # 格式化终端输出到Excel文件（转换output.txt格式）
     if config.enable.output_to_xlsx:
@@ -172,16 +197,19 @@ def main():
         tlog.success("格式化results字典列表到Excel文件成功")
 
     # 计算统计结果信息
-    results_statistic = core.results_statistics(final_results, nodesinfos, args, global_start_time, global_stop_time)
+    results_statistic = core.results_statistics(
+        final_results, nodesinfos, args, global_start_time, global_stop_time
+    )
     tlog.success("计算统计结果信息成功")
 
     # 格式化统计结果信息输出到终端
     output.format_statistic_results_to_terminal(results_statistic)
     tlog.success("格式化统计结果信息输出到终端成功")
 
-
     # 格式化统计结果信息输出到报告文件
-    output.format_statistic_results_to_report(results_statistic, exec_log_dir, args, config)
+    output.format_statistic_results_to_report(
+        results_statistic, exec_log_dir, args, config
+    )
     tlog.success("格式化统计结果信息输出到报告文件成功")
 
     # 保存执行资源文件
@@ -192,7 +220,6 @@ def main():
     utils.create_latest_log_symlink(config)
     tlog.success("创建最新日志符号链接函数执行成功")
 
-
     tlog.debug(f"{'-' * 20}SSHExec工具 - 整理结束{'-' * 20}")
 
     # 退出SSHExec工具
@@ -200,6 +227,7 @@ def main():
     tlog.info("SSHExec工具已退出")
     tlog.debug(f"{ '-' * 50}分割线{ '-' * 50}" + "\n" * 3)
     sys.exit(0)
+
 
 if __name__ == "__main__":
     """

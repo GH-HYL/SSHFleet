@@ -18,19 +18,23 @@ class Files(BaseModel):
     report: str
     results_xlsx: str
 
+
 class Logs(BaseModel):
     zip: str
     historys: str
     tool: str
     exec: str
 
+
 class Exe(BaseModel):
     batch_tool_windows: str
     batch_tool_linux: str
 
+
 class Jsons(BaseModel):
     error_keywords: str
     dangerous_keywords: str
+
 
 class Paths(BaseModel):
     jsons: Jsons
@@ -38,9 +42,11 @@ class Paths(BaseModel):
     logs: Logs
     files: Files
 
+
 class Enable(BaseModel):
     output_to_xlsx: bool
     results_to_xlsx: bool
+
 
 class Execution(BaseModel):
     mode: str
@@ -49,16 +55,19 @@ class Execution(BaseModel):
     timeout_transfer: int
     private_key: str
 
+
 class Account(BaseModel):
     port: int
     user: str
     password: str
+
 
 class SSHExecConfig(BaseModel):
     account: Account
     execution: Execution
     enable: Enable
     paths: Paths
+
 
 def load_config(config_path: str) -> SSHExecConfig:
     """
@@ -79,7 +88,9 @@ def load_config(config_path: str) -> SSHExecConfig:
         if config_dict["account"]["password"]:
             base64.b64decode(config_dict["account"]["password"])
     except Exception as e:
-        print(f"\033[91m[ERROR]\033[0m\033[93m [function:load_config]\033[0m 密码不是有效的base64编码\n异常类型：\n{type(e)}\n异常信息：\n{e}")
+        print(
+            f"\033[91m[ERROR]\033[0m\033[93m [function:load_config]\033[0m 密码不是有效的base64编码\n异常类型：\n{type(e)}\n异常信息：\n{e}"
+        )
         sys.exit(1)
 
     return SSHExecConfig(**config_dict)

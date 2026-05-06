@@ -3,6 +3,7 @@
 # 该文件负责定义通用的工具函数，包括参数解析、配置加载、日志初始化等
 
 import argparse
+
 # 系统或第三方模块
 import os
 import re
@@ -26,31 +27,33 @@ elog = logger.bind(logger_type="exec")
 
 class JumpOut(Exception):
     """自定义异常，用于跳出try，中断执行"""
+
     pass
+
 
 def clean_ansi_escape_codes(text):
     """
     清理文本中的ANSI转义序列（终端颜色代码等）
-    
+
     Args:
         text: 需要清理的文本内容
-        
+
     Returns:
         清理后的纯文本内容
     """
     if isinstance(text, bytes):
-        text = text.decode(encoding='utf-8', errors='ignore')  # 加errors避免解码失败
-    
+        text = text.decode(encoding="utf-8", errors="ignore")  # 加errors避免解码失败
+
     # 优化正则：匹配所有ANSI转义序列（包含\x1b开头的完整格式）
     ansi_escape_pattern: re.Pattern[str] = re.compile(
-        r'\x1b\[[0-9;]*m|'  # 颜色控制码（最常见）
-        r'\x1b[@-_][0-?]*[-/]*[@-~]'  # 其他ANSI转义码
+        r"\x1b\[[0-9;]*m|"  # 颜色控制码（最常见）
+        r"\x1b[@-_][0-?]*[-/]*[@-~]"  # 其他ANSI转义码
     )
-    cleaned_text = ansi_escape_pattern.sub('', text)
-    
+    cleaned_text = ansi_escape_pattern.sub("", text)
+
     # 过滤Excel不支持的控制字符（含\x1b等）
-    control_chars_pattern = re.compile(r'[\x00-\x1F\x7F]')
-    cleaned_text = control_chars_pattern.sub('', cleaned_text).strip()
+    control_chars_pattern = re.compile(r"[\x00-\x1F\x7F]")
+    cleaned_text = control_chars_pattern.sub("", cleaned_text).strip()
 
     return cleaned_text
 
@@ -70,17 +73,27 @@ def get_user_confirmation(prompt, yorn=False):
 
     try:
         if yorn:
-            confirm = input(f"{prompt} {color.COLOR_RED}[Y/n]{color.COLOR_RESET}: ").strip().lower() or 'y'
+            confirm = (
+                input(f"{prompt} {color.COLOR_RED}[Y/n]{color.COLOR_RESET}: ")
+                .strip()
+                .lower()
+                or "y"
+            )
         else:
-            confirm = input(f"{prompt} {color.COLOR_RED}[y/N]{color.COLOR_RESET}: ").strip().lower() or 'n'
-        return confirm == 'y'
+            confirm = (
+                input(f"{prompt} {color.COLOR_RED}[y/N]{color.COLOR_RESET}: ")
+                .strip()
+                .lower()
+                or "n"
+            )
+        return confirm == "y"
     except KeyboardInterrupt:
         print(f"\n{color.COLOR_YELLOW}操作已取消{color.COLOR_RESET}")
         sys.exit(1)
     except EOFError:  # 处理管道输入等情况
         print(f"\n{color.COLOR_YELLOW}输入结束，操作已取消{color.COLOR_RESET}")
         sys.exit(1)
-    
+
 
 def remove_command_fist_last_same_symbol(cmd_str):
     """
@@ -95,21 +108,27 @@ def remove_command_fist_last_same_symbol(cmd_str):
         cmd_str: 处理后的命令字符串
     """
 
-
     # 特殊符号黑名单，以下符号不移除
-    forbidden_chars = r'^$*+?.()[]{}|\/'
+    forbidden_chars = r"^$*+?.()[]{}|\/"
 
     # 判断并处理 , 命令大于一个字符、首尾相同、首尾不是字母或数字、首尾不在特殊符号黑名单中
-    if len(cmd_str) > 1 and cmd_str[0] == cmd_str[-1] and not cmd_str[0].isalnum() and cmd_str[0] not in forbidden_chars:
+    if (
+        len(cmd_str) > 1
+        and cmd_str[0] == cmd_str[-1]
+        and not cmd_str[0].isalnum()
+        and cmd_str[0] not in forbidden_chars
+    ):
 
         removed_symbol = cmd_str[0]  # 记录被移除的符号
-        cmd_str = cmd_str[1:-1]     # 实际移除操作
+        cmd_str = cmd_str[1:-1]  # 实际移除操作
         return removed_symbol, cmd_str
     else:
         return None, cmd_str
 
 
-def error_classify(ip: str, error_text: str, error_keywords: Dict[str, List[str]]) -> str:
+def error_classify(
+    ip: str, error_text: str, error_keywords: Dict[str, List[str]]
+) -> str:
     """
     功能：
         根据错误文本内容进行分类
@@ -138,7 +157,9 @@ def error_classify(ip: str, error_text: str, error_keywords: Dict[str, List[str]
     return "错误未分类"
 
 
-def print_error_informantion_and_exit( func_name: str, error_str: str, isexit: bool = True):
+def print_error_informantion_and_exit(
+    func_name: str, error_str: str, isexit: bool = True
+):
     """
     功能：
         打印错误信息并退出程序
@@ -151,7 +172,10 @@ def print_error_informantion_and_exit( func_name: str, error_str: str, isexit: b
     返回：
         None
     """
-    print(f"{color.COLOR_RED}[ERROR]{color.COLOR_RESET}{color.COLOR_YELLOW} [function:{func_name}]{color.COLOR_RESET} {error_str}", file=sys.stderr)
+    print(
+        f"{color.COLOR_RED}[ERROR]{color.COLOR_RESET}{color.COLOR_YELLOW} [function:{func_name}]{color.COLOR_RESET} {error_str}",
+        file=sys.stderr,
+    )
     sys.exit(1) if isexit else None
 
 
@@ -170,10 +194,11 @@ def init_tool_logger(log_dir: str, config: SSHExecConfig):
         level="DEBUG",
         encoding="utf-8",
         format="{time:YYYY-MM-DD HH:mm:ss.SSS} - [{level: ^7}] - {message}",
-        filter=lambda record: record["extra"].get("logger_type") == "tool"
+        filter=lambda record: record["extra"].get("logger_type") == "tool",
     )
 
     return tlog
+
 
 def args_normalize_path(path):
     """
@@ -203,7 +228,7 @@ def args_normalize_path(path):
     ends_with_slash = path.endswith("/")
 
     # 处理 Windows 盘符路径（如 C:\ → C:/）
-    if re.match(r'^[A-Za-z]:', path):
+    if re.match(r"^[A-Za-z]:", path):
         drive = path[0].upper()
         rest = path[2:].lstrip("/")
         path = f"{drive}:/{rest}" if rest else f"{drive}:/"
@@ -242,7 +267,7 @@ def build_final_command(args: argparse.Namespace) -> str:
 
     # 2. sudo
     if args.m == "sudo":
-        components.append('sudo')
+        components.append("sudo")
 
     # 3. 命令主体
     if args.c:
@@ -252,18 +277,20 @@ def build_final_command(args: argparse.Namespace) -> str:
         import base64
 
         # 脚本解释器选择
-        interpreter = 'python3' if args.s.endswith('.py') else 'bash'
+        interpreter = "python3" if args.s.endswith(".py") else "bash"
 
         # 读取脚本内容并正确使用heredoc
-        with open(args.s, 'r', encoding='utf-8') as f:
+        with open(args.s, "r", encoding="utf-8") as f:
             script_content = f.read().strip()
 
         # 编码为base64
-        encoded_content = base64.b64encode(script_content.encode('utf-8')).decode('utf-8')
+        encoded_content = base64.b64encode(script_content.encode("utf-8")).decode(
+            "utf-8"
+        )
 
         # 构建命令：使用printf输出base64字符串，然后解码并执行
         # base64编码字符集安全，不包含引号，因此使用单引号包裹
-        if interpreter == 'bash':
+        if interpreter == "bash":
             command = f"printf '%s' '{encoded_content}' | base64 -d | bash"
         else:  # python3
             command = f"printf '%s' '{encoded_content}' | base64 -d | python3"
@@ -272,7 +299,10 @@ def build_final_command(args: argparse.Namespace) -> str:
 
     else:
         tlog.error("参数出现严重异常，args.c 和 args.s 不能同时为空")
-        print_error_informantion_and_exit("add_env_sudo_to_commands", "参数出现严重异常，args.c 和 args.s 不能同时为空")
+        print_error_informantion_and_exit(
+            "add_env_sudo_to_commands",
+            "参数出现严重异常，args.c 和 args.s 不能同时为空",
+        )
 
     # 组合完整命令
     final_command = " ".join(filter(None, components))
@@ -280,8 +310,11 @@ def build_final_command(args: argparse.Namespace) -> str:
     tlog.success(f"拼接完成，完整命令: {final_command}")
     return final_command.strip()
 
+
 # 报错退出装饰器函数
-def error_and_exit_handling_decorator(func_name: str, error_str: str, isexit: bool = True):
+def error_and_exit_handling_decorator(
+    func_name: str, error_str: str, isexit: bool = True
+):
     """
     功能：
         装饰器函数，用于处理函数执行时的异常
@@ -294,15 +327,24 @@ def error_and_exit_handling_decorator(func_name: str, error_str: str, isexit: bo
     返回：
         装饰器函数
     """
+
     def decorator(func):
         def wrapper(*args, **kwargs):
             try:
                 result = func(*args, **kwargs)
                 return result
             except Exception as e:
-                tlog.error(f"{func_name}，{error_str}\n异常类型：\n{type(e)}\n异常信息：\n{e}")
-                print_error_informantion_and_exit(f"{func_name}", f"{error_str}\n异常类型：{type(e)}\n异常信息：\n{e}", isexit)
+                tlog.error(
+                    f"{func_name}，{error_str}\n异常类型：\n{type(e)}\n异常信息：\n{e}"
+                )
+                print_error_informantion_and_exit(
+                    f"{func_name}",
+                    f"{error_str}\n异常类型：{type(e)}\n异常信息：\n{e}",
+                    isexit,
+                )
+
         return wrapper
+
     return decorator
 
 
@@ -359,13 +401,14 @@ def init_execution_logger(log_dir: str, log_exec: str):
         enqueue=True,  # 启用线程安全队列
         encoding="utf-8",
         format="{time:YYYY-MM-DD HH:mm:ss.SSS} - [{level: ^7}] - {message}",
-        filter=lambda record: record["extra"].get("logger_type") == "exec"
+        filter=lambda record: record["extra"].get("logger_type") == "exec",
     )
     return elog
-    
 
-    
-@error_and_exit_handling_decorator("create_latest_log_symlink", "创建最新日志符号链接失败", isexit=True)
+
+@error_and_exit_handling_decorator(
+    "create_latest_log_symlink", "创建最新日志符号链接失败", isexit=True
+)
 def create_latest_log_symlink(config: SSHExecConfig):
     """
     功能：
@@ -379,7 +422,7 @@ def create_latest_log_symlink(config: SSHExecConfig):
     """
 
     # 检查一下当前系统环境
-    if os.name != 'posix':
+    if os.name != "posix":
         tlog.warning("当前系统环境不是POSIX兼容系统，无法创建符号链接")
         return
 
@@ -397,13 +440,16 @@ def create_latest_log_symlink(config: SSHExecConfig):
     log_dirs.sort(key=lambda x: x.stat().st_ctime, reverse=True)
 
     if not log_dirs:
-        print(f"{color.COLOR_RED}[ERROR]{color.COLOR_RESET}{color.COLOR_YELLOW} [function:package_latest_history]{color.COLOR_RESET} 历史记录目录 '{config.paths.logs.historys}' 中没有日志文件夹", file=sys.stderr)
+        print(
+            f"{color.COLOR_RED}[ERROR]{color.COLOR_RESET}{color.COLOR_YELLOW} [function:package_latest_history]{color.COLOR_RESET} 历史记录目录 '{config.paths.logs.historys}' 中没有日志文件夹",
+            file=sys.stderr,
+        )
         print("提示: 请先至少一次执行任务以生成历史记录")
         tlog.error("历史记录目录 (historys) 中没有日志文件夹")
         return
 
     latest_log_dir = posix_join(config.paths.logs.historys, log_dirs[0].name)
-    latest_link = 'latest_history'
+    latest_link = "latest_history"
 
     try:
         if os.path.islink(latest_link):
@@ -416,7 +462,9 @@ def create_latest_log_symlink(config: SSHExecConfig):
         tlog.success(f"创建最新日志符号链接函数执行成功，指向路径: {latest_log_dir}")
     except OSError as e:
         print(f"创建符号链接失败: {str(e)}")
-        tlog.error(f"创建最新日志符号链接函数执行失败\n异常类型：\n{type(e)}\n异常信息：\n{e}")
+        tlog.error(
+            f"创建最新日志符号链接函数执行失败\n异常类型：\n{type(e)}\n异常信息：\n{e}"
+        )
         if e.errno == 1:
             print("提示: 请尝试使用管理员/root权限运行")
             tlog.error("创建最新日志符号链接函数执行失败，权限不足")
