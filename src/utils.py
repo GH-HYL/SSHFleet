@@ -272,7 +272,10 @@ def build_final_command(args: argparse.Namespace) -> str:
     # 3. 命令主体
     if args.c:
         safe_command = shlex.quote(args.c)
-        components.append(f"bash -c {safe_command}")
+        if not args.nobash:
+            components.append(f"bash -c {safe_command}")
+        else:
+            components.append(args.c)
     elif args.s:
         import base64
 

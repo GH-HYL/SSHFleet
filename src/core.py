@@ -49,93 +49,23 @@ def parse_args(config: SSHExecConfig) -> argparse.Namespace:
         usage="\npython3 sshexec.py  ( -c | -s | -u | -d | -z )  ( -f ) ( -p ) [其他可选参数]\n",
     )
     try:
-        parser.add_argument(
-            "-c", metavar="command", help="    （命令模式）           远程执行命令"
-        )
-        parser.add_argument(
-            "-s", metavar="script", help="    （脚本模式）           远程执行脚本"
-        )
-        parser.add_argument(
-            "-u",
-            metavar="upload",
-            help="    （上传模式）           本地上传文件或目录路径",
-        )
-        parser.add_argument(
-            "-d",
-            metavar="download",
-            help="    （下载模式）           远程下载文件或目录路径（绝对路径）",
-        )
-        parser.add_argument(
-            "-z",
-            action="store_true",
-            help="    （打包模式）           打包最新日志到当前路径，注意：打包前会删除当前旧打包文件",
-        )
-        parser.add_argument(
-            "-f",
-            metavar="csv_file",
-            help="                           节点信息的 CSV 文件 （ -c 或 -s 或 -u 或 -d 时必填）",
-        )
-        parser.add_argument(
-            "-p",
-            metavar="path",
-            help="                           上传文件或目录的路径、下载文件存放的目录路径（ -u 或 -d 时必填）",
-        )
+        parser.add_argument('-c', metavar='command', help='    （命令模式）           远程执行命令')
+        parser.add_argument('-s', metavar='script', help='    （脚本模式）           远程执行脚本')
+        parser.add_argument('-u', metavar='upload', help='    （上传模式）           本地上传文件或目录路径')
+        parser.add_argument('-d', metavar='download', help='    （下载模式）           远程下载文件或目录路径（绝对路径）')
+        parser.add_argument('-z', action='store_true', help='    （打包模式）           打包最新日志到当前路径，注意：打包前会删除当前旧打包文件')
+        parser.add_argument('-f', metavar='csv_file', help='                           节点信息的 CSV 文件 （ -c 或 -s 或 -u 或 -d 时必填）')
+        parser.add_argument('-p', metavar='path', help='                           上传文件或目录的路径、下载文件存放的目录路径（ -u 或 -d 时必填）')
         # parser.add_argument('-tc', metavar='transfer_command', help=f'     传输模式专用，传输完成后远程执行命令')
-        parser.add_argument(
-            "-m",
-            metavar="mode",
-            choices=["direct", "sudo"],
-            default=config.execution.mode,
-            help=f'     [默认: {config.execution.mode if config.execution.mode else "direct"}]          c、s模式的执行权限 ：“direct” 用户权限执行；“sudo” root 权限执行',
-        )
-        parser.add_argument(
-            "-t",
-            metavar="execute_timeout",
-            type=int,
-            help=f'     [默认: {config.execution.timeout_execute if config.execution.timeout_execute  else "60"} 或 {config.execution.timeout_transfer if config.execution.timeout_transfer else "300"} ]    执行超时时间（秒）：c、s模式默认{config.execution.timeout_execute if config.execution.timeout_execute else "60"}；u、p模式{config.execution.timeout_transfer if config.execution.timeout_transfer else "300"}',
-        )
-        parser.add_argument(
-            "-T",
-            metavar="connect_timeout",
-            type=int,
-            default=config.execution.timeout_connect,
-            help=f'     [默认值: {config.execution.timeout_connect if config.execution.timeout_connect else "10"}]          连接超时时间（秒）',
-        )
-        parser.add_argument(
-            "-n",
-            metavar="number",
-            type=int,
-            default=0,
-            help="     [默认：最大]          c、s模式并发执行数，默认使用节点数，可指定并发梳理",
-        )
-        # parser.add_argument(
-        #     "-e",
-        #     metavar="env",
-        #     default="",
-        #     type=str,
-        #     help="                           环境变量，默认为空，可在配置文件进行配置 （ -c 或 -s 专用，可选填）",
-        # )
-        parser.add_argument(
-            "-k",
-            metavar="key",
-            type=str,
-            nargs="?",
-            const="no_value",
-            default="",
-            help=f'     [默认:不使用]         使用秘钥登陆：-k 指定私钥路径（不指定路径默认：{config.execution.private_key if config.execution.private_key else "~/.ssh/id_rsa"}）',
-        )
-        parser.add_argument(
-            "-r",
-            metavar="remark",
-            type=str,
-            default="",
-            help="                           备注信息，默认自动生成，用于生成历史记录文件名后缀",
-        )
-        parser.add_argument(
-            "--disinteractive",
-            action="store_true",
-            help="                           取消高危命令告警和配置信息的交互确认",
-        )
+        parser.add_argument('-m', metavar='mode', choices=['direct', 'sudo'],default=config.execution.mode,  help=f'     [默认: {config.execution.mode if config.execution.mode else "direct"}]          c、s模式的执行权限 ：“direct” 用户权限执行；“sudo” root 权限执行')
+        parser.add_argument('-t', metavar='execute_timeout',type=int, help=f'     [默认: {config.execution.timeout_execute if config.execution.timeout_execute  else "60"} 或 {config.execution.timeout_transfer if config.execution.timeout_transfer else "300"} ]    执行超时时间（秒）：c、s模式默认{config.execution.timeout_execute if config.execution.timeout_execute else "60"}；u、p模式{config.execution.timeout_transfer if config.execution.timeout_transfer else "300"}')
+        parser.add_argument('-T', metavar='connect_timeout',type=int, default=config.execution.timeout_connect, help=f'     [默认值: {config.execution.timeout_connect if config.execution.timeout_connect else "10"}]          连接超时时间（秒）')
+        parser.add_argument('-n', metavar='number', type=int, default=0, help='     [默认：最大]          c、s模式并发执行数，默认使用节点数，可指定并发梳理') 
+        # parser.add_argument('-e', metavar='env', default='', type=str, help='                           环境变量，默认为空，可在配置文件进行配置 （ -c 或 -s 专用，可选填）') 
+        parser.add_argument('-k', metavar='key',type=str, nargs='?', const='no_value', default="", help=f'     [默认:不使用]         使用秘钥登陆：-k 指定私钥路径（不指定路径默认：{config.execution.private_key if config.execution.private_key else "~/.ssh/id_rsa"}）')
+        parser.add_argument('-r', metavar='remark',type=str, default='', help='                           备注信息，默认自动生成，用于生成历史记录文件名后缀') 
+        parser.add_argument('--nobash', action='store_true', help='                           命令模式专用，不使用bash环境执行命令，直接执行原始命令')
+        parser.add_argument('--disinteractive', action='store_true', help='                           取消高危命令告警和配置信息的交互确认')
     except Exception as e:
         utils.print_error_informantion_and_exit(
             "parse_args", f"参数初始化失败\n异常类型：\n{type(e)}\n异常信息：\n{e}"
