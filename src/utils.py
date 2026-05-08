@@ -76,20 +76,20 @@ def clean_for_excel(original_text, replace_tabs=False):
     # 3. 统一换行符
     text = text.replace('\r\n', '\n').replace('\r', '\n')
 
-    # 4. 可选：替换制表符
+    # 4. 可选：替换制表符为四个空格（避免 WPS 光标异常）
     if replace_tabs:
-        text = text.replace('\t', '\n')
+        text = text.replace('\t', '    ')
 
-    # 5. 等号行安全处理
+    # 5. 防止等号开头的行被 Excel 误认为公式
     lines = text.split('\n')
     for i, line in enumerate(lines):
         if line.lstrip().startswith('='):
             stripped = line.lstrip()
             indent = line[:len(line) - len(stripped)]
-            lines[i] = indent + ' ' + stripped
+            lines[i] = indent + ' ' + stripped   # 在第一个 '=' 前加一个空格
     text = '\n'.join(lines)
 
-    # 6. 移除开头和结尾空行
+    # 6. 移除开头和结尾的空行（维持整洁）
     text = text.strip('\n')
 
     return text
