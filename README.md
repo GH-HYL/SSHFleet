@@ -142,14 +142,172 @@ historys/
 | `[enable]` | output_to_xlsx, results_to_xlsx | 输出格式开关 |
 | `[paths]` | logs, files, exe, jsons | 各类文件路径 |
 
+## 安装说明
+
+### 前置要求
+
+- Python 3.12+
+- Go 程序已预编译（包含在 `src/go/` 目录下）
+- 支持的操作系统：Windows / Linux
+
+### 安装步骤
+
+1. **克隆或下载项目**
+
+```bash
+git clone https://github.com/GH-HYL/Multi-SSHexec.git
+cd sshexec_py
+```
+
+2. **安装 Python 依赖**
+
+```bash
+# 建议使用虚拟环境
+python -m venv venv
+
+# 激活虚拟环境
+# Windows:
+venv\Scripts\activate
+# Linux:
+source venv/bin/activate
+
+# 安装依赖
+pip install loguru pydantic toml rich fabric openpyxl
+```
+
+3. **配置默认参数（可选）**
+
+编辑 `src/config/sshexec.ini`，配置默认端口、用户名、密码等参数：
+
+```ini
+[account]
+port = 22
+user = root
+password = 你的密码base64编码
+```
+
+### 密码 base64 编码方法
+
+```python
+import base64
+password = "你的密码"
+encoded = base64.b64encode(password.encode('utf-8')).decode('utf-8')
+print(encoded)
+```
+
+## 详细使用示例
+
+### 示例 1：批量执行命令
+
+创建 `nodes.csv` 文件：
+
+```csv
+192.168.1.10
+192.168.1.11
+192.168.1.12
+```
+
+执行命令：
+
+```bash
+python sshexec.py -f nodes.csv -c "uptime"
+```
+
+### 示例 2：批量执行脚本
+
+创建 `deploy.sh` 脚本：
+
+```bash
+#!/bin/bash
+echo "开始部署"
+mkdir -p /opt/app
+echo "部署完成"
+```
+
+执行脚本：
+
+```bash
+python sshexec.py -f nodes.csv -s deploy.sh -m sudo
+```
+
+### 示例 3：批量上传文件
+
+```bash
+python sshexec.py -f nodes.csv -u ./app.tar.gz -p /opt/
+```
+
+### 示例 4：批量下载文件
+
+```bash
+python sshexec.py -f nodes.csv -d /var/log/app.log -p ./logs/
+```
+
+### 示例 5：使用密钥登录
+
+```bash
+python sshexec.py -f nodes.csv -c "ls -l" -k ~/.ssh/id_rsa
+```
+
+### 示例 6：非交互模式
+
+```bash
+python sshexec.py -f nodes.csv -c "df -h" --disinteractive
+```
+
+## 常见问题 (FAQ)
+
+### Q1: 连接超时怎么办？
+
+A: 可以通过 `-T` 参数增加连接超时时间：
+
+```bash
+python sshexec.py -f nodes.csv -c "uptime" -T 30
+```
+
+### Q2: 如何批量处理多个端口的服务器？
+
+A: 在 CSV 文件中直接指定每个节点的端口：
+
+```csv
+192.168.1.10,22,root,密码
+192.168.1.11,10022,root,密码
+192.168.1.12,20022,root,密码
+```
+
+### Q3: 遇到高危命令提示怎么办？
+
+A: 工具会检测危险命令并提示确认。如果确认要执行，输入 `y` 继续；或者使用 `--disinteractive` 参数跳过确认（谨慎使用）。
+
+### Q4: 如何查看历史执行记录？
+
+A: 历史记录保存在 `historys/` 目录下，每次执行创建一个独立目录。也可以使用 `-z` 打包最新记录：
+
+```bash
+python sshexec.py -z
+```
+
+### Q5: Windows 下执行报错？
+
+A: 确保 Go 可执行文件 `batch_ssh.exe` 存在，并且有执行权限。
+
 ## 依赖
 
-Python 3.12+，主要依赖：loguru、pydantic、toml、rich、fabric、openpyxl
+Python 3.12+，主要依赖：
+- `loguru` - 日志记录
+- `pydantic` - 数据模型验证
+- `toml` - 配置文件解析
+- `rich` - 终端美化和进度条
+- `fabric` - SSH 操作（传输模块使用）
+- `openpyxl` - Excel 文件生成
 
 ## 仓库
 
 - GitHub: [github.com/GH-HYL/Multi-SSHexec](https://github.com/GH-HYL/Multi-SSHexec)
 - Gitee: [gitee.com/huang-fugui-123/sshexec](https://gitee.com/huang-fugui-123/sshexec)
 - 邮箱: 465317918@qq.com
+
+## 许可证
+
+本项目仅供学习和内部使用。
 
 > **警告：** 该工具可能存在 BUG，请在测试环境验证后再投入使用。数据无价，操作前请再三思量。
