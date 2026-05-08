@@ -186,16 +186,6 @@ def main():
             f"{color.COLOR_RED}results结果未能正常生成，跳过整理阶段{color.COLOR_RESET}",
         )
 
-    # 格式化终端输出到Excel文件（转换output.txt格式）
-    if config.enable.output_to_xlsx:
-        output.format_output_to_xlsx(exec_log_dir, config)
-        tlog.success("格式化output.txt到Excel文件成功")
-
-    # 输出results字典列表到xlsx文件
-    if config.enable.results_to_xlsx:
-        output.format_dict_list_to_xlsx(final_results, exec_log_dir, config)
-        tlog.success("格式化results字典列表到Excel文件成功")
-
     # 计算统计结果信息
     results_statistic = core.results_statistics(
         final_results, nodesinfos, args, global_start_time, global_stop_time
@@ -219,6 +209,16 @@ def main():
     # 创建最新日志符号链接
     utils.create_latest_log_symlink(config)
     tlog.success("创建最新日志符号链接函数执行成功")
+
+    # 格式化终端输出到Excel文件（转换output.txt格式）
+    if config.enable.output_to_xlsx:
+        output.format_output_to_xlsx(exec_log_dir, config)
+        tlog.success("格式化output.txt到Excel文件成功")
+
+    # 输出results字典列表到xlsx文件
+    if config.enable.results_to_xlsx:
+        output.format_dict_list_to_xlsx(final_results, exec_log_dir, config)
+        tlog.success("格式化results字典列表到Excel文件成功")
 
     tlog.debug(f"{'-' * 20}SSHExec工具 - 整理结束{'-' * 20}")
 

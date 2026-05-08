@@ -183,6 +183,9 @@ def format_dict_list_to_xlsx(
         tlog.error(f"结果字典列表为空，未生成{config.paths.files.results_xlsx}")
         return
 
+    # clean_for_excel 清理字典列表中的ANSI转义序列和非法XML字符
+    final_results = [{k: utils.clean_for_excel(v) for k, v in item.items()} for item in final_results]
+
     # 生成输出路径
     os.makedirs(log_dir, exist_ok=True)
     dict_path = posix_join(log_dir, config.paths.files.results_xlsx)

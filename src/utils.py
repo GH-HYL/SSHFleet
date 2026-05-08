@@ -29,10 +29,7 @@ class JumpOut(Exception):
 
     pass
 
-
-
-
-def clean_for_excel(original_text):
+def clean_for_excel(original_text, replace_tabs=False):
     """
     功能：
         移除所有 openpyxl / XML 无法处理的字符，保留常用空白符（\t \n \r）。    
@@ -42,25 +39,60 @@ def clean_for_excel(original_text):
     返回：
         cleaned_text: 清理后的文本字符串
     """
-    if isinstance(original_text, bytes):
-        original_text = original_text.decode('utf-8', errors='ignore')   # 丢弃无法解码的字节
-    if not isinstance(original_text, str):
-        return original_text
 
-    # 第一步：去掉完整的 ANSI 转义序列（ESC [ ... 字母）
-    cleaned_text = re.sub(r'\x1b\[[0-9;]*[a-zA-Z]', '', original_text)
+    # 类型规范化
+    if original_text is None:
+        text = ""
+    elif isinstance(original_text, bytes):
+        text = original_text.decode('utf-8', errors='backslashreplace')
+    elif isinstance(original_text, str):
+        text = original_text
+    else:
+        text = str(original_text)
 
-    # 第二步：移除非法的 XML 字符（包括残留的 \x1b 等）
-    # XML 1.0 第五版允许的字符范围（不含 0x9“缩进”、0xA“换行符”、0xD“回车符” 之外的控制字符，也不含代理项）
-    # illegal_xml_chars_re  不合法 XML 字符正则表达式
-    illegal_xml_chars_re = re.compile(
-        r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f\ud800-\udfff]'
+
+    import re
+
+    # 正则：完整的 ANSI 序列
+    ANSI_ESCAPE_RE = re.compile(
+        r'\x1b\[[0-9;]*[a-zA-Z]'
+        r'|\x1b\][^\x07]*(?:\x07|\x1b\\)'
+        r'|\x1b[@-_][0-?]*[-/]*[@-~]'
     )
-    cleaned_text = illegal_xml_chars_re.sub('', cleaned_text)
 
-    # 第三步：可选 —— 如果希望把空行变成真正空白，可以加 strip，但保留原始换行结构
-    return cleaned_text
+    # 正则：所有非打印/零宽字符（保留 \t \n \r）
+    INVISIBLE_CHAR_RE = re.compile(
+        r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f'   # C0/C1 控制字符
+        r'\ud800-\udfff'                         # 孤立代理项
+        r'\u200b-\u200f\u2028-\u202f\u2060-\u206f\ufeff]'  # 零宽/格式字符
+    )
 
+    # 1. 移除 ANSI 序列
+    text = ANSI_ESCAPE_RE.sub('', text)
+
+    # 2. 移除所有不可见/非法字符（保留 \t \n \r 暂时）
+    text = INVISIBLE_CHAR_RE.sub('', text)
+
+    # 3. 统一换行符
+    text = text.replace('\r\n', '\n').replace('\r', '\n')
+
+    # 4. 可选：替换制表符
+    if replace_tabs:
+        text = text.replace('\t', '\n')
+
+    # 5. 等号行安全处理
+    lines = text.split('\n')
+    for i, line in enumerate(lines):
+        if line.lstrip().startswith('='):
+            stripped = line.lstrip()
+            indent = line[:len(line) - len(stripped)]
+            lines[i] = indent + ' ' + stripped
+    text = '\n'.join(lines)
+
+    # 6. 移除开头和结尾空行
+    text = text.strip('\n')
+
+    return text
 
 def get_user_confirmation(prompt, yorn=False):
     """
