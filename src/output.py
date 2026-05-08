@@ -46,7 +46,9 @@ def format_output_to_xlsx(log_dir: str, config: SSHExecConfig) -> None:
     # 读取日志内容
     try:
         with open(output_file, "r", encoding="utf-8") as f:
-            log_content = f.read()
+            original_log_content = f.read()
+            # 清理日志内容中的非法XML字符
+            log_content = utils.clean_for_excel(original_log_content)
 
     except Exception as e:
         print(
@@ -93,7 +95,6 @@ def format_output_to_xlsx(log_dir: str, config: SSHExecConfig) -> None:
     lines = log_content.split("\n")
 
     for line in lines:
-        line = utils.clean_ansi_escape_codes(line)
         if not line:
             continue
 

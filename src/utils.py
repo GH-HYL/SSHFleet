@@ -9,7 +9,6 @@ import os
 import re
 import shlex
 import sys
-import time
 from typing import Dict, List
 from datetime import datetime
 from posixpath import join as posix_join
@@ -31,30 +30,35 @@ class JumpOut(Exception):
     pass
 
 
-def clean_ansi_escape_codes(text):
+
+
+def clean_for_excel(original_text):
     """
-    清理文本中的ANSI转义序列（终端颜色代码等）
-
-    Args:
-        text: 需要清理的文本内容
-
-    Returns:
-        清理后的纯文本内容
+    功能：
+        移除所有 openpyxl / XML 无法处理的字符，保留常用空白符（\t \n \r）。    
+        同时对 ANSI 转义序列进行二次清理（防止被转义后还残留控制码）。
+    参数：
+        original_text: 原始文本字符串
+    返回：
+        cleaned_text: 清理后的文本字符串
     """
-    if isinstance(text, bytes):
-        text = text.decode(encoding="utf-8", errors="ignore")  # 加errors避免解码失败
+    if isinstance(original_text, bytes):
+        original_text = original_text.decode('utf-8', errors='ignore')   # 丢弃无法解码的字节
+    if not isinstance(original_text, str):
+        return original_text
 
-    # 优化正则：匹配所有ANSI转义序列（包含\x1b开头的完整格式）
-    ansi_escape_pattern: re.Pattern[str] = re.compile(
-        r"\x1b\[[0-9;]*m|"  # 颜色控制码（最常见）
-        r"\x1b[@-_][0-?]*[-/]*[@-~]"  # 其他ANSI转义码
+    # 第一步：去掉完整的 ANSI 转义序列（ESC [ ... 字母）
+    cleaned_text = re.sub(r'\x1b\[[0-9;]*[a-zA-Z]', '', original_text)
+
+    # 第二步：移除非法的 XML 字符（包括残留的 \x1b 等）
+    # XML 1.0 第五版允许的字符范围（不含 0x9“缩进”、0xA“换行符”、0xD“回车符” 之外的控制字符，也不含代理项）
+    # illegal_xml_chars_re  不合法 XML 字符正则表达式
+    illegal_xml_chars_re = re.compile(
+        r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f\ud800-\udfff]'
     )
-    cleaned_text = ansi_escape_pattern.sub("", text)
+    cleaned_text = illegal_xml_chars_re.sub('', cleaned_text)
 
-    # 过滤Excel不支持的控制字符（含\x1b等）
-    control_chars_pattern = re.compile(r"[\x00-\x1F\x7F]")
-    cleaned_text = control_chars_pattern.sub("", cleaned_text).strip()
-
+    # 第三步：可选 —— 如果希望把空行变成真正空白，可以加 strip，但保留原始换行结构
     return cleaned_text
 
 
