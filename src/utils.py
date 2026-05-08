@@ -261,9 +261,9 @@ def build_final_command(args: argparse.Namespace) -> str:
     # 初始化组件,设置输出编码方式
     components = ["LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8;"]
 
-    # 1. 环境变量
-    if args.e:
-        components.append(args.e)
+    # # 1. 环境变量
+    # if args.e:
+    #     components.append(args.e)
 
     # 2. sudo
     if args.m == "sudo":
@@ -290,10 +290,11 @@ def build_final_command(args: argparse.Namespace) -> str:
 
         # 构建命令：使用printf输出base64字符串，然后解码并执行
         # base64编码字符集安全，不包含引号，因此使用单引号包裹
+        # printf '%s' 意思是原样输出字符串，不进行转义，确保内容完整传递
         if interpreter == "bash":
-            command = f"printf '%s' '{encoded_content}' | base64 -d | bash"
+            command = f"printf '%s' '{encoded_content}' | base64 -d | {'sudo ' if args.m == 'sudo' else ''}bash"
         else:  # python3
-            command = f"printf '%s' '{encoded_content}' | base64 -d | python3"
+            command = f"printf '%s' '{encoded_content}' | base64 -d | {'sudo ' if args.m == 'sudo' else ''}python3"
 
         components.append(command)
 

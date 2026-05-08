@@ -359,8 +359,8 @@ def format_statistic_results_to_report(
         if args.s:
             f.write("  执行模式： 脚本模式\n")
             f.write(f"  脚本路径： {args.s}\n")
-        if args.e:
-            f.write(f"  环境变量： {args.e}\n")
+        # if args.e:
+        #     f.write(f"  环境变量： {args.e}\n")
         if args.u:
             f.write("  执行模式： 上传模式\n")
             f.write(f"  本地路径： {args.u}\n")

@@ -123,18 +123,18 @@ def check_arguments(args):
             "check_arguments", " -d 参数目前不可用，请等待代码更新"
         )
 
-    # 检查 -e 参数
-    if args.e:
-        if args.u or args.d:
-            utils.print_error_informantion_and_exit(
-                "check_arguments", " -e 参数不能搭配 -u 或 -d 参数使用"
-            )
-        env_pattern = r'^[a-zA-Z_]+=[\'"]?[a-zA-Z0-9_./-]+[\'"]?$'  # key=value 格式
-        if not re.match(env_pattern, args.e):
-            utils.print_error_informantion_and_exit(
-                "check_arguments",
-                " -e 参数格式错误，必须是 key=value 格式 值可以是单引号或双引号包裹的字符串",
-            )
+    # # 检查 -e 参数
+    # if args.e:
+    #     if args.u or args.d:
+    #         utils.print_error_informantion_and_exit(
+    #             "check_arguments", " -e 参数不能搭配 -u 或 -d 参数使用"
+    #         )
+    #     env_pattern = r'^[a-zA-Z_]+=[\'"]?[a-zA-Z0-9_./-]+[\'"]?$'  # key=value 格式
+    #     if not re.match(env_pattern, args.e):
+    #         utils.print_error_informantion_and_exit(
+    #             "check_arguments",
+    #             " -e 参数格式错误，必须是 key=value 格式 值可以是单引号或双引号包裹的字符串",
+    #         )
 
     # 检查 -m 参数
     if args.m:

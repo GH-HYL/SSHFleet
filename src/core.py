@@ -108,13 +108,13 @@ def parse_args(config: SSHExecConfig) -> argparse.Namespace:
             default=0,
             help="     [默认：最大]          c、s模式并发执行数，默认使用节点数，可指定并发梳理",
         )
-        parser.add_argument(
-            "-e",
-            metavar="env",
-            default="",
-            type=str,
-            help="                           环境变量，默认为空，可在配置文件进行配置 （ -c 或 -s 专用，可选填）",
-        )
+        # parser.add_argument(
+        #     "-e",
+        #     metavar="env",
+        #     default="",
+        #     type=str,
+        #     help="                           环境变量，默认为空，可在配置文件进行配置 （ -c 或 -s 专用，可选填）",
+        # )
         parser.add_argument(
             "-k",
             metavar="key",
@@ -154,10 +154,10 @@ def parse_args(config: SSHExecConfig) -> argparse.Namespace:
     elif (args.u or args.d) and args.t is None:
         args.t = config.execution.timeout_transfer
 
-    # 自动去除环境变量中的'export '，规范args.e的值
-    if args.e and args.e.startswith("export "):
-        args.e = args.e[len("export ") :]
-        print("环境变量不需要输入'export ' , 已自动为您去除")
+    # # 自动去除环境变量中的'export '，规范args.e的值
+    # if args.e and args.e.startswith("export "):
+    #     args.e = args.e[len("export ") :]
+    #     print("环境变量不需要输入'export ' , 已自动为您去除")
 
     # 路径参数规范化
     for path_attr in ["s", "f", "u", "p", "d", "k"]:
@@ -474,9 +474,9 @@ def arguments_confirm(args, nodes):
         info_table.append(("执行模式", "脚本模式"))
         info_table.append(("脚本路径", args.s))
         info_table.append(("", ""))
-    if args.e:
-        info_table.append(("环境变量", args.e))
-        info_table.append(("", ""))
+    # if args.e:
+    #     info_table.append(("环境变量", args.e))
+    #     info_table.append(("", ""))
     if args.u:
         info_table.append(("执行模式", "上传模式"))
         info_table.append(("本地路径", args.u))
