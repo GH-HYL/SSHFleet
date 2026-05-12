@@ -48,51 +48,41 @@ def handle_go_connection(
     返回：
         无返回值
     """
-    # 缓冲区，用于存储不完整的消息数据
-    buffer = ""
+
+    # ✅ 改1：使用字节缓冲区，而不是字符串缓冲区
+    buffer = b""
     try:
-        # 循环接收数据，直到任务完成事件被触发
         while not completion_event.is_set():
             try:
-                # 从网络连接接收数据，每次最多10M
-                data = conn.recv(10 * 1024 * 1024).decode("utf-8")
-                # data = conn.recv(1024).decode('utf-8')
-                # 如果没有接收到数据，说明连接已关闭
+                # ✅ 改2：接收原始字节，不解码
+                data = conn.recv(10 * 1024 * 1024)
                 if not data:
                     tlog.debug("Monitor Server - Go程序主动关闭了连接")
                     completion_event.set()
                     break
 
             except socket.timeout:
-                # 超时异常，继续循环等待数据
                 continue
             except Exception as e:
-                # 其他接收异常，记录错误并设置完成事件
                 tlog.error(f"Monitor Server - 接收数据时发生异常: {e}")
                 completion_event.set()
                 break
 
-            # 将新接收的数据添加到缓冲区
+            # 把新收到的字节追加到缓冲区
             buffer += data
 
-            # 处理缓冲区中的完整消息（以换行符分隔）
-            while "\n" in buffer:
-                # 分割出第一条完整消息，剩余部分放回缓冲区
-                line, buffer = buffer.split("\n", 1)
-                line = line.strip()
+            # ✅ 改3：按字节换行符 b'\n' 切分完整行
+            while b"\n" in buffer:
+                line_bytes, buffer = buffer.split(b"\n", 1)
+                line = line_bytes.decode("utf-8").strip()
                 if line:
                     try:
-                        # 解析JSON格式的消息数据
                         msg_data = json.loads(line)
-                        # 获取消息类型
                         msg_type = msg_data.get("type")
 
                         if msg_type == "progress":
-                            # 处理进度更新消息
                             completed = msg_data.get("completed", 0)
                             total = msg_data.get("total", total_nodes)
-
-                            # 更新进度条显示
                             node_progress.update(
                                 node_task,
                                 description=f"执行进度 [bright_yellow]已完成: [bright_black]{completed}/{total}",
@@ -101,36 +91,27 @@ def handle_go_connection(
                             )
 
                         elif msg_type == "completion":
-                            # 处理任务完成消息
                             go_results = msg_data.get("results", [])
                             tlog.info(
                                 f"Monitor Server - 所有任务执行完成，收到结果数量: {len(go_results)}"
                             )
-
-                            # 将Go程序返回的结果添加到结果列表
                             results.extend(go_results)
-
-                            # 设置完成事件，通知主线程任务已完成
                             completion_event.set()
 
                     except Exception as e:
-                        # 处理消息解析异常
                         tlog.error(
                             f"Monitor Server - 处理消息异常: {e}, 原始消息: {line}"
                         )
 
     except Exception as e:
-        # 处理连接过程中的异常
         tlog.error(f"Monitor Server - 处理连接时发生异常: {e}")
         completion_event.set()
     finally:
-        # 确保连接被正确关闭
         try:
             conn.close()
             tlog.debug("Monitor Server - 网络连接已关闭")
         except:
             pass
-
 
 def capture_subprocess_output(process: subprocess.Popen) -> tuple[Thread, Thread]:
     """
