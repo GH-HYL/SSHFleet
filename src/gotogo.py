@@ -87,7 +87,6 @@ def handle_go_connection(
                                 node_task,
                                 description=f"执行进度 [bright_yellow]已完成: [bright_black]{completed}/{total}",
                                 completed=completed,
-                                total=total,
                             )
 
                         elif msg_type == "completion":
