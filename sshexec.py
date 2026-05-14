@@ -164,7 +164,8 @@ def main():
         if transfer_command:
             # 如果有值，表示是纯文本文件，交给“命令”执行器处理
             tlog.info("进入“执行”主执行器")
-            print("检测到上传目标是纯文本文件，使用批量上传命令")
+            print("提示：检测到上传目标是纯文本文件，使用批量上传命令")
+            tlog.info("提示：检测到上传目标是纯文本文件，使用批量上传命令")
             import src.gotogo as gotogo
             final_results = gotogo.go_to_go(args, config, nodesinfos, exec_log_dir, error_keywords, transfer_command)
             tlog.success("go_to_go主执行器执行完成")
