@@ -38,7 +38,6 @@ import src.utils as utils
 import src.check as check
 import src.output as output
 import src.color as color
-import src.gotogo as gotogo
 from src.utils import tlog
 
 
@@ -147,27 +146,40 @@ def main():
     tlog.success(f"生成日志目录成功: {exec_log_dir}")
 
     if args.c or args.s:
+        tlog.info("开始执行命令")
         tlog.info("进入“执行”主执行器")
-        final_results = gotogo.go_to_go(
-            args, config, nodesinfos, exec_log_dir, error_keywords
-        )
+        import src.gotogo as gotogo
+        final_results = gotogo.go_to_go(args, config, nodesinfos, exec_log_dir, error_keywords)
         tlog.success("go_to_go主执行器执行完成")
 
-    # 进入transfer主执行器
+        # 进入transfer主执行器
     if args.u or args.d:
         # 初始化执行日志记录器
-        tlog.info("进入“传输”主执行器")
-        tlog.debug(f"日志内容轮转到文件: {exec_log_dir}/{config.paths.logs.exec}")
-        utils.init_execution_logger(exec_log_dir, config.paths.logs.exec)
-        tlog.success("初始化执行日志记录器成功")
+        tlog.info("开始传输文件")
+        import src.transfer.transfer_preview as transfer_preview
+        
+        # 传输预检查
+        transfer_command = transfer_preview.transfer_preview(args.u, args.p)
 
-        # 开始传输文件
-        import src.transfer.transfer as transfer
+        if transfer_command:
+            # 如果有值，表示是纯文本文件，交给“命令”执行器处理
+            tlog.info("进入“执行”主执行器")
+            print("检测到上传目标是纯文本文件，使用批量上传命令")
+            import src.gotogo as gotogo
+            final_results = gotogo.go_to_go(args, config, nodesinfos, exec_log_dir, error_keywords, transfer_command)
+            tlog.success("go_to_go主执行器执行完成")
+        else:
+            # 如果是空值，表示不是纯文本文件，有二进制内容，交给“transfer”执行器处理
+            tlog.info("进入transfer主执行器")
+            tlog.debug(f"日志内容轮转到文件: {exec_log_dir}/{config.paths.logs.exec}")
 
-        tlog.info("进入transfer主执行器")
-        tlog.debug(f"日志内容轮转到文件: {exec_log_dir}/{config.paths.logs.exec}")
-        final_results = transfer.execute_transfer(args, nodesinfos, error_keywords)
-        tlog.success("transfer主执行器执行完成")
+            utils.init_execution_logger(exec_log_dir, config.paths.logs.exec)
+            tlog.success("初始化执行日志记录器成功")
+            
+            import src.transfer.transfer as transfer
+            final_results = transfer.execute_transfer(args, nodesinfos, error_keywords)
+            tlog.success("transfer主执行器执行完成")
+
 
     # “全局”结束时间计时
     global_stop_time = datetime.now()

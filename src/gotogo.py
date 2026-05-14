@@ -10,6 +10,7 @@ import subprocess
 import sys
 import threading
 import time
+from tkinter import N
 from typing import Dict, List
 from threading import Thread
 from queue import Queue, Empty
@@ -201,6 +202,7 @@ def go_to_go(
     nodesinfo: List[Dict],
     exec_log_dir: str,
     error_keywords: Dict[str, List[str]],
+    transfer_command: str | None = None,
 ) -> List[Dict]:
     """
     功能：
@@ -254,7 +256,7 @@ def go_to_go(
         "nodesinfo": nodesinfo,
         "monitor_info": f"127.0.0.1:{port}",  # 监控服务器地址信息
         "exec_log_dir": exec_log_dir,
-        "final_command": utils.build_final_command(args),  # 构建最终执行的命令
+        "final_command": transfer_command if transfer_command else utils.build_final_command(args),  # 构建最终执行的命令
         "error_keywords": error_keywords,
     }
 
