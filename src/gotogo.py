@@ -82,11 +82,16 @@ def handle_go_connection(
 
                         if msg_type == "progress":
                             completed = msg_data.get("completed", 0)
-                            total = msg_data.get("total", total_nodes)
+                            # 计算向下取整的百分比
+                            percent_int = int(completed / total_nodes * 100)   # 直接截断小数，等价于 floor
+                            percent_display = f"{percent_int:>3}%"             # 格式化为 " 99%" 或 "100%"
+                            
                             node_progress.update(
                                 node_task,
-                                description=f"执行进度 [bright_yellow]已完成: [bright_black]{completed}/{total}",
+                                description=f"执行进度 [bright_yellow]已完成: [bright_black]{completed}/{total_nodes}",
                                 completed=completed,
+                                percent_display=percent_display,
+                                # 注意：不要传入 total 参数，保持原总数不变
                             )
 
                         elif msg_type == "completion":
@@ -220,7 +225,7 @@ def go_to_go(
     node_progress = Progress(
         TextColumn("    执行进度"),
         BarColumn(bar_width=40, complete_style="green", finished_style="blue"),
-        "[progress.percentage]{task.percentage:>3.0f}%",
+        TextColumn("{task.fields[percent_display]}"),      # 使用自定义字段
         "[green]{task.completed}/{task.total}",
         TimeElapsedColumn(),
     )
