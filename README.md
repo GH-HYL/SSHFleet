@@ -260,7 +260,7 @@ src/
 ├── color.py                   # 终端颜色常量
 ├── transfer/
 │   ├── transfer.py            # 传输主流程：上传/下载、进度条、结果收集
-│   ├── transfer_precheck.py   # 传输预检查文件：根据文件类型选择传输方式
+│   ├── transfer_precheck.py   # 传输预检查：根据文件类型选择传输方式
 │   ├── transfer_check.py      # 传输预检：路径存在性、磁盘空间、写权限
 │   └── transfer_utils.py      # SSH 连接创建、文件打包、中断处理
 ├── config/
