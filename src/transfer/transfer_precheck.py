@@ -84,23 +84,16 @@ def generate_upload_command(file_list: list, upload_path: str, path: str) -> str
     repetition_exit_code = 102  # 重名检查退出码
     creation_exit_code = 101  # 文件创建失败退出码
     tlog.debug(f"本次使用的退出码: 重名-{repetition_exit_code}, 文件创建失败-{creation_exit_code}")
-    
+
     if not file_list:
         return ""
 
-    # 分离文件和目录条目
+    # 分离文件和目录条目（仅依赖os.path.isdir，不依赖扩展名）
     file_entries = []
     dir_entries = []
     for rel, full in file_list:
-        # 检查是否为目录（使用os.path.isdir，但full可能是Windows路径）
-        # 我们使用rel是否以'/'结尾或检查原始路径
-        if os.path.isdir(full) or (rel and not rel.endswith('.txt') and not rel.endswith('.csv') and not rel.endswith('.sh')):
-            # 简单判断：如果rel中没有点号或者以'/'结尾，可能是目录
-            # 但更可靠的是检查full是否为目录
-            if os.path.isdir(full):
-                dir_entries.append((rel, full))
-            else:
-                file_entries.append((rel, full))
+        if os.path.isdir(full):
+            dir_entries.append((rel, full))
         else:
             file_entries.append((rel, full))
 
@@ -122,57 +115,68 @@ def generate_upload_command(file_list: list, upload_path: str, path: str) -> str
     # 插入目标目录变量定义（放在重名检查之前）
     lines.append(f"TARGET_DIR='{path_safe}'")
 
+    # 检查重名，这是一个标志位：收集所有重名文件和目录，然后一起处理
+    lines.append("repetition_mark=0")
 
-    # 检查重名：收集所有重名文件，然后一起处理（只针对文件）
-    lines.append("repetition_found=0")
+    # 检查文件重名
     for rel, _ in file_data:
-        # 确定目标路径和文件名
         if rel:
             dest_path = f"$TARGET_DIR/{rel}"
             file_name = rel
         else:
             dest_path = f"$TARGET_DIR/{os.path.basename(upload_path)}"
             file_name = os.path.basename(upload_path)
-        # 转义文件名用于嵌入到双引号中（在 sh 脚本中）
         file_name_escaped = file_name.replace('"', '\\"').replace('\\', '\\\\')
-        # 生成检查命令：如果文件存在，打印重名消息并设置标志
         lines.append(
             f'if [ -f "{dest_path}" ]; then '
             f"printf '上传文件出现重名: %s\\n' \"{file_name_escaped}\" >&2; "
-            f'repetition_found=1; '
+            f'repetition_mark=1; '
             f'fi'
         )
+
+    # 检查目录重名
+    for rel, _ in dir_entries:
+        if rel:
+            dest_path = f"$TARGET_DIR/{rel}"
+            dir_name = rel
+            dir_name_escaped = dir_name.replace('"', '\\"').replace('\\', '\\\\')
+            lines.append(
+                f'if [ -d "{dest_path}" ]; then '
+                f"printf '上传目录出现重名: %s\\n' \"{dir_name_escaped}\" >&2; "
+                f'repetition_mark=1; '
+                f'fi'
+            )
+
     # 如果有重名，退出
     lines.append(
-        f'if [ $repetition_found -eq 1 ]; then '
+        f'if [ $repetition_mark -eq 1 ]; then '
         f'exit {repetition_exit_code}; '
         f'fi'
     )
 
     # 添加sh内容，如果下面任何命令退出码非0，就退出
     lines.append("set -e")
-    
-    # 先创建所有目录（包括空文件夹）
-    # 按路径深度排序，确保父目录先创建
+
+    # 先创建所有目录（包括空文件夹），按路径深度排序确保父目录先创建
     dir_entries.sort(key=lambda x: x[0].count('/'))
     for rel, _ in dir_entries:
         if rel:
             dest_path = f"$TARGET_DIR/{rel}"
+            lines.append(f"mkdir -p \"{dest_path}\"")
         else:
-            continue  # 跳过根目录
-        lines.append(f"mkdir -p \"{dest_path}\"")
+            continue  # 跳过根目录（已在TARGET_DIR中）
 
-    # 文件创建
+    # 文件创建（不再重复创建目录）
     for rel, b64 in file_data:
         if rel:
             dest_path = f"$TARGET_DIR/{rel}"
         else:
             dest_path = f"$TARGET_DIR/{os.path.basename(upload_path)}"
-        dir_part = f'"$(dirname "{dest_path}")"'
+        # 直接写入文件，目录已提前创建
         lines.append(
-            f"mkdir -p {dir_part}\n"
-            f"printf '%s' '{b64}' | base64 -d > \"{dest_path}\" "
+            f"printf '%s' '{b64}' | base64 -d > \"{dest_path}\""
         )
+
     # 使用单引号包裹完成消息
     lines.append("echo '上传文件完成'")
     script = "\n".join(lines)
@@ -184,7 +188,6 @@ def generate_upload_command(file_list: list, upload_path: str, path: str) -> str
     # 最终命令
     command = f"printf '%s' '{script_b64}' | base64 -d | sh"
     return command
-
 
 
 def transfer_precheck(upload_path: str, path: str) -> str:
@@ -200,6 +203,7 @@ def transfer_precheck(upload_path: str, path: str) -> str:
     """
     tlog.info(f"开始检查上传目标是否为纯文本文件")
     file_list = check_if_all_text(upload_path)
+    print(file_list)
     if file_list:  # 非空列表表示全是文本
         tlog.info(f"检测到上传目标是纯文本文件，生成上传命令")
         tlog.debug(f"上传目标文件列表: {file_list}")
