@@ -251,11 +251,11 @@ def check_script_file(script_path):
                 "check_script_file", f" 错误: {script_path} 不是UTF-8编码"
             )
 
-        # 必须使用LF换行符(Unix格式)
+        # 必须使用LF换行符(Unix格式)，如果不是，直接替换成LF并提示用户
         if b"\r\n" in data:
-            utils.print_error_informantion_and_exit(
-                "check_script_file", f" 错误: {script_path} 不是LF换行符(Unix格式)"
-            )
+            with open(script_path, "wb") as f:
+                f.write(data.replace(b"\r\n", b"\n"))
+            print(f" 警告: {script_path} 的换行符已自动转换为LF格式")
 
 
 @utils.error_and_exit_handling_decorator("check_files_exist", "检查代码文件存在性失败")
