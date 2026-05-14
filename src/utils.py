@@ -297,7 +297,7 @@ def build_final_command(args: argparse.Namespace) -> str:
     # 初始化组件,设置输出编码方式
     components = ["LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8;"]
 
-    # # 1. 环境变量
+    # 1. 环境变量
     # if args.e:
     #     components.append(args.e)
 
@@ -347,7 +347,7 @@ def build_final_command(args: argparse.Namespace) -> str:
     # 组合完整命令
     final_command = " ".join(filter(None, components))
 
-    tlog.success(f"拼接完成，完整命令: {final_command}")
+    tlog.success(f"完整命令拼接完成: {final_command}")
     return final_command.strip()
 
 
