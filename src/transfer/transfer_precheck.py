@@ -122,15 +122,6 @@ def generate_upload_command(file_list: list, upload_path: str, path: str) -> str
     # 插入目标目录变量定义（放在重名检查之前）
     lines.append(f"TARGET_DIR='{path_safe}'")
 
-    # 先创建所有目录（包括空文件夹）
-    # 按路径深度排序，确保父目录先创建
-    dir_entries.sort(key=lambda x: x[0].count('/'))
-    for rel, _ in dir_entries:
-        if rel:
-            dest_path = f"$TARGET_DIR/{rel}"
-        else:
-            continue  # 跳过根目录
-        lines.append(f"mkdir -p \"{dest_path}\"")
 
     # 检查重名：收集所有重名文件，然后一起处理（只针对文件）
     lines.append("repetition_found=0")
@@ -158,6 +149,19 @@ def generate_upload_command(file_list: list, upload_path: str, path: str) -> str
         f'fi'
     )
 
+    # 添加sh内容，如果下面任何命令退出码非0，就退出
+    lines.append("set -e")
+    
+    # 先创建所有目录（包括空文件夹）
+    # 按路径深度排序，确保父目录先创建
+    dir_entries.sort(key=lambda x: x[0].count('/'))
+    for rel, _ in dir_entries:
+        if rel:
+            dest_path = f"$TARGET_DIR/{rel}"
+        else:
+            continue  # 跳过根目录
+        lines.append(f"mkdir -p \"{dest_path}\"")
+
     # 文件创建
     for rel, b64 in file_data:
         if rel:
@@ -166,8 +170,8 @@ def generate_upload_command(file_list: list, upload_path: str, path: str) -> str
             dest_path = f"$TARGET_DIR/{os.path.basename(upload_path)}"
         dir_part = f'"$(dirname "{dest_path}")"'
         lines.append(
-            f"mkdir -p {dir_part} && "
-            f"printf '%s' '{b64}' | base64 -d > \"{dest_path}\" || exit {creation_exit_code}"
+            f"mkdir -p {dir_part}\n"
+            f"printf '%s' '{b64}' | base64 -d > \"{dest_path}\" "
         )
     # 使用单引号包裹完成消息
     lines.append("echo '上传文件完成'")
