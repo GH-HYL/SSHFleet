@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# SSHexec go to GO 文件
+# SSHexec 命令执行器入口
 # 该文件负责与Go程序建立网络连接，接收进度和结果数据，并将其转换为Python格式
 
 import argparse

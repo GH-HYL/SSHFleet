@@ -3,27 +3,27 @@
 # 该文件负责解析命令行参数、加载配置文件、执行任务、处理结果并输出到终端和Excel文件
 
 # 项目目录/
-# ├── sshexec.py                    # 主程序
-# └── src/                          # 源代码文件夹
-#     ├── go/                       # go语言的执行器文件夹
-#     │   ├── batch_ssh             # 执行器（Linux可执行文件）
-#     │   ├── batch_ssh.exe         # 执行器（Windows可执行文件）
-#     │   └── gotogo.py             # 执行器入口
-#     ├── transfer/                 # 传输模块
-#     │   ├── transfer_precheck.py  # 传输预检查文件
-#     │   ├── transfer_check.py     # 传输检查文件
-#     │   ├── transfer_utils.py     # 传输工具文件
-#     │   └── transfer.py           # 传输文件
-#     ├── config/                   # 配置文件夹
-#     │   ├── sshexec.ini           # 配置文件
-#     │   ├── dangerous_class.json  # 危险命令分类正则文件
-#     │   └── error_class.json      # 错误分类关键词文件
-#     ├── check.py                  # 检查文件
-#     ├── color.py                  # 颜色文件
-#     ├── core.py                   # 核心代码文件
-#     ├── output.py                 # 打印结果文件
-#     ├── toml.py                   # 读取配置文件
-#     └── utils.py                  # 工具文件
+# ├── sshexec.py                        # 主程序
+# └── src/                              # 源代码文件夹
+#     ├── go/                           # go语言的执行器文件夹
+#     │   ├── batch_ssh                 # 执行器（Linux可执行文件）
+#     │   └── batch_ssh.exe             # 执行器（Windows可执行文件）
+#     ├── transfer/                     # 传输模块
+#     │   ├── transfer_precheck.py      # 传输预检查文件
+#     │   ├── transfer_check.py         # 传输检查文件
+#     │   ├── transfer_utils.py         # 传输工具文件
+#     │   └── transfer.py               # 传输入口文件
+#     ├── config/                       # 配置文件夹
+#     │   ├── sshexec.ini               # 配置文件
+#     │   ├── dangerous_keywords.json   # 危险命令关键词文件
+#     │   └── error_keywords.json       # 错误分类关键词文件    
+#     ├── gotogo.py                     # 命令执行器入口
+#     ├── check.py                      # 检查文件
+#     ├── color.py                      # 颜色文件
+#     ├── core.py                       # 核心代码文件
+#     ├── output.py                     # 打印结果文件
+#     ├── toml.py                       # 读取配置文件
+#     └── utils.py                      # 工具文件
 
 
 # 系统或第三方模块
