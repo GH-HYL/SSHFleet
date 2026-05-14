@@ -203,7 +203,6 @@ def transfer_precheck(upload_path: str, path: str) -> str:
     """
     tlog.info(f"开始检查上传目标是否为纯文本文件")
     file_list = check_if_all_text(upload_path)
-    print(file_list)
     if file_list:  # 非空列表表示全是文本
         tlog.info(f"检测到上传目标是纯文本文件，生成上传命令")
         tlog.debug(f"上传目标文件列表: {file_list}")
