@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# SSHexec 传输文件优化版本
+# SSHexec 传输预检查文件
 # 处理纯文本和二进制文件上传，生成创建命令和全文本标志位
 
 import os
@@ -62,7 +62,7 @@ def check_if_all_text(upload_path: str) -> list:
     else:
         # 无效路径或符号链接,直接报错
         utils.print_error_informantion_and_exit(
-            "transfer_preview", f" 错误: {upload_path} 不是有效的文件或目录路径，或是一个符号链接"
+            "transfer_precheck", f" 错误: {upload_path} 不是有效的文件或目录路径，或是一个符号链接"
         )
         # 防ide报错，实际上不会执行，上面的函数已经退出了
         return []
@@ -183,7 +183,7 @@ def generate_upload_command(file_list: list, upload_path: str, path: str) -> str
 
 
 
-def transfer_preview(upload_path: str, path: str) -> str:
+def transfer_precheck(upload_path: str, path: str) -> str:
     """
     入口函数：检查上传文件是否为纯文本，并生成相应命令。
 

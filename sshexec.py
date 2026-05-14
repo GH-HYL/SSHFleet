@@ -10,6 +10,7 @@
 #     │   ├── batch_ssh.exe         # 执行器（Windows可执行文件）
 #     │   └── gotogo.py             # 执行器入口
 #     ├── transfer/                 # 传输模块
+#     │   ├── transfer_precheck.py  # 传输预检查文件
 #     │   ├── transfer_check.py     # 传输检查文件
 #     │   ├── transfer_utils.py     # 传输工具文件
 #     │   └── transfer.py           # 传输文件
@@ -156,10 +157,10 @@ def main():
     if args.u or args.d:
         # 初始化执行日志记录器
         tlog.info("开始传输文件")
-        import src.transfer.transfer_preview as transfer_preview
+        import src.transfer.transfer_precheck as transfer_precheck
         
         # 传输预检查
-        transfer_command = transfer_preview.transfer_preview(args.u, args.p)
+        transfer_command = transfer_precheck.transfer_precheck(args.u, args.p)
 
         if transfer_command:
             # 如果有值，表示是纯文本文件，交给“命令”执行器处理
