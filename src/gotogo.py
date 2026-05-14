@@ -10,7 +10,6 @@ import subprocess
 import sys
 import threading
 import time
-from tkinter import N
 from typing import Dict, List
 from threading import Thread
 from queue import Queue, Empty
