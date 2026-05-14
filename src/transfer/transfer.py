@@ -69,12 +69,16 @@ def sftp_upload(
     """
 
     # 获取node_info['user'] 的家目录 的绝对地址
-    try:
-        home_dir = conn.run(f"echo ~{node_info['user']}", hide=True).stdout.strip()
-        elog.info(f"获取家目录成功：{home_dir}")
-    except Exception as e:
-        elog.error(f"获取家目录失败：{e}")
-        raise Exception("获取家目录失败")
+    # try:
+    #     home_dir = conn.run(f"echo ~{node_info['user']}", hide=True).stdout.strip()
+    #     elog.info(f"获取家目录成功：{home_dir}")
+    # except Exception as e:
+    #     elog.error(f"获取家目录失败：{e}")
+    #     raise Exception("获取家目录失败")
+
+    # 不能以/号结尾
+    home_dir="/tmp"
+
 
     # chmod_chown_dir = f'{home_dir}/.sshexec_packages'
     large_file_threshold = 100 * 1024 * 1024  # 100MB
