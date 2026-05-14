@@ -260,6 +260,7 @@ src/
 ├── color.py                   # 终端颜色常量
 ├── transfer/
 │   ├── transfer.py            # 传输主流程：上传/下载、进度条、结果收集
+│   ├── transfer_precheck.py   # 传输预检查文件：根据文件类型选择传输方式
 │   ├── transfer_check.py      # 传输预检：路径存在性、磁盘空间、写权限
 │   └── transfer_utils.py      # SSH 连接创建、文件打包、中断处理
 ├── config/
@@ -277,7 +278,7 @@ src/
 参数解析 → 安全检查 → 节点读取 → 用户确认
   ↓
 ┌─ 命令/脚本模式 ─→ gotogo.py 启动 Go 子进程，通过 TCP socket 实时接收进度和结果（Rich 进度条显示）
-├─ 上传模式 ─→ transfer.py 逐节点 SFTP 传输，带预检和进度条
+├─ 上传模式 ─→ transfer.py 逐节点 SFTP 传输，带预检和进度条（已更新根据文件类型选择传输方式）
 └─ 下载模式 ─→ transfer.py 逐节点 SFTP 下载，带预检和进度条
   ↓
 结果统计 → 终端输出 → 生成报告(xlsx/txt) → 资源备份 → 创建 latest_history 链接
