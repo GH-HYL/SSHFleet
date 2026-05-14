@@ -120,7 +120,7 @@ def generate_upload_command(file_list: list, upload_path: str, path: str) -> str
     # 配置语言环境，确保远程执行环境正确处理文本
     lines.append("export LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8")
     # 插入目标目录变量定义（放在重名检查之前）
-    lines.insert(1, f"TARGET_DIR='{path_safe}'")
+    lines.append(f"TARGET_DIR='{path_safe}'")
 
     # 先创建所有目录（包括空文件夹）
     # 按路径深度排序，确保父目录先创建
@@ -172,10 +172,10 @@ def generate_upload_command(file_list: list, upload_path: str, path: str) -> str
     # 使用单引号包裹完成消息
     lines.append("echo '上传文件完成'")
     script = "\n".join(lines)
-    tlog.debug(f"上传脚本拼接完成\n {script}")
+    tlog.debug(f"上传脚本拼接完成\n{script}")
     # 将整个脚本 base64 编码
     script_b64 = base64.b64encode(script.encode('utf-8')).decode('ascii')
-    tlog.debug(f"上传脚本base64编码完成\n {script_b64}")
+    tlog.debug(f"上传脚本base64编码完成\n{script_b64}")
 
     # 最终命令
     command = f"printf '%s' '{script_b64}' | base64 -d | sh"
