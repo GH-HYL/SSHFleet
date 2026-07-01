@@ -2,6 +2,7 @@
 # Go 批量任务执行主入口
 
 import argparse
+import os
 from typing import Dict, List, Optional
 
 from rich.console import Console
@@ -13,6 +14,51 @@ from src.yaml import SSHFleetConfig
 from src.utils import tlog
 
 console = Console()
+
+
+def _format_result(result: Dict) -> str:
+    """
+    格式化单条结果（与旧Go版本格式一致）
+
+    格式：
+        【IP】 连接: 成功/失败 - X.XXXs
+        【IP】 执行: 成功/失败 - X.XXXs
+        输出内容
+        【IP】 分类: 分类名称
+        ==================================================
+    """
+    lines = []
+    ip = result.get("ip", "未知IP")
+    connect_success = result.get("connect_success", False)
+    connect_cost_time = result.get("connect_cost_time", 0)
+    exec_cost_time = result.get("exec_cost_time", 0)
+    exit_code = result.get("exit_code", -1)
+    output = result.get("output", "")
+    error = result.get("error")
+    result_category = result.get("result_category", "未知")
+
+    # 连接状态
+    conn_status = "成功" if connect_success else "失败"
+    lines.append(f"【{ip}】 连接: {conn_status} - {connect_cost_time:.3f}s")
+
+    if connect_success:
+        # 执行状态
+        exec_success = exit_code == 0
+        exec_status = "成功" if exec_success else "失败"
+        lines.append(f"【{ip}】 执行: {exec_status} - {exec_cost_time:.3f}s")
+        # 输出内容（去除首尾空行）
+        if output:
+            lines.append(output.strip())
+    else:
+        # 连接失败，显示错误信息
+        error_msg = error if error else "未知错误"
+        lines.append(f"【{ip}】 错误: {error_msg}")
+
+    # 分类
+    lines.append(f"【{ip}】 分类: {result_category}")
+    lines.append("=" * 50)
+
+    return "\n".join(lines)
 
 
 def go_to_go(
@@ -67,7 +113,7 @@ def go_to_go(
         "[green]{task.completed}/{task.total}",
         TimeElapsedColumn(),
     )
-    node_task = node_progress.add_task("", total=total_nodes)
+    node_task = node_progress.add_task("", total=total_nodes, percent_display="  0%")
 
     # 6. 发送请求并接收 SSE 流
     results = []
@@ -75,10 +121,32 @@ def go_to_go(
     live = Live(node_progress, console=console, refresh_per_second=20)
     live.start()
 
+    # 打开 output.txt 文件用于写入
+    output_file_path = os.path.join(exec_log_dir, config.paths.files.output)
+    output_file = None
+    try:
+        output_file = open(output_file_path, "w", encoding="utf-8")
+    except Exception as e:
+        tlog.warning(f"无法创建 output.txt 文件: {e}")
+
     try:
         for sse_data in caller.call_go(request_body, port, timeout=total_timeout):
             result = parser.parse_result(sse_data, error_keywords)
             results.append(result)
+
+            # 格式化输出（与旧Go版本格式一致）
+            formatted = _format_result(result)
+
+            # 写入文件
+            if output_file:
+                try:
+                    output_file.write(formatted + "\n")
+                    output_file.flush()
+                except Exception as e:
+                    tlog.warning(f"写入 output.txt 失败: {e}")
+
+            # 打印到终端
+            print(formatted)
 
             # 更新进度
             completed = len(results)
@@ -91,8 +159,13 @@ def go_to_go(
             )
     finally:
         live.stop()
+        if output_file:
+            output_file.close()
 
-    # 7. 等待 Go 进程退出
+    # 7. 通知 Go 服务器关闭
+    caller.shutdown_go_server(port)
+
+    # 8. 等待 Go 进程退出
     try:
         process.wait(timeout=30)
     except Exception:

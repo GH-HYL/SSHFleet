@@ -2,7 +2,9 @@ package core
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
+	"strings"
 	"sync"
 
 	"SSHFleet/internal/log"
@@ -100,6 +102,14 @@ func (e *BatchExecutor) worker(id int, taskChan <-chan *SSHTask, execResultChan 
 			}
 
 			workResult.Seq = task.Seq
+
+			// 记录SSH任务的输出（保持stdout/stderr交错顺序）
+			if workResult.Output != "" {
+				if decoded, err := base64.StdEncoding.DecodeString(workResult.Output); err == nil {
+					output := strings.TrimSpace(string(decoded))
+					log.Zlog.Sugar().Infof("协程worker - 节点输出 [IP:%s, ID:%d]:\n%s", task.Config.IP, id, output)
+				}
+			}
 
 			// 不管成功失败都写入 channel
 			e.safeSendResult(execResultChan, workResult)
