@@ -80,7 +80,7 @@ def sftp_upload(
     home_dir="/tmp"
 
 
-    # chmod_chown_dir = f'{home_dir}/.sshexec_packages'
+    # chmod_chown_dir = f'{home_dir}/.sshfleet_packages'
     large_file_threshold = 100 * 1024 * 1024  # 100MB
 
     def progress_callback(bytes_sent, _):
@@ -288,7 +288,7 @@ def sftp_upload(
 
         # 清理目标临时目录
         try:
-            clear_dir = f"{home_dir}/.sshexec_packages"
+            clear_dir = f"{home_dir}/.sshfleet_packages"
             cleanup_cmd = f"rm -rf {clear_dir}"
             if use_sudo:
                 conn.sudo(cleanup_cmd, hide=True, warn=True)

@@ -1,4 +1,4 @@
-# SSHExec_go
+# SSHFleet_go
 
 批量 SSH 命令执行引擎，通过 HTTP API 提供服务，SSE 流式返回结果。
 
@@ -15,17 +15,17 @@
 
 ```bash
 # Windows
-go build -o batch_ssh.exe .
+go build -o SSHFleet.exe .
 
 # Linux
-GOOS=linux GOARCH=amd64 go build -o batch_ssh .
+GOOS=linux GOARCH=amd64 go build -o SSHFleet .
 ```
 
 ## 使用
 
 ```bash
 # 启动服务
-./batch_ssh --port 9090 --log-path /var/log/sshexec.log
+./SSHFleet --port 9090 --log-path /var/log/sshfleet.log
 
 # 发送请求
 curl -N -X POST http://localhost:9090/api/v1/execute \

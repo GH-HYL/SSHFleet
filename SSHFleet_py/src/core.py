@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# SSHexec 核心文件
+# SSHFleet 核心文件
 # 该文件负责定义核心函数和类，包括参数解析、配置加载、任务执行等
 
 import argparse
@@ -40,13 +40,13 @@ def parse_args(config: SSHFleetConfig) -> argparse.Namespace:
         "  执行模式: c、s、u、p、z\n"
         "  模式说明：执行命令、执行脚本、上传文件、下载文件（暂未完成）、打包最新日志\n"
         "\n示例：\n"
-        '  命令模式: python3 sshexec.py -f nodes.csv -c "ls -l"\n'
-        "  脚本模式: python3 sshexec.py -f nodes.csv -s script.sh\n"
-        "  上传模式: python3 sshexec.py -f nodes.csv -u /local/path  -p /remote/path\n"
-        "  下载模式: python3 sshexec.py -f nodes.csv -d /remote/path -p /local/path\n"
-        "  打包模式: python3 sshexec.py -z\n",
+        '  命令模式: python3 sshfleet.py -f nodes.csv -c "ls -l"\n'
+        "  脚本模式: python3 sshfleet.py -f nodes.csv -s script.sh\n"
+        "  上传模式: python3 sshfleet.py -f nodes.csv -u /local/path  -p /remote/path\n"
+        "  下载模式: python3 sshfleet.py -f nodes.csv -d /remote/path -p /local/path\n"
+        "  打包模式: python3 sshfleet.py -z\n",
         formatter_class=argparse.RawTextHelpFormatter,
-        usage="\npython3 sshexec.py  ( -c | -s | -u | -d | -z )  ( -f ) ( -p ) [其他可选参数]\n",
+        usage="\npython3 sshfleet.py  ( -c | -s | -u | -d | -z )  ( -f ) ( -p ) [其他可选参数]\n",
     )
     try:
         parser.add_argument('-c', metavar='command', help='    （命令模式）           远程执行命令')
@@ -381,7 +381,7 @@ def arguments_confirm(args, nodes):
         return
 
     # 构建标题横幅
-    title = "           SSHExec - 执行参数确认           "
+    title = "           SSHFleet - 执行参数确认           "
     border = "═" * (len(title) + 10)
 
     print(f"\n{color.COLOR_CYAN}╔{border}╗{color.COLOR_RESET}")
@@ -488,9 +488,9 @@ def arguments_confirm(args, nodes):
         f"\n{color.COLOR_YELLOW}是否执行上述参数？{color.COLOR_RESET}", yorn=True
     ):
         print(f"{color.COLOR_YELLOW}操作已取消{color.COLOR_RESET}")
-        tlog.warning("执行已取消，SSHExec工具已退出")
+        tlog.warning("执行已取消，SSHFleet工具已退出")
         sys.exit(1)
-    print(f"SSHExec工具{color.COLOR_BLUE}开始执行{color.COLOR_RESET}......")
+    print(f"SSHFleet工具{color.COLOR_BLUE}开始执行{color.COLOR_RESET}......")
     print(f"{'=' * 50}")
 
 
@@ -540,7 +540,7 @@ def save_execute_resource_files(
         if src_path.exists():
             dst_path = Path(resources_dir) / src_path.name
             shutil.copy2(src_path, dst_path)
-
+    tlog.success("保存执行资源文件成功")
 
 @utils.error_and_exit_handling_decorator(
     "results_statistics", "计算统计结果信息失败", isexit=True
@@ -649,6 +649,7 @@ def results_statistics(
             (global_stop_time - global_start_time).total_seconds(), 2
         ),
     }
+    tlog.success("计算统计结果信息成功")
 
     return statistics
 
