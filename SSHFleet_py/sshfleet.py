@@ -51,7 +51,7 @@ def main():
         config = yaml.load_config(config_path)
     except Exception as e:
         print(
-            f"\033[91m[ERROR]\033[0m\033[93m [function:load_config]\033[0m 加载配置文件失败\n异常类型：\n{type(e)}\n异常信息：\n{e}"
+            f"{color.COLOR_RED}[ERROR]{color.COLOR_RESET}{color.COLOR_YELLOW} [function:load_config]{color.COLOR_RESET} 加载配置文件失败\n异常类型：\n{type(e)}\n异常信息：\n{e}"
         )
         sys.exit(1)
 
@@ -62,7 +62,7 @@ def main():
         tlog.success("初始化工具日志成功")
     except Exception as e:
         print(
-            f"\033[91m[ERROR]\033[0m\033[93m [function:init_tool_logger]\033[0m 初始化工具日志失败\n异常类型：\n{type(e)}\n异常信息：\n{e}"
+            f"{color.COLOR_RED}[ERROR]{color.COLOR_RESET}{color.COLOR_YELLOW} [function:init_tool_logger]{color.COLOR_RESET} 初始化工具日志失败\n异常类型：\n{type(e)}\n异常信息：\n{e}"
         )
 
     tlog.info(f"SSHFleet工具开始执行，时间：{datetime.now()}")
@@ -78,20 +78,19 @@ def main():
     tlog.success("检查代码文件存在性成功")
 
     # 获取危险命令分类正则关键字
-    if os.path.exists(config.paths.jsons.dangerous_keywords):
-        try:
-            with open(
-                config.paths.jsons.dangerous_keywords, "r", encoding="utf-8"
-            ) as f:
-                dangerous_keywords = json.load(f)
-        except Exception as e:
-            tlog.error(
-                f"JSON文件{config.paths.jsons.dangerous_keywords}读取内容失败\n异常类型：\n{type(e)}\n异常信息：\n{e}"
-            )
-            utils.print_error_informantion_and_exit(
-                "gotogo.go_to_go",
-                f"JSON文件{config.paths.jsons.dangerous_keywords}读取内容失败\n异常类型：\n{type(e)}\n异常信息：\n{e}",
-            )
+    try:
+        with open(
+            config.paths.jsons.dangerous_keywords, "r", encoding="utf-8"
+        ) as f:
+            dangerous_keywords = json.load(f)
+    except Exception as e:
+        tlog.error(
+            f"JSON文件{config.paths.jsons.dangerous_keywords}读取内容失败\n异常类型：\n{type(e)}\n异常信息：\n{e}"
+        )
+        utils.print_error_information_and_exit(
+            "main",
+            f"JSON文件{config.paths.jsons.dangerous_keywords}读取内容失败\n异常类型：\n{type(e)}\n异常信息：\n{e}",
+        )
 
     # 参数解析
     args = core.parse_args(config)
@@ -125,18 +124,17 @@ def main():
     tlog.debug(f"{'=' * 30}SSHFleet工具 - 执行阶段{'=' * 30}")
 
     # 获取错误分类关键字
-    if os.path.exists(config.paths.jsons.error_keywords):
-        try:
-            with open(config.paths.jsons.error_keywords, "r", encoding="utf-8") as f:
-                error_keywords = json.load(f)
-        except Exception as e:
-            tlog.error(
-                f"JSON文件{config.paths.exe.batch_tool_windows}读取内容失败\n异常类型：\n{type(e)}\n异常信息：\n{e}"
-            )
-            utils.print_error_informantion_and_exit(
-                "gotogo.go_to_go",
-                f"JSON文件{config.paths.exe.batch_tool_windows}读取内容失败\n异常类型：\n{type(e)}\n异常信息：\n{e}",
-            )
+    try:
+        with open(config.paths.jsons.error_keywords, "r", encoding="utf-8") as f:
+            error_keywords = json.load(f)
+    except Exception as e:
+        tlog.error(
+            f"JSON文件{config.paths.jsons.error_keywords}读取内容失败\n异常类型：\n{type(e)}\n异常信息：\n{e}"
+        )
+        utils.print_error_information_and_exit(
+            "main",
+            f"JSON文件{config.paths.jsons.error_keywords}读取内容失败\n异常类型：\n{type(e)}\n异常信息：\n{e}",
+        )
 
     # “全局”开始时间计时
     global_start_time = datetime.now()
@@ -153,7 +151,7 @@ def main():
         final_results = gotogo.go_to_go(args, config, nodesinfos, exec_log_dir, error_keywords)
         tlog.success("go_to_go主执行器执行完成")
 
-        # 进入transfer主执行器
+    # 进入transfer主执行器
     if args.u or args.d:
         # 初始化执行日志记录器
         tlog.info("开始传输文件")
@@ -195,7 +193,7 @@ def main():
     tlog.debug(f"{'-' * 20}SSHFleet工具 - 整理阶段{'-' * 20}")
 
     if not final_results:
-        utils.print_error_informantion_and_exit(
+        utils.print_error_information_and_exit(
             "main",
             f"{color.COLOR_RED}results结果未能正常生成，跳过整理阶段{color.COLOR_RESET}",
         )
@@ -204,35 +202,28 @@ def main():
     results_statistic = core.results_statistics(
         final_results, nodesinfos, args, global_start_time, global_stop_time
     )
-    
 
     # 格式化统计结果信息输出到终端
     output.format_statistic_results_to_terminal(results_statistic)
-    
 
     # 格式化统计结果信息输出到报告文件
     output.format_statistic_results_to_report(
         results_statistic, exec_log_dir, args, config
     )
-    
 
     # 保存执行资源文件
     core.save_execute_resource_files(args, exec_log_dir, config)
-    
 
     # 创建最新日志符号链接
     utils.create_latest_log_symlink(config)
-    
 
     # 格式化终端输出到Excel文件（转换output.txt格式）
     if config.enable.output_to_xlsx:
         output.format_output_to_xlsx(exec_log_dir, config)
-        
 
     # 输出results字典列表到xlsx文件
     if config.enable.results_to_xlsx:
         output.format_dict_list_to_xlsx(final_results, exec_log_dir, config)
-        
 
     tlog.debug(f"{'-' * 20}SSHFleet工具 - 整理结束{'-' * 20}")
 
@@ -244,11 +235,13 @@ def main():
 
 
 if __name__ == "__main__":
-    """
-    程序入口
-    """
     try:
-        # 进入主函数
         main()
     except KeyboardInterrupt:
         print("用户手动中断执行")
+    except Exception as e:
+        print(
+            f"{color.COLOR_RED}[FATAL]{color.COLOR_RESET} 未捕获异常: {e}",
+            file=sys.stderr,
+        )
+        sys.exit(1)

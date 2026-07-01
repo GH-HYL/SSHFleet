@@ -193,7 +193,7 @@ def error_classify(
     return "错误未分类"
 
 
-def print_error_informantion_and_exit(
+def print_error_information_and_exit(
     func_name: str, error_str: str, isexit: bool = True
 ):
     """
@@ -339,7 +339,7 @@ def build_final_command(args: argparse.Namespace) -> str:
 
     else:
         tlog.error("参数出现严重异常，args.c 和 args.s 不能同时为空")
-        print_error_informantion_and_exit(
+        print_error_information_and_exit(
             "add_env_sudo_to_commands",
             "参数出现严重异常，args.c 和 args.s 不能同时为空",
         )
@@ -377,7 +377,7 @@ def error_and_exit_handling_decorator(
                 tlog.error(
                     f"{func_name}，{error_str}\n异常类型：\n{type(e)}\n异常信息：\n{e}"
                 )
-                print_error_informantion_and_exit(
+                print_error_information_and_exit(
                     f"{func_name}",
                     f"{error_str}\n异常类型：{type(e)}\n异常信息：\n{e}",
                     isexit,

@@ -252,7 +252,7 @@ def initialize_result_dict(
         del result["upload_local"]
         del result["upload_remote"]
     else:
-        utils.print_error_informantion_and_exit(
+        utils.print_error_information_and_exit(
             "initialize_result_dict",
             f"参数错误,请联系开发者检查args.u（upload）和.args.d（download）值的有效性，当前值：{args.u}{upload},{args.d}{download}",
         )
