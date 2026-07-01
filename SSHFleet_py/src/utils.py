@@ -481,7 +481,7 @@ def create_latest_log_symlink(config: SSHFleetConfig):
 
     if not log_dirs:
         print(
-            f"{color.COLOR_RED}[ERROR]{color.COLOR_RESET}{color.COLOR_YELLOW} [function:package_latest_history]{color.COLOR_RESET} 历史记录目录 '{config.paths.logs.historys}' 中没有日志文件夹",
+            f"{color.COLOR_RED}[ERROR]{color.COLOR_RESET}{color.COLOR_YELLOW} [function:zip_latest_history]{color.COLOR_RESET} 历史记录目录 '{config.paths.logs.historys}' 中没有日志文件夹",
             file=sys.stderr,
         )
         print("提示: 请先至少一次执行任务以生成历史记录")
