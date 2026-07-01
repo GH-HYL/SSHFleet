@@ -141,7 +141,7 @@ func handleExecute(w http.ResponseWriter, r *http.Request) {
 	log.Zlog.Info("等待客户端发送关闭信号...")
 	select {
 	case <-shutdownSignal:
-		log.Zlog.Info("收到客户端关闭信号")
+		// handleShutdown 已记录日志
 	case <-time.After(10 * time.Minute):
 		log.Zlog.Warn("等待关闭信号超时(10分钟)，强制退出")
 	}
