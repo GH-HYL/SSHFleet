@@ -26,7 +26,7 @@ def check_dangerous_content(args, dangerous_keywords: List):
     try:
         check_dangerous_dict(dangerous_keywords)
     except Exception as e:
-        utils.print_error_informantion_and_exit(
+        utils.print_error_information_and_exit(
             "check_dangerous_dict", f" 危险命令筛查失败: {str(e)}"
         )
 
@@ -35,7 +35,7 @@ def check_dangerous_content(args, dangerous_keywords: List):
         if args.c or args.s:
             check_dangerous_patterns(args, dangerous_keywords)
     except Exception as e:
-        utils.print_error_informantion_and_exit(
+        utils.print_error_information_and_exit(
             "check_dangerous_patterns", f" 危险命令检查失败: {str(e)}"
         )
 
@@ -48,7 +48,7 @@ def check_arguments(args):
     lock_args = [args.c, args.s, args.u, args.d, args.z]
     lock_args_count = sum(1 for arg in lock_args if arg)
     if lock_args_count != 1:
-        utils.print_error_informantion_and_exit(
+        utils.print_error_information_and_exit(
             "check_arguments", " 执行模式参数：-c、-s、-u、-d、 -z 互斥，只能指定一个"
         )
 
@@ -56,12 +56,12 @@ def check_arguments(args):
     if args.p:
         if args.u:
             if not args.p.startswith("/"):
-                utils.print_error_informantion_and_exit(
+                utils.print_error_information_and_exit(
                     "check_arguments",
                     f" 上传模式：-p 参数指定的上传目录必须是绝对路径，当前值：{args.p}",
                 )
             if not args.p.endswith("/"):
-                utils.print_error_informantion_and_exit(
+                utils.print_error_information_and_exit(
                     "check_arguments",
                     f" 上传模式：-u 是目录的情况下 -p 参数指定的必须是目录（以/结尾），-p 当前值：{args.p}",
                 )
@@ -69,13 +69,13 @@ def check_arguments(args):
         elif args.d:
             # 下载模式：检查本路路径是否是文件夹
             if not os.path.isdir(args.p):
-                utils.print_error_informantion_and_exit(
+                utils.print_error_information_and_exit(
                     "check_arguments",
                     f" -p 参数指定的下载文件目录必须是本地文件夹路径，当前值：{args.p}",
                 )
         elif args.c or args.s:
             # -p 不能与 -c 或 -s 同时使用
-            utils.print_error_informantion_and_exit(
+            utils.print_error_information_and_exit(
                 "check_arguments",
                 " -p 参数不能搭配 -c 或 -s 使用，请单独使用 -u 参数指定上传文件或目录后再使用 -c 或 -s",
             )
@@ -83,15 +83,15 @@ def check_arguments(args):
     # 检查 -u 参数
     if args.u:
         if not args.p:
-            utils.print_error_informantion_and_exit(
+            utils.print_error_information_and_exit(
                 "check_arguments", " -u 参数必须搭配 -p 参数使用"
             )
         if not os.path.exists(args.u):
-            utils.print_error_informantion_and_exit(
+            utils.print_error_information_and_exit(
                 "check_arguments", f" -u 参数指定的上传文件或目录不存在：{args.u}"
             )
         if os.path.islink(args.u):
-            utils.print_error_informantion_and_exit(
+            utils.print_error_information_and_exit(
                 "check_arguments",
                 f" -u 参数指定的上传文件或目录是符号链接，不能上传：{args.u}",
             )
@@ -108,7 +108,7 @@ def check_arguments(args):
                     break  # 找到一个就退出外层循环
 
             if not has_real_file:
-                utils.print_error_informantion_and_exit(
+                utils.print_error_information_and_exit(
                     "check_arguments",
                     f"-u 参数指定的上传目录及其所有子目录中都没有真正的文件（只有符号链接）：{args.u}",
                 )
@@ -116,22 +116,22 @@ def check_arguments(args):
     # 检查 -d 参数
     if args.d:
         # if not args.p:
-        #     utils.print_error_informantion_and_exit("check_arguments", f" -d 参数必须搭配 -p 参数使用")
+        #     utils.print_error_information_and_exit("check_arguments", f" -d 参数必须搭配 -p 参数使用")
         # if not args.d.startswith('/'):
-        #     utils.print_error_informantion_and_exit("check_arguments", f" -d 参数必须是远程绝对路径，当前值：{args.d}")
-        utils.print_error_informantion_and_exit(
+        #     utils.print_error_information_and_exit("check_arguments", f" -d 参数必须是远程绝对路径，当前值：{args.d}")
+        utils.print_error_information_and_exit(
             "check_arguments", " -d 参数目前不可用，请等待代码更新"
         )
 
     # # 检查 -e 参数
     # if args.e:
     #     if args.u or args.d:
-    #         utils.print_error_informantion_and_exit(
+    #         utils.print_error_information_and_exit(
     #             "check_arguments", " -e 参数不能搭配 -u 或 -d 参数使用"
     #         )
     #     env_pattern = r'^[a-zA-Z_]+=[\'"]?[a-zA-Z0-9_./-]+[\'"]?$'  # key=value 格式
     #     if not re.match(env_pattern, args.e):
-    #         utils.print_error_informantion_and_exit(
+    #         utils.print_error_information_and_exit(
     #             "check_arguments",
     #             " -e 参数格式错误，必须是 key=value 格式 值可以是单引号或双引号包裹的字符串",
     #         )
@@ -139,7 +139,7 @@ def check_arguments(args):
     # 检查 -m 参数
     if args.m:
         if args.m not in ["direct", "sudo"]:
-            utils.print_error_informantion_and_exit(
+            utils.print_error_information_and_exit(
                 "check_arguments",
                 f" -m 参数必须是 'direct' 或 'sudo'，当前值：{args.m}",
             )
@@ -147,29 +147,29 @@ def check_arguments(args):
     # 检查 -c 参数
     if args.c:
         if not args.c.strip():
-            utils.print_error_informantion_and_exit(
+            utils.print_error_information_and_exit(
                 "check_arguments", " -c 参数不能为空，请提供要执行的命令"
             )
 
         first_word = re.findall(r"^[^a-zA-Z]*([a-zA-Z]+)", args.c.strip())
         if first_word and first_word[0] in ["for", "while", "until", "if", "case"]:
-            utils.print_error_informantion_and_exit(
+            utils.print_error_information_and_exit(
                 "check_arguments", " -c 参数不兼容执行循环的命令，请使用脚本模式执行"
             )
 
     # 检查 -s 参数
     if args.s:
         if os.path.isdir(args.s):
-            utils.print_error_informantion_and_exit(
+            utils.print_error_information_and_exit(
                 "check_arguments", f" -s 参数指定脚本路径不存在：{args.s}"
             )
         script_path = args.s
         if os.path.getsize(script_path) == 0:
-            utils.print_error_informantion_and_exit(
+            utils.print_error_information_and_exit(
                 "check_arguments", f" -s 参数指定的脚本文件为空：{script_path}"
             )
         if not script_path.endswith((".sh", ".py")):
-            utils.print_error_informantion_and_exit(
+            utils.print_error_information_and_exit(
                 "check_arguments",
                 f" -s 参数指定的脚本文件扩展名必须是 .sh 或 .py，当前值：{script_path}",
             )
@@ -178,23 +178,23 @@ def check_arguments(args):
     # 检查 -f 参数
     if args.f:
         if not os.path.exists(args.f):
-            utils.print_error_informantion_and_exit(
+            utils.print_error_information_and_exit(
                 "check_arguments", f" -f 参数指定的 CSV 文件不存在：{args.f}"
             )
         if os.path.getsize(args.f) == 0:
-            utils.print_error_informantion_and_exit(
+            utils.print_error_information_and_exit(
                 "check_arguments", f" -f 参数指定的 CSV 文件为空：{args.f}"
             )
         # 不能是二进制文件
         if b"\x00" in open(args.f, "rb").read(1024):
-            utils.print_error_informantion_and_exit(
+            utils.print_error_information_and_exit(
                 "check_arguments", f" 错误: {args.f} 是二进制文件"
             )
 
     # 检查 -n 参数
     if args.n:
         if not isinstance(args.n, int) or args.n <= 0:
-            utils.print_error_informantion_and_exit(
+            utils.print_error_information_and_exit(
                 "check_arguments",
                 f" -n 参数格式错误，并发连接数必须是正整数，当前值：{args.n}",
             )
@@ -202,27 +202,27 @@ def check_arguments(args):
     # 检查 -k 参数
     if args.k:
         if not os.path.isfile(args.k):
-            utils.print_error_informantion_and_exit(
+            utils.print_error_information_and_exit(
                 "check_arguments", f" -k 指向的秘钥文件不存在，请检查路径：{args.k}"
             )
 
     # 检查 --disinteractive 参数
     if args.disinteractive and args.z:
-        utils.print_error_informantion_and_exit(
+        utils.print_error_information_and_exit(
             "check_arguments", " --disinteractive 参数不能与 -z 一起使用"
         )
 
     # 检查 -t 参数, 必须是 int 类型
     if args.t:
         if not isinstance(args.t, int) or args.t <= 0:
-            utils.print_error_informantion_and_exit(
+            utils.print_error_information_and_exit(
                 "check_arguments",
                 f" -t 参数格式错误，命令或传输超时时间必须是正整数，当前值：{args.t}",
             )
 
     if args.T:
         if not isinstance(args.T, int) or args.T <= 0:
-            utils.print_error_informantion_and_exit(
+            utils.print_error_information_and_exit(
                 "check_arguments",
                 f" -T 参数格式错误，连接超时时间必须是正整数，当前值：{args.T}",
             )
@@ -237,7 +237,7 @@ def check_script_file(script_path):
 
         # 不能是二进制文件
         if b"\x00" in raw_data:
-            utils.print_error_informantion_and_exit(
+            utils.print_error_information_and_exit(
                 "check_script_file", f" 错误: {script_path} 是二进制文件"
             )
 
@@ -247,7 +247,7 @@ def check_script_file(script_path):
         else:
             data = raw_data
         if not data.decode("utf-8", errors="ignore").encode("utf-8") == data:
-            utils.print_error_informantion_and_exit(
+            utils.print_error_information_and_exit(
                 "check_script_file", f" 错误: {script_path} 不是UTF-8编码"
             )
 
@@ -292,7 +292,7 @@ def check_files_exist(config: SSHFleetConfig) -> None:
             missing_files.append(code_file)
 
     if missing_files:
-        utils.print_error_informantion_and_exit(
+        utils.print_error_information_and_exit(
             "check_files_exist", f" 代码文件缺失: {', '.join(missing_files)}"
         )
 
@@ -313,13 +313,13 @@ def check_dangerous_dict(dangerous_patterns: List, validation_code=None):
 
     # 1. 检查规则是否为空
     if not dangerous_patterns:
-        utils.print_error_informantion_and_exit(
+        utils.print_error_information_and_exit(
             "check_dangerous_dict", "危险命令检测规则为空，程序退出！"
         )
 
     # 2. 检查规则数量是否足够（至少10行）
     if len(dangerous_patterns) < 10:
-        utils.print_error_informantion_and_exit(
+        utils.print_error_information_and_exit(
             "check_dangerous_dict",
             f"危险命令检测规则不足（当前{len(dangerous_patterns)}条，需要至少10条），程序退出！",
         )
@@ -329,12 +329,12 @@ def check_dangerous_dict(dangerous_patterns: List, validation_code=None):
     for i, pattern in enumerate(dangerous_patterns):
         for field in required_fields:
             if field not in pattern:
-                utils.print_error_informantion_and_exit(
+                utils.print_error_information_and_exit(
                     "check_dangerous_dict",
                     f"危险命令检测规则不完整（第{i+1}条缺少字段'{field}'），程序退出！",
                 )
             if not pattern[field]:
-                utils.print_error_informantion_and_exit(
+                utils.print_error_information_and_exit(
                     "check_dangerous_dict",
                     f"危险命令检测规则不完整（第{i+1}条字段'{field}'为空），程序退出！",
                 )
@@ -354,11 +354,11 @@ def check_dangerous_dict(dangerous_patterns: List, validation_code=None):
             actual_hash = hashlib.sha256(patterns_json.encode("utf-8")).hexdigest()
 
             if actual_hash != validation_code:
-                utils.print_error_informantion_and_exit(
+                utils.print_error_information_and_exit(
                     "check_dangerous_dict", "风险命令检测规则已被篡改，程序退出！"
                 )
         except Exception as e:
-            utils.print_error_informantion_and_exit(
+            utils.print_error_information_and_exit(
                 "check_dangerous_dict", f"规则校验失败: {e}"
             )
 
@@ -386,7 +386,7 @@ def check_dangerous_patterns(args, dangerous_keywords: List, disinteractive=Fals
             with open(args.s, "r", encoding="utf-8") as f:
                 lines = f.readlines()
         except Exception as e:
-            utils.print_error_informantion_and_exit(
+            utils.print_error_information_and_exit(
                 "check_dangerous_patterns", f"读取脚本内容失败: {str(e)}"
             )
     else:

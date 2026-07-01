@@ -61,7 +61,7 @@ def check_if_all_text(upload_path: str) -> list:
         return all_list
     else:
         # 无效路径或符号链接,直接报错
-        utils.print_error_informantion_and_exit(
+        utils.print_error_information_and_exit(
             "transfer_precheck", f" 错误: {upload_path} 不是有效的文件或目录路径，或是一个符号链接"
         )
         # 防ide报错，实际上不会执行，上面的函数已经退出了
