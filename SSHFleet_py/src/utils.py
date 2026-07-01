@@ -294,8 +294,8 @@ def build_final_command(args: argparse.Namespace) -> str:
         str: 组合后的完整命令字符串
     """
 
-    # 初始化组件,设置输出编码方式
-    components = ["LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8;"]
+    # 初始化组件,设置输出编码方式（C.UTF-8是POSIX标准，所有Linux发行版内置支持）
+    components = ["LC_ALL=C.UTF-8 LANG=C.UTF-8;"]
 
     # 1. 环境变量
     # if args.e:

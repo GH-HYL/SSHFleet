@@ -111,7 +111,7 @@ def generate_upload_command(file_list: list, upload_path: str, path: str) -> str
     # 构建脚本内容
     lines = ["#!/bin/sh"]
     # 配置语言环境，确保远程执行环境正确处理文本
-    lines.append("export LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8")
+    lines.append("export LC_ALL=C.UTF-8 LANG=C.UTF-8")
     # 插入目标目录变量定义（放在重名检查之前）
     lines.append(f"TARGET_DIR='{path_safe}'")
 
