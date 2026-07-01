@@ -29,6 +29,7 @@ from rich.table import Table
 import src.transfer.transfer_check as transfer_check
 import src.transfer.transfer_utils as transfer_utils
 import src.utils as utils
+import src.color as color
 from src.utils import elog
 
 # 全局console对象，进度条
@@ -272,9 +273,9 @@ def sftp_upload(
             raise Exception(f"移动/解压文件失败: {e}")
 
         finally:
-            # 清理目标临时目录（保持不变）
+            # 清理目标临时目录
             try:
-                clear_dir = f"{home_dir}/.SSHFleet_packages"
+                clear_dir = f"{home_dir}/.sshfleet_packages"
                 cleanup_cmd = f"rm -rf {clear_dir}"
                 if use_sudo:
                     conn.sudo(cleanup_cmd, hide=True, warn=True)
@@ -901,7 +902,7 @@ def execute_transfer(
                 except KeyboardInterrupt:
                     elog.error("检测到Ctrl+C中断信号，except正在处理后续资源回收")
                     print(
-                        "\033[91m检测到Ctrl+C中断信号，except正在处理后续资源回收\033[0m"
+                        f"{color.COLOR_RED}检测到Ctrl+C中断信号，except正在处理后续资源回收{color.COLOR_RESET}"
                     )
                     result.update(
                         {

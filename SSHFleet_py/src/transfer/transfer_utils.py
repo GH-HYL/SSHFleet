@@ -140,11 +140,6 @@ def calculate_tar_files(path: str) -> Tuple[int, int, Optional[str]]:
                         elog.warning(f"计算文件大小时，跳过无权限文件: {file_path}")
                         continue
 
-            # # 创建临时压缩文件估算压缩后大小
-            # temp_tar_path = None
-            # # 默认使用原始大小
-            # compressed_size = original_total
-
             try:
                 temp_tar_path = os.path.join(
                     tempfile.gettempdir(), f"size_estimate_{os.urandom(4).hex()}.tar.gz"
@@ -173,9 +168,6 @@ def calculate_tar_files(path: str) -> Tuple[int, int, Optional[str]]:
     except Exception as e:
         elog.error(f"计算大小失败返回全0和None\n异常类型：\n{type(e)}\n异常信息：\n{e}")
         return 0, 0, None
-
-    elog.error("计算大小执行未正常结束，返回全0和None")
-    return 0, 0, None
 
 
 def chmod_chown_remote_files(conn, path, user, use_sudo):
@@ -258,17 +250,6 @@ def initialize_result_dict(
         )
 
     return result
-
-
-# def handle_interrupt(signum=None, frame=None):
-#     """全局中断信号处理器"""
-#     global transfer_interrupted
-#     if not transfer_interrupted:
-#         transfer_interrupted = True
-#         # 关键一步：立即屏蔽后续所有Ctrl+C
-#         signal.signal(signal.SIGINT, signal.SIG_IGN)
-#         elog.info("收到中断信号...")
-#         print(f"{color.COLOR_RED}收到中断信号，正在停止任务...{color.COLOR_RESET}")
 
 
 def handle_interrupt(signum=None, frame=None):
