@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# SSHexec 检查文件
+# SSHFleet 检查文件
 # 该文件负责检查文件是否存在、是否可写等操作
 
 import os
@@ -266,7 +266,7 @@ def check_files_exist(config: SSHFleetConfig) -> None:
 
     # 检查所有代码文件是否存在
     # code_files = [
-    #     "sshexec.py",
+    #     "sshfleet.py",
     #     "src/asyncssh/asyncssh.py",
     #     "src/transfer/transfer.py",
     #     "src/transfer/transfer_check.py",

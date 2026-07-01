@@ -1,4 +1,4 @@
-# SSHexec
+# SSHFleet
 
 基于 Python + Go 混合开发的 SSH 批量运维工具，支持命令/脚本执行与文件传输，面向大规模服务器运维场景。
 
@@ -52,8 +52,8 @@
 1. **克隆或下载项目**
 
 ```bash
-git clone https://github.com/GH-HYL/Multi-SSHexec.git
-cd sshexec_py
+git clone https://github.com/GH-HYL/Multi-SSHFleet.git
+cd sshfleet_py
 ```
 
 1. **安装 Python 依赖**
@@ -100,19 +100,19 @@ with open('/path/to/password_file', 'w') as f:
 
 ```bash
 # 命令模式
-python3 sshexec.py -f nodes.csv -c "ls -l"
+python3 sshfleet.py -f nodes.csv -c "ls -l"
 
 # 脚本模式
-python3 sshexec.py -f nodes.csv -s script.sh
+python3 sshfleet.py -f nodes.csv -s script.sh
 
 # 上传模式
-python3 sshexec.py -f nodes.csv -u /local/path -p /remote/path/
+python3 sshfleet.py -f nodes.csv -u /local/path -p /remote/path/
 
 # 下载模式
-python3 sshexec.py -f nodes.csv -d /remote/path -p /local/path/
+python3 sshfleet.py -f nodes.csv -d /remote/path -p /local/path/
 
 # 打包最新历史记录
-python3 sshexec.py -z
+python3 sshfleet.py -z
 ```
 
 ***
@@ -122,7 +122,7 @@ python3 sshexec.py -z
 ### 参数说明
 
 ```
-python3 sshexec.py  ( -c | -s | -u | -d | -z )  ( -f ) ( -p ) [可选参数]
+python3 sshfleet.py  ( -c | -s | -u | -d | -z )  ( -f ) ( -p ) [可选参数]
 ```
 
 #### 必填参数（五选一）
@@ -198,7 +198,7 @@ python3 sshexec.py  ( -c | -s | -u | -d | -z )  ( -f ) ( -p ) [可选参数]
 执行命令：
 
 ```bash
-python sshexec.py -f nodes.csv -c "uptime"
+python sshfleet.py -f nodes.csv -c "uptime"
 ```
 
 ### 示例 2：批量执行脚本
@@ -215,31 +215,31 @@ echo "部署完成"
 执行脚本：
 
 ```bash
-python sshexec.py -f nodes.csv -s deploy.sh -m sudo
+python sshfleet.py -f nodes.csv -s deploy.sh -m sudo
 ```
 
 ### 示例 3：批量上传文件
 
 ```bash
-python sshexec.py -f nodes.csv -u ./app.tar.gz -p /opt/
+python sshfleet.py -f nodes.csv -u ./app.tar.gz -p /opt/
 ```
 
 ### 示例 4：批量下载文件
 
 ```bash
-python sshexec.py -f nodes.csv -d /var/log/app.log -p ./logs/
+python sshfleet.py -f nodes.csv -d /var/log/app.log -p ./logs/
 ```
 
 ### 示例 5：使用密钥登录
 
 ```bash
-python sshexec.py -f nodes.csv -c "ls -l" -k ~/.ssh/id_rsa
+python sshfleet.py -f nodes.csv -c "ls -l" -k ~/.ssh/id_rsa
 ```
 
 ### 示例 6：非交互模式
 
 ```bash
-python sshexec.py -f nodes.csv -c "df -h" --disinteractive
+python sshfleet.py -f nodes.csv -c "df -h" --disinteractive
 ```
 
 ***
@@ -251,7 +251,7 @@ Python 负责参数解析、安全检查、日志整理、结果输出；Go 负�
 ### 项目结构
 
 ```
-sshexec.py                     # 入口：参数解析、流程编排
+sshfleet.py                     # 入口：参数解析、流程编排
 src/
 ├── core.py                    # 参数解析、节点读取、统计计算
 ├── gotogo.py                  # Go 执行器调度：启动子进程 + TCP 监控进度 + Rich 进度条显示
@@ -270,8 +270,8 @@ src/
 │   ├── dangerous_keywords.json # 危险命令检测规则
 │   └── error_keywords.json    # 错误分类关键词
 └── go/
-    ├── batch_ssh              # Go 执行器（Linux）
-    └── batch_ssh.exe          # Go 执行器（Windows）
+    ├── SSHFleet              # Go 执行器（Linux）
+    └── SSHFleet.exe          # Go 执行器（Windows）
 ```
 
 ### 执行流程
@@ -290,7 +290,7 @@ src/
 
 ```
 historys/
-├── sshexec.log                              # 工具运行日志
+├── sshfleet.log                              # 工具运行日志
 └── YYYY-MM-DD_HH-MM-SS_模式_备注/           # 每次执行独立目录
     ├── msg.log                              # 执行日志
     ├── output.txt                           # 终端输出（txt）
@@ -312,7 +312,7 @@ historys/
 A: 可以通过 `-T` 参数增加连接超时时间：
 
 ```bash
-python sshexec.py -f nodes.csv -c "uptime" -T 30
+python sshfleet.py -f nodes.csv -c "uptime" -T 30
 ```
 
 ### Q2: 如何批量处理多个端口的服务器？
@@ -334,12 +334,12 @@ A: 工具会检测危险命令并提示确认。如果确认要执行，输入 `
 A: 历史记录保存在 `historys/` 目录下，每次执行创建一个独立目录。也可以使用 `-z` 打包最新记录：
 
 ```bash
-python sshexec.py -z
+python sshfleet.py -z
 ```
 
 ### Q5: Windows 下执行报错？
 
-A: 确保 Go 可执行文件 `batch_ssh.exe` 存在，并且有执行权限。
+A: 确保 Go 可执行文件 `SSHFleet.exe` 存在，并且有执行权限。
 
 ***
 
@@ -358,8 +358,8 @@ Python 3.12+，主要依赖：
 
 ## 仓库
 
-- GitHub: [github.com/GH-HYL/Multi-SSHexec](https://github.com/GH-HYL/Multi-SSHexec)
-- Gitee: [gitee.com/huang-fugui-123/sshexec](https://gitee.com/huang-fugui-123/sshexec)
+- GitHub: [github.com/GH-HYL/Multi-SSHFleet](https://github.com/GH-HYL/Multi-SSHFleet)
+- Gitee: [gitee.com/huang-fugui-123/sshfleet](https://gitee.com/huang-fugui-123/sshfleet)
 - 邮箱: <465317918@qq.com>
 
 ***

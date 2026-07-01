@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# SSHexec 打印结果文件
+# SSHFleet 打印结果文件
 # 该文件负责格式化输出结果，包括打印到终端和导出到Excel文件
 
 # 系统或第三方模块
@@ -153,6 +153,8 @@ def format_output_to_xlsx(log_dir: str, config: SSHFleetConfig) -> None:
         return
     finally:
         wb.close()
+    
+    tlog.success("格式化output.txt到Excel文件成功")
 
 
 @utils.error_and_exit_handling_decorator(
@@ -252,6 +254,7 @@ def format_dict_list_to_xlsx(
             ws.auto_filter.ref = f"A1:{last_col}{last_row}"
 
         wb.save(dict_path)
+        tlog.success("格式化results字典列表到Excel文件成功")
 
     except PermissionError as e:
         print(
@@ -313,7 +316,7 @@ def format_statistic_results_to_terminal(results_statistic: Dict) -> None:
             f'  {color.COLOR_RED}失败分类统计{color.COLOR_RESET} >>>  {"  ".join(f"{color.COLOR_YELLOW}{k}：{color.COLOR_RESET}{v}" for k, v in results_statistic["sorted_fail_categories"])}'
         )
     print("═" * 60)
-
+    tlog.success("格式化统计结果信息输出到终端成功")
     return
 
 
@@ -418,3 +421,4 @@ def format_statistic_results_to_report(
             )
             for ip in results_statistic["sorted_success_ips"]:
                 f.write(f"{ip}\n")
+    tlog.success("格式化统计结果信息输出到报告文件成功")

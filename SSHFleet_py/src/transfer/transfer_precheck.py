@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# SSHexec 传输预检查文件
+# SSHFleet 传输预检查文件
 # 处理纯文本和二进制文件上传，生成创建命令和全文本标志位
 
 import os
