@@ -13,7 +13,7 @@ from posixpath import join as posix_join
 import src.color as color
 
 # 源代码模块
-from src.toml import SSHExecConfig
+from src.yaml import SSHFleetConfig
 import src.utils as utils
 
 
@@ -259,7 +259,7 @@ def check_script_file(script_path):
 
 
 @utils.error_and_exit_handling_decorator("check_files_exist", "检查代码文件存在性失败")
-def check_files_exist(config: SSHExecConfig) -> None:
+def check_files_exist(config: SSHFleetConfig) -> None:
     """检查所有代码文件必须存在"""
     # 检查当前脚本所在目录
     current_dir = os.getcwd()
@@ -280,7 +280,7 @@ def check_files_exist(config: SSHExecConfig) -> None:
     # ]
 
     code_files = [
-        "src/config/sshexec.ini",
+        "src/config/SSHFleet.yaml",
         config.paths.jsons.dangerous_keywords,
         config.paths.jsons.error_keywords,
     ]

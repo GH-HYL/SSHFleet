@@ -14,7 +14,7 @@
 #     │   ├── transfer_utils.py         # 传输工具文件
 #     │   └── transfer.py               # 传输入口文件
 #     ├── config/                       # 配置文件夹
-#     │   ├── sshexec.ini               # 配置文件
+#     │   ├── SSHFleet.yaml             # 配置文件
 #     │   ├── dangerous_keywords.json   # 危险命令关键词文件
 #     │   └── error_keywords.json       # 错误分类关键词文件    
 #     ├── gotogo.py                     # 命令执行器入口
@@ -22,7 +22,7 @@
 #     ├── color.py                      # 颜色文件
 #     ├── core.py                       # 核心代码文件
 #     ├── output.py                     # 打印结果文件
-#     ├── toml.py                       # 读取配置文件
+#     ├── yaml.py                       # 读取配置文件
 #     └── utils.py                      # 工具文件
 
 
@@ -30,7 +30,7 @@
 import os
 import sys
 import json
-from src import toml
+from src import yaml
 from datetime import datetime
 
 # 自定义模块
@@ -46,9 +46,9 @@ def main():
     """主程序"""
 
     # 加载配置文件
-    config_path = "src/config/SSHFleet.ini"
+    config_path = "src/config/SSHFleet.yaml"
     try:
-        config = toml.load_config(config_path)
+        config = yaml.load_config(config_path)
     except Exception as e:
         print(
             f"\033[91m[ERROR]\033[0m\033[93m [function:load_config]\033[0m 加载配置文件失败\n异常类型：\n{type(e)}\n异常信息：\n{e}"

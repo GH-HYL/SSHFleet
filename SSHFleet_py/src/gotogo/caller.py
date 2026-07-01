@@ -10,7 +10,7 @@ from typing import Dict, Generator, Optional
 
 import requests
 
-from src.toml import SSHFleetConfig
+from src.yaml import SSHFleetConfig
 from src.utils import tlog
 
 
