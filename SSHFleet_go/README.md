@@ -15,7 +15,7 @@
 
 ```bash
 # Windows
-go build -o SSHFleet.exe .
+go build -o SSHFleet_Go.exe .
 
 # Linux
 GOOS=linux GOARCH=amd64 go build -o SSHFleet .
