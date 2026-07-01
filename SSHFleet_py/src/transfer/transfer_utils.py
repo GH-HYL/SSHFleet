@@ -44,24 +44,24 @@ def create_ssh_connection(node_info: Dict[str, Any], args: Any) -> Connection:
     }
 
     # 添加认证信息
-    if args.k:
-        # 密钥认证
-        connect_kwargs.update(
-            {
-                "key_filename": args.k,
-                "look_for_keys": True,
-                "allow_agent": True,
-            }
-        )
-    else:
-        # 密码认证
-        connect_kwargs.update(
-            {
-                "password": node_info["password"],
-                "look_for_keys": False,
-                "allow_agent": False,
-            }
-        )
+    # if args.k:
+    #     # 密钥认证
+    #     connect_kwargs.update(
+    #         {
+    #             "key_filename": args.k,
+    #             "look_for_keys": True,
+    #             "allow_agent": True,
+    #         }
+    #     )
+    # else:
+    # 密码认证
+    connect_kwargs.update(
+        {
+            "password": node_info["password"],
+            "look_for_keys": False,
+            "allow_agent": False,
+        }
+    )
 
     # 创建连接对象
     try:
