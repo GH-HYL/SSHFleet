@@ -9,6 +9,7 @@
 #     │   ├── SSHFleet                 # 执行器（Linux可执行文件）
 #     │   └── SSHFleet_Go.exe             # 执行器（Windows可执行文件）
 #     ├── transfer/                     # 传输模块
+#     │   ├── transfer_router.py        # 传输路由（决定命令模式或SFTP模式）
 #     │   ├── transfer_precheck.py      # 传输预检查文件
 #     │   ├── transfer_check.py         # 传输检查文件
 #     │   ├── transfer_utils.py         # 传输工具文件
@@ -152,13 +153,12 @@ def main():
         tlog.success("go_to_go主执行器执行完成")
 
     # 进入transfer主执行器
-    if args.u:
+    if args.u or args.d:
         import src.transfer.transfer_router as transfer_router
-        final_results = transfer_router.route_upload(args, config, nodesinfos, exec_log_dir, error_keywords)
-
-    if args.d:
-        import src.transfer.transfer_router as transfer_router
-        final_results = transfer_router.route_download(args, config, nodesinfos, exec_log_dir, error_keywords)
+        if args.u:
+            final_results = transfer_router.route_upload(args, config, nodesinfos, exec_log_dir, error_keywords)
+        else:
+            final_results = transfer_router.route_download(args, config, nodesinfos, exec_log_dir, error_keywords)
 
 
     # “全局”结束时间计时
