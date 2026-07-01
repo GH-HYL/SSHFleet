@@ -3,11 +3,11 @@
 # 该文件负责解析命令行参数、加载配置文件、执行任务、处理结果并输出到终端和Excel文件
 
 # 项目目录/
-# ├── sshexec.py                        # 主程序
+# ├── sshfleet.py                        # 主程序
 # └── src/                              # 源代码文件夹
 #     ├── go/                           # go语言的执行器文件夹
-#     │   ├── batch_ssh                 # 执行器（Linux可执行文件）
-#     │   └── batch_ssh.exe             # 执行器（Windows可执行文件）
+#     │   ├── SSHFleet                 # 执行器（Linux可执行文件）
+#     │   └── SSHFleet.exe             # 执行器（Windows可执行文件）
 #     ├── transfer/                     # 传输模块
 #     │   ├── transfer_precheck.py      # 传输预检查文件
 #     │   ├── transfer_check.py         # 传输检查文件
@@ -204,41 +204,41 @@ def main():
     results_statistic = core.results_statistics(
         final_results, nodesinfos, args, global_start_time, global_stop_time
     )
-    tlog.success("计算统计结果信息成功")
+    
 
     # 格式化统计结果信息输出到终端
     output.format_statistic_results_to_terminal(results_statistic)
-    tlog.success("格式化统计结果信息输出到终端成功")
+    
 
     # 格式化统计结果信息输出到报告文件
     output.format_statistic_results_to_report(
         results_statistic, exec_log_dir, args, config
     )
-    tlog.success("格式化统计结果信息输出到报告文件成功")
+    
 
     # 保存执行资源文件
     core.save_execute_resource_files(args, exec_log_dir, config)
-    tlog.success("保存执行资源文件成功")
+    
 
     # 创建最新日志符号链接
     utils.create_latest_log_symlink(config)
-    tlog.success("创建最新日志符号链接函数执行成功")
+    
 
     # 格式化终端输出到Excel文件（转换output.txt格式）
     if config.enable.output_to_xlsx:
         output.format_output_to_xlsx(exec_log_dir, config)
-        tlog.success("格式化output.txt到Excel文件成功")
+        
 
     # 输出results字典列表到xlsx文件
     if config.enable.results_to_xlsx:
         output.format_dict_list_to_xlsx(final_results, exec_log_dir, config)
-        tlog.success("格式化results字典列表到Excel文件成功")
+        
 
     tlog.debug(f"{'-' * 20}SSHFleet工具 - 整理结束{'-' * 20}")
 
     # 退出SSHFleet工具
     print("SSHFleet工具执行结束，已退出")
-    tlog.info("SSHExec工具已退出")
+    tlog.info("SSHFleet工具已退出")
     tlog.debug(f"{ '-' * 50}分割线{ '-' * 50}" + "\n" * 3)
     sys.exit(0)
 

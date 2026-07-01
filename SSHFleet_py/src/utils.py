@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# SSHexec 工具文件
+# SSHFleet 工具文件
 # 该文件负责定义通用的工具函数，包括参数解析、配置加载、日志初始化等
 
 import argparse
@@ -509,4 +509,4 @@ def create_latest_log_symlink(config: SSHFleetConfig):
             print("提示: 请尝试使用管理员/root权限运行")
             tlog.error("创建最新日志符号链接函数执行失败，权限不足")
 
-
+    
