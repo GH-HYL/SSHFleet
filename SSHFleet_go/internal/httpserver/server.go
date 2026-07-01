@@ -26,7 +26,8 @@ type ErrorResponse struct {
 }
 
 var server *http.Server
-var requestUsed int32 // 0=可用, 1=已处理
+var requestUsed int32  // 0=可用, 1=已处理
+var shutdownSignal chan struct{} // 通知Go关闭的信号通道
 
 // Start 启动 HTTP Server，处理一次请求后退出
 func Start(port int, logPath string) error {
@@ -34,11 +35,14 @@ func Start(port int, logPath string) error {
 		return err
 	}
 
+	shutdownSignal = make(chan struct{})
+
 	interruptHandler := interrupt.NewInterruptHandler()
 	interruptHandler.Setup()
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /api/v1/execute", handleExecute)
+	mux.HandleFunc("POST /api/v1/shutdown", handleShutdown)
 
 	server = &http.Server{
 		Addr:    fmt.Sprintf(":%d", port),
@@ -132,7 +136,30 @@ func handleExecute(w http.ResponseWriter, r *http.Request) {
 	flusher.Flush()
 
 	log.Zlog.Succ(fmt.Sprintf("任务执行完成: total=%d, success=%d, failed=%d", total, success, failed))
+
+	// 等待客户端发送关闭信号，10分钟超时防御
+	log.Zlog.Info("等待客户端发送关闭信号...")
+	select {
+	case <-shutdownSignal:
+		log.Zlog.Info("收到客户端关闭信号")
+	case <-time.After(10 * time.Minute):
+		log.Zlog.Warn("等待关闭信号超时(10分钟)，强制退出")
+	}
 	go server.Shutdown(context.Background())
+}
+
+// handleShutdown 处理客户端关闭请求
+func handleShutdown(w http.ResponseWriter, r *http.Request) {
+	log.Zlog.Info("收到客户端关闭请求")
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+
+	// 发送关闭信号
+	select {
+	case shutdownSignal <- struct{}{}:
+	default:
+	}
 }
 
 func writeError(w http.ResponseWriter, statusCode int, code string, message string) {
