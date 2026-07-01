@@ -14,14 +14,14 @@ import src.color as color
 
 # 自定义模块
 from src import utils
-from src.toml import SSHExecConfig
+from src.yaml import SSHFleetConfig
 from src.utils import tlog
 
 
 @utils.error_and_exit_handling_decorator(
     "format_output_to_xlsx", "格式化输出结果到Excel文件失败", isexit=True
 )
-def format_output_to_xlsx(log_dir: str, config: SSHExecConfig) -> None:
+def format_output_to_xlsx(log_dir: str, config: SSHFleetConfig) -> None:
     """
     功能：
         格式化output.txt文件内容到Excel文件
@@ -159,7 +159,7 @@ def format_output_to_xlsx(log_dir: str, config: SSHExecConfig) -> None:
     "format_dict_list_to_xlsx", "格式化字典列表到Excel文件失败", isexit=False
 )
 def format_dict_list_to_xlsx(
-    final_results: List[Dict[str, Any]], log_dir: str, config: SSHExecConfig
+    final_results: List[Dict[str, Any]], log_dir: str, config: SSHFleetConfig
 ) -> None:
     """
     功能：
@@ -326,7 +326,7 @@ def format_statistic_results_to_report(
     results_statistic: Dict,
     log_dir: str,
     args: argparse.Namespace,
-    config: SSHExecConfig,
+    config: SSHFleetConfig,
 ) -> None:
     """
     功能：
