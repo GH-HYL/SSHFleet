@@ -137,3 +137,27 @@ def collect_stderr(process: subprocess.Popen) -> str:
     except Exception:
         pass
     return ""
+
+
+def shutdown_go_server(port: int) -> bool:
+    """
+    通知 Go 服务器关闭
+
+    Args:
+        port: Go 服务端口
+
+    Returns:
+        bool: 是否成功发送关闭信号
+    """
+    url = f"http://127.0.0.1:{port}/api/v1/shutdown"
+    try:
+        response = requests.post(url, timeout=5)
+        if response.status_code == 200:
+            tlog.info("已发送 Go 服务器关闭信号")
+            return True
+        else:
+            tlog.warning(f"关闭信号响应异常: {response.status_code}")
+            return False
+    except requests.RequestException as e:
+        tlog.warning(f"发送关闭信号失败: {e}")
+        return False
