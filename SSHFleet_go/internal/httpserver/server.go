@@ -29,8 +29,10 @@ var server *http.Server
 var requestUsed int32 // 0=可用, 1=已处理
 
 // Start 启动 HTTP Server，处理一次请求后退出
-func Start(port int, logPath string) {
-	log.InitLogger(logPath)
+func Start(port int, logPath string) error {
+	if err := log.InitLogger(logPath); err != nil {
+		return err
+	}
 
 	interruptHandler := interrupt.NewInterruptHandler()
 	interruptHandler.Setup()
@@ -53,6 +55,7 @@ func Start(port int, logPath string) {
 	if err := server.ListenAndServe(); err != http.ErrServerClosed {
 		log.Zlog.Error(fmt.Sprintf("HTTP Server 异常退出: %v", err))
 	}
+	return nil
 }
 
 // handleExecute 处理执行请求，完成后关闭服务器

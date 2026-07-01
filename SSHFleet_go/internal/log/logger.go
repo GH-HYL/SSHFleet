@@ -18,6 +18,10 @@ func InitLogger(logPath string) error {
 	var writeSyncer zapcore.WriteSyncer
 
 	if logPath != "" {
+		if info, err := os.Stat(logPath); err != nil || !info.IsDir() {
+			return fmt.Errorf("LOG_PATH_INVALID: 日志路径不存在: %s", logPath)
+		}
+
 		zFile := path.Join(logPath, "SSHFleet.log")
 
 		file, err := os.OpenFile(zFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
