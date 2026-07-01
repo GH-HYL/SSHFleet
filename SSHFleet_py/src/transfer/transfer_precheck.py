@@ -4,9 +4,14 @@
 
 import os
 import base64
+import stat
 
 from src import utils
 from src.utils import tlog
+
+# 命令长度安全上限（保守值，SSH命令通常限制在~1MB，预留余量）
+MAX_COMMAND_SIZE = 500 * 1024
+
 
 def check_if_all_text(upload_path: str) -> list:
     """
@@ -66,6 +71,22 @@ def check_if_all_text(upload_path: str) -> list:
         )
 
 
+def _shell_escape(s: str) -> str:
+    """
+    转义字符串用于shell单引号内使用。
+    单引号内不能出现单引号，所以用 '替换为'\'' 的方式。
+    """
+    return s.replace("'", "'\\''")
+
+
+def _get_file_mode(path: str) -> int:
+    """获取文件的权限模式（八进制）"""
+    try:
+        return stat.S_IMODE(os.stat(path).st_mode)
+    except OSError:
+        return 0o644  # 默认权限
+
+
 def generate_upload_command(file_list: list, upload_path: str, path: str) -> str:
     """
     生成上传命令，基于文件和目录清单。
@@ -95,39 +116,45 @@ def generate_upload_command(file_list: list, upload_path: str, path: str) -> str
         else:
             file_entries.append((rel, full))
 
-    # 读取文件内容并 base64 编码（已确认纯文本）
+    # 读取文件内容并 base64 编码，同时收集权限信息
     file_data = []
+    total_b64_size = 0
     for rel, full in file_entries:
         with open(full, 'rb') as f:
             content = f.read()
         b64 = base64.b64encode(content).decode('ascii')
-        file_data.append((rel, b64))
+        mode = _get_file_mode(full)
+        file_data.append((rel, b64, mode))
+        total_b64_size += len(b64)
 
-    # 转义目标目录路径中的单引号
-    path_safe = path.replace("'", "'\\''")
+    # 检查命令总长度是否超限
+    if total_b64_size > MAX_COMMAND_SIZE:
+        tlog.warning(f"文件base64编码后总大小{total_b64_size}超过安全上限{MAX_COMMAND_SIZE}，切换为SFTP模式")
+        return ""
+
+    # 转义目标目录路径
+    path_safe = _shell_escape(path)
 
     # 构建脚本内容
     lines = ["#!/bin/sh"]
-    # 配置语言环境，确保远程执行环境正确处理文本
     lines.append("export LC_ALL=C.UTF-8 LANG=C.UTF-8")
-    # 插入目标目录变量定义（放在重名检查之前）
     lines.append(f"TARGET_DIR='{path_safe}'")
 
-    # 检查重名，这是一个标志位：收集所有重名文件和目录，然后一起处理
+    # 检查重名
     lines.append("repetition_mark=0")
 
     # 检查文件重名
-    for rel, _ in file_data:
+    for rel, _, _ in file_data:
         if rel:
             dest_path = f"$TARGET_DIR/{rel}"
             file_name = rel
         else:
             dest_path = f"$TARGET_DIR/{os.path.basename(upload_path)}"
             file_name = os.path.basename(upload_path)
-        file_name_escaped = file_name.replace('"', '\\"').replace('\\', '\\\\')
+        file_name_escaped = _shell_escape(file_name)
         lines.append(
             f'if [ -f "{dest_path}" ]; then '
-            f"printf '上传文件出现重名: %s\\n' \"{file_name_escaped}\" >&2; "
+            f"printf '上传文件出现重名: %s\\n' '{file_name_escaped}' >&2; "
             f'repetition_mark=1; '
             f'fi'
         )
@@ -137,10 +164,10 @@ def generate_upload_command(file_list: list, upload_path: str, path: str) -> str
         if rel:
             dest_path = f"$TARGET_DIR/{rel}"
             dir_name = rel
-            dir_name_escaped = dir_name.replace('"', '\\"').replace('\\', '\\\\')
+            dir_name_escaped = _shell_escape(dir_name)
             lines.append(
                 f'if [ -d "{dest_path}" ]; then '
-                f"printf '上传目录出现重名: %s\\n' \"{dir_name_escaped}\" >&2; "
+                f"printf '上传目录出现重名: %s\\n' '{dir_name_escaped}' >&2; "
                 f'repetition_mark=1; '
                 f'fi'
             )
@@ -152,36 +179,37 @@ def generate_upload_command(file_list: list, upload_path: str, path: str) -> str
         f'fi'
     )
 
-    # 添加sh内容，如果下面任何命令退出码非0，就退出
+    # set -e：任何命令失败则退出
     lines.append("set -e")
 
-    # 先创建所有目录（包括空文件夹），按路径深度排序确保父目录先创建
+    # 先创建所有目录，按路径深度排序确保父目录先创建
     dir_entries.sort(key=lambda x: x[0].count('/'))
     for rel, _ in dir_entries:
         if rel:
             dest_path = f"$TARGET_DIR/{rel}"
             lines.append(f"mkdir -p \"{dest_path}\"")
-        else:
-            continue  # 跳过根目录（已在TARGET_DIR中）
 
-    # 文件创建（不再重复创建目录）
-    for rel, b64 in file_data:
+    # 文件创建，保留原始权限
+    for rel, b64, mode in file_data:
         if rel:
             dest_path = f"$TARGET_DIR/{rel}"
         else:
             dest_path = f"$TARGET_DIR/{os.path.basename(upload_path)}"
-        # 直接写入文件，目录已提前创建
+        # 写入文件
         lines.append(
             f"printf '%s' '{b64}' | base64 -d > \"{dest_path}\""
         )
+        # 恢复权限（八进制）
+        if mode and mode != 0o644:
+            lines.append(f"chmod {oct(mode)[2:]} \"{dest_path}\"")
 
-    # 使用单引号包裹完成消息
     lines.append("echo '上传文件完成'")
     script = "\n".join(lines)
-    tlog.debug(f"上传脚本拼接完成\n{script}")
+    tlog.debug(f"上传脚本拼接完成，脚本长度: {len(script)} 字符")
+
     # 将整个脚本 base64 编码
     script_b64 = base64.b64encode(script.encode('utf-8')).decode('ascii')
-    tlog.debug(f"上传脚本base64编码完成\n{script_b64}")
+    tlog.debug(f"上传脚本base64编码完成，编码后长度: {len(script_b64)} 字符")
 
     # 最终命令
     command = f"printf '%s' '{script_b64}' | base64 -d | sh"
@@ -197,7 +225,7 @@ def transfer_precheck(upload_path: str, path: str) -> str:
         path: 远程目标目录路径（一定是目录）
 
     返回:
-        拼装好的命令，如是空值，表示不是纯文本文件
+        拼装好的命令，如是空值，表示不是纯文本文件或超出命令长度限制
     """
     tlog.info(f"开始检查上传目标是否为纯文本文件")
     file_list = check_if_all_text(upload_path)
