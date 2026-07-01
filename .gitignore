@@ -1,0 +1,12 @@
+# 忽略所有
+*
+!.gitignore
+
+!SSHFleet_go/
+!SSHFleet_go/**
+SSHFleet_go/vendor/
+SSHFleet_go/vendor/**
+
+!SSHFleet_py/
+!SSHFleet_py/**
+*.pyc
