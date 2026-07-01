@@ -144,6 +144,7 @@ def format_output_to_xlsx(log_dir: str, config: SSHFleetConfig) -> None:
     # 保存文件
     try:
         wb.save(output_path)
+        tlog.success("格式化output.txt到Excel文件成功")
         return
     except Exception as e:
         print(
@@ -154,7 +155,6 @@ def format_output_to_xlsx(log_dir: str, config: SSHFleetConfig) -> None:
     finally:
         wb.close()
     
-    tlog.success("格式化output.txt到Excel文件成功")
 
 
 @utils.error_and_exit_handling_decorator(
@@ -290,7 +290,6 @@ def format_statistic_results_to_terminal(results_statistic: Dict) -> None:
         None
     """
 
-    # print(f'\n')
     print("═" * 60)
     print(f"  总耗时： {results_statistic['global_cost_time']}  秒")
     if results_statistic["verify"] == "通过":
@@ -366,8 +365,6 @@ def format_statistic_results_to_report(
         if args.s:
             f.write("  执行模式： 脚本模式\n")
             f.write(f"  脚本路径： {args.s}\n")
-        # if args.e:
-        #     f.write(f"  环境变量： {args.e}\n")
         if args.u:
             f.write("  执行模式： 上传模式\n")
             f.write(f"  本地路径： {args.u}\n")
