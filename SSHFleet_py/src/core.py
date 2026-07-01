@@ -61,7 +61,7 @@ def parse_args(config: SSHFleetConfig) -> argparse.Namespace:
         parser.add_argument('-t', metavar='execute_timeout',type=int, help=f'     [默认: {config.execution.timeout_execute if config.execution.timeout_execute  else "60"} 或 {config.execution.timeout_transfer if config.execution.timeout_transfer else "300"} ]    执行超时时间（秒）：c、s模式默认{config.execution.timeout_execute if config.execution.timeout_execute else "60"}；u、p模式{config.execution.timeout_transfer if config.execution.timeout_transfer else "300"}')
         parser.add_argument('-T', metavar='connect_timeout',type=int, default=config.execution.timeout_connect, help=f'     [默认值: {config.execution.timeout_connect if config.execution.timeout_connect else "10"}]          连接超时时间（秒）')
         parser.add_argument('-n', metavar='number', type=int, default=0, help='     [默认：最大]          c、s模式并发执行数，默认使用节点数，可指定并发梳理')
-        parser.add_argument('-k', metavar='key',type=str, nargs='?', const='no_value', default="", help=f'     [默认:不使用]         使用秘钥登陆：-k 指定私钥路径（不指定路径默认：{config.execution.private_key if config.execution.private_key else "~/.ssh/id_rsa"}）')
+        # parser.add_argument('-k', metavar='key',type=str, nargs='?', const='no_value', default="", help=f'     [默认:不使用]         使用秘钥登陆：-k 指定私钥路径（不指定路径默认：{config.execution.private_key if config.execution.private_key else "~/.ssh/id_rsa"}）')
         parser.add_argument('-r', metavar='remark',type=str, default='', help='                           备注信息，默认自动生成，用于生成历史记录文件名后缀') 
         parser.add_argument('--nobash', action='store_true', help='                           命令模式专用，不使用bash环境执行命令，直接执行原始命令')
         parser.add_argument('--disinteractive', action='store_true', help='                           取消高危命令告警和配置信息的交互确认')
@@ -84,7 +84,7 @@ def parse_args(config: SSHFleetConfig) -> argparse.Namespace:
         args.t = config.execution.timeout_transfer
 
     # 路径参数规范化
-    for path_attr in ["s", "f", "u", "p", "d", "k"]:
+    for path_attr in ["s", "f", "u", "p", "d"]:
         path_value = getattr(args, path_attr, None)
         if path_value:
             # 路径中间不能包含空格,不是路径不能包括空格,不能以空格开头
@@ -94,13 +94,13 @@ def parse_args(config: SSHFleetConfig) -> argparse.Namespace:
                 )
             setattr(args, path_attr, utils.args_normalize_path(path_value))
 
-    # 处理秘钥参数，如果不指定，默认使用家目录下的id_rsa
-    if args.k == "no_value":  # 用户只输入了 -k
-        default_path = os.path.expanduser(config.execution.private_key)
-        if os.path.exists(default_path):
-            args.k = default_path  # 文件存在，使用展开后的路径
-        else:
-            args.k = ""  # 文件不存在，置为空
+    # # 处理秘钥参数，如果不指定，默认使用家目录下的id_rsa
+    # if args.k == "no_value":  # 用户只输入了 -k
+    #     default_path = os.path.expanduser(config.execution.private_key)
+    #     if os.path.exists(default_path):
+    #         args.k = default_path  # 文件存在，使用展开后的路径
+    #     else:
+    #         args.k = ""  # 文件不存在，置为空
 
     # 处理备注参数，如果不指定，默认使用空字符串
     if not args.r:  # 用户未输入备注
