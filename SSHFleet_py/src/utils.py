@@ -3,6 +3,7 @@
 # 该文件负责定义通用的工具函数，包括参数解析、配置加载、日志初始化等
 
 import argparse
+import base64
 
 # 系统或第三方模块
 import os
@@ -49,9 +50,6 @@ def clean_for_excel(original_text, replace_tabs=False):
         text = original_text
     else:
         text = str(original_text)
-
-
-    import re
 
     # 正则：完整的 ANSI 序列
     ANSI_ESCAPE_RE = re.compile(
@@ -212,7 +210,8 @@ def print_error_information_and_exit(
         f"{color.COLOR_RED}[ERROR]{color.COLOR_RESET}{color.COLOR_YELLOW} [function:{func_name}]{color.COLOR_RESET} {error_str}",
         file=sys.stderr,
     )
-    sys.exit(1) if isexit else None
+    if isexit:
+        sys.exit(1)
 
 
 def init_tool_logger(log_dir: str, config: SSHFleetConfig):
@@ -297,11 +296,7 @@ def build_final_command(args: argparse.Namespace) -> str:
     # 初始化组件,设置输出编码方式（C.UTF-8是POSIX标准，所有Linux发行版内置支持）
     components = ["LC_ALL=C.UTF-8 LANG=C.UTF-8;"]
 
-    # 1. 环境变量
-    # if args.e:
-    #     components.append(args.e)
-
-    # 2. sudo
+    # sudo
     if args.m == "sudo":
         components.append("sudo")
 
@@ -313,8 +308,6 @@ def build_final_command(args: argparse.Namespace) -> str:
         else:
             components.append(args.c)
     elif args.s:
-        import base64
-
         # 脚本解释器选择
         interpreter = "python3" if args.s.endswith(".py") else "bash"
 
@@ -481,7 +474,7 @@ def create_latest_log_symlink(config: SSHFleetConfig):
 
     if not log_dirs:
         print(
-            f"{color.COLOR_RED}[ERROR]{color.COLOR_RESET}{color.COLOR_YELLOW} [function:zip_latest_history]{color.COLOR_RESET} 历史记录目录 '{config.paths.logs.historys}' 中没有日志文件夹",
+            f"{color.COLOR_RED}[ERROR]{color.COLOR_RESET}{color.COLOR_YELLOW} [function:create_latest_log_symlink]{color.COLOR_RESET} 历史记录目录 '{config.paths.logs.historys}' 中没有日志文件夹",
             file=sys.stderr,
         )
         print("提示: 请先至少一次执行任务以生成历史记录")
