@@ -161,7 +161,7 @@ def check_arguments(args):
     if args.s:
         if os.path.isdir(args.s):
             utils.print_error_information_and_exit(
-                "check_arguments", f" -s 参数指定脚本路径不存在：{args.s}"
+                "check_arguments", f" -s 参数指定的路径是目录，不是脚本文件：{args.s}"
             )
         script_path = args.s
         if os.path.getsize(script_path) == 0:
@@ -186,10 +186,11 @@ def check_arguments(args):
                 "check_arguments", f" -f 参数指定的 CSV 文件为空：{args.f}"
             )
         # 不能是二进制文件
-        if b"\x00" in open(args.f, "rb").read(1024):
-            utils.print_error_information_and_exit(
-                "check_arguments", f" 错误: {args.f} 是二进制文件"
-            )
+        with open(args.f, "rb") as f:
+            if b"\x00" in f.read(1024):
+                utils.print_error_information_and_exit(
+                    "check_arguments", f" 错误: {args.f} 是二进制文件"
+                )
 
     # 检查 -n 参数
     if args.n:
@@ -255,29 +256,14 @@ def check_script_file(script_path):
         if b"\r\n" in data:
             with open(script_path, "wb") as f:
                 f.write(data.replace(b"\r\n", b"\n"))
-            print(f" 警告: {script_path} 的换行符已自动转换为LF格式")
+            from src.utils import tlog as _tlog
+            _tlog.warning(f"{script_path} 的换行符已自动转换为LF格式")
 
 
 @utils.error_and_exit_handling_decorator("check_files_exist", "检查代码文件存在性失败")
 def check_files_exist(config: SSHFleetConfig) -> None:
     """检查所有代码文件必须存在"""
-    # 检查当前脚本所在目录
     current_dir = os.getcwd()
-
-    # 检查所有代码文件是否存在
-    # code_files = [
-    #     "sshfleet.py",
-    #     "src/asyncssh/asyncssh.py",
-    #     "src/transfer/transfer.py",
-    #     "src/transfer/transfer_check.py",
-    #     "src/transfer/transfer_utils.py",
-    #     "src/check.py",
-    #     "src/config.py",
-    #     "src/core.py",
-    #     "src/dicts.py",
-    #     "src/output.py",
-    #     "src/utils.py",
-    # ]
 
     code_files = [
         "src/config/SSHFleet.yaml",
@@ -297,7 +283,7 @@ def check_files_exist(config: SSHFleetConfig) -> None:
         )
 
 
-def check_dangerous_dict(dangerous_patterns: List, validation_code=None):
+def check_dangerous_dict(dangerous_patterns: List):
     """
     功能：
         检查命令或脚本内容是否包含危险模式
@@ -339,45 +325,14 @@ def check_dangerous_dict(dangerous_patterns: List, validation_code=None):
                     f"危险命令检测规则不完整（第{i+1}条字段'{field}'为空），程序退出！",
                 )
 
-    # 4. 校验危险模式规则是否被篡改
-    if validation_code:
-        try:
-            import hashlib
-            import json
-
-            # 将规则转换为JSON字符串并进行标准化（确保顺序一致）
-            patterns_json = json.dumps(
-                dangerous_patterns, sort_keys=True, ensure_ascii=False
-            )
-
-            # 计算哈希值
-            actual_hash = hashlib.sha256(patterns_json.encode("utf-8")).hexdigest()
-
-            if actual_hash != validation_code:
-                utils.print_error_information_and_exit(
-                    "check_dangerous_dict", "风险命令检测规则已被篡改，程序退出！"
-                )
-        except Exception as e:
-            utils.print_error_information_and_exit(
-                "check_dangerous_dict", f"规则校验失败: {e}"
-            )
-
-    # # 计算校验码（只需要执行一次）
-    # import hashlib
-    # import json
-    # patterns_json = json.dumps(DANGEROUS_PATTERNS, sort_keys=True, ensure_ascii=False)
-    # validation_code = hashlib.sha256(patterns_json.encode('utf-8')).hexdigest()
-    # print(f"校验码: {validation_code}")
-
-    # # 调用函数（必须提供校验码）
-    # check_command_dangerous_patterns(args, DANGEROUS_PATTERNS, validation_code=validation_code)
+    # 4. 校验危险模式规则是否被篡改（预留接口，暂未启用）
 
 
 def check_dangerous_patterns(args, dangerous_keywords: List, disinteractive=False):
     """检查命令或脚本内容是否包含危险模式"""
 
-    is_script = True if args.s else False
-    script_path = args.s if args.s else ""
+    is_script = bool(args.s)
+    script_path = args.s or ""
 
     # 检查是否是脚本文件路径
     if args.s:
@@ -466,7 +421,7 @@ def check_dangerous_patterns(args, dangerous_keywords: List, disinteractive=Fals
     # 按风险级别排序：forbidden > high > medium > low
     risk_order = {"forbidden": 0, "high": 1, "medium": 2, "low": 3}
     highest_risk_match = min(
-        all_matches, key=lambda x: risk_order[x["pattern"]["risk_level"]]
+        all_matches, key=lambda x: risk_order.get(x["pattern"]["risk_level"], 99)
     )
 
     # 根据最高风险级别处理
@@ -486,6 +441,9 @@ def check_dangerous_patterns(args, dangerous_keywords: List, disinteractive=Fals
 
 def print_danger_warning(matches, is_forbidden=False):
     """打印危险命令警告信息（合并函数）"""
+
+    if not matches:
+        return
 
     if is_forbidden:
         title = "🚫  发现禁止命令 🚫"
