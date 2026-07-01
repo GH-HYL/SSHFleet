@@ -4,6 +4,8 @@
 
 # 系统或第三方模块
 import os
+import random
+import string
 from posixpath import join as posix_join
 from typing import Dict, Any
 from fabric import Connection
@@ -38,7 +40,6 @@ def check_disk_space(conn: Connection, current_path: str, original_size: int) ->
         conn: Connection对象 - SSH连接对象
         current_path: str - 要检查的路径
         original_size: int - 原始文件大小（字节）
-        use_sudo: bool - 是否使用sudo权限执行命令
 
     返回：
         disk_free - 剩余磁盘空间（KB）
@@ -109,9 +110,6 @@ def check_single_path_writable(
     """
 
     # 检查可写性（创建测试文件）
-    import random
-    import string
-
     random_str = "".join(random.choices(string.ascii_lowercase + string.digits, k=12))
     test_file = posix_join(current_path, f".write_test_{random_str}")
 
