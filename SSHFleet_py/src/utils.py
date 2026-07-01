@@ -17,7 +17,7 @@ from loguru import logger
 
 # 自定义模块
 import src.color as color
-from src.toml import SSHExecConfig
+from src.yaml import SSHFleetConfig
 
 # 初始化全局logger变量
 tlog = logger.bind(logger_type="tool")
@@ -215,7 +215,7 @@ def print_error_informantion_and_exit(
     sys.exit(1) if isexit else None
 
 
-def init_tool_logger(log_dir: str, config: SSHExecConfig):
+def init_tool_logger(log_dir: str, config: SSHFleetConfig):
     global tlog
 
     os.makedirs(log_dir, exist_ok=True)
@@ -449,7 +449,7 @@ def init_execution_logger(log_dir: str, log_exec: str):
 @error_and_exit_handling_decorator(
     "create_latest_log_symlink", "创建最新日志符号链接失败", isexit=True
 )
-def create_latest_log_symlink(config: SSHExecConfig):
+def create_latest_log_symlink(config: SSHFleetConfig):
     """
     功能：
         创建最新日志符号链接

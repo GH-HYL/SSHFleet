@@ -20,12 +20,12 @@ from posixpath import join as posix_join
 # 自定义模块
 import src.color as color
 import src.utils as utils
-from src.toml import SSHExecConfig
+from src.yaml import SSHFleetConfig
 from src.utils import tlog
 
 
 @utils.error_and_exit_handling_decorator("parse_args", "参数解析失败")
-def parse_args(config: SSHExecConfig) -> argparse.Namespace:
+def parse_args(config: SSHFleetConfig) -> argparse.Namespace:
     """
     功能：
         参数解析函数
@@ -142,14 +142,14 @@ def parse_args(config: SSHExecConfig) -> argparse.Namespace:
 
 
 @utils.error_and_exit_handling_decorator("read_nodes_infos", "读取节点信息失败")
-def read_nodes_infos(csv_path: str, config: SSHExecConfig) -> List[Dict[str, str]]:
+def read_nodes_infos(csv_path: str, config: SSHFleetConfig) -> List[Dict[str, str]]:
     """
     功能：
         从CSV文件中读取节点信息，并进行数据验证和处理
 
     参数：
         csv_path (str): CSV文件的路径
-        config (SSHExecConfig): 配置对象
+        config (SSHFleetConfig): 配置对象
 
     返回：
         List[Dict[str, str]]: 处理后的节点信息列表，每个节点是一个字典，包含ip、port、user和password字段
@@ -498,7 +498,7 @@ def arguments_confirm(args, nodes):
     "save_execute_resource_files", "保存执行资源文件失败", isexit=True
 )
 def save_execute_resource_files(
-    args: argparse.Namespace, log_dir: str, config: SSHExecConfig
+    args: argparse.Namespace, log_dir: str, config: SSHFleetConfig
 ) -> None:
     """
     功能：
@@ -654,7 +654,7 @@ def results_statistics(
 
 
 @utils.error_and_exit_handling_decorator("zip_latest_history", "打包历史记录失败")
-def zip_latest_history(args, config: SSHExecConfig):
+def zip_latest_history(args, config: SSHFleetConfig):
     """
     功能：
         打包最新的历史记录日志文件为 ZIP 或 TAR 格式

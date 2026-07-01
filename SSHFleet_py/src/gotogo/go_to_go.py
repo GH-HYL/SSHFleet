@@ -9,7 +9,7 @@ from rich.live import Live
 from rich.progress import Progress, BarColumn, TextColumn, TimeElapsedColumn
 
 from src.gotogo import builder, caller, parser
-from src.toml import SSHFleetConfig
+from src.yaml import SSHFleetConfig
 from src.utils import tlog
 
 console = Console()
