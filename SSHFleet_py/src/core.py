@@ -67,7 +67,7 @@ def parse_args(config: SSHFleetConfig) -> argparse.Namespace:
         parser.add_argument('--nobash', action='store_true', help='                           命令模式专用，不使用bash环境执行命令，直接执行原始命令')
         parser.add_argument('--disinteractive', action='store_true', help='                           取消高危命令告警和配置信息的交互确认')
     except Exception as e:
-        utils.print_error_informantion_and_exit(
+        utils.print_error_information_and_exit(
             "parse_args", f"参数初始化失败\n异常类型：\n{type(e)}\n异常信息：\n{e}"
         )
 
@@ -95,7 +95,7 @@ def parse_args(config: SSHFleetConfig) -> argparse.Namespace:
         if path_value:
             # 路径中间不能包含空格,不是路径不能包括空格,不能以空格开头
             if " " in path_value.strip():
-                utils.print_error_informantion_and_exit(
+                utils.print_error_information_and_exit(
                     "parse_args", "路径参数中间不能包含空格"
                 )
             setattr(args, path_attr, utils.args_normalize_path(path_value))

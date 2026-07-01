@@ -752,7 +752,7 @@ def execute_transfer(
         elog.error(
             f"上传tar包失败，本地为目录{args.u}，但未正确生成压缩文件路径{callable_tar_result[2]}"
         )
-        utils.print_error_informantion_and_exit(
+        utils.print_error_information_and_exit(
             "calculate_files_size",
             f"上传tar包失败，上传任务中，本地为目录{args.u}，但未正确生成压缩文件路径{callable_tar_result[2]}",
         )
@@ -886,7 +886,7 @@ def execute_transfer(
                         elog.error(
                             f"参数错误,请联系开发者检查args.u和.args.d值的有效性，当前值：{args.u},{args.d}"
                         )
-                        utils.print_error_informantion_and_exit(
+                        utils.print_error_information_and_exit(
                             "execute_transfer",
                             f"参数错误,请联系开发者检查args.u和.args.d值的有效性，当前值：{args.u},{args.d}",
                         )
