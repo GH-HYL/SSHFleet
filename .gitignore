@@ -1,22 +1,12 @@
 # 忽略所有
 *
-
 !.gitignore
-!sshexec.py
-!readme.md
 
-!others/
-!others/*
+!SSHFleet_go/
+!SSHFleet_go/**
+SSHFleet_go/vendor/
+SSHFleet_go/vendor/**
 
-!src/
-!src/*
-!src/config/
-!src/config/*
-!src/go/
-!src/go/*
-!src/go/**
-!src/transfer/
-!src/transfer/*
-
-!notes/
-!notes/memo.txt
+!SSHFleet_py/
+!SSHFleet_py/**
+*.pyc

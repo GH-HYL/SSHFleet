@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# SSHexec 传输入口文件
+# SSHFleet 传输入口文件
 # 该文件负责处理文件传输操作，包括上传和下载
 
 # 系统或第三方模块
@@ -175,7 +175,7 @@ def sftp_upload(
 
             # 创建临时目录（确保父目录存在）
             # 拼接临时目录绝对路径
-            tmp_dir = f"{home_dir}/.sshexec_packages/upload_tmp/{os.urandom(4).hex()}"
+            tmp_dir = f"{home_dir}/.SSHFleet_packages/upload_tmp/{os.urandom(4).hex()}"
 
             if transfer_utils.create_dir(conn, tmp_dir, use_sudo=False):
                 elog.info(f"创建临时目录成功：{tmp_dir}")
@@ -274,7 +274,7 @@ def sftp_upload(
         finally:
             # 清理目标临时目录（保持不变）
             try:
-                clear_dir = f"{home_dir}/.sshexec_packages"
+                clear_dir = f"{home_dir}/.SSHFleet_packages"
                 cleanup_cmd = f"rm -rf {clear_dir}"
                 if use_sudo:
                     conn.sudo(cleanup_cmd, hide=True, warn=True)

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# SSHexec 主程序
+# SSHFleet 主程序
 # 该文件负责解析命令行参数、加载配置文件、执行任务、处理结果并输出到终端和Excel文件
 
 # 项目目录/
@@ -46,7 +46,7 @@ def main():
     """主程序"""
 
     # 加载配置文件
-    config_path = "src/config/sshexec.ini"
+    config_path = "src/config/SSHFleet.ini"
     try:
         config = toml.load_config(config_path)
     except Exception as e:
@@ -65,13 +65,13 @@ def main():
             f"\033[91m[ERROR]\033[0m\033[93m [function:init_tool_logger]\033[0m 初始化工具日志失败\n异常类型：\n{type(e)}\n异常信息：\n{e}"
         )
 
-    tlog.info(f"SSHExec工具开始执行，时间：{datetime.now()}")
+    tlog.info(f"SSHFleet工具开始执行，时间：{datetime.now()}")
     tlog.info(f"工作路径：{os.getcwd()}")
     tlog.info(f"原始命令行参数：{sys.argv}")
     tlog.info(
         f"日志目录：{config.paths.logs.historys}，工具日志文件名：{config.paths.logs.tool}"
     )
-    tlog.debug(f"{ '-' * 20}SSHExec工具 - 准备阶段{ '-' * 20}")
+    tlog.debug(f"{ '-' * 20}SSHFleet工具 - 准备阶段{ '-' * 20}")
 
     # 检查代码文件是否都存在
     check.check_files_exist(config)
@@ -105,7 +105,7 @@ def main():
     if args.z:
         core.zip_latest_history(args, config)
         tlog.success("打包历史记录成功")
-        tlog.info("SSHExec工具已退出")
+        tlog.info("SSHFleet工具已退出")
         sys.exit(0)
 
     # 执行危险字典内容检查
@@ -121,8 +121,8 @@ def main():
     core.arguments_confirm(args, nodesinfos)
     tlog.info("用户已核实通过参数信息")
 
-    tlog.debug(f"{'-' * 20}SSHExec工具 - 准备结束{'-' * 20}\n")
-    tlog.debug(f"{'=' * 30}SSHExec工具 - 执行阶段{'=' * 30}")
+    tlog.debug(f"{'-' * 20}SSHFleet工具 - 准备结束{'-' * 20}\n")
+    tlog.debug(f"{'=' * 30}SSHFleet工具 - 执行阶段{'=' * 30}")
 
     # 获取错误分类关键字
     if os.path.exists(config.paths.jsons.error_keywords):
@@ -190,9 +190,9 @@ def main():
     )
 
     print(f"{'═' * 60}")
-    print(f"SSHExec工具{color.COLOR_GREEN}正在整理{color.COLOR_RESET}......")
-    tlog.debug(f"{'=' * 30}SSHExec工具 - 执行结束{'=' * 30}\n")
-    tlog.debug(f"{'-' * 20}SSHExec工具 - 整理阶段{'-' * 20}")
+    print(f"SSHFleet工具{color.COLOR_GREEN}正在整理{color.COLOR_RESET}......")
+    tlog.debug(f"{'=' * 30}SSHFleet工具 - 执行结束{'=' * 30}\n")
+    tlog.debug(f"{'-' * 20}SSHFleet工具 - 整理阶段{'-' * 20}")
 
     if not final_results:
         utils.print_error_informantion_and_exit(
@@ -234,10 +234,10 @@ def main():
         output.format_dict_list_to_xlsx(final_results, exec_log_dir, config)
         tlog.success("格式化results字典列表到Excel文件成功")
 
-    tlog.debug(f"{'-' * 20}SSHExec工具 - 整理结束{'-' * 20}")
+    tlog.debug(f"{'-' * 20}SSHFleet工具 - 整理结束{'-' * 20}")
 
-    # 退出SSHExec工具
-    print("SSHExec工具执行结束，已退出")
+    # 退出SSHFleet工具
+    print("SSHFleet工具执行结束，已退出")
     tlog.info("SSHExec工具已退出")
     tlog.debug(f"{ '-' * 50}分割线{ '-' * 50}" + "\n" * 3)
     sys.exit(0)
