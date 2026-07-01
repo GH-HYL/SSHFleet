@@ -271,7 +271,7 @@ src/
 │   └── error_keywords.json    # 错误分类关键词
 └── go/
     ├── SSHFleet              # Go 执行器（Linux）
-    └── SSHFleet.exe          # Go 执行器（Windows）
+    └── SSHFleet_Go.exe          # Go 执行器（Windows）
 ```
 
 ### 执行流程
@@ -339,7 +339,7 @@ python sshfleet.py -z
 
 ### Q5: Windows 下执行报错？
 
-A: 确保 Go 可执行文件 `SSHFleet.exe` 存在，并且有执行权限。
+A: 确保 Go 可执行文件 `SSHFleet_Go.exe` 存在，并且有执行权限。
 
 ***
 

@@ -7,7 +7,7 @@
 # └── src/                              # 源代码文件夹
 #     ├── go/                           # go语言的执行器文件夹
 #     │   ├── SSHFleet                 # 执行器（Linux可执行文件）
-#     │   └── SSHFleet.exe             # 执行器（Windows可执行文件）
+#     │   └── SSHFleet_Go.exe             # 执行器（Windows可执行文件）
 #     ├── transfer/                     # 传输模块
 #     │   ├── transfer_precheck.py      # 传输预检查文件
 #     │   ├── transfer_check.py         # 传输检查文件

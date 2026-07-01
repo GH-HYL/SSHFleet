@@ -28,15 +28,15 @@ paths:
 
   # 程序路径
   exe:
-    batch_tool_windows: "./src/go/SSHFleet.exe"    # Windows 环境的批量执行程序路径
-    batch_tool_linux: "./src/go/SSHFleet"          # Linux   环境的批量执行程序路径
+    batch_tool_windows: "./src/go/SSHFleet_Go.exe"    # Windows 环境的批量执行程序路径
+    batch_tool_linux: "./src/go/SSHFleet_Go"          # Linux   环境的批量执行程序路径
 
   # 日志路径
   logs:
     zip: ""                        # 打包日志文件生成路径，为空表示在工作路径生成，可用绝对路径
     historys: "historys"           # 存放历史记录文件夹名称
     tool: "SSHFleetTools.log"      # 工具日志文件名
-    exec: "msg.log"                # 执行日志文件名
+    exec: "SSHFleet_Go.log"        # 执行日志文件名
 
   # 结果文件路径
   files:

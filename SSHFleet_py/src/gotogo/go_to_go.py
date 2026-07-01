@@ -49,7 +49,7 @@ def go_to_go(
 
     # 3. 检查端口可用性并启动 Go 进程
     port = caller.find_available_port()
-    process = caller.start_go_process(exe_path, port, exec_log_dir)
+    process = caller.start_go_process(exe_path, port, config.paths.logs.exec)
 
     # 4. 等待 Go 服务就绪
     if not caller.wait_for_server(port, timeout=10.0):
