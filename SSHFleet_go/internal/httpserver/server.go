@@ -59,6 +59,16 @@ func Start(port int, logPath string) error {
 	}()
 
 	log.Zlog.Succ(fmt.Sprintf("HTTP Server 启动，监听端口 %d", port))
+
+	// 防御性策略：1 分钟内无请求则自动退出
+	go func() {
+		time.Sleep(1 * time.Minute)
+		if atomic.LoadInt32(&requestUsed) == 0 {
+			log.Zlog.Warn("1 分钟内无请求连接，自动退出")
+			server.Shutdown(context.Background())
+		}
+	}()
+
 	if err := server.ListenAndServe(); err != http.ErrServerClosed {
 		log.Zlog.Error(fmt.Sprintf("HTTP Server 异常退出: %v", err))
 	}
@@ -255,7 +265,7 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		flusher.Flush()
-		if result.ConnectSuccess && result.FailedFiles == 0 {
+		if result.ConnectSuccess && result.Error == nil && result.ExitCode == 0 {
 			success++
 		} else {
 			failed++

@@ -9,6 +9,7 @@ import (
 	"io"
 	"math/rand"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/pkg/sftp"
@@ -179,11 +180,10 @@ func (c *SSHClient) UploadFiles(
 	ip string,
 ) (*UploadResult, error) {
 	result := &UploadResult{
-		IP:         c.config.IP,
-		Port:       c.config.Port,
-		User:       c.config.User,
-		TotalFiles: len(fileItems),
-		Files:      make([]FileUploadItem, 0, len(fileItems)),
+		IP:       c.config.IP,
+		Port:     c.config.Port,
+		User:     c.config.User,
+		ExitCode: 0,
 	}
 
 	// 1. SSH 建连
@@ -204,11 +204,11 @@ func (c *SSHClient) UploadFiles(
 
 	// 2. 清理残留临时目录（仅 sudo 模式）
 	if useSudo {
-		c.runCommand(fmt.Sprintf("sudo rm -rf /tmp/.SSHFleet_tmp/"))
+		c.runCommand("sudo rm -rf /tmp/.SSHFleet_tmp/")
 		log.Zlog.Info(fmt.Sprintf("[上传] 清理残留临时目录 - %s", ip))
 	}
 
-	// 3. 创建 SFTP 审户端
+	// 3. 创建 SFTP 客户端
 	sftpClient, err := sftp.NewClient(c.client)
 	if err != nil {
 		errMsg := err.Error()
@@ -242,6 +242,12 @@ func (c *SSHClient) UploadFiles(
 	}
 
 	// 6. 逐文件处理
+	totalFiles := len(fileItems)
+	successFiles := 0
+	failedFiles := 0
+	var outputLines []string
+	totalCostTime := 0.0
+
 	for _, item := range fileItems {
 		select {
 		case <-ctx.Done():
@@ -253,20 +259,12 @@ func (c *SSHClient) UploadFiles(
 		}
 
 		fileStart := time.Now()
-		fileResult := FileUploadItem{
-			FileName:   item.FileName,
-			FilePath:   item.LocalPath,
-			FileSize:   item.FileSize,
-		}
 
 		// 6a. 检查远程文件是否已存在
 		remoteFilePath := remotePath + "/" + item.FileName
 		if _, err := sftpClient.Stat(remoteFilePath); err == nil {
-			errMsg := "文件已存在"
-			fileResult.Error = &errMsg
-			fileResult.Success = false
-			result.FailedFiles++
-			result.Files = append(result.Files, fileResult)
+			failedFiles++
+			outputLines = append(outputLines, fmt.Sprintf("%s: 上传失败 - 文件已存在", item.FileName))
 			log.Zlog.Warn(fmt.Sprintf("[上传] 文件已存在，跳过 - %s: %s", ip, remoteFilePath))
 			continue
 		}
@@ -274,12 +272,9 @@ func (c *SSHClient) UploadFiles(
 		// 6b. 读取本地文件权限
 		localInfo, err := os.Stat(item.LocalPath)
 		if err != nil {
-			errMsg := fmt.Sprintf("读取本地文件失败: %v", err)
-			fileResult.Error = &errMsg
-			fileResult.Success = false
-			result.FailedFiles++
-			result.Files = append(result.Files, fileResult)
-			log.Zlog.Error(fmt.Sprintf("[上传] %s - %s: %s", ip, item.FileName, errMsg))
+			failedFiles++
+			outputLines = append(outputLines, fmt.Sprintf("%s: 上传失败 - %v", item.FileName, err))
+			log.Zlog.Error(fmt.Sprintf("[上传] %s - %s: %v", ip, item.FileName, err))
 			continue
 		}
 		localMode := localInfo.Mode().Perm()
@@ -287,31 +282,33 @@ func (c *SSHClient) UploadFiles(
 		// 6c. 执行上传
 		var uploadErr error
 		if !effectiveSudo {
-			// 直接写入目标路径
 			uploadErr = c.sftpUploadFile(sftpClient, item.LocalPath, remoteFilePath, localMode, ip)
 		} else {
-			// 写入临时目录 + sudo mv
 			uploadErr = c.sftpUploadWithSudo(sftpClient, item.LocalPath, item.FileName, remotePath, localMode, ip)
 		}
 
-		fileResult.CostTime = time.Since(fileStart).Seconds()
+		costTime := time.Since(fileStart).Seconds()
+		totalCostTime += costTime
 
 		if uploadErr != nil {
-			errMsg := uploadErr.Error()
-			fileResult.Error = &errMsg
-			fileResult.Success = false
-			result.FailedFiles++
+			failedFiles++
+			outputLines = append(outputLines, fmt.Sprintf("%s: 上传失败 - %v", item.FileName, uploadErr))
 			log.Zlog.Error(fmt.Sprintf("[上传] 文件上传失败 - %s: %s: %v", ip, item.FileName, uploadErr))
 		} else {
-			fileResult.Success = true
-			result.SuccessFiles++
-			log.Zlog.Info(fmt.Sprintf("[上传] 文件上传成功 - %s: %s (%.3fs)", ip, item.FileName, fileResult.CostTime))
+			successFiles++
+			outputLines = append(outputLines, fmt.Sprintf("%s: 上传成功 (%.3fs)", item.FileName, costTime))
+			log.Zlog.Info(fmt.Sprintf("[上传] 文件上传成功 - %s: %s (%.3fs)", ip, item.FileName, costTime))
 		}
-
-		result.Files = append(result.Files, fileResult)
 	}
 
-	log.Zlog.Succ(fmt.Sprintf("[上传] 节点完成 - %s: 成功 %d/%d", ip, result.SuccessFiles, result.TotalFiles))
+	// 7. 构建 output（base64 编码）
+	header := fmt.Sprintf("total_files=%d, success_files=%d, failed_files=%d", totalFiles, successFiles, failedFiles)
+	outputText := header + "\n" + strings.Join(outputLines, "\n")
+	result.Output = base64.StdEncoding.EncodeToString([]byte(outputText))
+	result.ExitCode = failedFiles
+	result.ExecCostTime = totalCostTime
+
+	log.Zlog.Succ(fmt.Sprintf("[上传] 节点完成 - %s: 成功 %d/%d", ip, successFiles, totalFiles))
 	return result, nil
 }
 
