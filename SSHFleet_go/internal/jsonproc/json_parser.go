@@ -37,7 +37,7 @@ func ParseRequest(data []byte) (*ExecuteRequest, error) {
 		req.Options.ConnectTimeout = 10
 	}
 	if req.Options.ExecTimeout <= 0 {
-		req.Options.ExecTimeout = 60
+		return nil, fmt.Errorf("exec_timeout 不能为空且必须大于 0")
 	}
 	for i := range req.Nodes {
 		if req.Nodes[i].Port <= 0 {
