@@ -87,15 +87,7 @@ def load_config(config_path: str) -> SSHFleetConfig:
     # 读取密码文件
     password_path = config_dict["account"]["password"]
     if password_path:
-        # 规范化路径（处理 Windows/Linux 路径分隔符）
-        password_path = os.path.normpath(password_path)
-
-        # 如果是相对路径且不存在，尝试相对于配置文件目录
-        if not os.path.isabs(password_path) and not os.path.exists(password_path):
-            password_path = os.path.normpath(
-                os.path.join(os.path.dirname(config_path), password_path)
-            )
-
+        password_path = os.path.expanduser(password_path)
         if not os.path.exists(password_path):
             raise FileNotFoundError(f"密码文件 {password_path} 不存在")
 
