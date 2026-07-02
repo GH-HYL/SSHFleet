@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"sync/atomic"
 	"time"
 
 	"SSHFleet/internal/core"
 	"SSHFleet/internal/interrupt"
 	"SSHFleet/internal/jsonproc"
+	"SSHFleet/internal/localfs"
 	"SSHFleet/internal/log"
 	"SSHFleet/internal/ssh"
 	"context"
@@ -42,6 +44,7 @@ func Start(port int, logPath string) error {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /api/v1/execute", handleExecute)
+	mux.HandleFunc("POST /api/v1/upload", handleUpload)
 	mux.HandleFunc("POST /api/v1/shutdown", handleShutdown)
 
 	server = &http.Server{
@@ -160,6 +163,119 @@ func handleShutdown(w http.ResponseWriter, r *http.Request) {
 	case shutdownSignal <- struct{}{}:
 	default:
 	}
+}
+
+// handleUpload 处理上传请求
+func handleUpload(w http.ResponseWriter, r *http.Request) {
+	// 一次性防护
+	if !atomic.CompareAndSwapInt32(&requestUsed, 0, 1) {
+		writeError(w, http.StatusServiceUnavailable, "ALREADY_USED", "服务已被调用，仅支持一次请求")
+		return
+	}
+
+	log.Zlog.Info("收到上传请求，开始处理...")
+
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "读取请求体失败")
+		go server.Shutdown(context.Background())
+		return
+	}
+	defer r.Body.Close()
+
+	req, err := jsonproc.ParseUploadRequest(body)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "MISSING_FIELD", err.Error())
+		go server.Shutdown(context.Background())
+		return
+	}
+	log.Zlog.Info(fmt.Sprintf("上传请求解析成功: file_path=%s, remote_path=%s, nodes=%d, sudo=%v",
+		req.FilePath, req.RemotePath, len(req.Nodes), req.Options.Sudo))
+
+	// 校验本地 file_path
+	if !os.IsPathSeparator(req.FilePath[0]) && len(req.FilePath) > 1 && req.FilePath[1] != ':' {
+		writeError(w, http.StatusBadRequest, "INVALID_PATH", "file_path 必须是绝对路径")
+		go server.Shutdown(context.Background())
+		return
+	}
+	if _, err := os.Stat(req.FilePath); err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_PATH", fmt.Sprintf("file_path 不存在或不可读: %s", req.FilePath))
+		go server.Shutdown(context.Background())
+		return
+	}
+
+	// 收集文件清单
+	fileItems, err := localfs.CollectFiles(req.FilePath)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_PATH", err.Error())
+		go server.Shutdown(context.Background())
+		return
+	}
+	log.Zlog.Info(fmt.Sprintf("文件清单收集完成: %d 个文件", len(fileItems)))
+
+	// 设置 SSE header
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "不支持流式响应")
+		go server.Shutdown(context.Background())
+		return
+	}
+
+	// 构建上传任务
+	tasks := make([]*core.UploadTask, 0, len(req.Nodes))
+	for _, node := range req.Nodes {
+		tasks = append(tasks, &core.UploadTask{
+			Seq: node.Seq,
+			Config: &ssh.SSHConfig{
+				IP:             node.IP,
+				Port:           node.Port,
+				User:           node.User,
+				Password:       node.Password,
+				ConnectTimeout: time.Duration(req.Options.ConnectTimeout) * time.Second,
+				ExecTimeout:    time.Duration(req.Options.ExecTimeout) * time.Second,
+			},
+			FileItems:  fileItems,
+			RemotePath: req.RemotePath,
+			UseSudo:    req.Options.Sudo,
+		})
+	}
+
+	// 执行上传
+	executor := core.NewBatchUploadExecutor(req.Options.Concurrency, len(tasks), r.Context())
+	resultChan := executor.Run(tasks)
+
+	total, success, failed := len(tasks), 0, 0
+	for result := range resultChan {
+		if err := WriteSSE(w, result); err != nil {
+			log.Zlog.Error(fmt.Sprintf("SSE 写入失败: %v", err))
+			return
+		}
+		flusher.Flush()
+		if result.ConnectSuccess && result.FailedFiles == 0 {
+			success++
+		} else {
+			failed++
+		}
+	}
+
+	done := ssh.DoneResponse{Type: "done", Total: total, Success: success, Failed: failed}
+	WriteSSE(w, done)
+	flusher.Flush()
+
+	log.Zlog.Succ(fmt.Sprintf("上传任务完成: total=%d, success=%d, failed=%d", total, success, failed))
+
+	// 等待关闭信号
+	log.Zlog.Info("等待客户端发送关闭信号...")
+	select {
+	case <-shutdownSignal:
+	case <-time.After(10 * time.Minute):
+		log.Zlog.Warn("等待关闭信号超时(10分钟)，强制退出")
+	}
+	go server.Shutdown(context.Background())
 }
 
 func writeError(w http.ResponseWriter, statusCode int, code string, message string) {
