@@ -103,7 +103,7 @@ func (e *BatchUploadExecutor) worker(id int, taskChan <-chan *UploadTask, result
 
 			e.safeSendResult(resultChan, result)
 
-			log.Zlog.Sugar().Infof("上传worker - 执行结束，IP:%s，ID:%d，成功:%d/%d", task.Config.IP, id, result.SuccessFiles, result.TotalFiles)
+			log.Zlog.Sugar().Infof("上传worker - 执行结束，IP:%s，ID:%d，exit_code:%d", task.Config.IP, id, result.ExitCode)
 		}
 	}
 }
