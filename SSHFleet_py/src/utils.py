@@ -307,6 +307,7 @@ def build_final_command(args: argparse.Namespace) -> str:
             components.append(f"bash -c {safe_command}")
         else:
             components.append(args.c)
+            
     elif args.s:
         # 脚本解释器选择
         interpreter = "python3" if args.s.endswith(".py") else "bash"
