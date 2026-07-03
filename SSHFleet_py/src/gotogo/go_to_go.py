@@ -16,13 +16,13 @@ from src.utils import tlog
 console = Console()
 
 
-def _format_result(result: Dict) -> str:
+def _format_result(result: Dict, args: argparse.Namespace = None) -> str:
     """
-    格式化单条结果（与旧Go版本格式一致）
+    格式化单条结果
 
     格式：
         【IP】 连接: 成功/失败 - X.XXXs
-        【IP】 执行: 成功/失败 - X.XXXs
+        【IP】 执行/上传: 成功/失败 - X.XXXs
         输出内容
         【IP】 分类: 分类名称
         ==================================================
@@ -36,16 +36,17 @@ def _format_result(result: Dict) -> str:
     output = result.get("output", "")
     error = result.get("error")
     result_category = result.get("result_category", "未知")
+    action = "上传" if args and args.u else "执行"
 
     # 连接状态
     conn_status = "成功" if connect_success else "失败"
     lines.append(f"【{ip}】 连接: {conn_status} - {connect_cost_time:.3f}s")
 
     if connect_success:
-        # 执行状态
+        # 执行/上传状态
         exec_success = exit_code == 0
         exec_status = "成功" if exec_success else "失败"
-        lines.append(f"【{ip}】 执行: {exec_status} - {exec_cost_time:.3f}s")
+        lines.append(f"【{ip}】 {action}: {exec_status} - {exec_cost_time:.3f}s")
         # 输出内容（去除首尾空行）
         if output:
             lines.append(output.strip())
@@ -86,7 +87,12 @@ def go_to_go(
     total_nodes = len(nodesinfo)
 
     # 1. 构建请求体
-    request_body = builder.build_request(args, nodesinfo, transfer_command)
+    if args.u:
+        request_body = builder.build_upload_request(args, nodesinfo)
+        url_path = "/api/v1/upload"
+    else:
+        request_body = builder.build_request(args, nodesinfo, transfer_command)
+        url_path = "/api/v1/execute"
     tlog.info(f"请求体构建完成，共 {total_nodes} 个节点")
 
     # 2. 获取 Go 可执行文件路径
@@ -106,8 +112,9 @@ def go_to_go(
         raise RuntimeError(f"Go 服务启动超时，stderr: {stderr}")
 
     # 5. 创建进度条
+    progress_text = "上传进度" if args.u else "执行进度"
     node_progress = Progress(
-        TextColumn("    执行进度"),
+        TextColumn(f"    {progress_text}"),
         BarColumn(bar_width=40, complete_style="green", finished_style="blue"),
         TextColumn("{task.fields[percent_display]}"),
         "[green]{task.completed}/{task.total}",
@@ -130,12 +137,12 @@ def go_to_go(
         tlog.warning(f"无法创建 output.txt 文件: {e}")
 
     try:
-        for sse_data in caller.call_go(request_body, port, timeout=total_timeout):
+        for sse_data in caller.call_go(request_body, port, timeout=total_timeout, url_path=url_path):
             result = parser.parse_result(sse_data, error_keywords)
             results.append(result)
 
-            # 格式化输出（与旧Go版本格式一致）
-            formatted = _format_result(result)
+            # 格式化输出
+            formatted = _format_result(result, args)
 
             # 写入文件
             if output_file:

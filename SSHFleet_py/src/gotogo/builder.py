@@ -43,3 +43,22 @@ def build_request(
             for i, node in enumerate(nodesinfo)
         ],
     }
+
+
+def build_upload_request(args: argparse.Namespace, nodesinfo: List[Dict]) -> Dict:
+    """构建上传请求体"""
+    return {
+        "file_path": args.u,
+        "remote_path": args.p,
+        "options": {
+            "concurrency": args.n,
+            "connect_timeout": args.T,
+            "exec_timeout": args.t,
+            "sudo": args.m == "sudo",
+        },
+        "nodes": [
+            {"seq": i, "ip": node["ip"], "port": node.get("port", 22),
+             "user": node["user"], "password": node["password"]}
+            for i, node in enumerate(nodesinfo)
+        ],
+    }

@@ -62,11 +62,22 @@ class Account(BaseModel):
     password: str
 
 
+class UploadConcurrencyThreshold(BaseModel):
+    small_file: int        # < 此值：全并发（等于节点数）
+    large_file: int        # > 此值：串行（并发=1）
+    medium_concurrency: int  # 中间档并发数
+
+
+class Upload(BaseModel):
+    concurrency_thresholds: UploadConcurrencyThreshold
+
+
 class SSHFleetConfig(BaseModel):
     account: Account
     execution: Execution
     enable: Enable
     paths: Paths
+    upload: Upload
 
 
 def load_config(config_path: str) -> SSHFleetConfig:

@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"sync/atomic"
 	"time"
 
@@ -202,12 +203,16 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 	log.Zlog.Info(fmt.Sprintf("上传请求解析成功: file_path=%s, remote_path=%s, nodes=%d, sudo=%v",
 		req.FilePath, req.RemotePath, len(req.Nodes), req.Options.Sudo))
 
-	// 校验本地 file_path
-	if !os.IsPathSeparator(req.FilePath[0]) && len(req.FilePath) > 1 && req.FilePath[1] != ':' {
-		writeError(w, http.StatusBadRequest, "INVALID_PATH", "file_path 必须是绝对路径")
+	// 将 file_path 转为绝对路径（支持相对路径）
+	absPath, err := filepath.Abs(req.FilePath)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_PATH", fmt.Sprintf("file_path 路径解析失败: %s", req.FilePath))
 		go server.Shutdown(context.Background())
 		return
 	}
+	req.FilePath = absPath
+
+	// 校验本地 file_path
 	if _, err := os.Stat(req.FilePath); err != nil {
 		writeError(w, http.StatusBadRequest, "INVALID_PATH", fmt.Sprintf("file_path 不存在或不可读: %s", req.FilePath))
 		go server.Shutdown(context.Background())
