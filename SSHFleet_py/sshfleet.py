@@ -118,7 +118,7 @@ def main():
 
     # 参数信息确认
     tlog.info("开始进行参数信息确认")
-    core.arguments_confirm(args, nodesinfos)
+    core.arguments_confirm(args, nodesinfos, config)
     tlog.info("用户已核实通过参数信息")
 
     tlog.debug(f"{'-' * 20}SSHFleet工具 - 准备结束{'-' * 20}\n")

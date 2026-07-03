@@ -70,6 +70,7 @@ def call_go(
     request_body: Dict,
     port: int,
     timeout: float = 120.0,
+    url_path: str = "/api/v1/execute",
 ) -> Generator[Dict, None, None]:
     """
     发送 HTTP 请求并接收 SSE 流式响应
@@ -78,11 +79,12 @@ def call_go(
         request_body: 请求体
         port: Go 服务端口
         timeout: 单条结果最大等待时间（秒），每次收到结果后重置
+        url_path: API 端点路径
 
     Yields:
         dict: 单条执行结果
     """
-    url = f"http://127.0.0.1:{port}/api/v1/execute"
+    url = f"http://127.0.0.1:{port}{url_path}"
 
     try:
         response = requests.post(
@@ -91,10 +93,22 @@ def call_go(
             stream=True,
             timeout=(5, None),  # 连接超时5秒，读取无超时（手动控制）
         )
-        response.raise_for_status()
+        if response.status_code >= 400:
+            try:
+                err_body = response.json()
+                err_msg = err_body.get("error", {}).get("message", response.text)
+                err_code = err_body.get("error", {}).get("code", "")
+            except Exception:
+                err_msg = response.text
+                err_code = ""
+            error_detail = f"[{err_code}] {err_msg}" if err_code else err_msg
+            tlog.error(f"Go 返回错误: {error_detail}")
+            print(f"\033[91m[ERROR]\033[0m Go 返回错误: {error_detail}")
+            raise RuntimeError(error_detail)
     except requests.RequestException as e:
-        tlog.error(f"HTTP 请求失败: {e}")
-        raise RuntimeError(f"HTTP 请求失败: {e}")
+        tlog.error(f"HTTP 连接失败: {e}")
+        print(f"\033[91m[ERROR]\033[0m HTTP 连接失败: {e}")
+        raise RuntimeError(f"HTTP 连接失败: {e}")
 
     last_recv_time = time.time()
 

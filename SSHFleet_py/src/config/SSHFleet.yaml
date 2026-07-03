@@ -5,7 +5,7 @@
 account:
   port: 10022                      # CSV文件默认IP端口 10022
   user: "jx_zyc"                   # CSV文件默认用户名
-  password: '~.SSHFleet/mypw'  # 密码文件路径，文件内容为base64编码的密码，支持绝对路径（Windows/Linux）
+  password: '~/.MyPW/SSHFleet_pw'  # 密码文件路径，文件内容为base64编码的密码，支持绝对路径（Windows/Linux）
 
 # 执行参数
 execution:
@@ -45,3 +45,13 @@ paths:
     output_xlsx: "output.xlsx"          # 终端输出文件名（xlsx格式）
     report: "report.txt"                # 统计报告文件名
     results_xlsx: "results.xlsx"        # 结果固化文件名（xlsx格式）
+
+# 上传并发阈值（提醒用，不强制约束）
+# file_size < small_file: 全并发（等于节点数）
+# file_size > large_file: 串行（并发=1）
+# 两者之间: 最多 medium_concurrency 并发
+upload:
+  concurrency_thresholds:
+    small_file: 1024          # 1KB
+    large_file: 10240         # 10KB
+    medium_concurrency: 2
