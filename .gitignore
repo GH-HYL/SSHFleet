@@ -9,4 +9,6 @@ SSHFleet_go/vendor/**
 
 !SSHFleet_py/
 !SSHFleet_py/**
+SSHFleet_py/historys/**
+
 *.pyc

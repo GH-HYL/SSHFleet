@@ -344,7 +344,7 @@ def read_nodes_infos(csv_path: str, config: SSHFleetConfig) -> List[Dict[str, st
 
 
 @utils.error_and_exit_handling_decorator("arguments_confirm", "确认执行参数失败")
-def arguments_confirm(args, nodes):
+def arguments_confirm(args, nodes, config=None):
     """
     功能：
         确认执行参数
@@ -352,6 +352,7 @@ def arguments_confirm(args, nodes):
     参数：
         args: 命令行参数
         nodes: 节点列表
+        config: 配置对象（可选，用于上传并发阈值检查）
 
     返回：
         None
@@ -363,6 +364,22 @@ def arguments_confirm(args, nodes):
 
     # 未输入并发数，默认使用nodes数量进行并发
     args.n = len(nodes) if args.n == 0 else args.n
+
+    # 上传并发阈值检查
+    if args.u and config:
+        file_size = _calculate_upload_size(args.u)
+        allowed = _check_concurrency_threshold(file_size, config)
+        if allowed > 0 and args.n > allowed:
+            print(f"{color.COLOR_YELLOW}⚠️ 上传文件总大小 {utils.format_size(file_size)}，建议并发数调整为 {allowed}（当前为 {args.n}）{color.COLOR_RESET}")
+            print(f"{color.COLOR_YELLOW}提示：大文件高并发可能导致本地磁盘 I/O 压力过大{color.COLOR_RESET}")
+            if utils.get_user_confirmation(
+                f"是否将并发数调整为 {allowed}？",
+                yorn=False
+            ):
+                args.n = allowed
+            else:
+                print(f"{color.COLOR_YELLOW}操作已取消{color.COLOR_RESET}")
+                sys.exit(1)
 
     # 非交互模式
     if args.disinteractive:
@@ -480,6 +497,30 @@ def arguments_confirm(args, nodes):
         sys.exit(1)
     print(f"SSHFleet工具{color.COLOR_BLUE}开始执行{color.COLOR_RESET}......")
     print(f"{'=' * 50}")
+
+
+def _calculate_upload_size(file_path: str) -> int:
+    """计算上传文件大小：单文件取大小，目录取总大小"""
+    if os.path.isfile(file_path):
+        return os.path.getsize(file_path)
+    total = 0
+    for root, dirs, files in os.walk(file_path):
+        for f in files:
+            fp = os.path.join(root, f)
+            if os.path.isfile(fp) and not os.path.islink(fp):
+                total += os.path.getsize(fp)
+    return total
+
+
+def _check_concurrency_threshold(file_size: int, config) -> int:
+    """根据文件大小返回建议并发数，0 = 不限制。按配置顺序遍历"""
+    t = config.upload.concurrency_thresholds
+    if file_size < t.small_file:
+        return 0
+    elif file_size > t.large_file:
+        return 1
+    else:
+        return t.medium_concurrency
 
 
 @utils.error_and_exit_handling_decorator(

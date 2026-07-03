@@ -503,4 +503,13 @@ def create_latest_log_symlink(config: SSHFleetConfig):
             print("提示: 请尝试使用管理员/root权限运行")
             tlog.error("创建最新日志符号链接函数执行失败，权限不足")
 
-    
+
+def format_size(size_bytes: int) -> str:
+    """自适应文件大小单位（B/KB/MB/GB/TB/PB），保留2位小数"""
+    units = ["B", "KB", "MB", "GB", "TB", "PB"]
+    size = float(abs(size_bytes))
+    for i, unit in enumerate(units):
+        if i == len(units) - 1 or size < 1024:
+            return f"{size:.2f} {unit}"
+        size /= 1024
+    return f"{size:.2f} {unit}"
