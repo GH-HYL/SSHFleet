@@ -13,7 +13,6 @@ execution:
   timeout_connect: 10            # 连接超时，连接远程主机的超时，默认值 50秒
   timeout_execute: 60            # 执行超时，执行命令或脚本的超时，默认值 60秒
   timeout_transfer: 300          # 传输超时，上传或下载文件的超时，默认值 300秒
-  private_key: "~/.ssh/id_rsa"   # 默认私钥路径， -k 后不输入路径则使用该路径
 
 # 功能开关
 enable:
@@ -52,6 +51,6 @@ paths:
 # 两者之间: 最多 medium_concurrency 并发
 upload:
   concurrency_thresholds:
-    small_file: 1024          # 1KB
-    large_file: 10240         # 10KB
-    medium_concurrency: 2
+    small_file: 1048576          # 1MB
+    large_file: 10485760         # 10MB
+    medium_concurrency: 10
