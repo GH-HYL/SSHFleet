@@ -53,7 +53,6 @@ class Execution(BaseModel):
     timeout_connect: int
     timeout_execute: int
     timeout_transfer: int
-    private_key: str
 
 
 class Account(BaseModel):
