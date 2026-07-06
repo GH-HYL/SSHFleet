@@ -38,6 +38,8 @@ func Start(port int, logPath string) error {
 		return err
 	}
 
+	log.Zlog.Info(fmt.Sprintf("服务器配置: 监听端口=%d, 日志路径=%q", port, logPath))
+
 	shutdownSignal = make(chan struct{})
 
 	interruptHandler := interrupt.NewInterruptHandler()
