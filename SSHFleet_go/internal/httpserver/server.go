@@ -322,15 +322,6 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 	go server.Shutdown(context.Background())
 }
 
-const maxPreviewLen = 500
-
-func truncateString(s string) string {
-	if len(s) <= maxPreviewLen {
-		return s
-	}
-	return s[:maxPreviewLen] + "...(truncated)"
-}
-
 func writeError(w http.ResponseWriter, statusCode int, code string, message string) {
 	log.Zlog.Error("请求处理失败", zap.String("code", code), zap.String("message", message))
 	w.Header().Set("Content-Type", "application/json")
