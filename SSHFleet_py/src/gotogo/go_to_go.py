@@ -101,7 +101,7 @@ def go_to_go(
 
     # 3. 检查端口可用性并启动 Go 进程
     port = caller.find_available_port()
-    process = caller.start_go_process(exe_path, port, exec_log_dir)
+    process, process_key = caller.start_go_process(exe_path, port, exec_log_dir)
 
     # 4. 等待 Go 服务就绪
     if not caller.wait_for_server(port, timeout=10.0):
@@ -137,7 +137,7 @@ def go_to_go(
         tlog.warning(f"无法创建 output.txt 文件: {e}")
 
     try:
-        for sse_data in caller.call_go(request_body, port, timeout=total_timeout, url_path=url_path):
+        for sse_data in caller.call_go(request_body, port, process_key, timeout=total_timeout, url_path=url_path):
             result = parser.parse_result(sse_data, error_keywords)
             results.append(result)
 
@@ -170,7 +170,7 @@ def go_to_go(
             output_file.close()
 
     # 7. 通知 Go 服务器关闭
-    caller.shutdown_go_server(port)
+    caller.shutdown_go_server(port, process_key)
 
     # 8. 等待 Go 进程退出
     try:
