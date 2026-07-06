@@ -96,6 +96,8 @@ func handleExecute(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 
+	log.Zlog.Info(fmt.Sprintf("请求体: size=%d bytes, preview=%q", len(body), truncateString(string(body))))
+
 	req, err := jsonproc.ParseRequest(body)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "MISSING_FIELD", err.Error())
@@ -196,6 +198,8 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 
+	log.Zlog.Info(fmt.Sprintf("请求体: size=%d bytes, preview=%q", len(body), truncateString(string(body))))
+
 	req, err := jsonproc.ParseUploadRequest(body)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "MISSING_FIELD", err.Error())
@@ -293,6 +297,15 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 		log.Zlog.Warn("等待关闭信号超时(10分钟)，强制退出")
 	}
 	go server.Shutdown(context.Background())
+}
+
+const maxPreviewLen = 500
+
+func truncateString(s string) string {
+	if len(s) <= maxPreviewLen {
+		return s
+	}
+	return s[:maxPreviewLen] + "...(truncated)"
 }
 
 func writeError(w http.ResponseWriter, statusCode int, code string, message string) {
