@@ -17,6 +17,8 @@ import (
 	"SSHFleet/internal/log"
 	"SSHFleet/internal/ssh"
 	"context"
+
+	"go.uber.org/zap"
 )
 
 // ErrorResponse 错误响应结构
@@ -38,7 +40,7 @@ func Start(port int, logPath string) error {
 		return err
 	}
 
-	log.Zlog.Info(fmt.Sprintf("服务器配置: 监听端口=%d, 日志路径=%q", port, logPath))
+	log.Zlog.Info("服务器配置", zap.Int("port", port), zap.String("logPath", logPath))
 
 	shutdownSignal = make(chan struct{})
 
@@ -61,7 +63,7 @@ func Start(port int, logPath string) error {
 		server.Shutdown(interruptHandler.Context())
 	}()
 
-	log.Zlog.Succ(fmt.Sprintf("HTTP Server 启动，监听端口 %d", port))
+	log.Zlog.Succ("HTTP Server 启动", zap.Int("port", port))
 
 	// 防御性策略：1 分钟内无请求则自动退出
 	go func() {
@@ -73,7 +75,7 @@ func Start(port int, logPath string) error {
 	}()
 
 	if err := server.ListenAndServe(); err != http.ErrServerClosed {
-		log.Zlog.Error(fmt.Sprintf("HTTP Server 异常退出: %v", err))
+		log.Zlog.Error("HTTP Server 异常退出", zap.Error(err))
 	}
 	return nil
 }
@@ -82,7 +84,7 @@ func Start(port int, logPath string) error {
 func handleExecute(w http.ResponseWriter, r *http.Request) {
 	// 一次性防护：只允许处理一次请求
 	if !atomic.CompareAndSwapInt32(&requestUsed, 0, 1) {
-		log.Zlog.Warn(fmt.Sprintf("请求被拒绝: 路径=%s, 原因=服务已被调用，仅支持一次请求", r.URL.Path))
+		log.Zlog.Warn("请求被拒绝: 服务已被调用，仅支持一次请求", zap.String("path", r.URL.Path))
 		writeError(w, http.StatusServiceUnavailable, "ALREADY_USED", "服务已被调用，仅支持一次请求")
 		return
 	}
@@ -97,7 +99,7 @@ func handleExecute(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 
-	log.Zlog.Info(fmt.Sprintf("请求体: size=%d bytes, preview=%q", len(body), truncateString(string(body))))
+	log.Zlog.Info("请求体", zap.Int("size", len(body)), zap.String("preview", truncateString(string(body))))
 
 	req, err := jsonproc.ParseRequest(body)
 	if err != nil {
@@ -140,7 +142,7 @@ func handleExecute(w http.ResponseWriter, r *http.Request) {
 	connSuccess, connFailed := 0, 0
 	for result := range resultChan {
 		if err := WriteSSE(w, result); err != nil {
-			log.Zlog.Error(fmt.Sprintf("SSE 写入失败: %v", err))
+			log.Zlog.Error("SSE 写入失败", zap.Error(err))
 			return
 		}
 		flusher.Flush()
@@ -156,13 +158,13 @@ func handleExecute(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	log.Zlog.Info(fmt.Sprintf("连接统计: 节点总数=%d, 成功连接=%d, 失败连接=%d", total, connSuccess, connFailed))
+	log.Zlog.Info("连接统计", zap.Int("total", total), zap.Int("connSuccess", connSuccess), zap.Int("connFailed", connFailed))
 
 	done := ssh.DoneResponse{Type: "done", Total: total, Success: success, Failed: failed}
 	WriteSSE(w, done)
 	flusher.Flush()
 
-	log.Zlog.Succ(fmt.Sprintf("任务执行完成: total=%d, success=%d, failed=%d", total, success, failed))
+	log.Zlog.Succ("任务执行完成", zap.Int("total", total), zap.Int("success", success), zap.Int("failed", failed))
 
 	// 等待客户端发送关闭信号，10分钟超时防御
 	log.Zlog.Info("等待客户端发送关闭信号...")
@@ -193,7 +195,7 @@ func handleShutdown(w http.ResponseWriter, r *http.Request) {
 func handleUpload(w http.ResponseWriter, r *http.Request) {
 	// 一次性防护
 	if !atomic.CompareAndSwapInt32(&requestUsed, 0, 1) {
-		log.Zlog.Warn(fmt.Sprintf("请求被拒绝: 路径=%s, 原因=服务已被调用，仅支持一次请求", r.URL.Path))
+		log.Zlog.Warn("请求被拒绝: 服务已被调用，仅支持一次请求", zap.String("path", r.URL.Path))
 		writeError(w, http.StatusServiceUnavailable, "ALREADY_USED", "服务已被调用，仅支持一次请求")
 		return
 	}
@@ -208,7 +210,7 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 
-	log.Zlog.Info(fmt.Sprintf("请求体: size=%d bytes, preview=%q", len(body), truncateString(string(body))))
+	log.Zlog.Info("请求体", zap.Int("size", len(body)), zap.String("preview", truncateString(string(body))))
 
 	req, err := jsonproc.ParseUploadRequest(body)
 	if err != nil {
@@ -216,8 +218,11 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 		go server.Shutdown(context.Background())
 		return
 	}
-	log.Zlog.Info(fmt.Sprintf("上传请求解析成功: file_path=%s, remote_path=%s, nodes=%d, sudo=%v",
-		req.FilePath, req.RemotePath, len(req.Nodes), req.Options.Sudo))
+	log.Zlog.Info("上传请求解析成功",
+		zap.String("filePath", req.FilePath),
+		zap.String("remotePath", req.RemotePath),
+		zap.Int("nodes", len(req.Nodes)),
+		zap.Bool("sudo", req.Options.Sudo))
 
 	// 将 file_path 转为绝对路径（支持相对路径）
 	absPath, err := filepath.Abs(req.FilePath)
@@ -242,7 +247,7 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 		go server.Shutdown(context.Background())
 		return
 	}
-	log.Zlog.Info(fmt.Sprintf("文件清单收集完成: %d 个文件", len(fileItems)))
+	log.Zlog.Info("文件清单收集完成", zap.Int("count", len(fileItems)))
 
 	// 设置 SSE header
 	w.Header().Set("Content-Type", "text/event-stream")
@@ -283,7 +288,7 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 	connSuccess, connFailed := 0, 0
 	for result := range resultChan {
 		if err := WriteSSE(w, result); err != nil {
-			log.Zlog.Error(fmt.Sprintf("SSE 写入失败: %v", err))
+			log.Zlog.Error("SSE 写入失败", zap.Error(err))
 			return
 		}
 		flusher.Flush()
@@ -299,13 +304,13 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	log.Zlog.Info(fmt.Sprintf("连接统计: 节点总数=%d, 成功连接=%d, 失败连接=%d", total, connSuccess, connFailed))
+	log.Zlog.Info("连接统计", zap.Int("total", total), zap.Int("connSuccess", connSuccess), zap.Int("connFailed", connFailed))
 
 	done := ssh.DoneResponse{Type: "done", Total: total, Success: success, Failed: failed}
 	WriteSSE(w, done)
 	flusher.Flush()
 
-	log.Zlog.Succ(fmt.Sprintf("上传任务完成: total=%d, success=%d, failed=%d", total, success, failed))
+	log.Zlog.Succ("上传任务完成", zap.Int("total", total), zap.Int("success", success), zap.Int("failed", failed))
 
 	// 等待关闭信号
 	log.Zlog.Info("等待客户端发送关闭信号...")
@@ -327,7 +332,7 @@ func truncateString(s string) string {
 }
 
 func writeError(w http.ResponseWriter, statusCode int, code string, message string) {
-	log.Zlog.Error(fmt.Sprintf("请求处理失败: code=%s, message=%s", code, message))
+	log.Zlog.Error("请求处理失败", zap.String("code", code), zap.String("message", message))
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
 	json.NewEncoder(w).Encode(ErrorResponse{Success: false, Error: struct {

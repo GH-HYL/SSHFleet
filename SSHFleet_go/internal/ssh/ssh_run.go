@@ -17,6 +17,8 @@ import (
 
 	"SSHFleet/internal/log"
 	"SSHFleet/internal/localfs"
+
+	"go.uber.org/zap"
 )
 
 // SSHClient 封装SSH客户端连接
@@ -43,7 +45,7 @@ func NewSSHClient(config *SSHConfig) *SSHClient {
 // Connect 建立SSH连接
 func (c *SSHClient) Connect() error {
 	addr := fmt.Sprintf("%s:%d", c.config.IP, c.config.Port)
-	log.Zlog.Info(fmt.Sprintf("SSH连接尝试 - %s@%s", c.config.User, addr))
+	log.Zlog.Info("SSH连接尝试", zap.String("user", c.config.User), zap.String("addr", addr))
 
 	sshClientConfig := &ssh.ClientConfig{
 		User:            c.config.User,
@@ -67,14 +69,14 @@ func (c *SSHClient) Connect() error {
 	select {
 	case res := <-result:
 		if res.err != nil {
-			log.Zlog.Error(fmt.Sprintf("SSH连接失败 - %s@%s: %v", c.config.User, addr, res.err))
+			log.Zlog.Error("SSH连接失败", zap.String("user", c.config.User), zap.String("addr", addr), zap.Error(res.err))
 			return fmt.Errorf("建立连接失败 - %w", res.err)
 		}
 		c.client = res.client
-		log.Zlog.Succ(fmt.Sprintf("SSH连接成功 - %s@%s", c.config.User, addr))
+		log.Zlog.Succ("SSH连接成功", zap.String("user", c.config.User), zap.String("addr", addr))
 		return nil
 	case <-time.After(maxTimeout):
-		log.Zlog.Error(fmt.Sprintf("SSH连接失败 - %s@%s: 握手超时%v", c.config.User, addr, maxTimeout))
+		log.Zlog.Error("SSH连接失败: 握手超时", zap.String("user", c.config.User), zap.String("addr", addr), zap.Duration("timeout", maxTimeout))
 		return fmt.Errorf("建立连接失败 - 握手超时%v", maxTimeout)
 	}
 }
@@ -95,24 +97,24 @@ func (c *SSHClient) ExecuteCommand(command string, ctx context.Context, ip strin
 		result.ExitCode = -1
 		errMsg := err.Error()
 		result.Error = &errMsg
-		log.Zlog.Error(fmt.Sprintf("连接失败 - %s: %v", ip, err))
+		log.Zlog.Error("连接失败", zap.String("ip", ip), zap.Error(err))
 		return result, err
 	}
 	defer func() { _ = c.Close() }()
 
 	result.ConnectSuccess = true
 	result.ConnectCostTime = time.Since(connStart).Seconds()
-	log.Zlog.Sugar().Succf("连接成功 - %s", ip)
+	log.Zlog.Succ("连接成功", zap.String("ip", ip))
 
 	// 创建会话
 	session, err := c.client.NewSession()
 	if err != nil {
 		errMsg := err.Error()
 		result.Error = &errMsg
-		log.Zlog.Error(fmt.Sprintf("会话创建失败 - %s: %v", ip, err))
+		log.Zlog.Error("会话创建失败", zap.String("ip", ip), zap.Error(err))
 		return result, fmt.Errorf("创建会话失败 - %w", err)
 	}
-	log.Zlog.Sugar().Succf("会话成功 - %s", ip)
+	log.Zlog.Succ("会话成功", zap.String("ip", ip))
 	defer func() { _ = session.Close() }()
 
 	execStartTime := time.Now()
@@ -171,7 +173,7 @@ func (c *SSHClient) runWithTimeoutAndCancel(session *ssh.Session, command string
 		return ctx.Err()
 	case <-time.After(c.config.ExecTimeout):
 		_ = session.Close()
-		log.Zlog.Warn(fmt.Sprintf("命令执行超时 - %v", c.config.ExecTimeout))
+		log.Zlog.Warn("命令执行超时", zap.Duration("timeout", c.config.ExecTimeout))
 		return fmt.Errorf("命令执行超时(%v)", c.config.ExecTimeout)
 	}
 }
@@ -198,19 +200,19 @@ func (c *SSHClient) UploadFiles(
 		result.ConnectSuccess = false
 		errMsg := err.Error()
 		result.Error = &errMsg
-		log.Zlog.Error(fmt.Sprintf("[上传] 连接失败 - %s: %v", ip, err))
+		log.Zlog.Error("[上传] 连接失败", zap.String("ip", ip), zap.Error(err))
 		return result, err
 	}
 	defer func() { _ = c.Close() }()
 
 	result.ConnectSuccess = true
 	result.ConnectCostTime = time.Since(connStart).Seconds()
-	log.Zlog.Succ(fmt.Sprintf("[上传] 连接成功 - %s", ip))
+	log.Zlog.Succ("[上传] 连接成功", zap.String("ip", ip))
 
 	// 2. 清理残留临时目录（仅 sudo 模式）
 	if useSudo {
 		c.runCommand("sudo rm -rf /tmp/.SSHFleet_tmp/")
-		log.Zlog.Info(fmt.Sprintf("[上传] 清理残留临时目录 - %s", ip))
+		log.Zlog.Info("[上传] 清理残留临时目录", zap.String("ip", ip))
 	}
 
 	// 3. 创建 SFTP 客户端
@@ -218,32 +220,32 @@ func (c *SSHClient) UploadFiles(
 	if err != nil {
 		errMsg := err.Error()
 		result.Error = &errMsg
-		log.Zlog.Error(fmt.Sprintf("[上传] SFTP 客户端创建失败 - %s: %v", ip, err))
+		log.Zlog.Error("[上传] SFTP 客户端创建失败", zap.String("ip", ip), zap.Error(err))
 		return result, err
 	}
 	defer func() { _ = sftpClient.Close() }()
-	log.Zlog.Info(fmt.Sprintf("[上传] SFTP 客户端创建成功 - %s", ip))
+	log.Zlog.Info("[上传] SFTP 客户端创建成功", zap.String("ip", ip))
 
 	// 4. 检查远程目标路径
 	fi, err := sftpClient.Stat(remotePath)
 	if err != nil {
 		errMsg := fmt.Sprintf("远程目标路径不存在: %s", remotePath)
 		result.Error = &errMsg
-		log.Zlog.Error(fmt.Sprintf("[上传] %s - %s", ip, errMsg))
+		log.Zlog.Error("[上传] 远程目标路径不存在", zap.String("ip", ip), zap.String("remotePath", remotePath))
 		return result, fmt.Errorf("%s", errMsg)
 	}
 	if !fi.IsDir() {
 		errMsg := fmt.Sprintf("远程目标路径不是目录: %s", remotePath)
 		result.Error = &errMsg
-		log.Zlog.Error(fmt.Sprintf("[上传] %s - %s", ip, errMsg))
+		log.Zlog.Error("[上传] 远程目标路径不是目录", zap.String("ip", ip), zap.String("remotePath", remotePath))
 		return result, fmt.Errorf("%s", errMsg)
 	}
-	log.Zlog.Info(fmt.Sprintf("[上传] 远程目标路径检查通过 - %s: %s", ip, remotePath))
+	log.Zlog.Info("[上传] 远程目标路径检查通过", zap.String("ip", ip), zap.String("remotePath", remotePath))
 
 	// 5. 判断 sudo 是否实际生效
 	effectiveSudo := useSudo && c.config.User != "root"
 	if useSudo && c.config.User == "root" {
-		log.Zlog.Info(fmt.Sprintf("[上传] 用户已是 root，跳过 sudo - %s", ip))
+		log.Zlog.Info("[上传] 用户已是 root，跳过 sudo", zap.String("ip", ip))
 	}
 
 	// 6. 逐文件处理
@@ -258,7 +260,7 @@ func (c *SSHClient) UploadFiles(
 		case <-ctx.Done():
 			errMsg := "上传超时被取消"
 			result.Error = &errMsg
-			log.Zlog.Error(fmt.Sprintf("[上传] %s - %s", ip, errMsg))
+			log.Zlog.Error("[上传] 上传超时被取消", zap.String("ip", ip))
 			return result, ctx.Err()
 		default:
 		}
@@ -270,7 +272,7 @@ func (c *SSHClient) UploadFiles(
 		if _, err := sftpClient.Stat(remoteFilePath); err == nil {
 			failedFiles++
 			outputLines = append(outputLines, fmt.Sprintf("%s: 上传失败 - 文件已存在", item.FileName))
-			log.Zlog.Warn(fmt.Sprintf("[上传] 文件已存在，跳过 - %s: %s", ip, remoteFilePath))
+			log.Zlog.Warn("[上传] 文件已存在，跳过", zap.String("ip", ip), zap.String("remoteFilePath", remoteFilePath))
 			continue
 		}
 
@@ -279,7 +281,7 @@ func (c *SSHClient) UploadFiles(
 		if err != nil {
 			failedFiles++
 			outputLines = append(outputLines, fmt.Sprintf("%s: 上传失败 - %v", item.FileName, err))
-			log.Zlog.Error(fmt.Sprintf("[上传] %s - %s: %v", ip, item.FileName, err))
+			log.Zlog.Error("[上传] 读取本地文件权限失败", zap.String("ip", ip), zap.String("fileName", item.FileName), zap.Error(err))
 			continue
 		}
 		localMode := localInfo.Mode().Perm()
@@ -298,11 +300,11 @@ func (c *SSHClient) UploadFiles(
 		if uploadErr != nil {
 			failedFiles++
 			outputLines = append(outputLines, fmt.Sprintf("%s: 上传失败 - %v", item.FileName, uploadErr))
-			log.Zlog.Error(fmt.Sprintf("[上传] 文件上传失败 - %s: %s: %v", ip, item.FileName, uploadErr))
+			log.Zlog.Error("[上传] 文件上传失败", zap.String("ip", ip), zap.String("fileName", item.FileName), zap.Error(uploadErr))
 		} else {
 			successFiles++
 			outputLines = append(outputLines, fmt.Sprintf("%s: 上传成功 (%.3fs)", item.FileName, costTime))
-			log.Zlog.Info(fmt.Sprintf("[上传] 文件上传成功 - %s: %s (%.3fs)", ip, item.FileName, costTime))
+			log.Zlog.Info("[上传] 文件上传成功", zap.String("ip", ip), zap.String("fileName", item.FileName), zap.Float64("costTime", costTime))
 		}
 	}
 
@@ -313,7 +315,7 @@ func (c *SSHClient) UploadFiles(
 	result.ExitCode = failedFiles
 	result.ExecCostTime = totalCostTime
 
-	log.Zlog.Succ(fmt.Sprintf("[上传] 节点完成 - %s: 成功 %d/%d", ip, successFiles, totalFiles))
+	log.Zlog.Succ("[上传] 节点完成", zap.String("ip", ip), zap.Int("success", successFiles), zap.Int("total", totalFiles))
 	return result, nil
 }
 
@@ -342,7 +344,7 @@ func (c *SSHClient) sftpUploadFile(sftpClient *sftp.Client, localPath, remoteFil
 
 	// 设置权限
 	if err := sftpClient.Chmod(remoteFilePath, perm); err != nil {
-		log.Zlog.Warn(fmt.Sprintf("[上传] 设置文件权限失败 - %s: %s: %v", ip, remoteFilePath, err))
+		log.Zlog.Warn("[上传] 设置文件权限失败", zap.String("ip", ip), zap.String("remoteFilePath", remoteFilePath), zap.Error(err))
 	}
 
 	return nil
@@ -355,7 +357,7 @@ func (c *SSHClient) sftpUploadWithSudo(sftpClient *sftp.Client, localPath, fileN
 	if err := sftpClient.MkdirAll(tmpDir); err != nil {
 		return fmt.Errorf("创建临时目录失败: %w", err)
 	}
-	log.Zlog.Info(fmt.Sprintf("[上传] 创建临时目录 - %s: %s", ip, tmpDir))
+	log.Zlog.Info("[上传] 创建临时目录", zap.String("ip", ip), zap.String("tmpDir", tmpDir))
 
 	// 清理函数
 	cleanup := func() {
@@ -386,7 +388,7 @@ func (c *SSHClient) sftpUploadWithSudo(sftpClient *sftp.Client, localPath, fileN
 
 	// 设置权限
 	if err := sftpClient.Chmod(tmpFilePath, perm); err != nil {
-		log.Zlog.Warn(fmt.Sprintf("[上传] 设置临时文件权限失败 - %s: %v", ip, err))
+		log.Zlog.Warn("[上传] 设置临时文件权限失败", zap.String("ip", ip), zap.Error(err))
 	}
 
 	// sudo mv 到目标路径
@@ -395,7 +397,7 @@ func (c *SSHClient) sftpUploadWithSudo(sftpClient *sftp.Client, localPath, fileN
 		cleanup()
 		return fmt.Errorf("sudo mv 失败: %w", err)
 	}
-	log.Zlog.Info(fmt.Sprintf("[上传] sudo mv 完成 - %s: %s -> %s/", ip, fileName, remotePath))
+	log.Zlog.Info("[上传] sudo mv 完成", zap.String("ip", ip), zap.String("fileName", fileName), zap.String("remotePath", remotePath))
 
 	// 清理临时目录
 	cleanup()
