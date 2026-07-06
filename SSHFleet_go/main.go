@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 
 	"SSHFleet/internal/httpserver"
 )
@@ -12,5 +13,6 @@ func main() {
 	logPath := flag.String("log-path", "", "日志文件路径")
 	flag.Parse()
 
+	fmt.Printf("启动参数: port=%d, log-path=%q\n", *port, *logPath)
 	httpserver.Start(*port, *logPath)
 }
