@@ -82,6 +82,7 @@ func Start(port int, logPath string) error {
 func handleExecute(w http.ResponseWriter, r *http.Request) {
 	// 一次性防护：只允许处理一次请求
 	if !atomic.CompareAndSwapInt32(&requestUsed, 0, 1) {
+		log.Zlog.Warn(fmt.Sprintf("请求被拒绝: 路径=%s, 原因=服务已被调用，仅支持一次请求", r.URL.Path))
 		writeError(w, http.StatusServiceUnavailable, "ALREADY_USED", "服务已被调用，仅支持一次请求")
 		return
 	}
@@ -184,6 +185,7 @@ func handleShutdown(w http.ResponseWriter, r *http.Request) {
 func handleUpload(w http.ResponseWriter, r *http.Request) {
 	// 一次性防护
 	if !atomic.CompareAndSwapInt32(&requestUsed, 0, 1) {
+		log.Zlog.Warn(fmt.Sprintf("请求被拒绝: 路径=%s, 原因=服务已被调用，仅支持一次请求", r.URL.Path))
 		writeError(w, http.StatusServiceUnavailable, "ALREADY_USED", "服务已被调用，仅支持一次请求")
 		return
 	}
