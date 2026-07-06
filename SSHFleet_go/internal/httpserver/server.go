@@ -99,7 +99,7 @@ func handleExecute(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 
-	log.Zlog.Info("请求体", zap.Int("size", len(body)), zap.String("preview", truncateString(string(body))))
+	log.Zlog.Info("请求体", zap.Int("size", len(body)))
 
 	req, err := jsonproc.ParseRequest(body)
 	if err != nil {
@@ -210,7 +210,7 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 
-	log.Zlog.Info("请求体", zap.Int("size", len(body)), zap.String("preview", truncateString(string(body))))
+	log.Zlog.Info("请求体", zap.Int("size", len(body)))
 
 	req, err := jsonproc.ParseUploadRequest(body)
 	if err != nil {
