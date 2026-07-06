@@ -42,6 +42,9 @@ func NewSSHClient(config *SSHConfig) *SSHClient {
 
 // Connect 建立SSH连接
 func (c *SSHClient) Connect() error {
+	addr := fmt.Sprintf("%s:%d", c.config.IP, c.config.Port)
+	log.Zlog.Info(fmt.Sprintf("SSH连接尝试 - %s@%s", c.config.User, addr))
+
 	sshClientConfig := &ssh.ClientConfig{
 		User:            c.config.User,
 		Auth:            []ssh.AuthMethod{ssh.Password(c.config.Password)},
@@ -56,7 +59,6 @@ func (c *SSHClient) Connect() error {
 	result := make(chan dialResult, 1)
 
 	go func() {
-		addr := fmt.Sprintf("%s:%d", c.config.IP, c.config.Port)
 		client, err := ssh.Dial("tcp", addr, sshClientConfig)
 		result <- dialResult{client, err}
 	}()
@@ -65,11 +67,14 @@ func (c *SSHClient) Connect() error {
 	select {
 	case res := <-result:
 		if res.err != nil {
+			log.Zlog.Error(fmt.Sprintf("SSH连接失败 - %s@%s: %v", c.config.User, addr, res.err))
 			return fmt.Errorf("建立连接失败 - %w", res.err)
 		}
 		c.client = res.client
+		log.Zlog.Succ(fmt.Sprintf("SSH连接成功 - %s@%s", c.config.User, addr))
 		return nil
 	case <-time.After(maxTimeout):
+		log.Zlog.Error(fmt.Sprintf("SSH连接失败 - %s@%s: 握手超时%v", c.config.User, addr, maxTimeout))
 		return fmt.Errorf("建立连接失败 - 握手超时%v", maxTimeout)
 	}
 }
