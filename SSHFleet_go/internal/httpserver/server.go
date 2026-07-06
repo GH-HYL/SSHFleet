@@ -137,18 +137,26 @@ func handleExecute(w http.ResponseWriter, r *http.Request) {
 	resultChan := executor.Run(tasks)
 
 	total, success, failed := len(tasks), 0, 0
+	connSuccess, connFailed := 0, 0
 	for result := range resultChan {
 		if err := WriteSSE(w, result); err != nil {
 			log.Zlog.Error(fmt.Sprintf("SSE 写入失败: %v", err))
 			return
 		}
 		flusher.Flush()
+		if result.ConnectSuccess {
+			connSuccess++
+		} else {
+			connFailed++
+		}
 		if result.ConnectSuccess && result.ExitCode == 0 {
 			success++
 		} else {
 			failed++
 		}
 	}
+
+	log.Zlog.Info(fmt.Sprintf("连接统计: 节点总数=%d, 成功连接=%d, 失败连接=%d", total, connSuccess, connFailed))
 
 	done := ssh.DoneResponse{Type: "done", Total: total, Success: success, Failed: failed}
 	WriteSSE(w, done)
@@ -272,18 +280,26 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 	resultChan := executor.Run(tasks)
 
 	total, success, failed := len(tasks), 0, 0
+	connSuccess, connFailed := 0, 0
 	for result := range resultChan {
 		if err := WriteSSE(w, result); err != nil {
 			log.Zlog.Error(fmt.Sprintf("SSE 写入失败: %v", err))
 			return
 		}
 		flusher.Flush()
+		if result.ConnectSuccess {
+			connSuccess++
+		} else {
+			connFailed++
+		}
 		if result.ConnectSuccess && result.Error == nil && result.ExitCode == 0 {
 			success++
 		} else {
 			failed++
 		}
 	}
+
+	log.Zlog.Info(fmt.Sprintf("连接统计: 节点总数=%d, 成功连接=%d, 失败连接=%d", total, connSuccess, connFailed))
 
 	done := ssh.DoneResponse{Type: "done", Total: total, Success: success, Failed: failed}
 	WriteSSE(w, done)
