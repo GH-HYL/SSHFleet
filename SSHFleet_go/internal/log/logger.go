@@ -30,10 +30,6 @@ func InitLogger(logPath string) error {
 			return err
 		}
 
-		if _, err := file.WriteString("\n\n\n"); err != nil {
-			return err
-		}
-
 		writeSyncer = zapcore.AddSync(file)
 	} else {
 		writeSyncer = zapcore.AddSync(os.Stderr)

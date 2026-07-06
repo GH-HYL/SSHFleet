@@ -3,7 +3,9 @@
 
 import json
 import os
+import secrets
 import socket
+import string
 import subprocess
 import time
 from typing import Dict, Generator, Optional
@@ -12,6 +14,11 @@ import requests
 
 from src.yaml import SSHFleetConfig
 from src.utils import tlog
+
+
+def generate_process_key() -> str:
+    """生成随机进程key"""
+    return ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(32))
 
 
 def find_available_port() -> int:
@@ -39,19 +46,29 @@ def get_exe_path(config: SSHFleetConfig) -> str:
     return exe_path
 
 
-def start_go_process(exe_path: str, port: int, log_path: str = "") -> subprocess.Popen:
-    """启动 Go 进程"""
-    cmd = [exe_path, "--port", str(port)]
-    if log_path:
-        cmd.extend(["--log-path", log_path])
+def start_go_process(exe_path: str, port: int, log_path: str) -> tuple:
+    """启动 Go 进程，通过环境变量传递配置
+
+    Returns:
+        tuple: (process, process_key)
+    """
+    process_key = generate_process_key()
+
+    env = os.environ.copy()
+    env["SSH_FLEET_KEY"] = process_key
+    env["SSH_FLEET_PORT"] = str(port)
+    env["SSH_FLEET_LOG_PATH"] = log_path
+
+    tlog.info(f"环境变量: SSH_FLEET_KEY={process_key}, SSH_FLEET_PORT={port}, SSH_FLEET_LOG_PATH={log_path}")
 
     process = subprocess.Popen(
-        cmd,
+        [exe_path],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
+        env=env,
     )
     tlog.info(f"Go 进程已启动，PID: {process.pid}，端口: {port}")
-    return process
+    return process, process_key
 
 
 def wait_for_server(port: int, timeout: float = 10.0) -> bool:
@@ -69,6 +86,7 @@ def wait_for_server(port: int, timeout: float = 10.0) -> bool:
 def call_go(
     request_body: Dict,
     port: int,
+    process_key: str,
     timeout: float = 120.0,
     url_path: str = "/api/v1/execute",
 ) -> Generator[Dict, None, None]:
@@ -78,6 +96,7 @@ def call_go(
     Args:
         request_body: 请求体
         port: Go 服务端口
+        process_key: 进程认证key
         timeout: 单条结果最大等待时间（秒），每次收到结果后重置
         url_path: API 端点路径
 
@@ -85,13 +104,18 @@ def call_go(
         dict: 单条执行结果
     """
     url = f"http://127.0.0.1:{port}{url_path}"
+    headers = {
+        "X-SSH-Fleet-Key": process_key,
+        "Content-Type": "application/json",
+    }
 
     try:
         response = requests.post(
             url,
+            headers=headers,
             json=request_body,
             stream=True,
-            timeout=(5, None),  # 连接超时5秒，读取无超时（手动控制）
+            timeout=(5, None),
         )
         if response.status_code >= 400:
             try:
@@ -153,19 +177,21 @@ def collect_stderr(process: subprocess.Popen) -> str:
     return ""
 
 
-def shutdown_go_server(port: int) -> bool:
+def shutdown_go_server(port: int, process_key: str) -> bool:
     """
     通知 Go 服务器关闭
 
     Args:
         port: Go 服务端口
+        process_key: 进程认证key
 
     Returns:
         bool: 是否成功发送关闭信号
     """
     url = f"http://127.0.0.1:{port}/api/v1/shutdown"
+    headers = {"X-SSH-Fleet-Key": process_key}
     try:
-        response = requests.post(url, timeout=5)
+        response = requests.post(url, headers=headers, timeout=5)
         if response.status_code == 200:
             tlog.info("已发送 Go 服务器关闭信号")
             return True

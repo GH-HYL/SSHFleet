@@ -33,9 +33,11 @@ type ErrorResponse struct {
 var server *http.Server
 var requestUsed int32  // 0=可用, 1=已处理
 var shutdownSignal chan struct{} // 通知Go关闭的信号通道
+var processKey string  // 进程认证key
 
 // Start 启动 HTTP Server，处理一次请求后退出
-func Start(port int, logPath string) error {
+func Start(port int, logPath string, key string) error {
+	processKey = key
 	if err := log.InitLogger(logPath); err != nil {
 		return err
 	}
@@ -48,9 +50,9 @@ func Start(port int, logPath string) error {
 	interruptHandler.Setup()
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /api/v1/execute", handleExecute)
-	mux.HandleFunc("POST /api/v1/upload", handleUpload)
-	mux.HandleFunc("POST /api/v1/shutdown", handleShutdown)
+	mux.HandleFunc("POST /api/v1/execute", validateKey(handleExecute))
+	mux.HandleFunc("POST /api/v1/upload", validateKey(handleUpload))
+	mux.HandleFunc("POST /api/v1/shutdown", validateKey(handleShutdown))
 
 	server = &http.Server{
 		Addr:    fmt.Sprintf(":%d", port),
@@ -99,14 +101,19 @@ func handleExecute(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 
-	log.Zlog.Info("请求体", zap.Int("size", len(body)))
-
 	req, err := jsonproc.ParseRequest(body)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "MISSING_FIELD", err.Error())
 		go server.Shutdown(context.Background())
 		return
 	}
+
+	log.Zlog.Info("执行请求解析成功",
+		zap.String("command", req.Command),
+		zap.Int("nodes", len(req.Nodes)),
+		zap.Int("concurrency", req.Options.Concurrency),
+		zap.Int("connectTimeout", req.Options.ConnectTimeout),
+		zap.Int("execTimeout", req.Options.ExecTimeout))
 
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -209,8 +216,6 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer r.Body.Close()
-
-	log.Zlog.Info("请求体", zap.Int("size", len(body)))
 
 	req, err := jsonproc.ParseUploadRequest(body)
 	if err != nil {
@@ -320,6 +325,17 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 		log.Zlog.Warn("等待关闭信号超时(10分钟)，强制退出")
 	}
 	go server.Shutdown(context.Background())
+}
+
+func validateKey(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		key := r.Header.Get("X-SSH-Fleet-Key")
+		if key != processKey {
+			writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "无效的认证key")
+			return
+		}
+		next(w, r)
+	}
 }
 
 func writeError(w http.ResponseWriter, statusCode int, code string, message string) {

@@ -137,7 +137,7 @@ def generate_upload_command(file_list: list, upload_path: str, path: str) -> str
 
     # 构建脚本内容
     lines = ["#!/bin/sh"]
-    lines.append("export LC_ALL=C.UTF-8 LANG=C.UTF-8")
+    lines.append("export LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8")
     lines.append(f"TARGET_DIR='{path_safe}'")
 
     # 检查重名
