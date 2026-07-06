@@ -3,12 +3,13 @@ package core
 import (
 	"context"
 	"encoding/base64"
-	"fmt"
 	"strings"
 	"sync"
 
 	"SSHFleet/internal/log"
 	"SSHFleet/internal/ssh"
+
+	"go.uber.org/zap"
 )
 
 // BatchExecutor 批量任务执行器
@@ -42,7 +43,7 @@ type SSHTask struct {
 
 // Run 启动执行，返回结果 channel（执行完毕后自动关闭）
 func (e *BatchExecutor) Run(tasks []*SSHTask) <-chan *ssh.ExecResult {
-	log.Zlog.Info(fmt.Sprintf("批量执行器 - 开始执行%d个任务，并发数:%d", e.totalTasks, e.maxConcurrency))
+	log.Zlog.Info("批量执行器 - 开始执行", zap.Int("tasks", e.totalTasks), zap.Int("concurrency", e.maxConcurrency))
 	if e.totalTasks == 0 {
 		log.Zlog.Warn("任务数量为0，程序退出，若为符合预期，请排查有效节点数量")
 	}
@@ -93,12 +94,12 @@ func (e *BatchExecutor) worker(id int, taskChan <-chan *SSHTask, execResultChan 
 				return
 			}
 
-			log.Zlog.Sugar().Debugf("协程worker - 开始执行，IP:%s，ID：%d", task.Config.IP, id)
+			log.Zlog.Debug("协程worker - 开始执行", zap.String("ip", task.Config.IP), zap.Int("workerId", id))
 
 			client := ssh.NewSSHClient(task.Config)
 			workResult, err := client.ExecuteCommand(task.Command, e.ctx, task.Config.IP)
 			if err != nil {
-				log.Zlog.Sugar().Errorf("协程worker - 出现异常，IP:%s，ID：%d\n%v", task.Config.IP, id, err)
+				log.Zlog.Error("协程worker - 出现异常", zap.String("ip", task.Config.IP), zap.Int("workerId", id), zap.Error(err))
 			}
 
 			workResult.Seq = task.Seq
@@ -107,14 +108,14 @@ func (e *BatchExecutor) worker(id int, taskChan <-chan *SSHTask, execResultChan 
 			if workResult.Output != "" {
 				if decoded, err := base64.StdEncoding.DecodeString(workResult.Output); err == nil {
 					output := strings.TrimSpace(string(decoded))
-					log.Zlog.Sugar().Infof("协程worker - 节点输出 [IP:%s, ID:%d]:\n%s", task.Config.IP, id, output)
+					log.Zlog.Info("协程worker - 节点输出", zap.String("ip", task.Config.IP), zap.Int("workerId", id), zap.String("output", output))
 				}
 			}
 
 			// 不管成功失败都写入 channel
 			e.safeSendResult(execResultChan, workResult)
 
-			log.Zlog.Sugar().Infof("协程worker - 执行结束，IP：%s，ID：%d，退出码：%d", task.Config.IP, id, workResult.ExitCode)
+			log.Zlog.Info("协程worker - 执行结束", zap.String("ip", task.Config.IP), zap.Int("workerId", id), zap.Int("exitCode", workResult.ExitCode))
 		}
 	}
 }
