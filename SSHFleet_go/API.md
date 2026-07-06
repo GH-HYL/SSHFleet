@@ -1,6 +1,6 @@
 # SSHFleet Go API 接口规范
 
-版本：3.0
+版本：4.0
 
 ---
 
@@ -8,7 +8,8 @@
 
 SSHFleet Go 是一个一次性批量 SSH 任务引擎，支持命令执行和文件上传两种模式，通过 HTTP API 接收请求。
 
-- **启动方式**：命令行参数配置端口和日志路径
+- **启动方式**：通过环境变量配置端口、日志路径和认证key
+- **认证机制**：所有HTTP请求必须携带`X-SSH-Fleet-Key`请求头
 - **数据传输**：HTTP POST 请求发送请求体，SSE 流式响应返回结果
 - **生命周期**：处理请求后等待关闭信号，收到后退出
 - **防护机制**：第二个请求会被拒绝，返回 `ALREADY_USED` 错误
@@ -16,16 +17,30 @@ SSHFleet Go 是一个一次性批量 SSH 任务引擎，支持命令执行和文
 
 ---
 
-## 二、命令行参数
+## 二、环境变量
 
-| 参数 | 说明 | 示例 |
-|------|------|------|
-| `--port` | 监听端口 | `--port 9090` |
-| `--log-path` | 日志目录路径（可选），目录必须已存在 | `--log-path /var/log/sshtask` |
+| 环境变量 | 说明 | 必填 |
+|---------|------|------|
+| `SSH_FLEET_KEY` | 进程认证key，用于验证HTTP请求 | 是 |
+| `SSH_FLEET_PORT` | 监听端口 | 是 |
+| `SSH_FLEET_LOG_PATH` | 日志目录路径，目录必须已存在 | 否（空字符串表示输出到stderr） |
+
+缺少`SSH_FLEET_KEY`或`SSH_FLEET_PORT`时，程序将直接退出并报错。
 
 ---
 
 ## 三、API 端点
+
+### 请求头（所有端点必需）
+
+所有HTTP请求必须携带以下请求头：
+
+| 请求头 | 说明 | 示例 |
+|-------|------|------|
+| `X-SSH-Fleet-Key` | 进程认证key，与启动时的`SSH_FLEET_KEY`环境变量一致 | `X-SSH-Fleet-Key: abc123def456` |
+| `Content-Type` | 内容类型 | `Content-Type: application/json` |
+
+缺少或key不匹配时，返回 `401 UNAUTHORIZED` 错误。
 
 ### 3.1 POST /api/v1/execute — 执行命令
 
@@ -297,7 +312,7 @@ done 的 total/success/failed 是节点级统计。
 ### 4.1 启动服务
 
 ```bash
-./SSHFleet_Go --port 9090 --log-path /var/log/sshtask
+SSH_FLEET_KEY=your-secret-key SSH_FLEET_PORT=9090 SSH_FLEET_LOG_PATH=/var/log/sshtask ./SSHFleet_Go
 ```
 
 ### 4.2 发送执行请求
@@ -305,6 +320,7 @@ done 的 total/success/failed 是节点级统计。
 ```bash
 curl -N -X POST http://localhost:9090/api/v1/execute \
   -H "Content-Type: application/json" \
+  -H "X-SSH-Fleet-Key: your-secret-key" \
   -d @request.json
 ```
 
@@ -313,6 +329,7 @@ curl -N -X POST http://localhost:9090/api/v1/execute \
 ```bash
 curl -N -X POST http://localhost:9090/api/v1/upload \
   -H "Content-Type: application/json" \
+  -H "X-SSH-Fleet-Key: your-secret-key" \
   -d '{
     "file_path": "/home/user/config.yaml",
     "remote_path": "/etc/app/",
@@ -324,7 +341,8 @@ curl -N -X POST http://localhost:9090/api/v1/upload \
 ### 4.4 发送关闭信号
 
 ```bash
-curl -X POST http://localhost:9090/api/v1/shutdown
+curl -X POST http://localhost:9090/api/v1/shutdown \
+  -H "X-SSH-Fleet-Key: your-secret-key"
 ```
 
 ---
@@ -363,6 +381,7 @@ curl -X POST http://localhost:9090/api/v1/shutdown
 | `INVALID_REQUEST` | 400 | 请求格式错误（JSON 解析失败） |
 | `MISSING_FIELD` | 400 | 必填字段缺失（command/file_path/remote_path 为空、nodes 为空、seq 重复） |
 | `INVALID_PATH` | 400 | file_path 不存在、不可读或不是绝对路径 |
+| `UNAUTHORIZED` | 401 | 请求头缺少`X-SSH-Fleet-Key`或key无效 |
 | `INTERNAL_ERROR` | 500 | 内部错误（不支持流式响应） |
 | `ALREADY_USED` | 503 | 服务已被调用，仅支持一次请求 |
 | `LOG_PATH_INVALID` | - | 启动失败：日志路径不存在或不是目录，输出到 stderr，进程退出码 1 |
