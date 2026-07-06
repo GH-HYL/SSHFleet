@@ -2,12 +2,13 @@ package core
 
 import (
 	"context"
-	"fmt"
 	"sync"
 
 	"SSHFleet/internal/localfs"
 	"SSHFleet/internal/log"
 	"SSHFleet/internal/ssh"
+
+	"go.uber.org/zap"
 )
 
 // BatchUploadExecutor 上传批量任务执行器
@@ -43,7 +44,7 @@ func NewBatchUploadExecutor(concurrency int, totalTasks int, ctx context.Context
 
 // Run 启动上传执行，返回结果 channel
 func (e *BatchUploadExecutor) Run(tasks []*UploadTask) <-chan *ssh.UploadResult {
-	log.Zlog.Info(fmt.Sprintf("上传执行器 - 开始执行%d个任务，并发数:%d", e.totalTasks, e.maxConcurrency))
+	log.Zlog.Info("上传执行器 - 开始执行", zap.Int("tasks", e.totalTasks), zap.Int("concurrency", e.maxConcurrency))
 	if e.totalTasks == 0 {
 		log.Zlog.Warn("上传任务数量为0")
 	}
@@ -91,19 +92,19 @@ func (e *BatchUploadExecutor) worker(id int, taskChan <-chan *UploadTask, result
 				return
 			}
 
-			log.Zlog.Sugar().Debugf("上传worker - 开始执行，IP:%s，ID:%d", task.Config.IP, id)
+			log.Zlog.Debug("上传worker - 开始执行", zap.String("ip", task.Config.IP), zap.Int("workerId", id))
 
 			client := ssh.NewSSHClient(task.Config)
 			result, err := client.UploadFiles(task.FileItems, task.RemotePath, task.UseSudo, e.ctx, task.Config.IP)
 			if err != nil {
-				log.Zlog.Sugar().Errorf("上传worker - 出现异常，IP:%s，ID:%d\n%v", task.Config.IP, id, err)
+				log.Zlog.Error("上传worker - 出现异常", zap.String("ip", task.Config.IP), zap.Int("workerId", id), zap.Error(err))
 			}
 
 			result.Seq = task.Seq
 
 			e.safeSendResult(resultChan, result)
 
-			log.Zlog.Sugar().Infof("上传worker - 执行结束，IP:%s，ID:%d，exit_code:%d", task.Config.IP, id, result.ExitCode)
+			log.Zlog.Info("上传worker - 执行结束", zap.String("ip", task.Config.IP), zap.Int("workerId", id), zap.Int("exitCode", result.ExitCode))
 		}
 	}
 }
