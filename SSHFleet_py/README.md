@@ -31,8 +31,8 @@
 | ---- | --------------------------------------- |
 | 命令执行 | 通过 Go 协程引擎多协程并发，支持数千节点，实时进度条显示          |
 | 脚本执行 | 远程执行本地 shell/python 脚本，base64 编码传输      |
-| 文件上传 | SFTP 协议，目录自动打包压缩，大文件流式传输                |
-| 文件下载 | SFTP 协议，支持下载远程文件/目录到本地                  |
+| 文件上传 | Go 引擎 SFTP 上传，大文件流式传输                          |
+| 文件下载 | SFTP 协议，支持下载远程文件/目录到本地（当前版本暂未开放）         |
 | 安全防护 | 危险命令正则规则，风险等级提示，交互式确认                   |
 | 错误分类 | SSH/网络错误自动归类                            |
 | 日志归档 | 每次执行独立目录，含终端输出(txt/xlsx)、执行日志、汇总报告、资源备份 |
@@ -43,7 +43,7 @@
 
 ### 前置要求
 
-- Python 3.12+
+- Python 3.10+
 - Go 程序已预编译（包含在 `src/go/` 目录下）
 - 支持的操作系统：Windows / Linux
 
@@ -69,7 +69,7 @@ venv\Scripts\activate
 source venv/bin/activate
 
 # 安装依赖
-pip install loguru pydantic pyyaml rich fabric openpyxl
+pip install loguru pydantic pyyaml rich fabric openpyxl requests
 ```
 
 1. **配置默认参数（可选）**
@@ -108,9 +108,6 @@ python3 sshfleet.py -f nodes.csv -s script.sh
 # 上传模式
 python3 sshfleet.py -f nodes.csv -u /local/path -p /remote/path/
 
-# 下载模式
-python3 sshfleet.py -f nodes.csv -d /remote/path -p /local/path/
-
 # 打包最新历史记录
 python3 sshfleet.py -z
 ```
@@ -132,8 +129,8 @@ python3 sshfleet.py  ( -c | -s | -u | -d | -z )  ( -f ) ( -p ) [可选参数]
 | `-c command`  | 命令模式，远程执行命令            |
 | `-s script`   | 脚本模式，远程执行本地脚本（.sh/.py） |
 | `-u upload`   | 上传模式，本地文件或目录路径         |
-| `-d download` | 下载模式，远程文件或目录路径         |
-| `-z`          | 打包模式，打包最新历史记录          |
+| `-d download` | 下载模式，远程文件或目录路径（绝对路径，当前版本暂未开放）  |
+| `-z`          | 打包模式，打包最新历史记录（打包前会删除当前旧打包文件）    |
 
 #### 条件必填参数
 
@@ -146,14 +143,13 @@ python3 sshfleet.py  ( -c | -s | -u | -d | -z )  ( -f ) ( -p ) [可选参数]
 
 | 参数                 | 说明                                           |
 | ------------------ | -------------------------------------------- |
-| `-m mode`          | 执行权限 \[默认: sudo]：direct（用户权限）/ sudo（root 权限） |
+| `-m mode`          | 执行权限 \[默认: 配置文件决定]：direct（用户权限）/ sudo（root 权限） |
 | `-t timeout`       | 执行/传输超时秒数 \[默认: 命令60 / 传输300]                |
 | `-T timeout`       | 连接超时秒数 \[默认: 10]                             |
 | `-n number`        | 并发数 \[默认: 节点数]                               |
-| `-k [key]`         | 密钥登录，指定私钥路径（不指定默认 \~/.ssh/id\_rsa）           |
 | `-r remark`        | 备注信息，用于历史记录文件名后缀                             |
 | `--nobash`         | 命令模式专用，不使用 bash 环境执行命令                       |
-| `--disinteractive` | 取消高危命令告警和参数确认的交互提示                           |
+| `--disinteractive` | 取消高危命令告警和配置信息确认的交互提示                        |
 
 ### CSV 文件格式
 
@@ -224,19 +220,7 @@ python sshfleet.py -f nodes.csv -s deploy.sh -m sudo
 python sshfleet.py -f nodes.csv -u ./app.tar.gz -p /opt/
 ```
 
-### 示例 4：批量下载文件
-
-```bash
-python sshfleet.py -f nodes.csv -d /var/log/app.log -p ./logs/
-```
-
-### 示例 5：使用密钥登录
-
-```bash
-python sshfleet.py -f nodes.csv -c "ls -l" -k ~/.ssh/id_rsa
-```
-
-### 示例 6：非交互模式
+### 示例 4：非交互模式
 
 ```bash
 python sshfleet.py -f nodes.csv -c "df -h" --disinteractive
@@ -246,7 +230,7 @@ python sshfleet.py -f nodes.csv -c "df -h" --disinteractive
 
 ## 技术架构
 
-Python 负责参数解析、安全检查、日志整理、结果输出；Go 负责高并发 SSH 执行引擎。两者通过 stdin/stdout + TCP socket 通信。
+Python 负责参数解析、安全检查、日志整理、结果输出；Go 负责高并发 SSH 执行引擎（命令执行、文件上传）。两者通过 HTTP SSE（Server-Sent Events）通信：Python 启动 Go 子进程，Go 启动 HTTP 服务器，Python 发送 HTTP 请求并接收 SSE 流式结果。
 
 ### 项目结构
 
@@ -254,13 +238,19 @@ Python 负责参数解析、安全检查、日志整理、结果输出；Go 负�
 sshfleet.py                     # 入口：参数解析、流程编排
 src/
 ├── core.py                    # 参数解析、节点读取、统计计算
-├── gotogo.py                  # Go 执行器调度：启动子进程 + TCP 监控进度 + Rich 进度条显示
+├── gotogo/                    # Go 执行器模块
+│   ├── go_to_go.py            #   主执行函数：启动 Go 进程 + HTTP SSE 接收 + Rich 进度条
+│   ├── caller.py              #   Go 进程调用与 HTTP SSE 通信
+│   ├── builder.py             #   请求体构建（命令/上传）
+│   ├── parser.py              #   SSE 响应解析、base64 解码
+│   └── classifier.py          #   错误分类
 ├── check.py                   # 参数校验、危险命令检测、脚本内容检查
 ├── output.py                  # 终端输出、xlsx 报告生成
 ├── utils.py                   # 工具函数、日志初始化、错误分类、装饰器
 ├── yaml.py                    # 配置文件加载（Pydantic 模型校验）
 ├── color.py                   # 终端颜色常量
 ├── transfer/
+│   ├── transfer_router.py     # 传输路由：根据模式分发到上传/下载流程
 │   ├── transfer.py            # 传输主流程：上传/下载、进度条、结果收集
 │   ├── transfer_precheck.py   # 传输预检查：根据文件类型选择传输方式
 │   ├── transfer_check.py      # 传输预检：路径存在性、磁盘空间、写权限
@@ -270,8 +260,8 @@ src/
 │   ├── dangerous_keywords.json # 危险命令检测规则
 │   └── error_keywords.json    # 错误分类关键词
 └── go/
-    ├── SSHFleet              # Go 执行器（Linux）
-    └── SSHFleet_Go.exe          # Go 执行器（Windows）
+    ├── SSHFleet               # Go 执行器（Linux）
+    └── SSHFleet_Go.exe        # Go 执行器（Windows）
 ```
 
 ### 执行流程
@@ -279,9 +269,9 @@ src/
 ```
 参数解析 → 安全检查 → 节点读取 → 用户确认
   ↓
-┌─ 命令/脚本模式 ─→ gotogo.py 启动 Go 子进程，通过 TCP socket 实时接收进度和结果（Rich 进度条显示）
-├─ 上传模式 ─→ transfer.py 逐节点 SFTP 传输，带预检和进度条（已更新根据文件类型选择传输方式）
-└─ 下载模式 ─→ transfer.py 逐节点 SFTP 下载，带预检和进度条
+┌─ 命令/脚本模式 ─→ gotogo 模块启动 Go 子进程，通过 HTTP SSE 实时接收结果（Rich 进度条显示）
+├─ 上传模式 ─→ gotogo 模块启动 Go 子进程，通过 HTTP SSE 实时接收结果（Rich 进度条显示）
+└─ 下载模式 ─→ transfer 模块逐节点 SFTP 下载，带预检和进度条（当前版本暂未开放）
   ↓
 结果统计 → 终端输出 → 生成报告(xlsx/txt) → 资源备份 → 创建 latest_history 链接
 ```
@@ -290,17 +280,17 @@ src/
 
 ```
 historys/
-├── sshfleet.log                              # 工具运行日志
+├── SSHFleetTools.log                           # 工具运行日志
 └── YYYY-MM-DD_HH-MM-SS_模式_备注/           # 每次执行独立目录
-    ├── msg.log                              # 执行日志
+    ├── SSHFleet_Go.log                        # 执行日志（Go 引擎）
     ├── output.txt                           # 终端输出（txt）
     ├── output.xlsx                          # 终端输出（xlsx）
     ├── report.txt                           # 汇总报告
     ├── results.xlsx                         # 结果字典（xlsx）
-    └── assets/                              # 资源备份
-        ├── ip.csv                           # 节点文件
-        ├── script.sh                        # 执行脚本
-        └── upload_dir/                      # 上传文件
+    └── assets/                              # 资源备份（按模式条件生成）
+        ├── <csv_file>                       # 节点 CSV 文件（始终备份）
+        ├── <script_file>                    # 执行脚本（仅脚本模式）
+        └── <upload_file>                    # 上传文件（仅上传模式）
 ```
 
 ***
@@ -339,20 +329,23 @@ python sshfleet.py -z
 
 ### Q5: Windows 下执行报错？
 
-A: 确保 Go 可执行文件 `SSHFleet_Go.exe` 存在，并且有执行权限。
+A: 确保 Go 可执行文件 `SSHFleet_Go.exe` 存在，且未被杀毒软件拦截。
 
 ***
 
 ## 依赖
 
-Python 3.12+，主要依赖：
+Python 3.10+，主要依赖：
 
 - `loguru` - 日志记录
 - `pydantic` - 数据模型验证
 - `pyyaml` - 配置文件解析
 - `rich` - 终端美化和进度条
 - `fabric` - SSH 操作（传输模块使用）
+- `paramiko` - SSH 底层库（fabric 传递依赖，代码中有直接 import）
+- `invoke` - 命令执行库（fabric 传递依赖，代码中有直接 import）
 - `openpyxl` - Excel 文件生成
+- `requests` - HTTP 通信（与 Go 进程 SSE 交互）
 
 ***
 
