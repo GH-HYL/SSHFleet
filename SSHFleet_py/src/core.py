@@ -552,17 +552,6 @@ def save_execute_resource_files(
             dst_path = Path(resources_dir) / src_path.name
             shutil.copy2(src_path, dst_path)  # 保留元数据复制
 
-    # 处理 -u 参数（文件或文件夹）
-    if hasattr(args, "u") and args.u:
-        src_path = Path(args.u)
-        if src_path.exists():
-            if src_path.is_file():  # 如果是文件
-                dst_path = Path(resources_dir) / src_path.name
-                shutil.copy2(src_path, dst_path)
-            else:  # 如果是文件夹
-                dst_dir = Path(resources_dir) / src_path.name
-                shutil.copytree(src_path, dst_dir)
-
     # 处理 -f 参数（单个文件）
     if hasattr(args, "f") and args.f:
         src_path = Path(args.f)

@@ -3,6 +3,8 @@
 
 import argparse
 import os
+import threading
+import time
 from typing import Dict, List, Optional
 
 from rich.console import Console
@@ -90,9 +92,11 @@ def go_to_go(
     if args.u:
         request_body = builder.build_upload_request(args, nodesinfo)
         url_path = "/api/v1/upload"
+        exec_mode = "upload"
     else:
         request_body = builder.build_request(args, nodesinfo, transfer_command)
         url_path = "/api/v1/execute"
+        exec_mode = "execute"
     tlog.info(f"请求体构建完成，共 {total_nodes} 个节点")
 
     # 2. 获取 Go 可执行文件路径
@@ -111,7 +115,22 @@ def go_to_go(
         tlog.error(f"Go 服务启动超时，stderr: {stderr}")
         raise RuntimeError(f"Go 服务启动超时，stderr: {stderr}")
 
-    # 5. 创建进度条
+    # 5. 启动健康检查线程
+    health_stop = threading.Event()
+    go_dead = threading.Event()
+
+    def health_checker():
+        while not health_stop.is_set():
+            if not caller.check_health(port):
+                tlog.error("Go 进程健康检查失败，进程可能已崩溃")
+                go_dead.set()
+                break
+            health_stop.wait(5)
+
+    health_thread = threading.Thread(target=health_checker, daemon=True)
+    health_thread.start()
+
+    # 6. 创建进度条
     progress_text = "上传进度" if args.u else "执行进度"
     node_progress = Progress(
         TextColumn(f"    {progress_text}"),
@@ -122,7 +141,7 @@ def go_to_go(
     )
     node_task = node_progress.add_task("", total=total_nodes, percent_display="  0%")
 
-    # 6. 发送请求并接收 SSE 流
+    # 7. 发送请求并接收 SSE 流
     results = []
     total_timeout = (args.T + args.t) * 1.5
     live = Live(node_progress, console=console, refresh_per_second=20)
@@ -138,7 +157,12 @@ def go_to_go(
 
     try:
         for sse_data in caller.call_go(request_body, port, process_key, timeout=total_timeout, url_path=url_path):
-            result = parser.parse_result(sse_data, error_keywords)
+            # 检查 Go 进程是否存活
+            if go_dead.is_set():
+                tlog.error("Go 进程已崩溃，终止接收")
+                break
+
+            result = parser.parse_result(sse_data, error_keywords, mode=exec_mode)
             results.append(result)
 
             # 格式化输出
@@ -165,22 +189,26 @@ def go_to_go(
                 percent_display=f"{percent_int:>3}%",
             )
     finally:
+        # 停止健康检查线程
+        health_stop.set()
+        health_thread.join(timeout=2)
         live.stop()
         if output_file:
             output_file.close()
 
-    # 7. 通知 Go 服务器关闭
-    caller.shutdown_go_server(port, process_key)
+    # 8. 通知 Go 服务器关闭
+    if not go_dead.is_set():
+        caller.shutdown_go_server(port, process_key)
 
-    # 8. 等待 Go 进程退出
+    # 9. 等待 Go 进程退出
     try:
-        process.wait(timeout=30)
+        process.wait(timeout=10)
     except Exception:
         process.kill()
         process.wait()
     tlog.info("Go 进程已退出")
 
-    # 8. 统计结果
+    # 10. 统计结果
     success_count = sum(1 for r in results if r.get("connect_success") and r.get("exit_bool"))
     fail_count = len(results) - success_count
     tlog.info(f"任务执行完成，共 {len(results)} 条结果: 成功 {success_count}, 失败 {fail_count}")

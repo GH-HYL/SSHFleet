@@ -27,6 +27,11 @@ type SSHClient struct {
 	config *SSHConfig
 }
 
+const (
+	maxFileRetries = 2
+	retryInterval  = 2 * time.Second
+)
+
 // SSHConfig 存储SSH连接配置
 type SSHConfig struct {
 	IP             string
@@ -286,12 +291,24 @@ func (c *SSHClient) UploadFiles(
 		}
 		localMode := localInfo.Mode().Perm()
 
-		// 6c. 执行上传
+		// 6c. 执行上传（含重试）
 		var uploadErr error
-		if !effectiveSudo {
-			uploadErr = c.sftpUploadFile(sftpClient, item.LocalPath, remoteFilePath, localMode, ip)
-		} else {
-			uploadErr = c.sftpUploadWithSudo(sftpClient, item.LocalPath, item.FileName, remotePath, localMode, ip)
+		for attempt := 0; attempt <= maxFileRetries; attempt++ {
+			if !effectiveSudo {
+				uploadErr = c.sftpUploadFile(sftpClient, item.LocalPath, remoteFilePath, localMode, ip)
+			} else {
+				uploadErr = c.sftpUploadWithSudo(sftpClient, item.LocalPath, item.FileName, remotePath, localMode, ip)
+			}
+			if uploadErr == nil {
+				break
+			}
+			if attempt < maxFileRetries {
+				log.Zlog.Warn("[上传] 文件上传失败，准备重试",
+					zap.String("ip", ip), zap.String("fileName", item.FileName),
+					zap.Int("attempt", attempt+1), zap.Int("maxRetries", maxFileRetries),
+					zap.Error(uploadErr))
+				time.Sleep(retryInterval)
+			}
 		}
 
 		costTime := time.Since(fileStart).Seconds()
@@ -361,7 +378,7 @@ func (c *SSHClient) sftpUploadWithSudo(sftpClient *sftp.Client, localPath, fileN
 
 	// 清理函数
 	cleanup := func() {
-		_ = c.runCommand(fmt.Sprintf("sudo rm -rf %s", tmpDir))
+		_ = c.runCommand(fmt.Sprintf("sudo rm -rf '%s'", tmpDir))
 	}
 
 	// 上传到临时目录
@@ -391,8 +408,9 @@ func (c *SSHClient) sftpUploadWithSudo(sftpClient *sftp.Client, localPath, fileN
 		log.Zlog.Warn("[上传] 设置临时文件权限失败", zap.String("ip", ip), zap.Error(err))
 	}
 
-	// sudo mv 到目标路径
-	mvCmd := fmt.Sprintf("sudo mv %s %s/", tmpFilePath, remotePath)
+	// sudo mv 到目标路径（引号防止路径含特殊字符导致命令注入）
+	escapedRemotePath := strings.ReplaceAll(remotePath, "'", "'\\''")
+	mvCmd := fmt.Sprintf("sudo mv '%s' '%s/'", tmpFilePath, escapedRemotePath)
 	if err := c.runCommand(mvCmd); err != nil {
 		cleanup()
 		return fmt.Errorf("sudo mv 失败: %w", err)

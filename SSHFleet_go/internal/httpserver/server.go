@@ -50,6 +50,7 @@ func Start(port int, logPath string, key string) error {
 	interruptHandler.Setup()
 
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/v1/health", handleHealth)
 	mux.HandleFunc("POST /api/v1/execute", validateKey(handleExecute))
 	mux.HandleFunc("POST /api/v1/upload", validateKey(handleUpload))
 	mux.HandleFunc("POST /api/v1/shutdown", validateKey(handleShutdown))
@@ -66,15 +67,6 @@ func Start(port int, logPath string, key string) error {
 	}()
 
 	log.Zlog.Succ("HTTP Server 启动", zap.Int("port", port))
-
-	// 防御性策略：1 分钟内无请求则自动退出
-	go func() {
-		time.Sleep(1 * time.Minute)
-		if atomic.LoadInt32(&requestUsed) == 0 {
-			log.Zlog.Warn("1 分钟内无请求连接，自动退出")
-			server.Shutdown(context.Background())
-		}
-	}()
 
 	if err := server.ListenAndServe(); err != http.ErrServerClosed {
 		log.Zlog.Error("HTTP Server 异常退出", zap.Error(err))
@@ -173,13 +165,13 @@ func handleExecute(w http.ResponseWriter, r *http.Request) {
 
 	log.Zlog.Succ("任务执行完成", zap.Int("total", total), zap.Int("success", success), zap.Int("failed", failed))
 
-	// 等待客户端发送关闭信号，10分钟超时防御
+	// 等待客户端发送关闭信号，2分钟超时防御
 	log.Zlog.Info("等待客户端发送关闭信号...")
 	select {
 	case <-shutdownSignal:
 		// handleShutdown 已记录日志
-	case <-time.After(10 * time.Minute):
-		log.Zlog.Warn("等待关闭信号超时(10分钟)，强制退出")
+	case <-time.After(2 * time.Minute):
+		log.Zlog.Warn("等待关闭信号超时(2分钟)，强制退出")
 	}
 	go server.Shutdown(context.Background())
 }
@@ -317,14 +309,20 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 
 	log.Zlog.Succ("上传任务完成", zap.Int("total", total), zap.Int("success", success), zap.Int("failed", failed))
 
-	// 等待关闭信号
+	// 等待关闭信号，2分钟超时防御
 	log.Zlog.Info("等待客户端发送关闭信号...")
 	select {
 	case <-shutdownSignal:
-	case <-time.After(10 * time.Minute):
-		log.Zlog.Warn("等待关闭信号超时(10分钟)，强制退出")
+	case <-time.After(2 * time.Minute):
+		log.Zlog.Warn("等待关闭信号超时(2分钟)，强制退出")
 	}
 	go server.Shutdown(context.Background())
+}
+
+// handleHealth 健康检查端点，无需认证
+func handleHealth(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
 func validateKey(next http.HandlerFunc) http.HandlerFunc {

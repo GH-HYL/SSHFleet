@@ -83,6 +83,18 @@ def wait_for_server(port: int, timeout: float = 10.0) -> bool:
     return False
 
 
+def check_health(port: int, timeout: float = 3.0) -> bool:
+    """检查 Go 进程健康状态"""
+    try:
+        resp = requests.get(
+            f"http://127.0.0.1:{port}/api/v1/health",
+            timeout=timeout,
+        )
+        return resp.status_code == 200
+    except requests.RequestException:
+        return False
+
+
 def call_go(
     request_body: Dict,
     port: int,
