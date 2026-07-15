@@ -7,13 +7,14 @@ from typing import Dict
 from src.gotogo.classifier import classify
 
 
-def parse_result(sse_data: Dict, error_keywords: Dict[str, list[str]]) -> Dict:
+def parse_result(sse_data: Dict, error_keywords: Dict[str, list[str]], mode: str = "execute") -> Dict:
     """
     解析 SSE 单条结果，补充 Python 端字段
 
     Args:
         sse_data: Go 返回的单条结果
         error_keywords: 错误分类关键词
+        mode: 执行模式，"execute" 或 "upload"
 
     Returns:
         dict: 完整的结果字典（兼容 core.results_statistics）
@@ -38,6 +39,7 @@ def parse_result(sse_data: Dict, error_keywords: Dict[str, list[str]]) -> Dict:
             error=error,
             output=output,
             error_keywords=error_keywords,
+            mode=mode,
         ),
         "error": error,
     }
