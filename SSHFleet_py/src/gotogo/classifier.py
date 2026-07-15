@@ -8,6 +8,7 @@ def classify(
     error: str | None,
     output: str,
     error_keywords: dict[str, list[str]],
+    mode: str = "execute",
 ) -> str:
     """
     根据响应体字段进行错误分类
@@ -18,6 +19,7 @@ def classify(
         error: Go 层面原始错误信息
         output: 命令输出内容（已解码）
         error_keywords: 分类关键词映射
+        mode: 执行模式，"execute" 或 "upload"
 
     Returns:
         str: 分类名称
@@ -26,7 +28,7 @@ def classify(
         return _match(error or "", error_keywords)
 
     if exit_code == 0:
-        return "执行成功"
+        return "传输成功" if mode == "upload" else "执行成功"
 
     if error:
         result = _match(error, error_keywords)
