@@ -153,7 +153,7 @@ def go_to_go(
                     tlog.warning(f"写入 output.txt 失败: {e}")
 
             # 打印到终端
-            print(formatted)
+            console.print(formatted)
 
             # 更新进度
             completed = len(results)

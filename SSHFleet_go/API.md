@@ -124,7 +124,7 @@ SSHFleet Go 是一个一次性批量 SSH 任务引擎，支持命令执行和文
 | `port` | int | SSH 端口 |
 | `user` | string | 登录用户名 |
 | `connect_success` | bool | SSH 连接是否成功 |
-| `exit_code` | int | 执行退出码：0=成功，-1=连接失败，其他=命令失败 |
+| `exit_code` | int | 执行退出码：0=成功，-1=连接失败，-10=其他错误，其他正值=命令失败 |
 | `output` | string | 执行输出内容（base64 编码，stdout+stderr 交错顺序） |
 | `connect_cost_time` | float | 连接耗时（秒） |
 | `exec_cost_time` | float | 命令执行耗时（秒） |
@@ -384,7 +384,7 @@ curl -X POST http://localhost:9090/api/v1/shutdown \
 | `UNAUTHORIZED` | 401 | 请求头缺少`X-SSH-Fleet-Key`或key无效 |
 | `INTERNAL_ERROR` | 500 | 内部错误（不支持流式响应） |
 | `ALREADY_USED` | 503 | 服务已被调用，仅支持一次请求 |
-| `LOG_PATH_INVALID` | - | 启动失败：日志路径不存在或不是目录，输出到 stderr，进程退出码 1 |
+| `LOG_PATH_INVALID` | - | 启动失败：日志路径不存在或不是目录，输出到 stderr |
 
 ---
 
@@ -420,7 +420,7 @@ internal/
 1. **output 字段为 base64 编码**，调用方需解码后使用
 2. **execute 的 output** 包含 stdout 和 stderr，按交错顺序拼接
 3. **upload 的 output** 包含统计信息和每个文件的上传状态
-4. **exit_code 含义不同**：execute 是命令退出码（0=成功，-1=连接失败），upload 是失败文件数（0=全部成功）
+4. **exit_code 含义不同**：execute 是命令退出码（0=成功，-1=连接失败，-10=其他错误），upload 是失败文件数（0=全部成功）
 5. **seq 用于关联请求与响应**，并发执行时结果顺序可能与请求顺序不同，seq 不可重复
 6. **error 只在 Go 层面出错时有值**（连接失败、Go 内部异常），命令执行失败看 exit_code
 7. **一次性执行**：每次启动只处理一次请求，第二个请求会被拒绝

@@ -22,30 +22,34 @@ GOOS=linux GOARCH=amd64 go build -o SSHFleet .
 ## 使用
 
 ```bash
-# 启动服务
-./SSHFleet_Go --port 9090 --log-path /var/log/sshtask
+# 启动服务（通过环境变量配置）
+SSH_FLEET_KEY=your-secret-key SSH_FLEET_PORT=9090 SSH_FLEET_LOG_PATH=/var/log/sshtask ./SSHFleet_Go
 
 # 执行命令
 curl -N -X POST http://localhost:9090/api/v1/execute \
   -H "Content-Type: application/json" \
+  -H "X-SSH-Fleet-Key: your-secret-key" \
   -d '{"command":"df -h","options":{"concurrency":10,"connect_timeout":10,"exec_timeout":60},"nodes":[{"seq":0,"ip":"10.0.0.1","port":22,"user":"root","password":"xxx"}]}'
 
 # 上传文件
 curl -N -X POST http://localhost:9090/api/v1/upload \
   -H "Content-Type: application/json" \
+  -H "X-SSH-Fleet-Key: your-secret-key" \
   -d '{"file_path":"/home/user/config.yaml","remote_path":"/etc/app/","options":{"concurrency":10,"connect_timeout":10,"exec_timeout":300,"sudo":false},"nodes":[{"seq":0,"ip":"10.0.0.1","port":22,"user":"root","password":"xxx"}]}'
 
 # 关闭服务
-curl -X POST http://localhost:9090/api/v1/shutdown
+curl -X POST http://localhost:9090/api/v1/shutdown \
+  -H "X-SSH-Fleet-Key: your-secret-key"
 ```
 
 ## API 文档
 
 API 接口规范见 `API.md`。
 
-## 命令行参数
+## 环境变量
 
-| 参数 | 说明 | 默认值 |
-|------|------|--------|
-| `--port` | 监听端口 | 9090 |
-| `--log-path` | 日志文件路径 | 空（输出到 stderr） |
+| 环境变量 | 说明 | 必填 |
+|---------|------|------|
+| `SSH_FLEET_KEY` | 进程认证 key，用于验证 HTTP 请求 | 是 |
+| `SSH_FLEET_PORT` | 监听端口 | 是 |
+| `SSH_FLEET_LOG_PATH` | 日志目录路径（空字符串输出到 stderr） | 否 |
