@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -298,13 +299,25 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 
 	// 创建 progress channel 并启动消费协程
 	progressChan := make(chan ssh.ProgressMsg, len(tasks)*10)
+
+	// 使用 mutex 保护 SSE 写入，防止并发写入导致分块编码错误
+	var sseMu sync.Mutex
+	writeSSESafe := func(data interface{}) error {
+		sseMu.Lock()
+		defer sseMu.Unlock()
+		if err := WriteSSE(w, data); err != nil {
+			return err
+		}
+		flusher.Flush()
+		return nil
+	}
+
 	go func() {
 		for msg := range progressChan {
-			if err := WriteSSE(w, msg); err != nil {
+			if err := writeSSESafe(msg); err != nil {
 				log.Zlog.Error("SSE progress 写入失败", zap.Error(err))
 				return
 			}
-			flusher.Flush()
 		}
 	}()
 
@@ -319,12 +332,11 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 	total, success, failed := len(tasks), 0, 0
 	connSuccess, connFailed := 0, 0
 	for result := range resultChan {
-		if err := WriteSSE(w, result); err != nil {
+		if err := writeSSESafe(result); err != nil {
 			log.Zlog.Error("SSE 写入失败", zap.Error(err))
 			close(progressChan)
 			return
 		}
-		flusher.Flush()
 		if result.ConnectSuccess {
 			connSuccess++
 		} else {
