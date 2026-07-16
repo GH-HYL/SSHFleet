@@ -312,7 +312,10 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 		return nil
 	}
 
+	var progressWg sync.WaitGroup
+	progressWg.Add(1)
 	go func() {
+		defer progressWg.Done()
 		for msg := range progressChan {
 			if err := writeSSESafe(msg); err != nil {
 				log.Zlog.Error("SSE progress 写入失败", zap.Error(err))
@@ -349,8 +352,9 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// 关闭 progress channel
+	// 关闭 progress channel 并等待消费完毕
 	close(progressChan)
+	progressWg.Wait()
 
 	log.Zlog.Info("连接统计", zap.Int("total", total), zap.Int("connSuccess", connSuccess), zap.Int("connFailed", connFailed))
 
