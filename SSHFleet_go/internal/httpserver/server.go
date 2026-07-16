@@ -134,7 +134,11 @@ func handleExecute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	executor := core.NewBatchExecutor(req.Options.Concurrency, len(tasks), r.Context())
+	// 使用独立的 context，不依赖 HTTP 请求（防止客户端断开导致所有任务终止）
+	execCtx, execCancel := context.WithCancel(context.Background())
+	defer execCancel()
+
+	executor := core.NewBatchExecutor(req.Options.Concurrency, len(tasks), execCtx)
 	resultChan := executor.Run(tasks)
 
 	total, success, failed := len(tasks), 0, 0
@@ -304,8 +308,12 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
+	// 使用独立的 context，不依赖 HTTP 请求（防止客户端断开导致所有任务终止）
+	uploadCtx, uploadCancel := context.WithCancel(context.Background())
+	defer uploadCancel()
+
 	// 执行上传
-	executor := core.NewBatchUploadExecutor(req.Options.Concurrency, len(tasks), r.Context(), progressChan)
+	executor := core.NewBatchUploadExecutor(req.Options.Concurrency, len(tasks), uploadCtx, progressChan)
 	resultChan := executor.Run(tasks)
 
 	total, success, failed := len(tasks), 0, 0
