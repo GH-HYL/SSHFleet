@@ -1,18 +1,20 @@
 # 忽略所有
 *
+
+# Git 配置
 !.gitignore
 
-!SSHFleet_go/
-!SSHFleet_go/**
-SSHFleet_go/vendor/
-SSHFleet_go/vendor/**
+# 只跟踪源代码模块
+!modules/
+!modules/**
 
-!SSHFleet_py/
-!SSHFleet_py/**
-SSHFleet_py/historys/**
+# Go 模块
+modules/SSHFleet_go/vendor/
+modules/SSHFleet_go/vendor/**
 
-
-
-
-SSHFleet_py/src/go/**
+# Python 模块
+modules/SSHFleet_py/__pycache__/
+modules/SSHFleet_py/**/__pycache__/
 *.pyc
+modules/SSHFleet_py/historys/
+modules/SSHFleet_py/src/go/
