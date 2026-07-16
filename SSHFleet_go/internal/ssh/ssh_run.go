@@ -172,13 +172,22 @@ func (c *SSHClient) ExecuteCommand(command string, ctx context.Context, ip strin
 	session.Stdout = outputBuffer
 	session.Stderr = outputBuffer
 
+	log.Zlog.Info("SSH执行前状态", zap.String("ip", ip),
+		zap.Any("stdoutType", fmt.Sprintf("%T", session.Stdout)),
+		zap.Any("stderrType", fmt.Sprintf("%T", session.Stderr)),
+		zap.Int("bufferLen", outputBuffer.Len()))
+
 	// 执行命令（带超时和中断）
 	err = c.runWithTimeoutAndCancel(session, command, ctx)
 
 	result.ExecCostTime = time.Since(execStartTime).Seconds()
 
+	// 调试：记录原始 buffer 内容
+	rawBytes := outputBuffer.Bytes()
+	log.Zlog.Info("SSH输出原始数据", zap.String("ip", ip), zap.Int("bufferLen", len(rawBytes)), zap.ByteString("raw", rawBytes))
+
 	// base64 编码输出
-	result.Output = base64.StdEncoding.EncodeToString(outputBuffer.Bytes())
+	result.Output = base64.StdEncoding.EncodeToString(rawBytes)
 
 	// 处理执行结果
 	if err != nil {
