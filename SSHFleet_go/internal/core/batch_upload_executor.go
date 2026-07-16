@@ -17,6 +17,7 @@ type BatchUploadExecutor struct {
 	totalTasks     int
 	ctx            context.Context
 	cancel         func()
+	progressChan   chan<- ssh.ProgressMsg
 }
 
 // UploadTask 单个上传任务
@@ -29,7 +30,7 @@ type UploadTask struct {
 }
 
 // NewBatchUploadExecutor 创建上传执行器
-func NewBatchUploadExecutor(concurrency int, totalTasks int, ctx context.Context) *BatchUploadExecutor {
+func NewBatchUploadExecutor(concurrency int, totalTasks int, ctx context.Context, progressChan chan<- ssh.ProgressMsg) *BatchUploadExecutor {
 	ctx, cancel := context.WithCancel(ctx)
 	if concurrency <= 0 || concurrency > totalTasks {
 		concurrency = totalTasks
@@ -39,6 +40,7 @@ func NewBatchUploadExecutor(concurrency int, totalTasks int, ctx context.Context
 		totalTasks:     totalTasks,
 		ctx:            ctx,
 		cancel:         cancel,
+		progressChan:   progressChan,
 	}
 }
 
@@ -95,7 +97,10 @@ func (e *BatchUploadExecutor) worker(id int, taskChan <-chan *UploadTask, result
 			log.Zlog.Debug("上传worker - 开始执行", zap.String("ip", task.Config.IP), zap.Int("workerId", id))
 
 			client := ssh.NewSSHClient(task.Config)
-			result, err := client.UploadFiles(task.FileItems, task.RemotePath, task.UseSudo, e.ctx, task.Config.IP)
+			onProgress := func(msg ssh.ProgressMsg) {
+				e.progressChan <- msg
+			}
+			result, err := client.UploadFiles(task.FileItems, task.RemotePath, task.UseSudo, e.ctx, task.Seq, task.Config.IP, onProgress)
 			if err != nil {
 				log.Zlog.Error("上传worker - 出现异常", zap.String("ip", task.Config.IP), zap.Int("workerId", id), zap.Error(err))
 			}

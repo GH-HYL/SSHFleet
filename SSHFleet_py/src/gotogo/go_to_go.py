@@ -9,13 +9,56 @@ from typing import Dict, List, Optional
 
 from rich.console import Console
 from rich.live import Live
-from rich.progress import Progress, BarColumn, TextColumn, TimeElapsedColumn
+from rich.progress import (
+    Progress,
+    BarColumn,
+    TextColumn,
+    TimeElapsedColumn,
+    TransferSpeedColumn,
+    DownloadColumn,
+)
+from rich.table import Table
+from rich.text import Text
 
 from src.gotogo import builder, caller, parser
 from src.yaml import SSHFleetConfig
 from src.utils import tlog
 
 console = Console()
+
+# 可配置变量：最大显示节点数
+MAX_VISIBLE_NODES = 20
+
+
+def _format_speed(bytes_per_sec: float) -> str:
+    """格式化速度显示"""
+    if bytes_per_sec >= 1024 * 1024:
+        return f"{bytes_per_sec / 1024 / 1024:.1f}MB/s"
+    elif bytes_per_sec >= 1024:
+        return f"{bytes_per_sec / 1024:.1f}KB/s"
+    return f"{bytes_per_sec:.0f}B/s"
+
+
+class SpeedTracker:
+    """聚合速度计算器（滑动窗口）"""
+
+    def __init__(self, window_size: float = 2.0):
+        self.window_size = window_size
+        self.window: List[tuple] = []  # [(timestamp, bytes)]
+
+    def update(self, total_bytes: int) -> float:
+        """更新并返回当前速度（bytes/sec）"""
+        now = time.time()
+        self.window.append((now, total_bytes))
+        # 移除超过窗口的旧数据
+        self.window = [(t, b) for t, b in self.window if now - t <= self.window_size]
+        # 计算窗口内总字节差
+        if len(self.window) >= 2:
+            bytes_delta = self.window[-1][1] - self.window[0][1]
+            time_delta = self.window[-1][0] - self.window[0][0]
+            if time_delta > 0:
+                return bytes_delta / time_delta
+        return 0
 
 
 def _format_result(result: Dict, args: argparse.Namespace = None) -> str:
@@ -130,30 +173,87 @@ def go_to_go(
     health_thread = threading.Thread(target=health_checker, daemon=True)
     health_thread.start()
 
-    # 6. 创建进度条
-    progress_text = "上传进度" if args.u else "执行进度"
-    node_progress = Progress(
-        TextColumn(f"    {progress_text}"),
-        BarColumn(bar_width=40, complete_style="green", finished_style="blue"),
-        TextColumn("{task.fields[percent_display]}"),
-        "[green]{task.completed}/{task.total}",
-        TimeElapsedColumn(),
-    )
-    node_task = node_progress.add_task("", total=total_nodes, percent_display="  0%")
+    # 分界线
+    separator = "─" * 50
+
+    # 6. 创建进度条（仅上传模式使用双进度条）
+    if args.u:
+        # 统一前缀宽度
+        prefix = "    "
+
+        # 总字节进度
+        total_progress = Progress(
+            TextColumn(f"{prefix}上传进度  "),
+            BarColumn(bar_width=40, complete_style="green", finished_style="blue"),
+            "[progress.percentage]{task.percentage:>3.0f}%",
+            TextColumn("  {task.fields[speed]}"),
+            DownloadColumn(),
+        )
+        total_task = total_progress.add_task("", total=1, speed="0B/s")
+
+        # 节点完成进度
+        node_progress = Progress(
+            TextColumn(f"{prefix}节点进度  "),
+            BarColumn(bar_width=40, complete_style="green", finished_style="blue"),
+            "[progress.percentage]{task.percentage:>3.0f}%",
+            "[green]{task.completed}/{task.total}",
+            TimeElapsedColumn(),
+        )
+        node_task = node_progress.add_task("", total=total_nodes)
+
+        # 单节点进度（动态增删）
+        node_bars = Progress(
+            TextColumn(f"{prefix}"),
+            BarColumn(bar_width=40, complete_style="cyan", finished_style="blue"),
+            "[progress.percentage]{task.percentage:>3.0f}%",
+            TransferSpeedColumn(),
+            TextColumn("  {task.fields[ip]}  Total:{task.fields[total_files]} Succ:{task.fields[success_files]} Fail:{task.fields[fail_files]}"),
+        )
+
+        # 布局
+        progress_table = Table.grid()
+        progress_table.add_row(total_progress)
+        progress_table.add_row(node_progress)
+        progress_table.add_row(Text(f"{prefix}{separator}"))
+        progress_table.add_row(node_bars)
+
+        # 速度追踪器
+        speed_tracker = SpeedTracker()
+    else:
+        # 命令模式：简单进度条
+        node_progress = Progress(
+            TextColumn("    执行进度"),
+            BarColumn(bar_width=40, complete_style="green", finished_style="blue"),
+            TextColumn("{task.fields[percent_display]}"),
+            "[green]{task.completed}/{task.total}",
+            TimeElapsedColumn(),
+        )
+        node_task = node_progress.add_task("", total=total_nodes, percent_display="  0%")
+        progress_table = node_progress
 
     # 7. 发送请求并接收 SSE 流
     results = []
     total_timeout = (args.T + args.t) * 1.5
-    live = Live(node_progress, console=console, refresh_per_second=20)
-    live.start()
 
-    # 打开 output.txt 文件用于写入
+    # 上传模式的状态
+    active_bars = {}  # {seq: task_id}
+    node_approximate = {}  # {seq: uploaded_bytes}
+    node_total_bytes = {}  # {seq: total_bytes}
+    completed_nodes = 0
+    total_uploaded = 0
+    global_total_bytes = 0
+
+    # 打开 output.txt 文件（仅命令模式写入）
     output_file_path = os.path.join(exec_log_dir, config.paths.files.output)
     output_file = None
-    try:
-        output_file = open(output_file_path, "w", encoding="utf-8")
-    except Exception as e:
-        tlog.warning(f"无法创建 output.txt 文件: {e}")
+    if not args.u:
+        try:
+            output_file = open(output_file_path, "w", encoding="utf-8")
+        except Exception as e:
+            tlog.warning(f"无法创建 output.txt 文件: {e}")
+
+    live = Live(progress_table, console=console, refresh_per_second=20)
+    live.start()
 
     try:
         for sse_data in caller.call_go(request_body, port, process_key, timeout=total_timeout, url_path=url_path):
@@ -162,37 +262,146 @@ def go_to_go(
                 tlog.error("Go 进程已崩溃，终止接收")
                 break
 
-            result = parser.parse_result(sse_data, error_keywords, mode=exec_mode)
-            results.append(result)
+            # 判断消息类型
+            msg_type = sse_data.get("type")
 
-            # 格式化输出
-            formatted = _format_result(result, args)
+            if msg_type == "init" and args.u:
+                # 初始化全局总量
+                total_nodes_init = sse_data.get("total_nodes", total_nodes)
+                total_bytes_per_node = sse_data.get("total_bytes_per_node", 0)
+                global_total_bytes = total_nodes_init * total_bytes_per_node
+                total_progress.update(total_task, total=global_total_bytes)
 
-            # 写入文件
-            if output_file:
-                try:
-                    output_file.write(formatted + "\n")
-                    output_file.flush()
-                except Exception as e:
-                    tlog.warning(f"写入 output.txt 失败: {e}")
+            elif msg_type == "progress" and args.u:
+                seq = sse_data["seq"]
+                uploaded = sse_data.get("uploaded_bytes", 0)
+                total_bytes = sse_data.get("total_bytes")
+                success_files = sse_data.get("success_files")
+                failed_files = sse_data.get("failed_files")
 
-            # 打印到终端
-            console.print(formatted)
+                # 排队时也要记录 total_bytes
+                if total_bytes is not None:
+                    node_total_bytes[seq] = total_bytes
 
-            # 更新进度
-            completed = len(results)
-            percent_int = int(completed / total_nodes * 100)
-            node_progress.update(
-                node_task,
-                description=f"执行进度 [bright_yellow]已完成: [bright_black]{completed}/{total_nodes}",
-                completed=completed,
-                percent_display=f"{percent_int:>3}%",
-            )
+                if seq not in active_bars:
+                    # 排队：满 N 个则等待
+                    if len(active_bars) >= MAX_VISIBLE_NODES:
+                        continue
+                    # 初始化节点进度条
+                    task_id = node_bars.add_task("",
+                        ip=sse_data.get("ip", "?"),
+                        total_files=str(sse_data.get("total_files", "?")),
+                        success_files="0",
+                        fail_files="0",
+                        total=total_bytes or node_total_bytes.get(seq, 1),
+                    )
+                    active_bars[seq] = task_id
+                    node_approximate[seq] = 0
+
+                if total_bytes is not None:
+                    # 首次：更新 total
+                    node_bars.update(active_bars[seq], total=total_bytes)
+
+                # 更新 success_files/failed_files
+                if success_files is not None:
+                    node_bars.update(active_bars[seq],
+                        success_files=str(success_files),
+                        fail_files=str(failed_files or 0))
+
+                # 补偿：用精确值替换近似值
+                if uploaded > 0:
+                    old = node_approximate.get(seq, 0)
+                    delta = uploaded - old
+                    total_uploaded += delta
+                    node_approximate[seq] = uploaded
+
+                # 更新进度条
+                speed = speed_tracker.update(total_uploaded)
+                total_progress.update(total_task,
+                    completed=total_uploaded,
+                    speed=_format_speed(speed))
+                if seq in active_bars:
+                    node_bars.update(active_bars[seq], completed=uploaded)
+
+            elif msg_type == "result":
+                seq = sse_data.get("seq")
+
+                if args.u and seq is not None:
+                    # 补偿：用精确值校正
+                    old_approx = node_approximate.get(seq, 0)
+                    exact_bytes = sse_data.get("total_bytes", old_approx)
+                    total_uploaded = total_uploaded - old_approx + exact_bytes
+
+                    # 更新总进度
+                    speed = speed_tracker.update(total_uploaded)
+                    total_progress.update(total_task,
+                        completed=total_uploaded,
+                        speed=_format_speed(speed))
+
+                    # 移除节点进度条
+                    if seq in active_bars:
+                        # 成功节点直接 100%
+                        if sse_data.get("exit_code") == 0:
+                            node_bars.update(active_bars[seq],
+                                completed=node_total_bytes.get(seq, old_approx))
+                        node_bars.remove_task(active_bars[seq])
+                        del active_bars[seq]
+                    for d in [node_approximate, node_total_bytes]:
+                        d.pop(seq, None)
+
+                    completed_nodes += 1
+                    node_progress.update(node_task, completed=completed_nodes)
+
+                # 解析结果（兼容旧逻辑）
+                result = parser.parse_result(sse_data, error_keywords, mode=exec_mode)
+                results.append(result)
+
+            elif msg_type == "done":
+                # 处理完成标记
+                if not args.u:
+                    # 命令模式：更新进度
+                    done_total = sse_data.get("total", total_nodes)
+                    done_success = sse_data.get("success", 0)
+                    done_failed = sse_data.get("failed", 0)
+                    node_progress.update(node_task, completed=done_total)
+                break
+
+            else:
+                # 其他消息（兼容旧的 result 格式）
+                result = parser.parse_result(sse_data, error_keywords, mode=exec_mode)
+                results.append(result)
+
+                if not args.u:
+                    # 命令模式：格式化输出
+                    formatted = _format_result(result, args)
+
+                    # 写入文件
+                    if output_file:
+                        try:
+                            output_file.write(formatted + "\n")
+                            output_file.flush()
+                        except Exception as e:
+                            tlog.warning(f"写入 output.txt 失败: {e}")
+
+                    # 打印到终端
+                    console.print(formatted)
+
+                    # 更新进度
+                    completed = len(results)
+                    percent_int = int(completed / total_nodes * 100)
+                    node_progress.update(
+                        node_task,
+                        description=f"执行进度 [bright_yellow]已完成: [bright_black]{completed}/{total_nodes}",
+                        completed=completed,
+                        percent_display=f"{percent_int:>3}%",
+                    )
+
     finally:
         # 停止健康检查线程
         health_stop.set()
         health_thread.join(timeout=2)
         live.stop()
+        # 关闭 output.txt
         if output_file:
             output_file.close()
 
