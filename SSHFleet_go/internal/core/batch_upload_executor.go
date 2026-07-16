@@ -94,22 +94,20 @@ func (e *BatchUploadExecutor) worker(id int, taskChan <-chan *UploadTask, result
 				return
 			}
 
-			log.Zlog.Debug("上传worker - 开始执行", zap.String("ip", task.Config.IP), zap.Int("workerId", id))
+			log.Zlog.Debug("上传worker - 开始", zap.String("ip", task.Config.IP))
 
 			client := ssh.NewSSHClient(task.Config)
 			onProgress := func(msg ssh.ProgressMsg) {
 				e.progressChan <- msg
 			}
 			result, err := client.UploadFiles(task.FileItems, task.RemotePath, task.UseSudo, e.ctx, task.Seq, task.Config.IP, onProgress)
-			if err != nil {
-				log.Zlog.Error("上传worker - 出现异常", zap.String("ip", task.Config.IP), zap.Int("workerId", id), zap.Error(err))
+			if err != nil && err.Error() != "context canceled" {
+				log.Zlog.Error("上传worker - 异常", zap.String("ip", task.Config.IP), zap.Error(err))
 			}
 
 			result.Seq = task.Seq
 
 			e.safeSendResult(resultChan, result)
-
-			log.Zlog.Info("上传worker - 执行结束", zap.String("ip", task.Config.IP), zap.Int("workerId", id), zap.Int("exitCode", result.ExitCode))
 		}
 	}
 }
