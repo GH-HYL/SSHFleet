@@ -492,12 +492,12 @@ func (c *SSHClient) sftpUploadFile(sftpClient *sftp.Client, localPath, remoteFil
 
 // sftpUploadWithSudo 通过临时目录 + sudo mv 上传文件
 func (c *SSHClient) sftpUploadWithSudo(sftpClient *sftp.Client, localPath, fileName, remotePath string, perm os.FileMode, seq int, ip string, onProgress func(ProgressMsg)) error {
-	// 创建临时目录
+	// 创建临时目录（使用 SSH + sudo，因为 SFTP 没有 sudo 权限）
 	tmpDir := fmt.Sprintf("/tmp/.SSHFleet_tmp/%s", randomHex())
-	if err := sftpClient.MkdirAll(tmpDir); err != nil {
+	if err := c.runCommand(fmt.Sprintf("sudo mkdir -p '%s'", tmpDir)); err != nil {
 		return fmt.Errorf("创建临时目录失败: %w", err)
 	}
-	log.Zlog.Info("[上传] 创建临时目录", zap.String("ip", ip), zap.String("tmpDir", tmpDir))
+	log.Zlog.Debug("[上传] 创建临时目录", zap.String("ip", ip), zap.String("tmpDir", tmpDir))
 
 	// 清理函数
 	cleanup := func() {
