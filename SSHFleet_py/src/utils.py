@@ -304,7 +304,7 @@ def build_final_command(args: argparse.Namespace) -> str:
     if args.c:
         safe_command = shlex.quote(args.c)
         if not args.nobash:
-            components.append(f"bash -c {safe_command}")
+            components.append(f"bash --norc --noprofile -c {safe_command}")
         else:
             components.append(args.c)
             

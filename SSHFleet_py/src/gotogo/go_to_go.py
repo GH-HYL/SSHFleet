@@ -356,6 +356,23 @@ def go_to_go(
                 result = parser.parse_result(sse_data, error_keywords, mode=exec_mode)
                 results.append(result)
 
+                if not args.u:
+                    # 命令模式：格式化输出
+                    formatted = _format_result(result, args)
+
+                    # 打印到终端
+                    console.print(formatted)
+
+                    # 更新进度
+                    completed = len(results)
+                    percent_int = int(completed / total_nodes * 100)
+                    node_progress.update(
+                        node_task,
+                        description=f"执行进度 [bright_yellow]已完成: [bright_black]{completed}/{total_nodes}",
+                        completed=completed,
+                        percent_display=f"{percent_int:>3}%",
+                    )
+
             elif msg_type == "done":
                 # 处理完成标记
                 if not args.u:

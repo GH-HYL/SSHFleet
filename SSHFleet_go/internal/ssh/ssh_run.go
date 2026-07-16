@@ -167,7 +167,7 @@ func (c *SSHClient) ExecuteCommand(command string, ctx context.Context, ip strin
 
 	execStartTime := time.Now()
 
-	// stdout + stderr 合并写入同一个 buffer
+	// stdout + stderr 合并写入同一个 buffer（保持顺序输出）
 	outputBuffer := new(bytes.Buffer)
 	session.Stdout = outputBuffer
 	session.Stderr = outputBuffer
