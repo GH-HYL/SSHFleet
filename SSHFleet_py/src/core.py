@@ -25,6 +25,62 @@ from src.yaml import SSHFleetConfig
 from src.utils import tlog
 
 
+def validate_password_file(file_path: str) -> None:
+    """
+    验证密码文件的有效性
+
+    Args:
+        file_path: 密码文件路径
+
+    Raises:
+        SystemExit: 验证失败时退出程序
+    """
+    # 1. 检查文件是否存在
+    if not os.path.exists(file_path):
+        utils.print_error_information_and_exit(
+            "validate_password_file",
+            f"密码文件不存在：{file_path}"
+        )
+
+    # 2. 检查文件是否可读
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            content = f.read().strip()
+    except PermissionError:
+        utils.print_error_information_and_exit(
+            "validate_password_file",
+            f"密码文件无法读取：{file_path}"
+        )
+    except Exception as e:
+        utils.print_error_information_and_exit(
+            "validate_password_file",
+            f"读取密码文件失败：{file_path}\n异常信息：{e}"
+        )
+
+    # 3. 检查文件内容是否为空
+    if not content:
+        utils.print_error_information_and_exit(
+            "validate_password_file",
+            f"密码文件内容为空：{file_path}"
+        )
+
+    # 4. 检查是否为有效的 Base64 编码
+    try:
+        decoded = base64.b64decode(content)
+    except Exception as e:
+        utils.print_error_information_and_exit(
+            "validate_password_file",
+            f"密码文件内容不是有效的 Base64 编码：{file_path}\n异常信息：{e}"
+        )
+
+    # 5. 检查解码后是否为空
+    if not decoded:
+        utils.print_error_information_and_exit(
+            "validate_password_file",
+            f"密码文件解码后内容为空：{file_path}"
+        )
+
+
 @utils.error_and_exit_handling_decorator("parse_args", "参数解析失败")
 def parse_args(config: SSHFleetConfig) -> argparse.Namespace:
     """
@@ -148,8 +204,8 @@ def read_nodes_infos(csv_path: str, config: SSHFleetConfig) -> List[Dict[str, st
         List[Dict[str, str]]: 处理后的节点信息列表，每个节点是一个字典，包含ip、port、user和password字段
     """
 
-    # debug=true，将不再检查重复ip
-    debug = False
+    # debug=True，跳过IP重复检查
+    debug = True
 
     # 初始化存储字典
     csv_infos = []  # 存储从CSV读取的原始内容
@@ -291,7 +347,9 @@ def read_nodes_infos(csv_path: str, config: SSHFleetConfig) -> List[Dict[str, st
         elif (
             config.account.password and config.account.password != "None"
         ):  # 使用配置的默认值
-            # 配置文件中的密码是进过base64编码的，需要解码
+            # 验证密码文件有效性
+            validate_password_file(config.account.password)
+            # 配置文件中的密码是经过base64编码的，需要解码
             password = base64.b64decode(config.account.password).decode("utf-8")
         elif password_use_input:  # 使用之前用户输入的值
             password = password_input_value

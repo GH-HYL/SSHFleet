@@ -3,9 +3,7 @@
 # 该文件负责读取配置文件，包括资产文件、输出文件、日志文件等
 
 # 系统或第三方模块
-import base64
 import os
-import sys
 
 import yaml
 from pydantic import BaseModel
@@ -94,25 +92,9 @@ def load_config(config_path: str) -> SSHFleetConfig:
     with open(config_path, 'r', encoding='utf-8') as f:
         config_dict = yaml.safe_load(f)
 
-    # 读取密码文件
+    # 读取密码文件路径（不验证）
     password_path = config_dict["account"]["password"]
     if password_path:
-        password_path = os.path.expanduser(password_path)
-        if not os.path.exists(password_path):
-            raise FileNotFoundError(f"密码文件 {password_path} 不存在")
-
-        with open(password_path, "r", encoding="utf-8") as f:
-            password_b64 = f.read().strip()
-
-        # 验证 base64 格式
-        try:
-            base64.b64decode(password_b64)
-        except Exception as e:
-            print(
-                f"\033[91m[ERROR]\033[0m\033[93m [function:load_config]\033[0m 密码文件内容不是有效的base64编码\n异常类型：\n{type(e)}\n异常信息：\n{e}"
-            )
-            sys.exit(1)
-
-        config_dict["account"]["password"] = password_b64
+        config_dict["account"]["password"] = os.path.expanduser(password_path)
 
     return SSHFleetConfig(**config_dict)
