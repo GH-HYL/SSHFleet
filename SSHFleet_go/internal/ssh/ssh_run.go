@@ -104,7 +104,7 @@ func NewSSHClient(config *SSHConfig) *SSHClient {
 // Connect 建立SSH连接
 func (c *SSHClient) Connect() error {
 	addr := fmt.Sprintf("%s:%d", c.config.IP, c.config.Port)
-	log.Zlog.Info("SSH连接尝试", zap.String("user", c.config.User), zap.String("addr", addr))
+	log.Zlog.Debug("SSH连接", zap.String("addr", addr))
 
 	sshClientConfig := &ssh.ClientConfig{
 		User:            c.config.User,
@@ -281,7 +281,7 @@ func (c *SSHClient) UploadFiles(
 	// 2. 清理残留临时目录（仅 sudo 模式）
 	if useSudo {
 		c.runCommand("sudo rm -rf /tmp/.SSHFleet_tmp/")
-		log.Zlog.Info("[上传] 清理残留临时目录", zap.String("ip", ip))
+		log.Zlog.Debug("[上传] 清理残留临时目录", zap.String("ip", ip))
 	}
 
 	// 3. 创建 SFTP 客户端
@@ -293,7 +293,7 @@ func (c *SSHClient) UploadFiles(
 		return result, err
 	}
 	defer func() { _ = sftpClient.Close() }()
-	log.Zlog.Info("[上传] SFTP 客户端创建成功", zap.String("ip", ip))
+	log.Zlog.Debug("[上传] SFTP 客户端创建成功", zap.String("ip", ip))
 
 	// 4. 检查远程目标路径
 	fi, err := sftpClient.Stat(remotePath)
@@ -309,7 +309,7 @@ func (c *SSHClient) UploadFiles(
 		log.Zlog.Error("[上传] 远程目标路径不是目录", zap.String("ip", ip), zap.String("remotePath", remotePath))
 		return result, fmt.Errorf("%s", errMsg)
 	}
-	log.Zlog.Info("[上传] 远程目标路径检查通过", zap.String("ip", ip), zap.String("remotePath", remotePath))
+	log.Zlog.Debug("[上传] 远程目标路径检查通过", zap.String("ip", ip), zap.String("remotePath", remotePath))
 
 	// 5. 判断 sudo 是否实际生效
 	effectiveSudo := useSudo && c.config.User != "root"
@@ -342,9 +342,8 @@ func (c *SSHClient) UploadFiles(
 	for _, item := range fileItems {
 		select {
 		case <-ctx.Done():
-			errMsg := "上传超时被取消"
+			errMsg := "上传被取消"
 			result.Error = &errMsg
-			log.Zlog.Error("[上传] 上传超时被取消", zap.String("ip", ip))
 			return result, ctx.Err()
 		default:
 		}
@@ -420,7 +419,7 @@ func (c *SSHClient) UploadFiles(
 		} else {
 			successFiles++
 			outputLines = append(outputLines, fmt.Sprintf("%s: 上传成功 (%.3fs)", item.FileName, costTime))
-			log.Zlog.Info("[上传] 文件上传成功", zap.String("ip", ip), zap.String("fileName", item.FileName), zap.Float64("costTime", costTime))
+			log.Zlog.Debug("[上传] 文件上传成功", zap.String("ip", ip), zap.String("fileName", item.FileName), zap.Float64("costTime", costTime))
 		}
 
 		// 文件完成：发送进度更新
