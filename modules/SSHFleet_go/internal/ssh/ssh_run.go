@@ -295,7 +295,23 @@ func (c *SSHClient) UploadFiles(
 	defer func() { _ = sftpClient.Close() }()
 	log.Zlog.Debug("[上传] SFTP 客户端创建成功", zap.String("ip", ip))
 
-	// 4. 检查远程目标路径
+	// 4. 计算总字节数并发送首次进度（必须在路径检查之前，确保 Python 能创建进度条）
+	var totalBytes int64
+	for _, item := range fileItems {
+		totalBytes += item.FileSize
+	}
+	if onProgress != nil {
+		log.Zlog.Info("[上传] 发送首次进度", zap.Int("seq", seq), zap.Int64("totalBytes", totalBytes), zap.Int("totalFiles", len(fileItems)))
+		onProgress(ProgressMsg{
+			Type:       "progress",
+			Seq:        seq,
+			IP:         ip,
+			TotalBytes: totalBytes,
+			TotalFiles: len(fileItems),
+		})
+	}
+
+	// 5. 检查远程目标路径
 	fi, err := sftpClient.Stat(remotePath)
 	if err != nil {
 		errMsg := fmt.Sprintf("远程目标路径不存在: %s", remotePath)
@@ -311,25 +327,10 @@ func (c *SSHClient) UploadFiles(
 	}
 	log.Zlog.Debug("[上传] 远程目标路径检查通过", zap.String("ip", ip), zap.String("remotePath", remotePath))
 
-	// 5. 判断 sudo 是否实际生效
+	// 6. 判断 sudo 是否实际生效
 	effectiveSudo := useSudo && c.config.User != "root"
 	if useSudo && c.config.User == "root" {
 		log.Zlog.Info("[上传] 用户已是 root，跳过 sudo", zap.String("ip", ip))
-	}
-
-	// 6. 计算总字节数并发送首次进度
-	var totalBytes int64
-	for _, item := range fileItems {
-		totalBytes += item.FileSize
-	}
-	if onProgress != nil {
-		onProgress(ProgressMsg{
-			Type:       "progress",
-			Seq:        seq,
-			IP:         ip,
-			TotalBytes: totalBytes,
-			TotalFiles: len(fileItems),
-		})
 	}
 
 	// 7. 逐文件处理
@@ -424,13 +425,18 @@ func (c *SSHClient) UploadFiles(
 
 		// 文件完成：发送进度更新
 		if onProgress != nil {
-			onProgress(ProgressMsg{
-				Type:         "progress",
-				Seq:          seq,
-				IP:           ip,
-				SuccessFiles: successFiles,
-				FailedFiles:  failedFiles,
-			})
+			msg := ProgressMsg{
+				Type:          "progress",
+				Seq:           seq,
+				IP:            ip,
+				UploadedBytes: totalBytes,
+				TotalBytes:    totalBytes,
+				TotalFiles:    totalFiles,
+				SuccessFiles:  successFiles,
+				FailedFiles:   failedFiles,
+			}
+			log.Zlog.Info("[上传] 发送进度", zap.Int("seq", seq), zap.Int64("uploadedBytes", totalBytes), zap.Int("success", successFiles), zap.Int("failed", failedFiles))
+			onProgress(msg)
 		}
 	}
 
