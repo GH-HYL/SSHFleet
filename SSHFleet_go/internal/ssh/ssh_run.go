@@ -34,6 +34,18 @@ const (
 	progressThrottle = 500 * time.Millisecond
 )
 
+// threadSafeWriter 带锁的写入器，确保并发写入安全且保持顺序
+type threadSafeWriter struct {
+	buf *bytes.Buffer
+	mu  sync.Mutex
+}
+
+func (w *threadSafeWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.buf.Write(p)
+}
+
 // progressWriter 带进度回调的写入器
 type progressWriter struct {
 	dst          io.Writer
@@ -167,27 +179,23 @@ func (c *SSHClient) ExecuteCommand(command string, ctx context.Context, ip strin
 
 	execStartTime := time.Now()
 
-	// stdout + stderr 合并写入同一个 buffer（保持顺序输出）
-	outputBuffer := new(bytes.Buffer)
-	session.Stdout = outputBuffer
-	session.Stderr = outputBuffer
-
-	log.Zlog.Info("SSH执行前状态", zap.String("ip", ip),
-		zap.Any("stdoutType", fmt.Sprintf("%T", session.Stdout)),
-		zap.Any("stderrType", fmt.Sprintf("%T", session.Stderr)),
-		zap.Int("bufferLen", outputBuffer.Len()))
+	// 使用带锁的写入器，确保 stdout 和 stderr 并发写入安全且保持顺序
+	outputWriter := &threadSafeWriter{buf: new(bytes.Buffer)}
+	session.Stdout = outputWriter
+	session.Stderr = outputWriter
 
 	// 执行命令（带超时和中断）
 	err = c.runWithTimeoutAndCancel(session, command, ctx)
 
 	result.ExecCostTime = time.Since(execStartTime).Seconds()
 
-	// 调试：记录原始 buffer 内容
-	rawBytes := outputBuffer.Bytes()
-	log.Zlog.Info("SSH输出原始数据", zap.String("ip", ip), zap.Int("bufferLen", len(rawBytes)), zap.ByteString("raw", rawBytes))
-
 	// base64 编码输出
+	rawBytes := outputWriter.buf.Bytes()
 	result.Output = base64.StdEncoding.EncodeToString(rawBytes)
+
+	if len(rawBytes) > 0 {
+		log.Zlog.Info("节点输出", zap.String("ip", ip), zap.String("output", strings.TrimSpace(string(rawBytes))))
+	}
 
 	// 处理执行结果
 	if err != nil {
