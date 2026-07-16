@@ -10,6 +10,7 @@ import (
 	"math/rand"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/pkg/sftp"
@@ -30,7 +31,48 @@ type SSHClient struct {
 const (
 	maxFileRetries = 2
 	retryInterval  = 2 * time.Second
+	progressThrottle = 500 * time.Millisecond
 )
+
+// progressWriter 带进度回调的写入器
+type progressWriter struct {
+	dst          io.Writer
+	uploaded     int64
+	lastCallback time.Time
+	seq          int
+	ip           string
+	callback     func(ProgressMsg)
+	mu           sync.Mutex
+}
+
+func (pw *progressWriter) Write(p []byte) (int, error) {
+	n, err := pw.dst.Write(p)
+	pw.mu.Lock()
+	pw.uploaded += int64(n)
+	if time.Since(pw.lastCallback) >= progressThrottle {
+		pw.lastCallback = time.Now()
+		pw.callback(ProgressMsg{
+			Type:          "progress",
+			Seq:           pw.seq,
+			IP:            pw.ip,
+			UploadedBytes: pw.uploaded,
+		})
+	}
+	pw.mu.Unlock()
+	return n, err
+}
+
+// ProgressMsg SSE 进度消息
+type ProgressMsg struct {
+	Type          string `json:"type"`
+	Seq           int    `json:"seq"`
+	IP            string `json:"ip"`
+	UploadedBytes int64  `json:"uploaded_bytes,omitempty"`
+	TotalBytes    int64  `json:"total_bytes,omitempty"`
+	TotalFiles    int    `json:"total_files,omitempty"`
+	SuccessFiles  int    `json:"success_files,omitempty"`
+	FailedFiles   int    `json:"failed_files,omitempty"`
+}
 
 // SSHConfig 存储SSH连接配置
 type SSHConfig struct {
@@ -89,6 +131,7 @@ func (c *SSHClient) Connect() error {
 // ExecuteCommand 执行命令（带上下文中断支持）
 func (c *SSHClient) ExecuteCommand(command string, ctx context.Context, ip string) (*ExecResult, error) {
 	result := &ExecResult{
+		Type: "result",
 		IP:   c.config.IP,
 		Port: c.config.Port,
 		User: c.config.User,
@@ -189,9 +232,12 @@ func (c *SSHClient) UploadFiles(
 	remotePath string,
 	useSudo bool,
 	ctx context.Context,
+	seq int,
 	ip string,
+	onProgress func(ProgressMsg),
 ) (*UploadResult, error) {
 	result := &UploadResult{
+		Type:     "result",
 		IP:       c.config.IP,
 		Port:     c.config.Port,
 		User:     c.config.User,
@@ -203,6 +249,7 @@ func (c *SSHClient) UploadFiles(
 	if err := c.Connect(); err != nil {
 		result.ConnectCostTime = time.Since(connStart).Seconds()
 		result.ConnectSuccess = false
+		result.FailedFiles = len(fileItems)
 		errMsg := err.Error()
 		result.Error = &errMsg
 		log.Zlog.Error("[上传] 连接失败", zap.String("ip", ip), zap.Error(err))
@@ -253,7 +300,22 @@ func (c *SSHClient) UploadFiles(
 		log.Zlog.Info("[上传] 用户已是 root，跳过 sudo", zap.String("ip", ip))
 	}
 
-	// 6. 逐文件处理
+	// 6. 计算总字节数并发送首次进度
+	var totalBytes int64
+	for _, item := range fileItems {
+		totalBytes += item.FileSize
+	}
+	if onProgress != nil {
+		onProgress(ProgressMsg{
+			Type:       "progress",
+			Seq:        seq,
+			IP:         ip,
+			TotalBytes: totalBytes,
+			TotalFiles: len(fileItems),
+		})
+	}
+
+	// 7. 逐文件处理
 	totalFiles := len(fileItems)
 	successFiles := 0
 	failedFiles := 0
@@ -272,32 +334,52 @@ func (c *SSHClient) UploadFiles(
 
 		fileStart := time.Now()
 
-		// 6a. 检查远程文件是否已存在
+		// 7a. 检查远程文件是否已存在
 		remoteFilePath := remotePath + "/" + item.FileName
 		if _, err := sftpClient.Stat(remoteFilePath); err == nil {
 			failedFiles++
 			outputLines = append(outputLines, fmt.Sprintf("%s: 上传失败 - 文件已存在", item.FileName))
 			log.Zlog.Warn("[上传] 文件已存在，跳过", zap.String("ip", ip), zap.String("remoteFilePath", remoteFilePath))
+			// 文件完成：发送进度更新
+			if onProgress != nil {
+				onProgress(ProgressMsg{
+					Type:         "progress",
+					Seq:          seq,
+					IP:           ip,
+					SuccessFiles: successFiles,
+					FailedFiles:  failedFiles,
+				})
+			}
 			continue
 		}
 
-		// 6b. 读取本地文件权限
+		// 7b. 读取本地文件权限
 		localInfo, err := os.Stat(item.LocalPath)
 		if err != nil {
 			failedFiles++
 			outputLines = append(outputLines, fmt.Sprintf("%s: 上传失败 - %v", item.FileName, err))
 			log.Zlog.Error("[上传] 读取本地文件权限失败", zap.String("ip", ip), zap.String("fileName", item.FileName), zap.Error(err))
+			// 文件完成：发送进度更新
+			if onProgress != nil {
+				onProgress(ProgressMsg{
+					Type:         "progress",
+					Seq:          seq,
+					IP:           ip,
+					SuccessFiles: successFiles,
+					FailedFiles:  failedFiles,
+				})
+			}
 			continue
 		}
 		localMode := localInfo.Mode().Perm()
 
-		// 6c. 执行上传（含重试）
+		// 7c. 执行上传（含重试）
 		var uploadErr error
 		for attempt := 0; attempt <= maxFileRetries; attempt++ {
 			if !effectiveSudo {
-				uploadErr = c.sftpUploadFile(sftpClient, item.LocalPath, remoteFilePath, localMode, ip)
+				uploadErr = c.sftpUploadFile(sftpClient, item.LocalPath, remoteFilePath, localMode, seq, ip, onProgress)
 			} else {
-				uploadErr = c.sftpUploadWithSudo(sftpClient, item.LocalPath, item.FileName, remotePath, localMode, ip)
+				uploadErr = c.sftpUploadWithSudo(sftpClient, item.LocalPath, item.FileName, remotePath, localMode, seq, ip, onProgress)
 			}
 			if uploadErr == nil {
 				break
@@ -323,21 +405,36 @@ func (c *SSHClient) UploadFiles(
 			outputLines = append(outputLines, fmt.Sprintf("%s: 上传成功 (%.3fs)", item.FileName, costTime))
 			log.Zlog.Info("[上传] 文件上传成功", zap.String("ip", ip), zap.String("fileName", item.FileName), zap.Float64("costTime", costTime))
 		}
+
+		// 文件完成：发送进度更新
+		if onProgress != nil {
+			onProgress(ProgressMsg{
+				Type:         "progress",
+				Seq:          seq,
+				IP:           ip,
+				SuccessFiles: successFiles,
+				FailedFiles:  failedFiles,
+			})
+		}
 	}
 
-	// 7. 构建 output（base64 编码）
+	// 8. 构建 output（base64 编码）
 	header := fmt.Sprintf("total_files=%d, success_files=%d, failed_files=%d", totalFiles, successFiles, failedFiles)
 	outputText := header + "\n" + strings.Join(outputLines, "\n")
 	result.Output = base64.StdEncoding.EncodeToString([]byte(outputText))
 	result.ExitCode = failedFiles
 	result.ExecCostTime = totalCostTime
+	result.TotalBytes = totalBytes
+	result.TotalFiles = totalFiles
+	result.SuccessFiles = successFiles
+	result.FailedFiles = failedFiles
 
 	log.Zlog.Succ("[上传] 节点完成", zap.String("ip", ip), zap.Int("success", successFiles), zap.Int("total", totalFiles))
 	return result, nil
 }
 
 // sftpUploadFile 直接通过 SFTP 写入文件
-func (c *SSHClient) sftpUploadFile(sftpClient *sftp.Client, localPath, remoteFilePath string, perm os.FileMode, ip string) error {
+func (c *SSHClient) sftpUploadFile(sftpClient *sftp.Client, localPath, remoteFilePath string, perm os.FileMode, seq int, ip string, onProgress func(ProgressMsg)) error {
 	srcFile, err := os.Open(localPath)
 	if err != nil {
 		return fmt.Errorf("打开本地文件失败: %w", err)
@@ -352,7 +449,17 @@ func (c *SSHClient) sftpUploadFile(sftpClient *sftp.Client, localPath, remoteFil
 
 	// 1MB buffer 流式写入
 	buf := make([]byte, 1024*1024)
-	_, err = io.CopyBuffer(dstFile, srcFile, buf)
+	if onProgress != nil {
+		pw := &progressWriter{
+			dst:      dstFile,
+			seq:      seq,
+			ip:       ip,
+			callback: onProgress,
+		}
+		_, err = io.CopyBuffer(pw, srcFile, buf)
+	} else {
+		_, err = io.CopyBuffer(dstFile, srcFile, buf)
+	}
 	if err != nil {
 		// 写入失败，删除远程半成品文件
 		_ = sftpClient.Remove(remoteFilePath)
@@ -368,7 +475,7 @@ func (c *SSHClient) sftpUploadFile(sftpClient *sftp.Client, localPath, remoteFil
 }
 
 // sftpUploadWithSudo 通过临时目录 + sudo mv 上传文件
-func (c *SSHClient) sftpUploadWithSudo(sftpClient *sftp.Client, localPath, fileName, remotePath string, perm os.FileMode, ip string) error {
+func (c *SSHClient) sftpUploadWithSudo(sftpClient *sftp.Client, localPath, fileName, remotePath string, perm os.FileMode, seq int, ip string, onProgress func(ProgressMsg)) error {
 	// 创建临时目录
 	tmpDir := fmt.Sprintf("/tmp/.SSHFleet_tmp/%s", randomHex())
 	if err := sftpClient.MkdirAll(tmpDir); err != nil {
@@ -398,9 +505,22 @@ func (c *SSHClient) sftpUploadWithSudo(sftpClient *sftp.Client, localPath, fileN
 	defer func() { _ = dstFile.Close() }()
 
 	buf := make([]byte, 1024*1024)
-	if _, err = io.CopyBuffer(dstFile, srcFile, buf); err != nil {
-		cleanup()
-		return fmt.Errorf("写入临时文件失败: %w", err)
+	if onProgress != nil {
+		pw := &progressWriter{
+			dst:      dstFile,
+			seq:      seq,
+			ip:       ip,
+			callback: onProgress,
+		}
+		if _, err = io.CopyBuffer(pw, srcFile, buf); err != nil {
+			cleanup()
+			return fmt.Errorf("写入临时文件失败: %w", err)
+		}
+	} else {
+		if _, err = io.CopyBuffer(dstFile, srcFile, buf); err != nil {
+			cleanup()
+			return fmt.Errorf("写入临时文件失败: %w", err)
+		}
 	}
 
 	// 设置权限

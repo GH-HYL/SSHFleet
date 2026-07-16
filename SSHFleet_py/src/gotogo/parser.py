@@ -42,6 +42,11 @@ def parse_result(sse_data: Dict, error_keywords: Dict[str, list[str]], mode: str
             mode=mode,
         ),
         "error": error,
+        # 上传专属字段
+        "total_bytes": sse_data.get("total_bytes", 0),
+        "total_files": sse_data.get("total_files", 0),
+        "success_files": sse_data.get("success_files", 0),
+        "failed_files": sse_data.get("failed_files", 0),
     }
 
 

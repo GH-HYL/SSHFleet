@@ -2,6 +2,7 @@ package ssh
 
 // ExecResult 表示单个节点的执行结果
 type ExecResult struct {
+	Type            string  `json:"type"`
 	Seq             int     `json:"seq"`
 	IP              string  `json:"ip"`
 	Port            int     `json:"port"`
@@ -24,6 +25,7 @@ type DoneResponse struct {
 
 // UploadResult 上传结果（单个节点）
 type UploadResult struct {
+	Type            string  `json:"type"`
 	Seq             int     `json:"seq"`
 	IP              string  `json:"ip"`
 	Port            int     `json:"port"`
@@ -34,4 +36,8 @@ type UploadResult struct {
 	ConnectCostTime float64 `json:"connect_cost_time"`
 	ExecCostTime    float64 `json:"exec_cost_time"`
 	Error           *string `json:"error"`
+	TotalBytes      int64   `json:"total_bytes"`
+	TotalFiles      int     `json:"total_files"`
+	SuccessFiles    int     `json:"success_files"`
+	FailedFiles     int     `json:"failed_files"`
 }

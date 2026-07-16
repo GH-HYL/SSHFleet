@@ -258,6 +258,21 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 计算每个节点的总字节数
+	var totalBytesPerNode int64
+	for _, item := range fileItems {
+		totalBytesPerNode += item.FileSize
+	}
+
+	// 发送 init 消息
+	initMsg := map[string]interface{}{
+		"type":               "init",
+		"total_nodes":        len(req.Nodes),
+		"total_bytes_per_node": totalBytesPerNode,
+	}
+	WriteSSE(w, initMsg)
+	flusher.Flush()
+
 	// 构建上传任务
 	tasks := make([]*core.UploadTask, 0, len(req.Nodes))
 	for _, node := range req.Nodes {
@@ -277,8 +292,20 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
+	// 创建 progress channel 并启动消费协程
+	progressChan := make(chan ssh.ProgressMsg, len(tasks)*10)
+	go func() {
+		for msg := range progressChan {
+			if err := WriteSSE(w, msg); err != nil {
+				log.Zlog.Error("SSE progress 写入失败", zap.Error(err))
+				return
+			}
+			flusher.Flush()
+		}
+	}()
+
 	// 执行上传
-	executor := core.NewBatchUploadExecutor(req.Options.Concurrency, len(tasks), r.Context())
+	executor := core.NewBatchUploadExecutor(req.Options.Concurrency, len(tasks), r.Context(), progressChan)
 	resultChan := executor.Run(tasks)
 
 	total, success, failed := len(tasks), 0, 0
@@ -286,6 +313,7 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 	for result := range resultChan {
 		if err := WriteSSE(w, result); err != nil {
 			log.Zlog.Error("SSE 写入失败", zap.Error(err))
+			close(progressChan)
 			return
 		}
 		flusher.Flush()
@@ -300,6 +328,9 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 			failed++
 		}
 	}
+
+	// 关闭 progress channel
+	close(progressChan)
 
 	log.Zlog.Info("连接统计", zap.Int("total", total), zap.Int("connSuccess", connSuccess), zap.Int("connFailed", connFailed))
 
