@@ -453,7 +453,7 @@ func (c *SSHClient) UploadFiles(
 	result.Output = base64.StdEncoding.EncodeToString([]byte(outputText))
 	result.ExitCode = failedFiles
 	result.ExecCostTime = totalCostTime
-	result.TotalBytes = totalBytes
+	result.TotalBytes = uploadedBytes  // 使用实际上传字节数，而不是总字节数
 	result.TotalFiles = totalFiles
 	result.SuccessFiles = successFiles
 	result.FailedFiles = failedFiles
