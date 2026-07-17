@@ -451,9 +451,14 @@ func (c *SSHClient) UploadFiles(
 	header := fmt.Sprintf("total_files=%d, success_files=%d, failed_files=%d", totalFiles, successFiles, failedFiles)
 	outputText := header + "\n" + strings.Join(outputLines, "\n")
 	result.Output = base64.StdEncoding.EncodeToString([]byte(outputText))
-	result.ExitCode = failedFiles
+	// ExitCode: 0=全部成功, 1=有失败
+	if failedFiles > 0 {
+		result.ExitCode = 1
+	} else {
+		result.ExitCode = 0
+	}
 	result.ExecCostTime = totalCostTime
-	result.TotalBytes = uploadedBytes  // 使用实际上传字节数，而不是总字节数
+	result.TotalBytes = uploadedBytes  // 实际成功上传的字节数
 	result.TotalFiles = totalFiles
 	result.SuccessFiles = successFiles
 	result.FailedFiles = failedFiles
