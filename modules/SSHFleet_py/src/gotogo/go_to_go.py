@@ -47,7 +47,7 @@ class SpeedTracker:
         self.window: List[tuple] = []  # [(timestamp, bytes)]
 
     def update(self, total_bytes: int) -> float:
-        """更新并返回当前速度（bytes/sec）"""
+        """更新并返回当前速度（bytes/sec），确保不返回负值"""
         now = time.time()
         self.window.append((now, total_bytes))
         # 移除超过窗口的旧数据
@@ -57,7 +57,8 @@ class SpeedTracker:
             bytes_delta = self.window[-1][1] - self.window[0][1]
             time_delta = self.window[-1][0] - self.window[0][0]
             if time_delta > 0:
-                return bytes_delta / time_delta
+                speed = bytes_delta / time_delta
+                return max(speed, 0)  # 确保不返回负速度
         return 0
 
 
