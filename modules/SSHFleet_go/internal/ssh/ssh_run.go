@@ -53,6 +53,8 @@ type progressWriter struct {
 	lastCallback time.Time
 	seq          int
 	ip           string
+	totalBytes   int64
+	totalFiles   int
 	callback     func(ProgressMsg)
 	mu           sync.Mutex
 }
@@ -68,6 +70,8 @@ func (pw *progressWriter) Write(p []byte) (int, error) {
 			Seq:           pw.seq,
 			IP:            pw.ip,
 			UploadedBytes: pw.uploaded,
+			TotalBytes:    pw.totalBytes,
+			TotalFiles:    pw.totalFiles,
 		})
 	}
 	pw.mu.Unlock()
@@ -394,9 +398,9 @@ func (c *SSHClient) UploadFiles(
 		var uploadErr error
 		for attempt := 0; attempt <= maxFileRetries; attempt++ {
 			if !effectiveSudo {
-				uploadErr = c.sftpUploadFile(sftpClient, item.LocalPath, remoteFilePath, localMode, seq, ip, onProgress)
+				uploadErr = c.sftpUploadFile(sftpClient, item.LocalPath, remoteFilePath, localMode, seq, ip, totalBytes, totalFiles, onProgress)
 			} else {
-				uploadErr = c.sftpUploadWithSudo(sftpClient, item.LocalPath, item.FileName, remotePath, localMode, seq, ip, onProgress)
+				uploadErr = c.sftpUploadWithSudo(sftpClient, item.LocalPath, item.FileName, remotePath, localMode, seq, ip, totalBytes, totalFiles, onProgress)
 			}
 			if uploadErr == nil {
 				break
@@ -456,7 +460,7 @@ func (c *SSHClient) UploadFiles(
 }
 
 // sftpUploadFile 直接通过 SFTP 写入文件
-func (c *SSHClient) sftpUploadFile(sftpClient *sftp.Client, localPath, remoteFilePath string, perm os.FileMode, seq int, ip string, onProgress func(ProgressMsg)) error {
+func (c *SSHClient) sftpUploadFile(sftpClient *sftp.Client, localPath, remoteFilePath string, perm os.FileMode, seq int, ip string, totalBytes int64, totalFiles int, onProgress func(ProgressMsg)) error {
 	srcFile, err := os.Open(localPath)
 	if err != nil {
 		return fmt.Errorf("打开本地文件失败: %w", err)
@@ -473,10 +477,12 @@ func (c *SSHClient) sftpUploadFile(sftpClient *sftp.Client, localPath, remoteFil
 	buf := make([]byte, 1024*1024)
 	if onProgress != nil {
 		pw := &progressWriter{
-			dst:      dstFile,
-			seq:      seq,
-			ip:       ip,
-			callback: onProgress,
+			dst:        dstFile,
+			seq:        seq,
+			ip:         ip,
+			totalBytes: totalBytes,
+			totalFiles: totalFiles,
+			callback:   onProgress,
 		}
 		_, err = io.CopyBuffer(pw, srcFile, buf)
 	} else {
@@ -497,7 +503,7 @@ func (c *SSHClient) sftpUploadFile(sftpClient *sftp.Client, localPath, remoteFil
 }
 
 // sftpUploadWithSudo 通过临时目录 + sudo mv 上传文件
-func (c *SSHClient) sftpUploadWithSudo(sftpClient *sftp.Client, localPath, fileName, remotePath string, perm os.FileMode, seq int, ip string, onProgress func(ProgressMsg)) error {
+func (c *SSHClient) sftpUploadWithSudo(sftpClient *sftp.Client, localPath, fileName, remotePath string, perm os.FileMode, seq int, ip string, totalBytes int64, totalFiles int, onProgress func(ProgressMsg)) error {
 	// 创建临时目录（使用 SSH + sudo，因为 SFTP 没有 sudo 权限）
 	tmpDir := fmt.Sprintf("/tmp/.SSHFleet_tmp/%s", randomHex())
 	if err := c.runCommand(fmt.Sprintf("sudo mkdir -p '%s' && sudo chmod 777 '%s'", tmpDir, tmpDir)); err != nil {
@@ -529,10 +535,12 @@ func (c *SSHClient) sftpUploadWithSudo(sftpClient *sftp.Client, localPath, fileN
 	buf := make([]byte, 1024*1024)
 	if onProgress != nil {
 		pw := &progressWriter{
-			dst:      dstFile,
-			seq:      seq,
-			ip:       ip,
-			callback: onProgress,
+			dst:        dstFile,
+			seq:        seq,
+			ip:         ip,
+			totalBytes: totalBytes,
+			totalFiles: totalFiles,
+			callback:   onProgress,
 		}
 		if _, err = io.CopyBuffer(pw, srcFile, buf); err != nil {
 			cleanup()
