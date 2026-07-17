@@ -327,10 +327,11 @@ def go_to_go(
                 seq = sse_data.get("seq")
 
                 if args.u and seq is not None:
-                    # 补偿：用精确值校正
+                    # 用 result 的精确值校正（只增不减，防止进度回退）
                     old_approx = node_approximate.get(seq, 0)
                     exact_bytes = sse_data.get("total_bytes", old_approx)
-                    total_uploaded = total_uploaded - old_approx + exact_bytes
+                    if exact_bytes > old_approx:
+                        total_uploaded += (exact_bytes - old_approx)
 
                     # 更新总进度
                     speed = speed_tracker.update(total_uploaded)
