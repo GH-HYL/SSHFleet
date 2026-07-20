@@ -40,7 +40,7 @@ def classify(
         if result != "错误未分类":
             return result
 
-    return f"退出码-{exit_code}"
+    return f"执行失败 (exit={exit_code})"
 
 
 def _match(text: str, error_keywords: dict) -> str:
