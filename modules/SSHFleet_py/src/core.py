@@ -430,15 +430,17 @@ def arguments_confirm(args, nodes, config=None):
         allowed = _check_concurrency_threshold(file_size, config)
         if allowed > 0 and args.n > allowed:
             print(f"{color.COLOR_YELLOW}⚠️ 上传文件总大小 {utils.format_size(file_size)}，建议并发数调整为 {allowed}（当前为 {args.n}）{color.COLOR_RESET}")
-            print(f"{color.COLOR_YELLOW}提示：大文件高并发可能导致本地磁盘 I/O 压力过大{color.COLOR_RESET}")
+            print(f"{color.COLOR_YELLOW}提示：大文件高并发带宽或本地压力过大{color.COLOR_RESET}")
             if utils.get_user_confirmation(
                 f"是否将并发数调整为 {allowed}？",
-                yorn=False
+                yorn=True
             ):
                 args.n = allowed
             else:
-                print(f"{color.COLOR_YELLOW}操作已取消{color.COLOR_RESET}")
-                sys.exit(1)
+                print(
+                    f"{color.COLOR_RED}[WARNING] 用户已拒绝并发执行建议！"
+                    f"请确认你充分理解并发操作的风险后再继续！{color.COLOR_RESET}"
+                )
 
     # 非交互模式
     if args.disinteractive:
@@ -484,9 +486,9 @@ def arguments_confirm(args, nodes, config=None):
 
     info_table.append(("CSV文件路径", args.f))
     info_table.append(("节点数量", len(nodes)))
-    if args.c or args.s:
-        info_table.append(("并发数值", args.n))
-        info_table.append(("", ""))
+    # if args.c or args.s:
+    info_table.append(("并发数值", args.n))
+    info_table.append(("", ""))
 
     # 3. 超时设置
     if args.T:
