@@ -144,6 +144,19 @@ func (c *SSHClient) Connect() error {
 	}
 }
 
+// connectResult SSH 连接结果
+type connectResult struct {
+	costTime float64
+	err      error
+}
+
+// connectSSH 建立 SSH 连接并返回耗时
+func (c *SSHClient) connectSSH() connectResult {
+	start := time.Now()
+	err := c.Connect()
+	return connectResult{costTime: time.Since(start).Seconds(), err: err}
+}
+
 // ExecuteCommand 执行命令（带上下文中断支持）
 func (c *SSHClient) ExecuteCommand(command string, ctx context.Context, ip string) (*ExecResult, error) {
 	result := &ExecResult{
@@ -154,20 +167,18 @@ func (c *SSHClient) ExecuteCommand(command string, ctx context.Context, ip strin
 	}
 
 	// 创建连接
-	connStart := time.Now()
-	if err := c.Connect(); err != nil {
-		result.ConnectCostTime = time.Since(connStart).Seconds()
+	conn := c.connectSSH()
+	result.ConnectCostTime = conn.costTime
+	if conn.err != nil {
 		result.ConnectSuccess = false
-		result.ExitCode = -1
-		errMsg := err.Error()
+		errMsg := conn.err.Error()
 		result.Error = &errMsg
-		log.Zlog.Error("连接失败", zap.String("ip", ip), zap.Error(err))
-		return result, err
+		log.Zlog.Error("连接失败", zap.String("ip", ip), zap.Error(conn.err))
+		return result, conn.err
 	}
 	defer func() { _ = c.Close() }()
 
 	result.ConnectSuccess = true
-	result.ConnectCostTime = time.Since(connStart).Seconds()
 	log.Zlog.Succ("连接成功", zap.String("ip", ip))
 
 	// 创建会话
@@ -207,7 +218,7 @@ func (c *SSHClient) ExecuteCommand(command string, ctx context.Context, ip strin
 		if errors.As(err, &exitErr) {
 			result.ExitCode = exitErr.ExitStatus()
 		} else {
-			result.ExitCode = -10
+			// 超时或中断等非命令执行错误，靠 error 字段分类
 			errMsg := err.Error()
 			result.Error = &errMsg
 		}
@@ -266,20 +277,19 @@ func (c *SSHClient) UploadFiles(
 	}
 
 	// 1. SSH 建连
-	connStart := time.Now()
-	if err := c.Connect(); err != nil {
-		result.ConnectCostTime = time.Since(connStart).Seconds()
+	conn := c.connectSSH()
+	result.ConnectCostTime = conn.costTime
+	if conn.err != nil {
 		result.ConnectSuccess = false
 		result.FailedFiles = len(fileItems)
-		errMsg := err.Error()
+		errMsg := conn.err.Error()
 		result.Error = &errMsg
-		log.Zlog.Error("[上传] 连接失败", zap.String("ip", ip), zap.Error(err))
-		return result, err
+		log.Zlog.Error("[上传] 连接失败", zap.String("ip", ip), zap.Error(conn.err))
+		return result, conn.err
 	}
 	defer func() { _ = c.Close() }()
 
 	result.ConnectSuccess = true
-	result.ConnectCostTime = time.Since(connStart).Seconds()
 	log.Zlog.Succ("[上传] 连接成功", zap.String("ip", ip))
 
 	// 2. 清理残留临时目录（仅 sudo 模式）
@@ -331,13 +341,25 @@ func (c *SSHClient) UploadFiles(
 	}
 	log.Zlog.Debug("[上传] 远程目标路径检查通过", zap.String("ip", ip), zap.String("remotePath", remotePath))
 
-	// 6. 判断 sudo 是否实际生效
+	// 6. 预检本地文件
+	for _, item := range fileItems {
+		if _, err := os.Stat(item.LocalPath); err != nil {
+			errMsg := fmt.Sprintf("本地文件不存在或不可读: %s - %v", item.FileName, err)
+			result.Error = &errMsg
+			result.FailedFiles = len(fileItems)
+			log.Zlog.Error("[上传] 本地文件预检失败", zap.String("ip", ip), zap.String("fileName", item.FileName), zap.Error(err))
+			return result, fmt.Errorf("%s", errMsg)
+		}
+	}
+	log.Zlog.Debug("[上传] 本地文件预检通过", zap.String("ip", ip), zap.Int("files", len(fileItems)))
+
+	// 7. 判断 sudo 是否实际生效
 	effectiveSudo := useSudo && c.config.User != "root"
 	if useSudo && c.config.User == "root" {
 		log.Zlog.Info("[上传] 用户已是 root，跳过 sudo", zap.String("ip", ip))
 	}
 
-	// 7. 逐文件处理
+	// 8. 逐文件处理
 	totalFiles := len(fileItems)
 	successFiles := 0
 	failedFiles := 0
@@ -356,12 +378,14 @@ func (c *SSHClient) UploadFiles(
 
 		fileStart := time.Now()
 
-		// 7a. 检查远程文件是否已存在
+		// 8a. 检查远程文件是否已存在
 		remoteFilePath := remotePath + "/" + item.FileName
 		if _, err := sftpClient.Stat(remoteFilePath); err == nil {
 			failedFiles++
-			outputLines = append(outputLines, fmt.Sprintf("%s: 上传失败 - 文件已存在", item.FileName))
-			log.Zlog.Warn("[上传] 文件已存在，跳过", zap.String("ip", ip), zap.String("remoteFilePath", remoteFilePath))
+			errMsg := fmt.Sprintf("%s: 上传失败 - 文件已存在", item.FileName)
+			outputLines = append(outputLines, errMsg)
+			result.Error = &errMsg
+			log.Zlog.Warn("[上传] 文件已存在，终止传输", zap.String("ip", ip), zap.String("remoteFilePath", remoteFilePath))
 			// 文件完成：发送进度更新
 			if onProgress != nil {
 				onProgress(ProgressMsg{
@@ -372,15 +396,17 @@ func (c *SSHClient) UploadFiles(
 					FailedFiles:  failedFiles,
 				})
 			}
-			continue
+			break
 		}
 
-		// 7b. 读取本地文件权限
+		// 8b. 读取本地文件权限
 		localInfo, err := os.Stat(item.LocalPath)
 		if err != nil {
 			failedFiles++
-			outputLines = append(outputLines, fmt.Sprintf("%s: 上传失败 - %v", item.FileName, err))
-			log.Zlog.Error("[上传] 读取本地文件权限失败", zap.String("ip", ip), zap.String("fileName", item.FileName), zap.Error(err))
+			errMsg := fmt.Sprintf("%s: 上传失败 - %v", item.FileName, err)
+			outputLines = append(outputLines, errMsg)
+			result.Error = &errMsg
+			log.Zlog.Error("[上传] 读取本地文件权限失败，终止传输", zap.String("ip", ip), zap.String("fileName", item.FileName), zap.Error(err))
 			// 文件完成：发送进度更新
 			if onProgress != nil {
 				onProgress(ProgressMsg{
@@ -391,11 +417,11 @@ func (c *SSHClient) UploadFiles(
 					FailedFiles:  failedFiles,
 				})
 			}
-			continue
+			break
 		}
 		localMode := localInfo.Mode().Perm()
 
-		// 7c. 执行上传（含重试）
+		// 8c. 执行上传（含重试）
 		var uploadErr error
 		var fileWritten int64
 		for attempt := 0; attempt <= maxFileRetries; attempt++ {
@@ -421,8 +447,21 @@ func (c *SSHClient) UploadFiles(
 
 		if uploadErr != nil {
 			failedFiles++
-			outputLines = append(outputLines, fmt.Sprintf("%s: 上传失败 - %v", item.FileName, uploadErr))
-			log.Zlog.Error("[上传] 文件上传失败", zap.String("ip", ip), zap.String("fileName", item.FileName), zap.Error(uploadErr))
+			errMsg := fmt.Sprintf("%s: 上传失败 - %v", item.FileName, uploadErr)
+			outputLines = append(outputLines, errMsg)
+			result.Error = &errMsg
+			log.Zlog.Error("[上传] 文件上传失败，终止传输", zap.String("ip", ip), zap.String("fileName", item.FileName), zap.Error(uploadErr))
+			// 文件完成：发送进度更新
+			if onProgress != nil {
+				onProgress(ProgressMsg{
+					Type:         "progress",
+					Seq:          seq,
+					IP:           ip,
+					SuccessFiles: successFiles,
+					FailedFiles:  failedFiles,
+				})
+			}
+			break
 		} else {
 			successFiles++
 			uploadedBytes += fileWritten  // 累加已上传字节数
@@ -447,7 +486,7 @@ func (c *SSHClient) UploadFiles(
 		}
 	}
 
-	// 8. 构建 output（base64 编码）
+	// 9. 构建 output（base64 编码）
 	header := fmt.Sprintf("total_files=%d, success_files=%d, failed_files=%d", totalFiles, successFiles, failedFiles)
 	outputText := header + "\n" + strings.Join(outputLines, "\n")
 	result.Output = base64.StdEncoding.EncodeToString([]byte(outputText))
