@@ -349,8 +349,9 @@ def read_nodes_infos(csv_path: str, config: SSHFleetConfig) -> List[Dict[str, st
         ):  # 使用配置的默认值
             # 验证密码文件有效性
             validate_password_file(config.account.password)
-            # 配置文件中的密码是经过base64编码的，需要解码
-            password = base64.b64decode(config.account.password).decode("utf-8")
+            # 读取密码文件内容并解码base64
+            with open(config.account.password, "r", encoding="utf-8") as f:
+                password = base64.b64decode(f.read().strip()).decode("utf-8")
         elif password_use_input:  # 使用之前用户输入的值
             password = password_input_value
         else:  # 请求用户输入新值
