@@ -228,8 +228,9 @@ def go_to_go(
             TextColumn("{task.fields[percent_display]}"),
             "[green]{task.completed}/{task.total}",
             TimeElapsedColumn(),
+            TextColumn("  [bright_green]Succ:[bright_black]{task.fields[success_nodes]} [bright_red]Fail:[bright_black]{task.fields[fail_nodes]}"),
         )
-        node_task = node_progress.add_task("", total=total_nodes, percent_display="  0%")
+        node_task = node_progress.add_task("", total=total_nodes, percent_display="  0%", success_nodes=0, fail_nodes=0)
         progress_table = node_progress
 
     # 7. 发送请求并接收 SSE 流
@@ -243,6 +244,10 @@ def go_to_go(
     completed_nodes = 0
     total_uploaded = 0
     global_total_bytes = 0
+
+    # 命令模式的状态
+    success_nodes = 0
+    fail_nodes = 0
 
     # 打开 output.txt 文件（仅命令模式写入）
     output_file_path = os.path.join(exec_log_dir, config.paths.files.output)
@@ -365,6 +370,12 @@ def go_to_go(
                     # 打印到终端
                     console.print(formatted)
 
+                    # 统计成功/失败节点
+                    if result.get("exit_code") == 0:
+                        success_nodes += 1
+                    else:
+                        fail_nodes += 1
+
                     # 更新进度
                     completed = len(results)
                     percent_int = int(completed / total_nodes * 100)
@@ -373,6 +384,8 @@ def go_to_go(
                         description=f"执行进度 [bright_yellow]已完成: [bright_black]{completed}/{total_nodes}",
                         completed=completed,
                         percent_display=f"{percent_int:>3}%",
+                        success_nodes=success_nodes,
+                        fail_nodes=fail_nodes,
                     )
 
             elif msg_type == "done":
