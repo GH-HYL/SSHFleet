@@ -3,6 +3,8 @@
 
 # Git 配置
 !.gitignore
+# 更新日志
+!CHANGELOG.md 
 
 # 只跟踪源代码模块
 !modules/
