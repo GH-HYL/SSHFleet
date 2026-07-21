@@ -1,262 +1,22 @@
 package ssh
 
 import (
-	"bytes"
 	"context"
 	"encoding/base64"
-	"errors"
 	"fmt"
 	"io"
 	"math/rand"
 	"os"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/pkg/sftp"
-	"golang.org/x/crypto/ssh"
 
 	"SSHFleet/internal/log"
 	"SSHFleet/internal/localfs"
 
 	"go.uber.org/zap"
 )
-
-// SSHClient 封装SSH客户端连接
-type SSHClient struct {
-	client *ssh.Client
-	config *SSHConfig
-}
-
-const (
-	maxFileRetries = 2
-	retryInterval  = 2 * time.Second
-	progressThrottle = 500 * time.Millisecond
-)
-
-// threadSafeWriter 带锁的写入器，确保并发写入安全且保持顺序
-type threadSafeWriter struct {
-	buf *bytes.Buffer
-	mu  sync.Mutex
-}
-
-func (w *threadSafeWriter) Write(p []byte) (int, error) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	return w.buf.Write(p)
-}
-
-// progressWriter 带进度回调的写入器
-type progressWriter struct {
-	dst          io.Writer
-	uploaded     int64
-	lastCallback time.Time
-	seq          int
-	ip           string
-	totalBytes   int64
-	totalFiles   int
-	callback     func(ProgressMsg)
-	mu           sync.Mutex
-}
-
-func (pw *progressWriter) Write(p []byte) (int, error) {
-	n, err := pw.dst.Write(p)
-	pw.mu.Lock()
-	pw.uploaded += int64(n)
-	if time.Since(pw.lastCallback) >= progressThrottle {
-		pw.lastCallback = time.Now()
-		pw.callback(ProgressMsg{
-			Type:          "progress",
-			Seq:           pw.seq,
-			IP:            pw.ip,
-			UploadedBytes: pw.uploaded,
-			TotalBytes:    pw.totalBytes,
-			TotalFiles:    pw.totalFiles,
-		})
-	}
-	pw.mu.Unlock()
-	return n, err
-}
-
-// ProgressMsg SSE 进度消息
-type ProgressMsg struct {
-	Type          string `json:"type"`
-	Seq           int    `json:"seq"`
-	IP            string `json:"ip"`
-	UploadedBytes int64  `json:"uploaded_bytes,omitempty"`
-	TotalBytes    int64  `json:"total_bytes,omitempty"`
-	TotalFiles    int    `json:"total_files,omitempty"`
-	SuccessFiles  int    `json:"success_files,omitempty"`
-	FailedFiles   int    `json:"failed_files,omitempty"`
-}
-
-// SSHConfig 存储SSH连接配置
-type SSHConfig struct {
-	IP             string
-	Port           int
-	User           string
-	Password       string
-	ConnectTimeout time.Duration
-	ExecTimeout    time.Duration
-}
-
-// NewSSHClient 创建SSH客户端实例
-func NewSSHClient(config *SSHConfig) *SSHClient {
-	return &SSHClient{config: config}
-}
-
-// Connect 建立SSH连接
-func (c *SSHClient) Connect() error {
-	addr := fmt.Sprintf("%s:%d", c.config.IP, c.config.Port)
-	log.Zlog.Debug("SSH连接", zap.String("addr", addr))
-
-	sshClientConfig := &ssh.ClientConfig{
-		User:            c.config.User,
-		Auth:            []ssh.AuthMethod{ssh.Password(c.config.Password)},
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-		Timeout:         c.config.ConnectTimeout,
-	}
-
-	type dialResult struct {
-		client *ssh.Client
-		err    error
-	}
-	result := make(chan dialResult, 1)
-
-	go func() {
-		client, err := ssh.Dial("tcp", addr, sshClientConfig)
-		result <- dialResult{client, err}
-	}()
-
-	maxTimeout := c.config.ConnectTimeout + 2*time.Second
-	select {
-	case res := <-result:
-		if res.err != nil {
-			log.Zlog.Error("SSH连接失败", zap.String("user", c.config.User), zap.String("addr", addr), zap.Error(res.err))
-			return fmt.Errorf("建立连接失败 - %w", res.err)
-		}
-		c.client = res.client
-		log.Zlog.Succ("SSH连接成功", zap.String("user", c.config.User), zap.String("addr", addr))
-		return nil
-	case <-time.After(maxTimeout):
-		log.Zlog.Error("SSH连接失败: 握手超时", zap.String("user", c.config.User), zap.String("addr", addr), zap.Duration("timeout", maxTimeout))
-		return fmt.Errorf("建立连接失败 - 握手超时%v", maxTimeout)
-	}
-}
-
-// connectResult SSH 连接结果
-type connectResult struct {
-	costTime float64
-	err      error
-}
-
-// connectSSH 建立 SSH 连接并返回耗时
-func (c *SSHClient) connectSSH() connectResult {
-	start := time.Now()
-	err := c.Connect()
-	return connectResult{costTime: time.Since(start).Seconds(), err: err}
-}
-
-// ExecuteCommand 执行命令（带上下文中断支持）
-func (c *SSHClient) ExecuteCommand(command string, ctx context.Context, ip string) (*ExecResult, error) {
-	result := &ExecResult{
-		Type: "result",
-		IP:   c.config.IP,
-		Port: c.config.Port,
-		User: c.config.User,
-	}
-
-	// 创建连接
-	conn := c.connectSSH()
-	result.ConnectCostTime = conn.costTime
-	if conn.err != nil {
-		result.ConnectSuccess = false
-		errMsg := conn.err.Error()
-		result.Error = &errMsg
-		log.Zlog.Error("连接失败", zap.String("ip", ip), zap.Error(conn.err))
-		return result, conn.err
-	}
-	defer func() { _ = c.Close() }()
-
-	result.ConnectSuccess = true
-	log.Zlog.Succ("连接成功", zap.String("ip", ip))
-
-	// 创建会话
-	session, err := c.client.NewSession()
-	if err != nil {
-		errMsg := err.Error()
-		result.Error = &errMsg
-		log.Zlog.Error("会话创建失败", zap.String("ip", ip), zap.Error(err))
-		return result, fmt.Errorf("创建会话失败 - %w", err)
-	}
-	log.Zlog.Succ("会话成功", zap.String("ip", ip))
-	defer func() { _ = session.Close() }()
-
-	execStartTime := time.Now()
-
-	// 使用带锁的写入器，确保 stdout 和 stderr 并发写入安全且保持顺序
-	outputWriter := &threadSafeWriter{buf: new(bytes.Buffer)}
-	session.Stdout = outputWriter
-	session.Stderr = outputWriter
-
-	// 执行命令（带超时和中断）
-	err = c.runWithTimeoutAndCancel(session, command, ctx)
-
-	result.ExecCostTime = time.Since(execStartTime).Seconds()
-
-	// base64 编码输出
-	rawBytes := outputWriter.buf.Bytes()
-	result.Output = base64.StdEncoding.EncodeToString(rawBytes)
-
-	if len(rawBytes) > 0 {
-		log.Zlog.Info("节点输出", zap.String("ip", ip), zap.String("output", strings.TrimSpace(string(rawBytes))))
-	}
-
-	// 处理执行结果
-	if err != nil {
-		var exitErr *ssh.ExitError
-		if errors.As(err, &exitErr) {
-			result.ExitCode = exitErr.ExitStatus()
-		} else {
-			// 超时或中断等非命令执行错误，靠 error 字段分类
-			errMsg := err.Error()
-			result.Error = &errMsg
-		}
-	} else {
-		result.ExitCode = 0
-	}
-
-	return result, nil
-}
-
-// Close 关闭SSH连接
-func (c *SSHClient) Close() error {
-	if c.client != nil {
-		return c.client.Close()
-	}
-	return nil
-}
-
-// runWithTimeoutAndCancel 带超时和中断的命令执行
-func (c *SSHClient) runWithTimeoutAndCancel(session *ssh.Session, command string, ctx context.Context) error {
-	done := make(chan error, 1)
-
-	go func() {
-		done <- session.Run(command)
-	}()
-
-	select {
-	case err := <-done:
-		return err
-	case <-ctx.Done():
-		_ = session.Close()
-		return ctx.Err()
-	case <-time.After(c.config.ExecTimeout):
-		_ = session.Close()
-		log.Zlog.Warn("命令执行超时", zap.Duration("timeout", c.config.ExecTimeout))
-		return fmt.Errorf("命令执行超时(%v)", c.config.ExecTimeout)
-	}
-}
 
 // UploadFiles 上传文件到远程节点
 func (c *SSHClient) UploadFiles(
@@ -363,7 +123,7 @@ func (c *SSHClient) UploadFiles(
 	totalFiles := len(fileItems)
 	successFiles := 0
 	failedFiles := 0
-	var uploadedBytes int64  // 累计已上传字节数
+	var uploadedBytes int64 // 累计已上传字节数
 	var outputLines []string
 	totalCostTime := 0.0
 
@@ -464,7 +224,7 @@ func (c *SSHClient) UploadFiles(
 			break
 		} else {
 			successFiles++
-			uploadedBytes += fileWritten  // 累加已上传字节数
+			uploadedBytes += fileWritten // 累加已上传字节数
 			outputLines = append(outputLines, fmt.Sprintf("%s: 上传成功 (%.3fs)", item.FileName, costTime))
 			log.Zlog.Debug("[上传] 文件上传成功", zap.String("ip", ip), zap.String("fileName", item.FileName), zap.Float64("costTime", costTime))
 		}
@@ -497,7 +257,7 @@ func (c *SSHClient) UploadFiles(
 		result.ExitCode = 0
 	}
 	result.ExecCostTime = totalCostTime
-	result.TotalBytes = uploadedBytes  // 实际成功上传的字节数
+	result.TotalBytes = uploadedBytes // 实际成功上传的字节数
 	result.TotalFiles = totalFiles
 	result.SuccessFiles = successFiles
 	result.FailedFiles = failedFiles
@@ -622,16 +382,6 @@ func (c *SSHClient) sftpUploadWithSudo(sftpClient *sftp.Client, localPath, fileN
 	cleanup()
 
 	return written, nil
-}
-
-// runCommand 通过 SSH 执行命令
-func (c *SSHClient) runCommand(command string) error {
-	session, err := c.client.NewSession()
-	if err != nil {
-		return err
-	}
-	defer func() { _ = session.Close() }()
-	return session.Run(command)
 }
 
 // randomHex 生成 8 位随机 hex 字符串
