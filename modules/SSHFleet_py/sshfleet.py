@@ -168,7 +168,7 @@ def main():
     )
 
     print(f"{'═' * 60}")
-    print(f"SSHFleet工具{color.COLOR_GREEN}正在整理{color.COLOR_RESET}......")
+    # print(f"SSHFleet工具{color.COLOR_GREEN}正在整理{color.COLOR_RESET}......")
     tlog.debug(f"{'=' * 30}SSHFleet工具 - 执行结束{'=' * 30}\n")
     tlog.debug(f"{'-' * 20}SSHFleet工具 - 整理阶段{'-' * 20}")
 
