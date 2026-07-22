@@ -298,7 +298,7 @@ def format_statistic_results_to_terminal(results_statistic: Dict) -> None:
         )
     else:
         print(
-            f"  {color.COLOR_CYAN}节点总数:{color.COLOR_RESET} {results_statistic['nodeinofs_total']}  {color.COLOR_CYAN}完成总数：{color.COLOR_RESET}{results_statistic['results_total']}  {color.COLOR_CYAN}总数校验：{color.COLOR_RESET}{results_statistic['verify_color']}{results_statistic['verify']}{color.COLOR_RESET}"
+            f"  {color.COLOR_CYAN}节点总数:{color.COLOR_RESET} {results_statistic['nodeinofs_total']}  {color.COLOR_CYAN}完成总数：{color.COLOR_RESET}{results_statistic['results_total']}  {color.COLOR_CYAN}总数校验：{color.COLOR_RESET}{color.COLOR_RED}{results_statistic['verify']}{color.COLOR_RESET}"
         )
 
     if results_statistic["fail_counts"] > 0:
