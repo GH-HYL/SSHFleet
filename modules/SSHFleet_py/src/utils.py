@@ -25,11 +25,6 @@ tlog = logger.bind(logger_type="tool")
 elog = logger.bind(logger_type="exec")
 
 
-class JumpOut(Exception):
-    """自定义异常，用于跳出try，中断执行"""
-
-    pass
-
 def clean_for_excel(original_text, replace_tabs=False):
     """
     功能：
