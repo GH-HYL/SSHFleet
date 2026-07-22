@@ -405,8 +405,6 @@ def create_exec_log_dir(args, config) -> str:
         file_name = "script"
     elif args.u:
         file_name = "upload"
-    elif args.d:
-        file_name = "download"
     else:
         file_name = "unknown"  # 添加默认值避免未定义
 
