@@ -70,7 +70,7 @@ venv\Scripts\activate
 source venv/bin/activate
 
 # 安装依赖
-pip install loguru pydantic pyyaml rich fabric openpyxl requests
+pip install loguru pydantic pyyaml rich openpyxl requests
 ```
 
 1. **配置默认参数（可选）**
@@ -338,12 +338,8 @@ Python 3.10+，主要依赖：
 - `pydantic` - 数据模型验证
 - `pyyaml` - 配置文件解析
 - `rich` - 终端美化和进度条
-- `fabric` - SSH 操作（传输模块使用）
-- `paramiko` - SSH 底层库（fabric 传递依赖，代码中有直接 import）
-- `invoke` - 命令执行库（fabric 传递依赖，代码中有直接 import）
 - `openpyxl` - Excel 文件生成
 - `requests` - HTTP 通信（与 Go 进程 SSE 交互）
-- pydantic
 
 ---
 
