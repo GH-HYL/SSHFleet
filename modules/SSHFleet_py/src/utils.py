@@ -20,9 +20,8 @@ from loguru import logger
 import src.color as color
 from src.yaml import SSHFleetConfig
 
-# 向后兼容：从日志模块导入tlog和迁移的函数
+# 向后兼容：从日志模块导入tlog
 from src.log import tlog
-from src.log import init_tool_logger, init_execution_logger, create_exec_log_dir, create_latest_log_symlink
 
 
 def clean_for_excel(original_text, replace_tabs=False):
@@ -245,7 +244,3 @@ def format_size(size_bytes: int) -> str:
             return f"{size:.2f} {unit}"
         size /= 1024
     return f"{size:.2f} {unit}"
-
-
-# 向后兼容：已迁移到 src.command.builder 模块
-from src.command.builder import build_final_command, remove_command_fist_last_same_symbol

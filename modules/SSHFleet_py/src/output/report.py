@@ -7,7 +7,7 @@ from posixpath import join as posix_join
 
 from src import utils
 from src.yaml import SSHFleetConfig
-from src.utils import tlog
+from src.log import tlog
 
 
 @utils.error_and_exit_handling_decorator(

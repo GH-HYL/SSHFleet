@@ -58,5 +58,5 @@ def check_script_file(script_path):
         if b"\r\n" in data:
             with open(script_path, "wb") as f:
                 f.write(data.replace(b"\r\n", b"\n"))
-            from src.utils import tlog as _tlog
+            from src.log import tlog as _tlog
             _tlog.warning(f"{script_path} 的换行符已自动转换为LF格式")
