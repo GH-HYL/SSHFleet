@@ -4,7 +4,7 @@
 import argparse
 from typing import Dict, List, Optional
 
-from src import utils
+from src.command.builder import build_final_command
 
 
 def build_request(
@@ -23,7 +23,7 @@ def build_request(
     Returns:
         dict: 符合 Go API 规范的请求体
     """
-    command = transfer_command if transfer_command else utils.build_final_command(args)
+    command = transfer_command if transfer_command else build_final_command(args)
 
     return {
         "command": command,
