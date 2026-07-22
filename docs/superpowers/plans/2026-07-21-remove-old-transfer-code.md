@@ -2,6 +2,7 @@
 change: remove-old-transfer-code
 design-doc: docs/superpowers/specs/2026-07-21-remove-old-transfer-code-design.md
 base-ref: 35ceeb3ffc9d29a476b1f55fd538cf8518879291
+archived-with: 2026-07-21-remove-old-transfer-code
 ---
 
 # Implementation Plan: 移除旧 Transfer 代码
