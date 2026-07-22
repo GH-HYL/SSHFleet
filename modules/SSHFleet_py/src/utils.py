@@ -10,7 +10,7 @@ import os
 import re
 import shlex
 import sys
-from typing import Dict, List
+
 from datetime import datetime
 from posixpath import join as posix_join
 
@@ -153,37 +153,6 @@ def remove_command_fist_last_same_symbol(cmd_str):
         return removed_symbol, cmd_str
     else:
         return None, cmd_str
-
-
-def error_classify(
-    ip: str, error_text: str, error_keywords: Dict[str, List[str]]
-) -> str:
-    """
-    功能：
-        根据错误文本内容进行分类
-
-    参数：
-        ip: 设备IP
-        error_text: 错误文本内容
-        error_keywords: 错误分类字典，用于根据错误文本分类错误
-
-    返回：
-        错误类型分类
-    """
-
-    # 转换为小写进行匹配
-    error_lower = error_text.lower()
-    elog.info(f"{ip}：错误类型原始文本: {error_text}")
-    # 注意：这里的关键词是英文，字典关键词全为小写
-    for category, keywords in error_keywords.items():
-        # 获取单个中文的多个关键词
-        for keyword in keywords:
-            # 检查关键词是否在错误文本中
-            if keyword in error_lower:
-                return category
-
-    elog.error(f"{ip}：未匹配到错误类型")
-    return "错误未分类"
 
 
 def print_error_information_and_exit(
