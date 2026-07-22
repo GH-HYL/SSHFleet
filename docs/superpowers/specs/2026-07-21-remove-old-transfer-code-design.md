@@ -2,6 +2,8 @@
 comet_change: remove-old-transfer-code
 role: technical-design
 canonical_spec: openspec
+archived-with: 2026-07-21-remove-old-transfer-code
+status: archived
 ---
 
 # Design: 移除旧 Transfer 代码
