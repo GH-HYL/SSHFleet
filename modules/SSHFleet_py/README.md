@@ -120,10 +120,10 @@ python3 sshfleet.py -z
 ### 参数说明
 
 ```
-python3 sshfleet.py  ( -c | -s | -u | -d | -z )  ( -f ) ( -p ) [可选参数]
+python3 sshfleet.py  ( -c | -s | -u | -z )  ( -f ) ( -p ) [可选参数]
 ```
 
-#### 必填参数（五选一）
+#### 必填参数（四选一）
 
 
 | 参数          | 说明                                                       |
@@ -131,7 +131,6 @@ python3 sshfleet.py  ( -c | -s | -u | -d | -z )  ( -f ) ( -p ) [可选参数]
 | `-c command`  | 命令模式，远程执行命令                                     |
 | `-s script`   | 脚本模式，远程执行本地脚本（.sh/.py）                      |
 | `-u upload`   | 上传模式，本地文件或目录路径                               |
-| `-d download` | 下载模式，远程文件或目录路径（绝对路径，当前版本暂未开放） |
 | `-z`          | 打包模式，打包最新历史记录（打包前会删除当前旧打包文件）   |
 
 #### 条件必填参数
@@ -139,8 +138,8 @@ python3 sshfleet.py  ( -c | -s | -u | -d | -z )  ( -f ) ( -p ) [可选参数]
 
 | 参数          | 说明                                      |
 | ------------- | ----------------------------------------- |
-| `-f csv_file` | 节点 CSV 文件（-c/-s/-u/-d 时必填）       |
-| `-p path`     | 上传目标路径/下载存放路径（-u/-d 时必填） |
+| `-f csv_file` | 节点 CSV 文件（-c/-s/-u 时必填）          |
+| `-p path`     | 上传目标路径（-u 时必填）                 |
 
 #### 可选参数
 
@@ -254,12 +253,6 @@ src/
 ├── utils.py                   # 工具函数、日志初始化、错误分类、装饰器
 ├── yaml.py                    # 配置文件加载（Pydantic 模型校验）
 ├── color.py                   # 终端颜色常量
-├── transfer/
-│   ├── transfer_router.py     # 传输路由：根据模式分发到上传/下载流程
-│   ├── transfer.py            # 传输主流程：上传/下载、进度条、结果收集
-│   ├── transfer_precheck.py   # 传输预检查：根据文件类型选择传输方式
-│   ├── transfer_check.py      # 传输预检：路径存在性、磁盘空间、写权限
-│   └── transfer_utils.py      # SSH 连接创建、文件打包、中断处理
 ├── config/
 │   ├── SSHFleet.yaml          # 工具配置（账号、超时、路径等）
 │   ├── dangerous_keywords.json # 危险命令检测规则
@@ -275,8 +268,7 @@ src/
 参数解析 → 安全检查 → 节点读取 → 用户确认
   ↓
 ┌─ 命令/脚本模式 ─→ gotogo 模块启动 Go 子进程，通过 HTTP SSE 实时接收结果（Rich 进度条显示）
-├─ 上传模式 ─→ gotogo 模块启动 Go 子进程，通过 HTTP SSE 实时接收结果（Rich 进度条显示）
-└─ 下载模式 ─→ transfer 模块逐节点 SFTP 下载，带预检和进度条（当前版本暂未开放）
+└─ 上传模式 ─→ gotogo 模块启动 Go 子进程，通过 HTTP SSE 实时接收结果（Rich 进度条显示）
   ↓
 结果统计 → 终端输出 → 生成报告(xlsx/txt) → 资源备份 → 创建 latest_history 链接
 ```

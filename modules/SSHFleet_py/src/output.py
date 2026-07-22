@@ -369,10 +369,6 @@ def format_statistic_results_to_report(
             f.write("  执行模式： 上传模式\n")
             f.write(f"  本地路径： {args.u}\n")
             f.write(f"  远程路径： {args.p}\n")
-        if args.d:
-            f.write("  执行模式： 下载模式\n")
-            f.write(f"  远程路径： {args.d}\n")
-            f.write(f"  本地路径： {args.p}\n")
 
         f.write(f"  CSV文件路径： {args.f}\n")
         f.write(f'  节点数量： {results_statistic["nodeinofs_total"]}\n')
@@ -383,7 +379,7 @@ def format_statistic_results_to_report(
         if args.t:
             if args.c or args.s:
                 f.write(f"  执行超时： {args.t}s\n")
-            if args.u or args.d:
+            if args.u:
                 f.write(f"  传输超时： {args.t}s\n")
 
         f.write("\n【结果统计】\n")
