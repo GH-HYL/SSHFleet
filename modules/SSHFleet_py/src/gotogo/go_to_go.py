@@ -22,7 +22,7 @@ from rich.text import Text
 
 from src.gotogo import builder, caller, parser
 from src.yaml import SSHFleetConfig
-from src.utils import tlog
+from src.log import tlog
 
 console = Console()
 

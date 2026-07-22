@@ -7,7 +7,8 @@ from pathlib import Path
 
 import src.color as color
 import src.utils as utils
-from src.utils import tlog
+from src.log import tlog
+from src.command.builder import remove_command_fist_last_same_symbol
 
 
 def _check_upload_concurrency(args, config) -> None:
@@ -161,7 +162,7 @@ def arguments_confirm(args, nodes, config=None):
 
     if args.c:
         # 检测并移除命令的边界符号
-        remove_symbol, args.c = utils.remove_command_fist_last_same_symbol(args.c)
+        remove_symbol, args.c = remove_command_fist_last_same_symbol(args.c)
 
     # 未输入并发数，默认使用nodes数量进行并发
     args.n = len(nodes) if args.n == 0 else args.n
