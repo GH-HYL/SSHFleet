@@ -12,7 +12,7 @@ from posixpath import join as posix_join
 import src.color as color
 import src.utils as utils
 from src.yaml import SSHFleetConfig
-from src.utils import tlog
+from src.log import tlog
 
 
 @utils.error_and_exit_handling_decorator(

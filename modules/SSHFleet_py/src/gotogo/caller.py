@@ -13,7 +13,7 @@ from typing import Dict, Generator, Optional
 import requests
 
 from src.yaml import SSHFleetConfig
-from src.utils import tlog
+from src.log import tlog
 
 
 def generate_process_key() -> str:
