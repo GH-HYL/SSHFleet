@@ -8,12 +8,6 @@
 #     ├── go/                           # go语言的执行器文件夹
 #     │   ├── SSHFleet                 # 执行器（Linux可执行文件）
 #     │   └── SSHFleet_Go.exe             # 执行器（Windows可执行文件）
-#     ├── transfer/                     # 传输模块
-#     │   ├── transfer_router.py        # 传输路由（决定命令模式或SFTP模式）
-#     │   ├── transfer_precheck.py      # 传输预检查文件
-#     │   ├── transfer_check.py         # 传输检查文件
-#     │   ├── transfer_utils.py         # 传输工具文件
-#     │   └── transfer.py               # 传输入口文件
 #     ├── config/                       # 配置文件夹
 #     │   ├── SSHFleet.yaml             # 配置文件
 #     │   ├── dangerous_keywords.json   # 危险命令关键词文件
@@ -152,13 +146,10 @@ def main():
         final_results = gotogo.go_to_go(args, config, nodesinfos, exec_log_dir, error_keywords)
         tlog.success("go_to_go主执行器执行完成")
 
-    # 进入transfer主执行器
-    if args.u or args.d:
-        import src.transfer.transfer_router as transfer_router
-        if args.u:
-            final_results = transfer_router.route_upload(args, config, nodesinfos, exec_log_dir, error_keywords)
-        else:
-            final_results = transfer_router.route_download(args, config, nodesinfos, exec_log_dir, error_keywords)
+    # 进入上传执行器（使用 Go 后端）
+    if args.u:
+        import src.gotogo as gotogo
+        final_results = gotogo.go_to_go(args, config, nodesinfos, exec_log_dir, error_keywords)
 
 
     # “全局”结束时间计时

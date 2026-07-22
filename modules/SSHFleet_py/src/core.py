@@ -94,25 +94,23 @@ def parse_args(config: SSHFleetConfig) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="\n基于 Python3.12 的 Paramiko 工具库的批量执行和传输工具\n"
         "\n功能说明:\n"
-        "  执行模式: c、s、u、p、z\n"
-        "  模式说明：执行命令、执行脚本、上传文件、下载文件（暂未完成）、打包最新日志\n"
+        "  执行模式: c、s、u、z\n"
+        "  模式说明：执行命令、执行脚本、上传文件、打包最新日志\n"
         "\n示例：\n"
         '  命令模式: python3 sshfleet.py -f nodes.csv -c "ls -l"\n'
         "  脚本模式: python3 sshfleet.py -f nodes.csv -s script.sh\n"
         "  上传模式: python3 sshfleet.py -f nodes.csv -u /local/path  -p /remote/path\n"
-        "  下载模式: python3 sshfleet.py -f nodes.csv -d /remote/path -p /local/path\n"
         "  打包模式: python3 sshfleet.py -z\n",
         formatter_class=argparse.RawTextHelpFormatter,
-        usage="\npython3 sshfleet.py  ( -c | -s | -u | -d | -z )  ( -f ) ( -p ) [其他可选参数]\n",
+        usage="\npython3 sshfleet.py  ( -c | -s | -u | -z )  ( -f ) ( -p ) [其他可选参数]\n",
     )
     try:
         parser.add_argument('-c', metavar='command', help='    （命令模式）           远程执行命令')
         parser.add_argument('-s', metavar='script', help='    （脚本模式）           远程执行脚本')
         parser.add_argument('-u', metavar='upload', help='    （上传模式）           本地上传文件或目录路径')
-        parser.add_argument('-d', metavar='download', help='    （下载模式）           远程下载文件或目录路径（绝对路径）')
         parser.add_argument('-z', action='store_true', help='    （打包模式）           打包最新日志到当前路径，注意：打包前会删除当前旧打包文件')
-        parser.add_argument('-f', metavar='csv_file', help='                           节点信息的 CSV 文件 （ -c 或 -s 或 -u 或 -d 时必填）')
-        parser.add_argument('-p', metavar='path', help='                           上传文件或目录的路径、下载文件存放的目录路径（ -u 或 -d 时必填）')
+        parser.add_argument('-f', metavar='csv_file', help='                           节点信息的 CSV 文件 （ -c 或 -s 或 -u 时必填）')
+        parser.add_argument('-p', metavar='path', help='                           上传文件或目录的路径（ -u 时必填）')
         parser.add_argument('-m', metavar='mode', choices=['direct', 'sudo'],default=config.execution.mode,  help=f'     [默认: {config.execution.mode if config.execution.mode else "direct"}]          c、s模式的执行权限 ："direct" 用户权限执行；"sudo" root 权限执行')
         parser.add_argument('-t', metavar='execute_timeout',type=int, help=f'     [默认: {config.execution.timeout_execute if config.execution.timeout_execute  else "60"} 或 {config.execution.timeout_transfer if config.execution.timeout_transfer else "300"} ]    执行超时时间（秒）：c、s模式默认{config.execution.timeout_execute if config.execution.timeout_execute else "60"}；u、p模式{config.execution.timeout_transfer if config.execution.timeout_transfer else "300"}')
         parser.add_argument('-T', metavar='connect_timeout',type=int, default=config.execution.timeout_connect, help=f'     [默认值: {config.execution.timeout_connect if config.execution.timeout_connect else "10"}]          连接超时时间（秒）')
@@ -136,11 +134,11 @@ def parse_args(config: SSHFleetConfig) -> argparse.Namespace:
     # 根据模式设置超时时间
     if (args.c or args.s) and args.t is None:
         args.t = config.execution.timeout_execute
-    elif (args.u or args.d) and args.t is None:
+    elif args.u and args.t is None:
         args.t = config.execution.timeout_transfer
 
     # 路径参数规范化
-    for path_attr in ["s", "f", "u", "p", "d"]:
+    for path_attr in ["s", "f", "u", "p"]:
         path_value = getattr(args, path_attr, None)
         if path_value:
             # 路径中间不能包含空格,不是路径不能包括空格,不能以空格开头
@@ -183,9 +181,6 @@ def parse_args(config: SSHFleetConfig) -> argparse.Namespace:
         elif args.u:
             # 取u路径的文件名部分作为备注
             args.r = os.path.basename(args.u)
-        elif args.d:
-            # 取d路径的文件名部分作为备注
-            args.r = os.path.basename(args.d)
 
     return args
 
@@ -478,11 +473,6 @@ def arguments_confirm(args, nodes, config=None):
         info_table.append(("本地路径", args.u))
         info_table.append(("远程路径", args.p))
         info_table.append(("", ""))
-    if args.d:
-        info_table.append(("执行模式", "下载模式"))
-        info_table.append(("远程路径", args.d))
-        info_table.append(("本地路径", args.p))
-        info_table.append(("", ""))
 
     info_table.append(("CSV文件路径", args.f))
     info_table.append(("节点数量", len(nodes)))
@@ -496,7 +486,7 @@ def arguments_confirm(args, nodes, config=None):
     if args.t:
         if args.c or args.s:
             info_table.append(("执行超时", f"{args.t}s"))
-        if args.u or args.d:
+        if args.u:
             info_table.append(("传输超时", f"{args.t}s"))
 
     # 备注信息
@@ -665,7 +655,7 @@ def results_statistics(
     category_counts = Counter(d.get("result_category") for d in results)
 
     # 根据模式移除成功分类
-    if args.u or args.d:
+    if args.u:
         success_category = "传输成功"
         category_counts.pop(success_category, None)
     elif args.c or args.s:
