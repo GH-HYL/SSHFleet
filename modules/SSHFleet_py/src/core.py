@@ -92,7 +92,7 @@ def parse_args(config: SSHFleetConfig) -> argparse.Namespace:
     """
 
     parser = argparse.ArgumentParser(
-        description="\n基于 Python3.12 的 Paramiko 工具库的批量执行和传输工具\n"
+        description="\n基于 Go 后端的批量 SSH 执行和上传工具\n"
         "\n功能说明:\n"
         "  执行模式: c、s、u、z\n"
         "  模式说明：执行命令、执行脚本、上传文件、打包最新日志\n"
