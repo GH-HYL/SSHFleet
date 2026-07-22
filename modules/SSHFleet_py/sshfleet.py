@@ -25,16 +25,40 @@
 import os
 import sys
 import json
-from src import yaml
 from datetime import datetime
 
-# 自定义模块
-import src.core as core
+# 自定义模块 - 新模块路径
+from src.input.args import parse_args
+from src.input.csv import read_nodes_infos
+from src.input.confirm import arguments_confirm
+from src.log.logger import tlog, init_tool_logger, create_exec_log_dir, create_latest_log_symlink
+from src.check.arguments import check_arguments
+from src.check.dangerous import check_dangerous_content
+from src.check.files import check_files_exist
+from src.output.statistics import results_statistics
+from src.output.archive import save_execute_resource_files, zip_latest_history
+from src.output.terminal import format_statistic_results_to_terminal
+from src.output.report import format_statistic_results_to_report
+from src.output.xlsx import format_output_to_xlsx, format_dict_list_to_xlsx
+from src.gotogo.go_to_go import go_to_go
+from src import yaml
 import src.utils as utils
-import src.check as check
-import src.output as output
 import src.color as color
-from src.utils import tlog
+
+
+def _load_json(path):
+    """读取JSON文件并返回解析后的数据"""
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        tlog.error(
+            f"JSON文件{path}读取内容失败\n异常类型：\n{type(e)}\n异常信息：\n{e}"
+        )
+        utils.print_error_information_and_exit(
+            "_load_json",
+            f"JSON文件{path}读取内容失败\n异常类型：\n{type(e)}\n异常信息：\n{e}",
+        )
 
 
 def main():
@@ -52,7 +76,7 @@ def main():
 
     # 初始化工具日志
     try:
-        utils.init_tool_logger(config.paths.logs.historys, config)
+        init_tool_logger(config.paths.logs.historys, config)
         tlog.debug(f"{ '-' * 50}分割线{ '-' * 50}")
         tlog.success("初始化工具日志成功")
     except Exception as e:
@@ -69,90 +93,62 @@ def main():
     tlog.debug(f"{ '-' * 20}SSHFleet工具 - 准备阶段{ '-' * 20}")
 
     # 检查代码文件是否都存在
-    check.check_files_exist(config)
+    check_files_exist(config)
     tlog.success("检查代码文件存在性成功")
 
     # 获取危险命令分类正则关键字
-    try:
-        with open(
-            config.paths.jsons.dangerous_keywords, "r", encoding="utf-8"
-        ) as f:
-            dangerous_keywords = json.load(f)
-    except Exception as e:
-        tlog.error(
-            f"JSON文件{config.paths.jsons.dangerous_keywords}读取内容失败\n异常类型：\n{type(e)}\n异常信息：\n{e}"
-        )
-        utils.print_error_information_and_exit(
-            "main",
-            f"JSON文件{config.paths.jsons.dangerous_keywords}读取内容失败\n异常类型：\n{type(e)}\n异常信息：\n{e}",
-        )
+    dangerous_keywords = _load_json(config.paths.jsons.dangerous_keywords)
 
     # 参数解析
-    args = core.parse_args(config)
+    args = parse_args(config)
     tlog.success(f"参数解析成功,解析结果: {args}")
 
     # 参数合规性检查
-    check.check_arguments(args)
+    check_arguments(args)
     tlog.success("输入的参数合规性检查成功")
 
     # 执行打包历史记录
     if args.z:
-        core.zip_latest_history(args, config)
+        zip_latest_history(args, config)
         tlog.success("打包历史记录成功")
         tlog.info("SSHFleet工具已退出")
         sys.exit(0)
 
     # 执行危险字典内容检查
-    check.check_dangerous_content(args, dangerous_keywords)
+    check_dangerous_content(args, dangerous_keywords)
     tlog.success("[check] 执行危险字典内容检查成功")
 
     # 读取节点信息
-    nodesinfos = core.read_nodes_infos(args.f, config)
+    nodesinfos = read_nodes_infos(args.f, config)
     tlog.success("读取节点信息成功")
 
     # 参数信息确认
     tlog.info("开始进行参数信息确认")
-    core.arguments_confirm(args, nodesinfos, config)
+    arguments_confirm(args, nodesinfos, config)
     tlog.info("用户已核实通过参数信息")
 
     tlog.debug(f"{'-' * 20}SSHFleet工具 - 准备结束{'-' * 20}\n")
     tlog.debug(f"{'=' * 30}SSHFleet工具 - 执行阶段{'=' * 30}")
 
     # 获取错误分类关键字
-    try:
-        with open(config.paths.jsons.error_keywords, "r", encoding="utf-8") as f:
-            error_keywords = json.load(f)
-    except Exception as e:
-        tlog.error(
-            f"JSON文件{config.paths.jsons.error_keywords}读取内容失败\n异常类型：\n{type(e)}\n异常信息：\n{e}"
-        )
-        utils.print_error_information_and_exit(
-            "main",
-            f"JSON文件{config.paths.jsons.error_keywords}读取内容失败\n异常类型：\n{type(e)}\n异常信息：\n{e}",
-        )
+    error_keywords = _load_json(config.paths.jsons.error_keywords)
 
-    # “全局”开始时间计时
+    # "全局"开始时间计时
     global_start_time = datetime.now()
     tlog.info(f"全局开始时间: {global_start_time}")
 
     # 生成日志目录
-    exec_log_dir = utils.create_exec_log_dir(args, config)
+    exec_log_dir = create_exec_log_dir(args, config)
     tlog.success(f"生成日志目录成功: {exec_log_dir}")
 
-    if args.c or args.s:
-        tlog.info("开始执行命令")
-        tlog.info("进入“执行”主执行器")
-        import src.gotogo as gotogo
-        final_results = gotogo.go_to_go(args, config, nodesinfos, exec_log_dir, error_keywords)
+    # 执行命令、脚本或上传（合并所有执行模式）
+    if args.c or args.s or args.u:
+        tlog.info("开始执行任务")
+        tlog.info("进入主执行器")
+        final_results = go_to_go(args, config, nodesinfos, exec_log_dir, error_keywords)
         tlog.success("go_to_go主执行器执行完成")
 
-    # 进入上传执行器（使用 Go 后端）
-    if args.u:
-        import src.gotogo as gotogo
-        final_results = gotogo.go_to_go(args, config, nodesinfos, exec_log_dir, error_keywords)
-
-
-    # “全局”结束时间计时
+    # "全局"结束时间计时
     global_stop_time = datetime.now()
     tlog.info(
         f"全局结束时间: {global_stop_time}，全局执行时间: {round((global_stop_time - global_start_time).total_seconds(), 3)}秒"
@@ -170,31 +166,31 @@ def main():
         )
 
     # 计算统计结果信息
-    results_statistic = core.results_statistics(
+    results_stat = results_statistics(
         final_results, nodesinfos, args, global_start_time, global_stop_time
     )
 
     # 格式化统计结果信息输出到终端
-    output.format_statistic_results_to_terminal(results_statistic)
+    format_statistic_results_to_terminal(results_stat)
 
     # 格式化统计结果信息输出到报告文件
-    output.format_statistic_results_to_report(
-        results_statistic, exec_log_dir, args, config
+    format_statistic_results_to_report(
+        results_stat, exec_log_dir, args, config
     )
 
     # 保存执行资源文件
-    core.save_execute_resource_files(args, exec_log_dir, config)
+    save_execute_resource_files(args, exec_log_dir, config)
 
     # 创建最新日志符号链接
-    utils.create_latest_log_symlink(config)
+    create_latest_log_symlink(config)
 
     # 格式化终端输出到Excel文件（转换output.txt格式）
     if config.enable.output_to_xlsx:
-        output.format_output_to_xlsx(exec_log_dir, config)
+        format_output_to_xlsx(exec_log_dir, config)
 
     # 输出results字典列表到xlsx文件
     if config.enable.results_to_xlsx:
-        output.format_dict_list_to_xlsx(final_results, exec_log_dir, config)
+        format_dict_list_to_xlsx(final_results, exec_log_dir, config)
 
     tlog.debug(f"{'-' * 20}SSHFleet工具 - 整理结束{'-' * 20}")
 
