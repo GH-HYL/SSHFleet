@@ -5,20 +5,37 @@
 # 项目目录/
 # ├── sshfleet.py                        # 主程序
 # └── src/                              # 源代码文件夹
-#     ├── go/                           # go语言的执行器文件夹
-#     │   ├── SSHFleet                 # 执行器（Linux可执行文件）
-#     │   └── SSHFleet_Go.exe             # 执行器（Windows可执行文件）
+#     ├── input/                        # 输入处理模块
+#     │   ├── args.py                   #   命令行参数解析
+#     │   ├── csv.py                    #   CSV 节点文件读取
+#     │   └── confirm.py                #   参数信息交互确认
+#     ├── check/                        # 校验模块
+#     │   ├── arguments.py              #   参数合规性检查
+#     │   ├── dangerous.py              #   危险命令检测
+#     │   └── files.py                  #   文件存在性检查
+#     ├── command/                      # 命令构建模块
+#     │   └── builder.py                #   最终执行命令构建
+#     ├── gotogo/                       # Go 执行器模块
+#     │   ├── go_to_go.py               #   主执行函数
+#     │   ├── caller.py                 #   Go 进程调用与 HTTP SSE 通信
+#     │   ├── builder.py                #   请求体构建（命令/上传）
+#     │   ├── parser.py                 #   SSE 响应解析
+#     │   └── classifier.py             #   错误分类
+#     ├── output/                       # 输出处理模块
+#     │   ├── terminal.py               #   终端格式化输出
+#     │   ├── report.py                 #   执行报告生成
+#     │   ├── xlsx.py                   #   Excel 文件生成
+#     │   ├── statistics.py             #   结果统计计算
+#     │   └── archive.py                #   资源文件备份与打包
+#     ├── log/                          # 日志模块
+#     │   └── logger.py                 #   日志初始化与管理
 #     ├── config/                       # 配置文件夹
-#     │   ├── SSHFleet.yaml             # 配置文件
-#     │   ├── dangerous_keywords.json   # 危险命令关键词文件
-#     │   └── error_keywords.json       # 错误分类关键词文件    
-#     ├── gotogo.py                     # 命令执行器入口
-#     ├── check.py                      # 检查文件
-#     ├── color.py                      # 颜色文件
-#     ├── core.py                       # 核心代码文件
-#     ├── output.py                     # 打印结果文件
-#     ├── yaml.py                       # 读取配置文件
-#     └── utils.py                      # 工具文件
+#     │   ├── SSHFleet.yaml             #   工具配置
+#     │   ├── dangerous_keywords.json   #   危险命令检测规则
+#     │   └── error_keywords.json       #   错误分类关键词
+#     ├── utils.py                      # 工具函数、装饰器
+#     ├── yaml.py                       # 配置文件加载（Pydantic）
+#     └── color.py                      # 终端颜色常量
 
 
 # 系统或第三方模块
