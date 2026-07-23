@@ -17,13 +17,20 @@ from src.log import tlog
 @utils.error_and_exit_handling_decorator(
     "format_output_to_xlsx", "格式化输出结果到Excel文件失败", isexit=True
 )
-def format_output_to_xlsx(log_dir: str, config: SSHFleetConfig) -> None:
+def format_output_to_xlsx(
+    final_results: List[Dict[str, Any]],
+    log_dir: str,
+    args: Any,
+    config: SSHFleetConfig,
+) -> None:
     """
     功能：
-        格式化output.txt文件内容到Excel文件
+        从结构化数据生成output.xlsx（3列格式：IP地址、事件类型、内容详情）
 
     参数:
+        final_results: 结构化结果列表
         log_dir: 日志目录路径
+        args: 命令行参数
         config: 配置对象
     返回:
         None
@@ -33,24 +40,8 @@ def format_output_to_xlsx(log_dir: str, config: SSHFleetConfig) -> None:
     from openpyxl.utils import get_column_letter
     from openpyxl.worksheet.worksheet import Worksheet
 
-    # 如果output.txt不存在，直接返回
-    output_file = posix_join(log_dir, config.paths.files.output)
-    if not os.path.exists(output_file):
-        tlog.error(f"输出文本文件不存在，路径：{output_file}")
-        return
-
-    # 读取日志内容
-    try:
-        with open(output_file, "r", encoding="utf-8") as f:
-            original_log_content = f.read()
-            # 清理日志内容中的非法XML字符
-            log_content = utils.clean_for_excel(original_log_content)
-
-    except Exception as e:
-        print(
-            f"{color.COLOR_RED}[ERROR]{color.COLOR_RESET}{color.COLOR_YELLOW} [function:format_output_to_xlsx]{color.COLOR_RESET}读取日志文件失败: {e}",
-            file=sys.stderr,
-        )
+    if not final_results:
+        tlog.warning("结果列表为空，跳过 output.xlsx 生成")
         return
 
     # 配置输出路径
@@ -75,52 +66,68 @@ def format_output_to_xlsx(log_dir: str, config: SSHFleetConfig) -> None:
         start_color="366092", end_color="366092", fill_type="solid"
     )
     header_alignment = Alignment(horizontal="center", vertical="center")
+    separator_fill = PatternFill(
+        start_color="D9E1F2", end_color="D9E1F2", fill_type="solid"
+    )
 
     # 写入表头
     headers = ["IP地址", "事件类型", "内容详情"]
     for col_idx, header in enumerate(headers, 1):
         cell = ws.cell(row=1, column=col_idx, value=header)
-        if cell:  # 确保cell对象存在
+        if cell:
             cell.font = header_font
             cell.fill = header_fill
             cell.alignment = header_alignment
 
-    # 处理日志内容
-    current_ip = ""
+    # 从结构化数据生成行
     row_idx = 2
-    lines = log_content.split("\n")
+    action = "上传" if args.u else "执行"
 
-    for line in lines:
-        if not line:
-            continue
+    for result in final_results:
+        ip = result.get("ip", "未知IP")
+        connect_success = result.get("connect_success", False)
+        connect_cost_time = result.get("connect_cost_time", 0)
+        exec_cost_time = result.get("exec_cost_time", 0)
+        exit_code = result.get("exit_code", -1)
+        output = result.get("output", "")
+        result_category = result.get("result_category", "未知")
 
-        # 处理══════行，转换为空白行
-        # if line.startswith('══════'):
-        if line.startswith("========================="):
-            row_idx += 1
-            continue
+        # 行1: 连接状态
+        conn_status = "成功" if connect_success else "失败"
+        ws.cell(row=row_idx, column=1, value=ip)
+        ws.cell(row=row_idx, column=2, value=f"连接: {conn_status} - {connect_cost_time:.3f}s")
+        row_idx += 1
 
-        # 匹配IP行
-        ip_match = re.search(r"【(\d+\.\d+\.\d+\.\d+)】", line)
-        if ip_match:
-            current_ip = ip_match.group(1)
-            content_start = line.find("】") + 1
-            content = line[content_start:].strip()
+        # 行2: 执行/上传状态
+        exec_success = exit_code == 0
+        exec_status = "成功" if exec_success else "失败"
+        ws.cell(row=row_idx, column=1, value=ip)
+        ws.cell(row=row_idx, column=2, value=f"{action}: {exec_status} - {exec_cost_time:.3f}s")
+        row_idx += 1
 
-            # 写入主记录
-            ws.cell(row=row_idx, column=1, value=current_ip)
-            ws.cell(row=row_idx, column=2, value=content)
-            row_idx += 1
-        elif current_ip:
-            # 作为标准输出和错误输出内容
-            ws.cell(row=row_idx, column=1, value=current_ip)
-            ws.cell(row=row_idx, column=2, value="标准输出和错误输出")
-            cell_content = ws.cell(row=row_idx, column=3, value=line.strip())
+        # 行3+: 输出内容（按行拆分）
+        if output:
+            for line in output.strip().split("\n"):
+                if not line.strip():
+                    continue
+                ws.cell(row=row_idx, column=1, value=ip)
+                ws.cell(row=row_idx, column=2, value="标准输出和错误输出")
+                cell_content = ws.cell(row=row_idx, column=3, value=line.strip())
+                if cell_content:
+                    cell_content.alignment = Alignment(vertical="top", wrap_text=True)
+                row_idx += 1
 
-            # 设置内容单元格自动换行
-            if cell_content:
-                cell_content.alignment = Alignment(vertical="top", wrap_text=True)
-            row_idx += 1
+        # 行: 分类
+        ws.cell(row=row_idx, column=1, value=ip)
+        ws.cell(row=row_idx, column=2, value=f"分类: {result_category}")
+        row_idx += 1
+
+        # 分隔行
+        for col in range(1, 4):
+            cell = ws.cell(row=row_idx, column=col)
+            if cell:
+                cell.fill = separator_fill
+        row_idx += 1
 
     # 设置列宽
     column_widths = [15, 20, 60]
@@ -140,14 +147,12 @@ def format_output_to_xlsx(log_dir: str, config: SSHFleetConfig) -> None:
     # 保存文件
     try:
         wb.save(output_path)
-        tlog.success("格式化output.txt到Excel文件成功")
-        return
+        tlog.success("格式化结构化数据到 output.xlsx 成功")
     except Exception as e:
         print(
             f"{color.COLOR_RED}[ERROR]{color.COLOR_RESET}{color.COLOR_YELLOW} [function:format_output_to_xlsx]{color.COLOR_RESET}保存Excel文件失败: {e}",
             file=sys.stderr,
         )
-        return
     finally:
         wb.close()
 
