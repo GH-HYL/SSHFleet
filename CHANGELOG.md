@@ -11,11 +11,15 @@
 - 新增并发数提示信息，增强用户确认警告
 - 新增 `output.txt` 上传模式写入支持（命令模式和上传模式共用输出文件）
 - 上传模式节点进度条新增 Succ/Fail 实时统计（与命令模式一致）
+- 新增 `CONTEXT.md` 领域术语表和数据流图
+- 新增 `docs/adr/0001-unified-output-and-structured-xlsx.md` 决策记录
 
 ### Changed
 - 重命名 Go 工程目录 `SSHFleet_go` → `SSHFleet_Go`，符合个人开发规范
 - 修复日志模块文件名拼写 `sucessLevel.go` → `successLevel.go`
 - 拆分 `ssh_run.go`（642行）为三个职责清晰的文件：`ssh_types.go`（99行）、`ssh_run.go`（174行）、`ssh_upload.go`（392行）
+- `output.xlsx` 改为从结构化数据直接生成，不再从 txt 正则解析（更可靠）
+- `format_output_to_xlsx()` 函数签名更新：增加 `final_results` 和 `args` 参数
 
 ### Fixed
 - 修复 `output.txt` 命令模式文件创建但内容为空的问题（主结果分支缺少写入逻辑）

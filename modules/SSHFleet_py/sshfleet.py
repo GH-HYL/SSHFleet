@@ -202,9 +202,9 @@ def main():
     # 创建最新日志符号链接
     create_latest_log_symlink(config)
 
-    # 格式化终端输出到Excel文件（转换output.txt格式）
+    # 格式化结构化数据到 output.xlsx（3列格式：IP、事件类型、内容详情）
     if config.enable.output_to_xlsx:
-        format_output_to_xlsx(exec_log_dir, config)
+        format_output_to_xlsx(final_results, exec_log_dir, args, config)
 
     # 输出results字典列表到xlsx文件
     if config.enable.results_to_xlsx:
