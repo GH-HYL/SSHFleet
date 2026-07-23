@@ -155,7 +155,7 @@ func handleExecute(w http.ResponseWriter, r *http.Request) {
 		} else {
 			connFailed++
 		}
-		if result.ConnectSuccess && result.ExitCode == 0 {
+		if result.ConnectSuccess && result.ExitCode != nil && *result.ExitCode == 0 {
 			success++
 		} else {
 			failed++
@@ -345,7 +345,7 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 		} else {
 			connFailed++
 		}
-		if result.ConnectSuccess && result.Error == nil && result.ExitCode == 0 {
+		if result.ConnectSuccess && result.Error == nil && result.ExitCode != nil && *result.ExitCode == 0 {
 			success++
 		} else {
 			failed++

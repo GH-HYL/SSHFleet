@@ -29,11 +29,10 @@ func (c *SSHClient) UploadFiles(
 	onProgress func(ProgressMsg),
 ) (*UploadResult, error) {
 	result := &UploadResult{
-		Type:     "result",
-		IP:       c.config.IP,
-		Port:     c.config.Port,
-		User:     c.config.User,
-		ExitCode: 0,
+		Type: "result",
+		IP:   c.config.IP,
+		Port: c.config.Port,
+		User: c.config.User,
 	}
 
 	// 1. SSH 建连
@@ -252,9 +251,11 @@ func (c *SSHClient) UploadFiles(
 	result.Output = base64.StdEncoding.EncodeToString([]byte(outputText))
 	// ExitCode: 0=全部成功, 1=有失败
 	if failedFiles > 0 {
-		result.ExitCode = 1
+		code := 1
+		result.ExitCode = &code
 	} else {
-		result.ExitCode = 0
+		code := 0
+		result.ExitCode = &code
 	}
 	result.ExecCostTime = totalCostTime
 	result.TotalBytes = uploadedBytes // 实际成功上传的字节数
