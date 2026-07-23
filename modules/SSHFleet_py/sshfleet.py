@@ -77,7 +77,8 @@ def main():
     # 初始化工具日志
     try:
         init_tool_logger(config.paths.logs.historys, config)
-        tlog.debug(f"{ '-' * 50}分割线{ '-' * 50}")
+        tlog.debug(f"{ '-' * 100}分割线{ '-' * 100}")
+        tlog.debug(f"{ '-' * 100}分割线{ '-' * 100}")
         tlog.success("初始化工具日志成功")
     except Exception as e:
         print(
@@ -197,7 +198,8 @@ def main():
     # 退出SSHFleet工具
     print("SSHFleet工具执行结束，已退出")
     tlog.info("SSHFleet工具已退出")
-    tlog.debug(f"{ '-' * 50}分割线{ '-' * 50}" + "\n" * 3)
+    tlog.debug(f"{ '-' * 100}分割线{ '-' * 100}")
+    tlog.debug(f"{ '-' * 100}分割线{ '-' * 100}" + "\n" * 3)
     sys.exit(0)
 
 
