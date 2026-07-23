@@ -11,12 +11,12 @@
 !modules/**
 
 # Go 模块
-modules/SSHFleet_go/vendor/
-modules/SSHFleet_go/vendor/**
+modules/SSHFleet_Go/vendor/
+modules/SSHFleet_Go/vendor/**
 
 # Python 模块
-modules/SSHFleet_py/__pycache__/
-modules/SSHFleet_py/**/__pycache__/
+modules/SSHFleet_Py/__pycache__/
+modules/SSHFleet_Py/**/__pycache__/
 *.pyc
-modules/SSHFleet_py/historys/
-modules/SSHFleet_py/src/go/
+modules/SSHFleet_Py/historys/
+modules/SSHFleet_Py/src/go/

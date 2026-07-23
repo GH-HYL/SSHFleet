@@ -241,53 +241,65 @@ Python 负责参数解析、安全检查、日志整理、结果输出；Go 负�
 ```
 sshfleet.py                     # 入口：参数解析、流程编排
 src/
-├── core.py                    # 参数解析、节点读取、统计计算
-├── gotogo/                    # Go 执行器模块
-│   ├── go_to_go.py            #   主执行函数：启动 Go 进程 + HTTP SSE 接收 + Rich 进度条
-│   ├── caller.py              #   Go 进程调用与 HTTP SSE 通信
-│   ├── builder.py             #   请求体构建（命令/上传）
-│   ├── parser.py              #   SSE 响应解析、base64 解码
-│   └── classifier.py          #   错误分类
-├── check.py                   # 参数校验、危险命令检测、脚本内容检查
-├── output.py                  # 终端输出、xlsx 报告生成
-├── utils.py                   # 工具函数、日志初始化、错误分类、装饰器
-├── yaml.py                    # 配置文件加载（Pydantic 模型校验）
-├── color.py                   # 终端颜色常量
-├── config/
-│   ├── SSHFleet.yaml          # 工具配置（账号、超时、路径等）
-│   ├── dangerous_keywords.json # 危险命令检测规则
-│   └── error_keywords.json    # 错误分类关键词
-└── go/
-    ├── SSHFleet               # Go 执行器（Linux）
-    └── SSHFleet_Go.exe        # Go 执行器（Windows）
+├── input/                      # 输入处理模块
+│   ├── args.py                 #   命令行参数解析
+│   ├── csv.py                  #   CSV 节点文件读取
+│   └── confirm.py              #   参数信息交互确认
+├── check/                      # 校验模块
+│   ├── arguments.py            #   参数合规性检查
+│   ├── dangerous.py            #   危险命令检测
+│   └── files.py                #   文件存在性检查
+├── command/                    # 命令构建模块
+│   └── builder.py              #   最终执行命令构建
+├── gotogo/                     # Go 执行器模块
+│   ├── go_to_go.py             #   主执行函数：启动 Go 进程 + HTTP SSE 接收 + Rich 进度条
+│   ├── caller.py               #   Go 进程调用与 HTTP SSE 通信
+│   ├── builder.py              #   请求体构建（命令/上传）
+│   ├── parser.py               #   SSE 响应解析、base64 解码
+│   └── classifier.py           #   错误分类
+├── output/                     # 输出处理模块
+│   ├── terminal.py             #   终端格式化输出
+│   ├── report.py               #   执行报告生成
+│   ├── xlsx.py                 #   Excel 文件生成
+│   ├── statistics.py           #   结果统计计算
+│   └── archive.py              #   资源文件备份与打包
+├── log/                        # 日志模块
+│   └── logger.py               #   日志初始化与管理
+├── utils.py                    # 工具函数、装饰器
+├── yaml.py                     # 配置文件加载（Pydantic 模型校验）
+├── color.py                    # 终端颜色常量
+└── config/
+    ├── SSHFleet.yaml           # 工具配置（账号、超时、路径等）
+    ├── dangerous_keywords.json # 危险命令检测规则
+    └── error_keywords.json     # 错误分类关键词
 ```
 
 ### 执行流程
 
 ```
-参数解析 → 安全检查 → 节点读取 → 用户确认
+参数解析(input) → 校验(check) → 用户确认(input)
   ↓
 ┌─ 命令/脚本模式 ─→ gotogo 模块启动 Go 子进程，通过 HTTP SSE 实时接收结果（Rich 进度条显示）
 └─ 上传模式 ─→ gotogo 模块启动 Go 子进程，通过 HTTP SSE 实时接收结果（Rich 进度条显示）
   ↓
-结果统计 → 终端输出 → 生成报告(xlsx/txt) → 资源备份 → 创建 latest_history 链接
+结果统计(output) → 终端输出(output) → 生成报告(output) → 资源备份(output) → 创建 latest_history 链接
 ```
 
 ### 历史记录结构
 
 ```
 historys/
-├── SSHFleetTools.log                           # 工具运行日志
-└── YYYY-MM-DD_HH-MM-SS_模式_备注/           # 每次执行独立目录
-    ├── SSHFleet_Go.log                        # 执行日志（Go 引擎）
-    ├── output.txt                           # 终端输出（txt）
-    ├── output.xlsx                          # 终端输出（xlsx）
-    ├── report.txt                           # 汇总报告
-    ├── results.xlsx                         # 结果字典（xlsx）
-    └── assets/                              # 资源备份（按模式条件生成）
-        ├── <csv_file>                       # 节点 CSV 文件（始终备份）
-        ├── <script_file>                    # 执行脚本（仅脚本模式）
-        └── <upload_file>                    # 上传文件（仅上传模式）
+├── SSHFleetTools.log                              # 工具运行日志
+└── YYYY-MM-DD_HH-MM-SS_模式_备注/                # 每次执行独立目录
+    ├── SSHFleet_Go.log                            # 执行日志（Go 引擎）
+    ├── output.txt                                 # 终端输出（txt，命令/上传模式均写入）
+    ├── output.xlsx                                # 终端输出（xlsx，由 output.txt 转换）
+    ├── report.txt                                 # 汇总报告
+    ├── results.xlsx                               # 结果字典（xlsx）
+    └── assets/                                    # 资源备份（按模式条件生成）
+        ├── <csv_file>                             # 节点 CSV 文件（始终备份）
+        ├── <script_file>                          # 执行脚本（仅脚本模式）
+        └── <upload_file>                          # 上传文件（仅上传模式）
 ```
 
 ---
