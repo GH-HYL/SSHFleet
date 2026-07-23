@@ -77,8 +77,8 @@ def main():
     # 初始化工具日志
     try:
         init_tool_logger(config.paths.logs.historys, config)
-        tlog.debug(f"{ '-' * 100}分割线{ '-' * 100}")
-        tlog.debug(f"{ '-' * 100}分割线{ '-' * 100}")
+        tlog.debug(f"{ '=' * 100}分割线{ '=' * 100}")
+        tlog.debug(f"{ '=' * 100}分割线{ '=' * 100}")
         tlog.success("初始化工具日志成功")
     except Exception as e:
         print(
@@ -129,7 +129,7 @@ def main():
     tlog.info("用户已核实通过参数信息")
 
     tlog.debug(f"{'-' * 20}SSHFleet工具 - 准备结束{'-' * 20}\n")
-    tlog.debug(f"{'=' * 30}SSHFleet工具 - 执行阶段{'=' * 30}")
+    tlog.debug(f"{'-' * 30}SSHFleet工具 - 执行阶段{'-' * 30}")
 
     # 获取错误分类关键字
     error_keywords = _load_json(config.paths.jsons.error_keywords)
@@ -157,7 +157,7 @@ def main():
 
     print(f"{'═' * 60}")
     # print(f"SSHFleet工具{color.COLOR_GREEN}正在整理{color.COLOR_RESET}......")
-    tlog.debug(f"{'=' * 30}SSHFleet工具 - 执行结束{'=' * 30}\n")
+    tlog.debug(f"{'-' * 30}SSHFleet工具 - 执行结束{'-' * 30}\n")
     tlog.debug(f"{'-' * 20}SSHFleet工具 - 整理阶段{'-' * 20}")
 
     if not final_results:
@@ -198,8 +198,8 @@ def main():
     # 退出SSHFleet工具
     print("SSHFleet工具执行结束，已退出")
     tlog.info("SSHFleet工具已退出")
-    tlog.debug(f"{ '-' * 100}分割线{ '-' * 100}")
-    tlog.debug(f"{ '-' * 100}分割线{ '-' * 100}" + "\n" * 3)
+    tlog.debug(f"{ '=' * 100}分割线{ '=' * 100}")
+    tlog.debug(f"{ '=' * 100}分割线{ '=' * 100}" + "\n" * 3)
     sys.exit(0)
 
 
