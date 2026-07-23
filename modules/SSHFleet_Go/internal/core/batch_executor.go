@@ -115,7 +115,11 @@ func (e *BatchExecutor) worker(id int, taskChan <-chan *SSHTask, execResultChan 
 			// 不管成功失败都写入 channel
 			e.safeSendResult(execResultChan, workResult)
 
-			log.Zlog.Info("协程worker - 执行结束", zap.String("ip", task.Config.IP), zap.Int("workerId", id), zap.Int("exitCode", workResult.ExitCode))
+			if workResult.ExitCode != nil {
+				log.Zlog.Info("协程worker - 执行结束", zap.String("ip", task.Config.IP), zap.Int("workerId", id), zap.Int("exitCode", *workResult.ExitCode))
+			} else {
+				log.Zlog.Info("协程worker - 执行结束", zap.String("ip", task.Config.IP), zap.Int("workerId", id), zap.String("exitCode", "nil"))
+			}
 		}
 	}
 }

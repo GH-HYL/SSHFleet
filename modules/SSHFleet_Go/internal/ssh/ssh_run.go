@@ -121,14 +121,16 @@ func (c *SSHClient) ExecuteCommand(command string, ctx context.Context, ip strin
 	if err != nil {
 		var exitErr *ssh.ExitError
 		if errors.As(err, &exitErr) {
-			result.ExitCode = exitErr.ExitStatus()
+			code := exitErr.ExitStatus()
+			result.ExitCode = &code
 		} else {
 			// 超时或中断等非命令执行错误，靠 error 字段分类
 			errMsg := err.Error()
 			result.Error = &errMsg
 		}
 	} else {
-		result.ExitCode = 0
+		code := 0
+		result.ExitCode = &code
 	}
 
 	return result, nil

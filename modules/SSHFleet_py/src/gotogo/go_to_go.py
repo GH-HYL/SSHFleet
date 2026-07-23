@@ -199,8 +199,9 @@ def go_to_go(
             "[progress.percentage]{task.percentage:>3.0f}%",
             "[green]{task.completed}/{task.total}",
             TimeElapsedColumn(),
+            TextColumn("  [bright_green]Succ:[bright_black]{task.fields[success_nodes]} [bright_red]Fail:[bright_black]{task.fields[fail_nodes]}"),
         )
-        node_task = node_progress.add_task("", total=total_nodes)
+        node_task = node_progress.add_task("", total=total_nodes, success_nodes=0, fail_nodes=0)
 
         # 单节点进度（动态增删）
         node_bars = Progress(
@@ -242,6 +243,8 @@ def go_to_go(
     node_approximate = {}  # {seq: uploaded_bytes}
     node_total_bytes = {}  # {seq: total_bytes}
     completed_nodes = 0
+    upload_success_nodes = 0
+    upload_fail_nodes = 0
     total_uploaded = 0
     global_total_bytes = 0
 
@@ -356,7 +359,15 @@ def go_to_go(
                         d.pop(seq, None)
 
                     completed_nodes += 1
-                    node_progress.update(node_task, completed=completed_nodes)
+                    # 统计上传成功/失败节点
+                    if sse_data.get("exit_code") == 0:
+                        upload_success_nodes += 1
+                    else:
+                        upload_fail_nodes += 1
+                    node_progress.update(node_task,
+                        completed=completed_nodes,
+                        success_nodes=upload_success_nodes,
+                        fail_nodes=upload_fail_nodes)
 
                 # 解析结果（兼容旧逻辑）
                 result = parser.parse_result(sse_data, error_keywords, mode=exec_mode)
