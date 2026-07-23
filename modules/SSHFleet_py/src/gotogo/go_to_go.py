@@ -249,14 +249,13 @@ def go_to_go(
     success_nodes = 0
     fail_nodes = 0
 
-    # 打开 output.txt 文件（仅命令模式写入）
+    # 打开 output.txt 文件（两种模式均写入）
     output_file_path = os.path.join(exec_log_dir, config.paths.files.output)
     output_file = None
-    if not args.u:
-        try:
-            output_file = open(output_file_path, "w", encoding="utf-8")
-        except Exception as e:
-            tlog.warning(f"无法创建 output.txt 文件: {e}")
+    try:
+        output_file = open(output_file_path, "w", encoding="utf-8")
+    except Exception as e:
+        tlog.warning(f"无法创建 output.txt 文件: {e}")
 
     live = Live(progress_table, console=console, refresh_per_second=20)
     live.start()
@@ -363,11 +362,19 @@ def go_to_go(
                 result = parser.parse_result(sse_data, error_keywords, mode=exec_mode)
                 results.append(result)
 
-                if not args.u:
-                    # 命令模式：格式化输出
-                    formatted = _format_result(result, args)
+                # 格式化输出（两种模式共用）
+                formatted = _format_result(result, args)
 
-                    # 打印到终端
+                # 写入 output.txt（两种模式共用）
+                if output_file:
+                    try:
+                        output_file.write(formatted + "\n")
+                        output_file.flush()
+                    except Exception as e:
+                        tlog.warning(f"写入 output.txt 失败: {e}")
+
+                if not args.u:
+                    # 命令模式：打印到终端
                     console.print(formatted)
 
                     # 统计成功/失败节点
@@ -403,19 +410,19 @@ def go_to_go(
                 result = parser.parse_result(sse_data, error_keywords, mode=exec_mode)
                 results.append(result)
 
+                # 格式化输出（两种模式共用）
+                formatted = _format_result(result, args)
+
+                # 写入 output.txt（两种模式共用）
+                if output_file:
+                    try:
+                        output_file.write(formatted + "\n")
+                        output_file.flush()
+                    except Exception as e:
+                        tlog.warning(f"写入 output.txt 失败: {e}")
+
                 if not args.u:
-                    # 命令模式：格式化输出
-                    formatted = _format_result(result, args)
-
-                    # 写入文件
-                    if output_file:
-                        try:
-                            output_file.write(formatted + "\n")
-                            output_file.flush()
-                        except Exception as e:
-                            tlog.warning(f"写入 output.txt 失败: {e}")
-
-                    # 打印到终端
+                    # 命令模式：打印到终端
                     console.print(formatted)
 
                     # 更新进度
