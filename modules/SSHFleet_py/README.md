@@ -109,6 +109,12 @@ python3 sshfleet.py -f nodes.csv -s script.sh
 # 上传模式
 python3 sshfleet.py -f nodes.csv -u /local/path -p /remote/path/
 
+# 内联CSV（单个节点，无需编辑CSV文件）
+python3 sshfleet.py -f "192.168.1.10,22,root,~/.MyPW/pw.txt" -c "ls"
+
+# 非交互模式（跳过所有确认提示）
+python3 sshfleet.py -f nodes.csv -c "df -h" --disinteractive
+
 # 打包最新历史记录
 python3 sshfleet.py -z
 ```
@@ -136,10 +142,10 @@ python3 sshfleet.py  ( -c | -s | -u | -z )  ( -f ) ( -p ) [可选参数]
 #### 条件必填参数
 
 
-| 参数          | 说明                                      |
-| ------------- | ----------------------------------------- |
-| `-f csv_file` | 节点 CSV 文件（-c/-s/-u 时必填）          |
-| `-p path`     | 上传目标路径（-u 时必填）                 |
+| 参数          | 说明                                                        |
+| ------------- | ----------------------------------------------------------- |
+| `-f csv_file` | 节点 CSV 文件或内联CSV文本（-c/-s/-u 时必填）              |
+| `-p path`     | 上传目标路径（-u 时必填）                                   |
 
 #### 可选参数
 
@@ -157,17 +163,20 @@ python3 sshfleet.py  ( -c | -s | -u | -z )  ( -f ) ( -p ) [可选参数]
 ### CSV 文件格式
 
 ```csv
-# 完整格式：IP,端口,用户名,密码
-192.168.1.10,10022,root,P@ssw0rd
+# 完整格式：IP,端口,用户名,密码文件路径
+192.168.1.10,10022,root,~/.MyPW/pw.txt
 
 # 极简格式：端口/用户/密码使用配置文件默认值
 192.168.1.10
 
-# 密码为空时，运行时交互输入
+# 密码列为空时，使用配置文件的默认密码文件
 192.168.1.10,10022,root,
 ```
 
-默认值在 `src/config/SSHFleet.yaml` 中配置，密码字段为包含 base64 编码密码的文件路径。
+密码字段为 Base64 编码的密码文件路径，支持三种格式：
+- `~/.MyPW/pw.txt` — 展开 HOME 目录
+- `/home/user/pw.txt` — 绝对路径
+- `./pw.txt` — 相对路径，与 `password_dir` 配置拼接
 
 ### 配置文件
 
@@ -176,7 +185,7 @@ python3 sshfleet.py  ( -c | -s | -u | -z )  ( -f ) ( -p ) [可选参数]
 
 | 配置段      | 关键参数                            | 说明                                   |
 | ----------- | ----------------------------------- | -------------------------------------- |
-| `account`   | port, user, password                | CSV 缺省值，密码为 base64 编码文件路径 |
+| `account`   | port, user, password\_dir, password | CSV 缺省值，密码为 base64 编码文件路径 |
 | `execution` | mode, timeout\_\*                   | 执行模式、超时时间                     |
 | `enable`    | output\_to\_xlsx, results\_to\_xlsx | 输出格式开关                           |
 | `paths`     | logs, files, exe, jsons             | 各类文件路径                           |
@@ -228,6 +237,14 @@ python sshfleet.py -f nodes.csv -u ./app.tar.gz -p /opt/
 
 ```bash
 python sshfleet.py -f nodes.csv -c "df -h" --disinteractive
+```
+
+### 示例 5：内联CSV（单个节点）
+
+无需创建CSV文件，直接在命令行指定节点信息：
+
+```bash
+python sshfleet.py -f "192.168.1.10,22,root,~/.MyPW/pw.txt" -c "uptime"
 ```
 
 ---
