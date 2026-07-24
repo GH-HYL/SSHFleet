@@ -93,20 +93,49 @@ def parse_args(config: SSHFleetConfig) -> argparse.Namespace:
             "  显式指定 -n 时，工具信任您的选择，仅提示建议值\n"
         ),
     )
+    # 三列对齐的帮助信息（argparse自动显示第一列选项名，help只写第二列+第三列）
+    help_entries = [
+        ('-c', 'command', '(命令模式)', '远程执行命令'),
+        ('-s', 'script', '(脚本模式)', '远程执行脚本'),
+        ('-u', 'upload', '(上传模式)', '本地上传文件或目录路径'),
+        ('-z', None, '(打包模式)', '打包最新日志到当前路径'),
+        ('-f', 'csv_file', None, '节点信息的 CSV 文件或内联CSV文本 (-c / -s / -u 时必填)'),
+        ('-p', 'path', None, '上传目标路径 (-u 时必填)'),
+        ('-m', 'mode', f'[默认: {config.execution.mode or "direct"}]', '执行权限: direct=用户权限, sudo=root权限'),
+        ('-t', 'timeout', f'[默认: 命令{config.execution.timeout_execute}s/上传{config.execution.timeout_transfer}s]', '执行或传输超时 (秒)'),
+        ('-T', 'timeout', f'[默认: {config.execution.timeout_connect}]', '连接超时 (秒)'),
+        ('-n', 'number', '[默认: 节点数]', '并发数。上传模式下未指定时会根据文件大小自动约束'),
+        ('-r', 'remark', None, '备注信息, 用于生成历史记录文件名后缀'),
+        ('--nobash', None, None, '命令模式: 不使用 bash 环境, 直接执行原始命令'),
+        ('--disinteractive', None, None, '跳过交互确认, 直接执行'),
+    ]
+
+    def display_width(s):
+        """计算字符串显示宽度（中文字符占2列）"""
+        import unicodedata
+        w = 0
+        for c in s:
+            if unicodedata.east_asian_width(c) in ('F', 'W'):
+                w += 2
+            else:
+                w += 1
+        return w
+
+    def pad_to_width(s, target_width):
+        """按显示宽度填充空格"""
+        return s + ' ' * (target_width - display_width(s))
+
+    # 计算第二列最大显示宽度
+    col2_width = max(display_width(tag) if tag else 0 for _, _, tag, _ in help_entries)
+
     try:
-        parser.add_argument('-c', metavar='command', help='    （命令模式）远程执行命令')
-        parser.add_argument('-s', metavar='script', help='    （脚本模式）远程执行脚本')
-        parser.add_argument('-u', metavar='upload', help='    （上传模式）本地上传文件或目录路径')
-        parser.add_argument('-z', action='store_true', help='    （打包模式）打包最新日志到当前路径')
-        parser.add_argument('-f', metavar='csv_file', help='                         节点信息的 CSV 文件（-c / -s / -u 时必填）')
-        parser.add_argument('-p', metavar='path', help='                         上传目标路径（-u 时必填）')
-        parser.add_argument('-m', metavar='mode', choices=['direct', 'sudo'], default=config.execution.mode, help=f'     [默认: {config.execution.mode or "direct"}]  执行权限：direct=用户权限，sudo=root权限')
-        parser.add_argument('-t', metavar='timeout', type=int, help=f'     [默认: 命令{config.execution.timeout_execute}s/上传{config.execution.timeout_transfer}s]  执行或传输超时（秒）')
-        parser.add_argument('-T', metavar='timeout', type=int, default=config.execution.timeout_connect, help=f'     [默认: {config.execution.timeout_connect}]    连接超时（秒）')
-        parser.add_argument('-n', metavar='number', type=int, default=0, help='     [默认: 节点数]          并发数。上传模式下未指定时会根据文件大小自动约束')
-        parser.add_argument('-r', metavar='remark', type=str, default='', help='                         备注信息，用于生成历史记录文件名后缀')
-        parser.add_argument('--nobash', action='store_true', help='                         命令模式：不使用 bash 环境，直接执行原始命令')
-        parser.add_argument('--disinteractive', action='store_true', help='                         跳过交互确认，直接执行')
+        for opt, metavar, tag, desc in help_entries:
+            col2 = tag if tag else ''
+            help_str = f'{pad_to_width(col2, col2_width)}  {desc}'
+            if metavar:
+                parser.add_argument(opt, metavar=metavar, help=help_str)
+            else:
+                parser.add_argument(opt, action='store_true', help=help_str)
     except Exception as e:
         utils.print_error_information_and_exit(
             "parse_args", f"参数初始化失败\n异常类型：\n{type(e)}\n异常信息：\n{e}"

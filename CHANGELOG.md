@@ -2,6 +2,7 @@
 
 所有重要变更记录在此。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
+只记录 ./modules/** 工程代码相关的记录，其他辅助文件变更不记录
 
 ---
 
@@ -12,18 +13,20 @@
 - 新增 `password_dir` 配置字段，支持相对路径拼接
 - 新增 `resolve_password_path()` 函数，支持 `~`、绝对路径、相对路径解析
 - 新增 `validate_csv_passwords()` 预检查机制，处理节点前统一验证密码文件
+- 新增 `-f` 参数支持内联CSV文本传入（如 `-f "192.168.1.10,22,root,密码路径"`）
+- 新增 `--disinteractive` 模式自动跳过所有 `yorn=True` 的确认提示
 - 新增并发数提示信息，增强用户确认警告
 - 新增 `output.txt` 上传模式写入支持（命令模式和上传模式共用输出文件）
 - 上传模式节点进度条新增 Succ/Fail 实时统计（与命令模式一致）
-- 新增 `CONTEXT.md` 领域术语表和数据流图
-- 新增 `docs/adr/0001-unified-output-and-structured-xlsx.md` 决策记录
-- 新增 `docs/adr/0002-upload-concurrency-enforcement.md` 决策记录
-- 新增测试脚本 `test/test_password_path.py`
 
 ### Changed
 - CSV 密码列语义从「明文密码」变为「密码文件路径」
 - 重构密码验证逻辑，复用 `args.validate_password_file()` 函数
 - 移除 `read_nodes_infos()` 中重复的密码验证调用
+- `get_user_confirmation()` 新增 `disinteractive` 参数，支持非交互模式
+- `-f` 参数文件不存在时增加交互确认，可选择作为内联CSV文本传入
+- `validate_csv_passwords()` 内联校验替代 `validate_password_file()`，错误信息更具体
+- `-h` 帮助信息三列对齐，支持中文字符显示宽度计算
 - 重命名 Go 工程目录 `SSHFleet_go` → `SSHFleet_Go`，符合个人开发规范
 - 修复日志模块文件名拼写 `sucessLevel.go` → `successLevel.go`
 - 拆分 `ssh_run.go`（642行）为三个职责清晰的文件：`ssh_types.go`（99行）、`ssh_run.go`（174行）、`ssh_upload.go`（392行）
