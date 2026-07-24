@@ -121,7 +121,9 @@ def zip_latest_history(args, config: SSHFleetConfig):
     # 检查打包路径是否存在，不存在则创建
     if not os.path.exists(zip_dir):
         utils.get_user_confirmation(
-            f"{zip_dir} \n 配置文件的默认打包路径不存在，是否创建？", yorn=True
+            f"{zip_dir} \n 配置文件的默认打包路径不存在，是否创建？",
+            yorn=True,
+            disinteractive=getattr(args, 'disinteractive', False),
         )
         os.makedirs(zip_dir)
 
