@@ -42,7 +42,8 @@ def _check_upload_concurrency(args, config, nodes_count: int, n_explicit: bool) 
         )
         if utils.get_user_confirmation(
             f"是否使用建议并发数 {allowed}？",
-            yorn=True
+            yorn=True,
+            disinteractive=getattr(args, 'disinteractive', False),
         ):
             args.n = allowed
         else:
@@ -222,7 +223,9 @@ def arguments_confirm(args, nodes, config=None):
     # 4. 获取用户确认
     print("\n" + "═" * 60)
     if not utils.get_user_confirmation(
-        f"\n{color.COLOR_YELLOW}是否执行上述参数？{color.COLOR_RESET}", yorn=True
+        f"\n{color.COLOR_YELLOW}是否执行上述参数？{color.COLOR_RESET}",
+        yorn=True,
+        disinteractive=getattr(args, 'disinteractive', False),
     ):
         print(f"{color.COLOR_YELLOW}操作已取消{color.COLOR_RESET}")
         tlog.warning("执行已取消，SSHFleet工具已退出")

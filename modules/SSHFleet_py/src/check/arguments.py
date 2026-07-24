@@ -116,19 +116,29 @@ def check_arguments(args):
     # 检查 -f 参数
     if args.f:
         if not os.path.exists(args.f):
-            utils.print_error_information_and_exit(
-                "check_arguments", f" -f 参数指定的 CSV 文件不存在：{args.f}"
-            )
-        if os.path.getsize(args.f) == 0:
-            utils.print_error_information_and_exit(
-                "check_arguments", f" -f 参数指定的 CSV 文件为空：{args.f}"
-            )
-        # 不能是二进制文件
-        with open(args.f, "rb") as f:
-            if b"\x00" in f.read(1024):
+            # 文件不存在，询问是否作为内联CSV文本传入
+            if utils.get_user_confirmation(
+                f"[-f] 指定的内容 '{args.f}' 不是有效的文件路径，是否将其作为CSV文本传入",
+                disinteractive=getattr(args, 'disinteractive', False),
+            ):
+                args.f_is_inline = True
+            else:
                 utils.print_error_information_and_exit(
-                    "check_arguments", f" 错误: {args.f} 是二进制文件"
+                    "check_arguments", f" -f 参数指定的文件不存在：{args.f}"
                 )
+        else:
+            # 文件存在，执行原有检查
+            args.f_is_inline = False
+            if os.path.getsize(args.f) == 0:
+                utils.print_error_information_and_exit(
+                    "check_arguments", f" -f 参数指定的 CSV 文件为空：{args.f}"
+                )
+            # 不能是二进制文件
+            with open(args.f, "rb") as f:
+                if b"\x00" in f.read(1024):
+                    utils.print_error_information_and_exit(
+                        "check_arguments", f" 错误: {args.f} 是二进制文件"
+                    )
 
     # 检查 -n 参数
     if args.n:
