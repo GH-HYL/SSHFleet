@@ -11,26 +11,43 @@ from src.log import tlog
 from src.command.builder import remove_command_fist_last_same_symbol
 
 
-def _check_upload_concurrency(args, config) -> None:
-    """检查上传并发阈值，根据文件大小建议调整并发数"""
+def _check_upload_concurrency(args, config, nodes_count: int, n_explicit: bool) -> None:
+    """检查上传并发阈值，根据文件大小约束并发数
+
+    约束规则：
+    - 用户显式指定了 -n → 跳过检查，信任用户选择（仅提示）
+    - 未指定 -n 且默认值超过约束 → 提示并要求确认，拒绝则退出
+    """
     if not args.u or not config:
         return
 
     file_size = _calculate_upload_size(args.u)
     allowed = _check_concurrency_threshold(file_size, config)
-    if allowed > 0 and args.n > allowed:
-        print(f"{color.COLOR_YELLOW}⚠️ 上传文件总大小 {utils.format_size(file_size)}，建议并发数调整为 {allowed}（当前为 {args.n}）{color.COLOR_RESET}")
-        print(f"{color.COLOR_YELLOW}提示：大文件高并发带宽或本地压力过大{color.COLOR_RESET}")
+
+    if allowed == 0:
+        return
+
+    if n_explicit:
+        if args.n > allowed:
+            print(
+                f"{color.COLOR_YELLOW}提示：上传文件总大小 {utils.format_size(file_size)}，"
+                f"建议并发数为 {allowed}（当前指定 {args.n}），已按您的指定执行{color.COLOR_RESET}"
+            )
+        return
+
+    if nodes_count > allowed:
+        print(
+            f"{color.COLOR_YELLOW}上传文件总大小 {utils.format_size(file_size)}，"
+            f"建议并发数为 {allowed}（默认节点数 {nodes_count}）{color.COLOR_RESET}"
+        )
         if utils.get_user_confirmation(
-            f"是否将并发数调整为 {allowed}？",
+            f"是否使用建议并发数 {allowed}？",
             yorn=True
         ):
             args.n = allowed
         else:
-            print(
-                f"{color.COLOR_RED}[WARNING] 用户已拒绝并发执行建议！"
-                f"请确认你充分理解并发操作的风险后再继续！{color.COLOR_RESET}"
-            )
+            print(f"{color.COLOR_RED}操作已取消{color.COLOR_RESET}")
+            sys.exit(1)
 
 
 def _build_info_table(args, nodes):
@@ -164,11 +181,12 @@ def arguments_confirm(args, nodes, config=None):
         # 检测并移除命令的边界符号
         remove_symbol, args.c = remove_command_fist_last_same_symbol(args.c)
 
+    # 上传并发阈值检查（在默认值赋值之前，判断用户是否显式指定了 -n）
+    n_explicit = args.n != 0
+    _check_upload_concurrency(args, config, len(nodes), n_explicit)
+
     # 未输入并发数，默认使用nodes数量进行并发
     args.n = len(nodes) if args.n == 0 else args.n
-
-    # 上传并发阈值检查
-    _check_upload_concurrency(args, config)
 
     # 非交互模式
     if args.disinteractive:

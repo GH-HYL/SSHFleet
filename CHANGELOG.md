@@ -13,6 +13,7 @@
 - 上传模式节点进度条新增 Succ/Fail 实时统计（与命令模式一致）
 - 新增 `CONTEXT.md` 领域术语表和数据流图
 - 新增 `docs/adr/0001-unified-output-and-structured-xlsx.md` 决策记录
+- 新增 `docs/adr/0002-upload-concurrency-enforcement.md` 决策记录
 
 ### Changed
 - 重命名 Go 工程目录 `SSHFleet_go` → `SSHFleet_Go`，符合个人开发规范
@@ -20,6 +21,7 @@
 - 拆分 `ssh_run.go`（642行）为三个职责清晰的文件：`ssh_types.go`（99行）、`ssh_run.go`（174行）、`ssh_upload.go`（392行）
 - `output.xlsx` 改为从结构化数据直接生成，不再从 txt 正则解析（更可靠）
 - `format_output_to_xlsx()` 函数签名更新：增加 `final_results` 和 `args` 参数
+- 上传并发阈值检查从"提醒模式"改为"默认约束模式"：未指定 `-n` 时自动约束并提示确认，显式指定 `-n` 时仅提示不强制
 
 ### Fixed
 - 修复 `output.txt` 命令模式文件创建但内容为空的问题（主结果分支缺少写入逻辑）
