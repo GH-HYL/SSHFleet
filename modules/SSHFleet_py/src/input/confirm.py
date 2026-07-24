@@ -177,8 +177,9 @@ def arguments_confirm(args, nodes, config=None):
         None
     """
 
-    if args.c:
-        # 检测并移除命令的边界符号
+    remove_symbol = None
+    if args.c and not args.nobash:
+        # 检测并移除命令的边界符号（--nobash 模式跳过，保留原始命令）
         remove_symbol, args.c = remove_command_fist_last_same_symbol(args.c)
 
     # 上传并发阈值检查（在默认值赋值之前，判断用户是否显式指定了 -n）

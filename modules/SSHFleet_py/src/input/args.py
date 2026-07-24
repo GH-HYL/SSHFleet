@@ -105,7 +105,7 @@ def parse_args(config: SSHFleetConfig) -> argparse.Namespace:
         parser.add_argument('-T', metavar='timeout', type=int, default=config.execution.timeout_connect, help=f'     [默认: {config.execution.timeout_connect}]    连接超时（秒）')
         parser.add_argument('-n', metavar='number', type=int, default=0, help='     [默认: 节点数]          并发数。上传模式下未指定时会根据文件大小自动约束')
         parser.add_argument('-r', metavar='remark', type=str, default='', help='                         备注信息，用于生成历史记录文件名后缀')
-        parser.add_argument('--nobash', action='store_true', help='                         命令模式：不使用 bash 环境，直接执行原始命令')
+        parser.add_argument('--nobash', action='store_true', help='                         命令模式：原样传递命令给 Go，跳过所有预处理（环境变量、sudo、bash -c）')
         parser.add_argument('--disinteractive', action='store_true', help='                         跳过交互确认，直接执行')
     except Exception as e:
         utils.print_error_information_and_exit(
