@@ -56,6 +56,7 @@ class Execution(BaseModel):
 class Account(BaseModel):
     port: int
     user: str
+    password_dir: str
     password: str
 
 
@@ -91,6 +92,11 @@ def load_config(config_path: str) -> SSHFleetConfig:
 
     with open(config_path, 'r', encoding='utf-8') as f:
         config_dict = yaml.safe_load(f)
+
+    # 读取密码目录路径（不验证）
+    password_dir = config_dict["account"].get("password_dir", "")
+    if password_dir:
+        config_dict["account"]["password_dir"] = os.path.expanduser(password_dir)
 
     # 读取密码文件路径（不验证）
     password_path = config_dict["account"]["password"]
