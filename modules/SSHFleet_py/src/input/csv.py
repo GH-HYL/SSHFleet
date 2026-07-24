@@ -48,6 +48,56 @@ def resolve_password_path(raw_value: str, password_dir: str) -> str:
     return os.path.join(password_dir, raw)
 
 
+def validate_csv_passwords(csv_infos: List[List[str]], config: SSHFleetConfig) -> None:
+    """
+    预检查所有密码文件，通过才继续处理节点
+
+    Args:
+        csv_infos: 已移除表头的CSV行列表
+        config: 配置对象
+
+    Raises:
+        SystemExit: 验证失败
+    """
+    from src.input.args import validate_password_file
+
+    errors = []
+    need_default_password = False
+
+    for idx, row in enumerate(csv_infos, start=1):
+        while len(row) < 4:
+            row.append("")
+
+        password = row[3].strip()
+
+        if password:
+            # 有密码路径：验证文件
+            try:
+                password_path = resolve_password_path(password, config.account.password_dir)
+                validate_password_file(password_path)
+            except SystemExit:
+                errors.append(f"行 {idx} (IP: {row[0]}): 密码文件验证失败 → {password}")
+        else:
+            # 密码为空：标记需要默认密码
+            need_default_password = True
+
+    # 如果有空密码行，验证一次默认密码
+    if need_default_password:
+        if not config.account.password or config.account.password == "None":
+            errors.append("密码列有空值，但 config 未配置默认密码(account.password)")
+        else:
+            try:
+                validate_password_file(config.account.password)
+            except SystemExit:
+                errors.append(f"默认密码文件验证失败 → {config.account.password}")
+
+    if errors:
+        print(f"\n{color.COLOR_RED}[ERROR]{color.COLOR_RESET} CSV密码预检查失败：")
+        for error in errors:
+            print(f"  {error}")
+        sys.exit(1)
+
+
 @utils.error_and_exit_handling_decorator("read_nodes_infos", "读取节点信息失败")
 def read_nodes_infos(csv_path: str, config: SSHFleetConfig) -> List[Dict[str, str]]:
     """
