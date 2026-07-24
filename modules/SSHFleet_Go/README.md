@@ -1,4 +1,4 @@
-# SSHFleet_go
+# SSHFleet_Go
 
 批量 SSH 任务执行引擎，通过 HTTP API 提供服务，SSE 流式返回结果。
 
