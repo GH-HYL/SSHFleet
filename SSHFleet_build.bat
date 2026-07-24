@@ -10,13 +10,14 @@ echo.
 set "SCRIPT_DIR=%~dp0"
 set "SRC=!SCRIPT_DIR!modules\SSHFleet_py"
 set "BUILD=!SCRIPT_DIR!build"
+set "RELEASE=!SCRIPT_DIR!release"
 
 for /f %%I in ('powershell -NoProfile -Command "Get-Date -Format yyyy-MM-dd_HH-mm-ss"') do set "TS=%%I"
 
-set "DEST=!BUILD!\!TS!"
+set "DEST=!RELEASE!\!TS!"
 
 echo [1/6] Creating directory...
-if not exist "!BUILD!" mkdir "!BUILD!"
+if not exist "!RELEASE!" mkdir "!RELEASE!"
 mkdir "!DEST!"
 echo        OK: !DEST!
 
