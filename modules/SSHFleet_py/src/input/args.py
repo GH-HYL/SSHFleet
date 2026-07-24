@@ -101,7 +101,7 @@ def parse_args(config: SSHFleetConfig) -> argparse.Namespace:
         parser.add_argument('-f', metavar='csv_file', help='                         节点信息的 CSV 文件（-c / -s / -u 时必填）')
         parser.add_argument('-p', metavar='path', help='                         上传目标路径（-u 时必填）')
         parser.add_argument('-m', metavar='mode', choices=['direct', 'sudo'], default=config.execution.mode, help=f'     [默认: {config.execution.mode or "direct"}]  执行权限：direct=用户权限，sudo=root权限')
-        parser.add_argument('-t', metavar='timeout', type=int, help='     [默认: 命令60s/上传300s]  执行或传输超时（秒）')
+        parser.add_argument('-t', metavar='timeout', type=int, help=f'     [默认: 命令{config.execution.timeout_execute}s/上传{config.execution.timeout_transfer}s]  执行或传输超时（秒）')
         parser.add_argument('-T', metavar='timeout', type=int, default=config.execution.timeout_connect, help=f'     [默认: {config.execution.timeout_connect}]    连接超时（秒）')
         parser.add_argument('-n', metavar='number', type=int, default=0, help='     [默认: 节点数]          并发数。上传模式下未指定时会根据文件大小自动约束')
         parser.add_argument('-r', metavar='remark', type=str, default='', help='                         备注信息，用于生成历史记录文件名后缀')
