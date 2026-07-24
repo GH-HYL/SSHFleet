@@ -152,6 +152,9 @@ def read_nodes_infos(csv_path: str, config: SSHFleetConfig) -> List[Dict[str, st
     password_use_input = False  # 是否使用用户输入的密码值
     password_input_value = None  # 用户输入的密码值
 
+    # 密码路径预检查（全部通过才继续处理节点）
+    validate_csv_passwords(csv_infos, config)
+
     # 处理每个节点
     for idx, row in enumerate(csv_infos, start=1):
         # 确保行有足够的列
@@ -251,14 +254,13 @@ def read_nodes_infos(csv_path: str, config: SSHFleetConfig) -> List[Dict[str, st
         # 处理密码 - 按照优先级：CSV > config > 用户之前输入的值 > 用户输入新值
         password = password.strip() if password else ""
         if password:  # CSV中有值，最高优先级
-            pass  # 已经有值，不需要处理
+            password_path = resolve_password_path(password, config.account.password_dir)
+            with open(password_path, "r", encoding="utf-8") as f:
+                password = base64.b64decode(f.read().strip()).decode("utf-8")
         elif (
             config.account.password and config.account.password != "None"
         ):  # 使用配置的默认值
-            # 验证密码文件有效性
-            from src.input.args import validate_password_file
-            validate_password_file(config.account.password)
-            # 读取密码文件内容并解码base64
+            # 读取密码文件内容并解码base64（预检查已验证文件有效性）
             with open(config.account.password, "r", encoding="utf-8") as f:
                 password = base64.b64decode(f.read().strip()).decode("utf-8")
         elif password_use_input:  # 使用之前用户输入的值
