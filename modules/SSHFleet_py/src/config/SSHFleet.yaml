@@ -45,7 +45,7 @@ paths:
     report: "report.txt"                # 统计报告文件名
     results_xlsx: "results.xlsx"        # 结果固化文件名（xlsx格式）
 
-# 上传并发阈值（提醒用，不强制约束）
+# 上传并发阈值（未指定 -n 时自动约束，指定 -n 时仅提示）
 # file_size < small_file: 全并发（等于节点数）
 # file_size > large_file: 串行（并发=1）
 # 两者之间: 最多 medium_concurrency 并发
