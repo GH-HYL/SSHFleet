@@ -60,7 +60,6 @@ def validate_csv_passwords(csv_infos: List[List[str]], config: SSHFleetConfig) -
     Raises:
         SystemExit: 验证失败
     """
-    from src.input.args import validate_password_file
 
     errors = []
     need_default_password = False
@@ -72,12 +71,31 @@ def validate_csv_passwords(csv_infos: List[List[str]], config: SSHFleetConfig) -
         password = row[3].strip()
 
         if password:
-            # 有密码路径：验证文件
+            # 有密码路径：解析并验证文件
+            password_path = resolve_password_path(password, config.account.password_dir)
+            # 检查文件是否存在
+            if not os.path.exists(password_path):
+                errors.append(f"行 {idx} (IP: {row[0]}): 密码文件不存在 → {password_path}")
+                continue
+            # 检查文件是否可读且非空
             try:
-                password_path = resolve_password_path(password, config.account.password_dir)
-                validate_password_file(password_path)
-            except SystemExit:
-                errors.append(f"行 {idx} (IP: {row[0]}): 密码文件验证失败 → {password}")
+                with open(password_path, "r", encoding="utf-8") as f:
+                    content = f.read().strip()
+            except Exception as e:
+                errors.append(f"行 {idx} (IP: {row[0]}): 密码文件无法读取 → {password_path} ({e})")
+                continue
+            if not content:
+                errors.append(f"行 {idx} (IP: {row[0]}): 密码文件内容为空 → {password_path}")
+                continue
+            # 检查是否为有效的Base64编码
+            try:
+                decoded = base64.b64decode(content)
+            except Exception:
+                errors.append(f"行 {idx} (IP: {row[0]}): 密码文件不是有效的Base64编码 → {password_path}")
+                continue
+            if not decoded:
+                errors.append(f"行 {idx} (IP: {row[0]}): 密码文件解码后内容为空 → {password_path}")
+                continue
         else:
             # 密码为空：标记需要默认密码
             need_default_password = True
@@ -87,13 +105,28 @@ def validate_csv_passwords(csv_infos: List[List[str]], config: SSHFleetConfig) -
         if not config.account.password or config.account.password == "None":
             errors.append("密码列有空值，但 config 未配置默认密码(account.password)")
         else:
-            try:
-                validate_password_file(config.account.password)
-            except SystemExit:
-                errors.append(f"默认密码文件验证失败 → {config.account.password}")
+            if not os.path.exists(config.account.password):
+                errors.append(f"默认密码文件不存在 → {config.account.password}")
+            else:
+                try:
+                    with open(config.account.password, "r", encoding="utf-8") as f:
+                        content = f.read().strip()
+                except Exception as e:
+                    errors.append(f"默认密码文件无法读取 → {config.account.password} ({e})")
+                else:
+                    if not content:
+                        errors.append(f"默认密码文件内容为空 → {config.account.password}")
+                    else:
+                        try:
+                            decoded = base64.b64decode(content)
+                        except Exception:
+                            errors.append(f"默认密码文件不是有效的Base64编码 → {config.account.password}")
+                        else:
+                            if not decoded:
+                                errors.append(f"默认密码文件解码后内容为空 → {config.account.password}")
 
     if errors:
-        print(f"\n{color.COLOR_RED}[ERROR]{color.COLOR_RESET} CSV密码预检查失败：")
+        print(f"{color.COLOR_RED}[ERROR]{color.COLOR_RESET} CSV密码预检查失败：")
         for error in errors:
             print(f"  {error}")
         sys.exit(1)
