@@ -86,7 +86,7 @@ def clean_for_excel(original_text, replace_tabs=False):
 
     return text
 
-def get_user_confirmation(prompt, yorn=False):
+def get_user_confirmation(prompt, yorn=False, disinteractive=False):
     """
     功能：
         获取用户确认的通用函数
@@ -94,10 +94,15 @@ def get_user_confirmation(prompt, yorn=False):
     参数：
         prompt: 确认提示信息
         yorn: 是否为 yes/no 确认，默认 False
+        disinteractive: 跳过确认模式，yorn=True时自动确认，yorn=False时自动拒绝
 
     返回：
         confirm: 用户确认结果，True 或 False
     """
+
+    # 非交互模式：自动跳过确认
+    if disinteractive:
+        return yorn  # yorn=True 自动确认，yorn=False 自动拒绝
 
     try:
         if yorn:

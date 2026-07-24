@@ -183,7 +183,9 @@ def check_dangerous_patterns(args, dangerous_keywords: List, disinteractive=Fals
 
         # 获取用户确认
         if not utils.get_user_confirmation(
-            f"\n{color.COLOR_YELLOW}已明确风险继续执行？{color.COLOR_RESET}", yorn=False
+            f"\n{color.COLOR_YELLOW}已明确风险继续执行？{color.COLOR_RESET}",
+            yorn=False,
+            disinteractive=disinteractive,
         ):
             print(f"{color.COLOR_YELLOW}操作已取消{color.COLOR_RESET}")
             sys.exit(1)

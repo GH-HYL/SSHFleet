@@ -4,6 +4,7 @@
 import base64
 import csv
 import ipaddress
+import io
 import os
 import re
 import sys
@@ -99,14 +100,15 @@ def validate_csv_passwords(csv_infos: List[List[str]], config: SSHFleetConfig) -
 
 
 @utils.error_and_exit_handling_decorator("read_nodes_infos", "读取节点信息失败")
-def read_nodes_infos(csv_path: str, config: SSHFleetConfig) -> List[Dict[str, str]]:
+def read_nodes_infos(csv_path: str, config: SSHFleetConfig, is_inline: bool = False) -> List[Dict[str, str]]:
     """
     功能：
-        从CSV文件中读取节点信息，并进行数据验证和处理
+        从CSV文件或内联文本中读取节点信息，并进行数据验证和处理
 
     参数：
-        csv_path (str): CSV文件的路径
+        csv_path (str): CSV文件的路径或内联CSV文本
         config (SSHFleetConfig): 配置对象
+        is_inline (bool): 是否为内联文本模式
 
     返回：
         List[Dict[str, str]]: 处理后的节点信息列表，每个节点是一个字典，包含ip、port、user和password字段
@@ -120,18 +122,29 @@ def read_nodes_infos(csv_path: str, config: SSHFleetConfig) -> List[Dict[str, st
     node_infos = []  # 存储处理后的节点信息
     csv_errors = []  # 存储错误信息
 
-    # 读取CSV文件
+    # 读取CSV内容
     try:
-        with open(csv_path, "r", encoding="utf-8") as file:
+        if is_inline:
+            # 内联文本模式：用 StringIO 包装
+            file = io.StringIO(csv_path)
             reader = csv.reader(file)
             for row in reader:
-                # 跳过空行和注释行
                 if not row or (row[0].startswith("#") and row[0].strip() != ""):
                     continue
                 csv_infos.append(row)
+            file.close()
+        else:
+            # 文件模式：读取文件
+            with open(csv_path, "r", encoding="utf-8") as file:
+                reader = csv.reader(file)
+                for row in reader:
+                    # 跳过空行和注释行
+                    if not row or (row[0].startswith("#") and row[0].strip() != ""):
+                        continue
+                    csv_infos.append(row)
     except Exception as e:
         print(
-            f"{color.COLOR_RED}[ERROR]{color.COLOR_RESET}{color.COLOR_YELLOW} [function:read_nodes_infos]{color.COLOR_RESET} 读取文件时发生错误: {e}"
+            f"{color.COLOR_RED}[ERROR]{color.COLOR_RESET}{color.COLOR_YELLOW} [function:read_nodes_infos]{color.COLOR_RESET} 读取内容时发生错误: {e}"
         )
         sys.exit(1)
 
@@ -208,6 +221,7 @@ def read_nodes_infos(csv_path: str, config: SSHFleetConfig) -> List[Dict[str, st
                             if utils.get_user_confirmation(
                                 f"\n{color.COLOR_YELLOW}是否将此端口号应用于所有后续端口为空的节点？{color.COLOR_RESET}",
                                 yorn=True,
+                                disinteractive=getattr(args, 'disinteractive', False),
                             ):
                                 port_use_input = True
                                 port_input_value = int(port)
@@ -241,6 +255,7 @@ def read_nodes_infos(csv_path: str, config: SSHFleetConfig) -> List[Dict[str, st
                             if utils.get_user_confirmation(
                                 f"\n{color.COLOR_YELLOW}是否将此用户名应用于所有后续用户为空的节点？{color.COLOR_RESET}",
                                 yorn=True,
+                                disinteractive=getattr(args, 'disinteractive', False),
                             ):
                                 user_use_input = True
                                 user_input_value = user
@@ -283,6 +298,7 @@ def read_nodes_infos(csv_path: str, config: SSHFleetConfig) -> List[Dict[str, st
                             if utils.get_user_confirmation(
                                 f"\n{color.COLOR_YELLOW}是否将此密码应用于所有后续密码为空的节点？{color.COLOR_RESET}",
                                 yorn=True,
+                                disinteractive=getattr(args, 'disinteractive', False),
                             ):
                                 password_use_input = True
                                 password_input_value = password
