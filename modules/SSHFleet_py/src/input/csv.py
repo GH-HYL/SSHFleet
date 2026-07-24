@@ -14,6 +14,40 @@ import src.utils as utils
 from src.yaml import SSHFleetConfig
 
 
+def resolve_password_path(raw_value: str, password_dir: str) -> str:
+    """
+    将 CSV 密码列原始值解析为绝对路径
+
+    Args:
+        raw_value: CSV 密码列原始值
+        password_dir: 配置的密码目录
+
+    Returns:
+        绝对路径
+
+    Raises:
+        SystemExit: 路径解析失败
+    """
+    raw = raw_value.strip()
+
+    # ~ 开头：展开 HOME
+    if raw.startswith("~"):
+        return os.path.expanduser(raw)
+
+    # 绝对路径：直接使用
+    if os.path.isabs(raw):
+        return raw
+
+    # 相对路径：与 password_dir 拼接
+    if not password_dir or password_dir == "None":
+        utils.print_error_information_and_exit(
+            "resolve_password_path",
+            "密码列包含相对路径，但 password_dir 未配置"
+        )
+
+    return os.path.join(password_dir, raw)
+
+
 @utils.error_and_exit_handling_decorator("read_nodes_infos", "读取节点信息失败")
 def read_nodes_infos(csv_path: str, config: SSHFleetConfig) -> List[Dict[str, str]]:
     """
