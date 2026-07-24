@@ -42,17 +42,22 @@ def remove_command_fist_last_same_symbol(cmd_str):
 
 def build_final_command(args: argparse.Namespace) -> str:
     """
-    根据参数构建命令字符串，添加环境变量和sudo权限
+    根据参数构建命令字符串
+
+    --nobash 模式：直接返回用户输入的原始命令，不做任何预处理
+    默认模式：添加环境变量、sudo 权限，用 bash -c 包裹
 
     Args:
-        args: 参数字典，包含：
-            - c: 命令字符串
-            - m: 模式，检测到'sudo'时添加sudo
-            - e: 环境变量字符串
+        args: 参数字典
 
     Returns:
-        str: 组合后的完整命令字符串
+        str: 完整命令字符串
     """
+
+    # --nobash 模式：原样传递给 Go，不做任何处理
+    if args.nobash and args.c:
+        tlog.info(f"--nobash 模式，原样传递命令: {args.c}")
+        return args.c
 
     # 初始化组件,设置输出编码方式（C.UTF-8是POSIX标准，所有Linux发行版内置支持）
     components = ["LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8;"]
@@ -61,14 +66,11 @@ def build_final_command(args: argparse.Namespace) -> str:
     if args.m == "sudo":
         components.append("sudo")
 
-    # 3. 命令主体
+    # 命令主体
     if args.c:
         safe_command = shlex.quote(args.c)
-        if not args.nobash:
-            components.append(f"bash -c {safe_command}")
-        else:
-            components.append(args.c)
-            
+        components.append(f"bash -c {safe_command}")
+
     elif args.s:
         # 脚本解释器选择
         interpreter = "python3" if args.s.endswith(".py") else "bash"
