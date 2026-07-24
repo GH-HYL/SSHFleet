@@ -1,6 +1,6 @@
 # SSHFleet Go API 接口规范
 
-版本：4.0
+版本：5.0
 
 ---
 
@@ -41,6 +41,16 @@ SSHFleet Go 是一个一次性批量 SSH 任务引擎，支持命令执行和文
 | `Content-Type` | 内容类型 | `Content-Type: application/json` |
 
 缺少或key不匹配时，返回 `401 UNAUTHORIZED` 错误。
+
+### 3.0 GET /api/v1/health — 健康检查
+
+检查服务是否存活，无需认证。
+
+#### 响应
+
+```json
+{"status": "ok"}
+```
 
 ### 3.1 POST /api/v1/execute — 执行命令
 
@@ -124,7 +134,7 @@ SSHFleet Go 是一个一次性批量 SSH 任务引擎，支持命令执行和文
 | `port` | int | SSH 端口 |
 | `user` | string | 登录用户名 |
 | `connect_success` | bool | SSH 连接是否成功 |
-| `exit_code` | int | 执行退出码：0=成功，-1=连接失败，-10=其他错误，其他正值=命令失败 |
+| `exit_code` | int/null | 执行退出码：0=成功，null=连接失败未执行，其他正值=命令失败 |
 | `output` | string | 执行输出内容（base64 编码，stdout+stderr 交错顺序） |
 | `connect_cost_time` | float | 连接耗时（秒） |
 | `exec_cost_time` | float | 命令执行耗时（秒） |
@@ -231,11 +241,15 @@ SSHFleet Go 是一个一次性批量 SSH 任务引擎，支持命令执行和文
 | `port` | int | SSH 端口 |
 | `user` | string | 登录用户名 |
 | `connect_success` | bool | SSH 连接是否成功 |
-| `exit_code` | int | 失败文件数：0=全部成功，N=N个文件失败 |
+| `exit_code` | int/null | 失败文件数：0=全部成功，null=连接失败未执行，N=N个文件失败 |
 | `output` | string | 上传结果（base64 编码），格式见下方 |
 | `connect_cost_time` | float | 连接耗时（秒） |
 | `exec_cost_time` | float | 所有文件上传总耗时（秒） |
 | `error` | string/null | 节点级错误（连接失败等），成功时为 null |
+| `total_bytes` | int | 上传文件总字节数 |
+| `total_files` | int | 上传文件总数 |
+| `success_files` | int | 上传成功文件数 |
+| `failed_files` | int | 上传失败文件数 |
 
 **output 内容格式（base64 解码后）：**
 
@@ -274,12 +288,31 @@ done 的 total/success/failed 是节点级统计。
 | 远程文件已存在 | 该文件跳过，标记失败 |
 | SSH 连接失败 | 该节点所有文件标记失败 |
 | SFTP 子系统不可用 | 该节点所有文件标记失败 |
-| SFTP 写入失败 | 删除远程半成品文件，该文件标记失败 |
+| SFTP 写入失败 | 自动重试（最多2次，间隔2秒），仍失败则删除远程半成品文件 |
 | sudo 模式 | 写入临时目录 + sudo mv |
 | root 用户 sudo | 自动跳过 sudo，直接 SFTP 写入 |
 | exec_timeout 超时 | 该节点所有未完成文件标记失败 |
 | 目录上传 | 自动递归遍历，过滤软链接和快捷方式 |
 | 文件权限 | 保留本地权限（SFTP Create + Chmod） |
+
+**SSE 上传进度消息**
+
+上传过程中，每个节点会推送进度消息：
+
+```json
+{
+  "type": "progress",
+  "seq": 0,
+  "ip": "10.0.0.1",
+  "uploaded_bytes": 1048576,
+  "total_bytes": 5242880,
+  "total_files": 5,
+  "success_files": 3,
+  "failed_files": 0
+}
+```
+
+进度消息节流：每500ms最多推送一次。
 
 ---
 
@@ -404,13 +437,16 @@ internal/
 ├── localfs/
 │   └── collector.go           # 本地文件收集（递归遍历、软链接过滤）
 ├── ssh/
-│   ├── ssh_run.go             # SSH 连接 + 命令执行 + SFTP 上传
-│   └── ssh_result.go          # 结果结构体定义
+│   ├── ssh_types.go           # SSH 客户端类型定义
+│   ├── ssh_run.go             # SSH 连接 + 命令执行
+│   ├── ssh_upload.go          # SFTP 上传（含重试机制）
+│   ├── ssh_result.go          # 结果结构体定义
+│   └── ssh_run_test.go        # 单元测试
 ├── interrupt/
 │   └── interrupt.go           # 信号中断处理
 └── log/
-    ├── logger.go              # 日志初始化
-    └── sucessLevel.go         # 自定义 SUCCESS 级别
+    ├── logger.go              # 日志初始化（zap）
+    └── successLevel.go        # 自定义 SUCCESS 级别
 ```
 
 ---
@@ -420,10 +456,13 @@ internal/
 1. **output 字段为 base64 编码**，调用方需解码后使用
 2. **execute 的 output** 包含 stdout 和 stderr，按交错顺序拼接
 3. **upload 的 output** 包含统计信息和每个文件的上传状态
-4. **exit_code 含义不同**：execute 是命令退出码（0=成功，-1=连接失败，-10=其他错误），upload 是失败文件数（0=全部成功）
+4. **exit_code 含义不同**：execute 是命令退出码（0=成功，null=连接失败，其他正值=命令失败），upload 是失败文件数（0=全部成功，null=连接失败）
 5. **seq 用于关联请求与响应**，并发执行时结果顺序可能与请求顺序不同，seq 不可重复
 6. **error 只在 Go 层面出错时有值**（连接失败、Go 内部异常），命令执行失败看 exit_code
 7. **一次性执行**：每次启动只处理一次请求，第二个请求会被拒绝
 8. **优雅退出**：执行完成后需调用 shutdown 端点，否则等待 10 分钟超时退出
 9. **上传前提**：Go 和 Python 必须运行在同一台机器上，Go 直接读取本地文件
 10. **远程路径要求**：upload 端点的 remote_path 必须已存在且是目录，不存在则报错
+11. **上传重试**：SFTP 写入失败时自动重试（最多2次，间隔2秒）
+12. **进度消息**：上传过程推送 `progress` 类型 SSE 消息，节流间隔500ms
+13. **健康检查**：`GET /api/v1/health` 无需认证，可用于检查服务是否存活
