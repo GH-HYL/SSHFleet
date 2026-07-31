@@ -98,9 +98,18 @@ def load_config(config_path: str) -> SSHFleetConfig:
     if password_dir:
         config_dict["account"]["password_dir"] = os.path.expanduser(password_dir)
 
-    # 读取密码文件路径（不验证）
+    # 读取密码文件路径（不验证，相对路径与 password_dir 拼接）
     password_path = config_dict["account"]["password"]
     if password_path:
-        config_dict["account"]["password"] = os.path.expanduser(password_path)
+        password_path = os.path.expanduser(password_path)
+        if not os.path.isabs(password_path):
+            if password_dir:
+                password_path = os.path.join(password_dir, password_path)
+            else:
+                raise ValueError(
+                    f"account.password 为相对路径 '{password_path}'，"
+                    f"但 account.password_dir 未配置，无法拼接密码文件路径"
+                )
+        config_dict["account"]["password"] = password_path
 
     return SSHFleetConfig(**config_dict)
