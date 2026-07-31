@@ -96,7 +96,8 @@ def load_config(config_path: str) -> SSHFleetConfig:
     # 读取密码目录路径（不验证）
     password_dir = config_dict["account"].get("password_dir", "")
     if password_dir:
-        config_dict["account"]["password_dir"] = os.path.expanduser(password_dir)
+        password_dir = os.path.expanduser(password_dir)
+        config_dict["account"]["password_dir"] = password_dir
 
     # 读取密码文件路径（不验证，相对路径与 password_dir 拼接）
     password_path = config_dict["account"]["password"]
