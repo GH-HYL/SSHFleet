@@ -33,7 +33,7 @@
 | 命令执行 | 通过 Go 协程引擎多协程并发，支持数千节点，实时进度条显示             |
 | 脚本执行 | 远程执行本地 shell/python 脚本，base64 编码传输                      |
 | 文件上传 | Go 引擎 SFTP 上传，大文件流式传输                                    |
-| 文件下载 | SFTP 协议，支持下载远程文件/目录到本地（当前版本暂未开放）           |
+| 文件下载 | Go 引擎 SFTP 下载，支持远程文件/目录批量下载到本地                   |
 | 安全防护 | 危险命令正则规则，风险等级提示，交互式确认                           |
 | 错误分类 | SSH/网络错误自动归类                                                 |
 | 日志归档 | 每次执行独立目录，含终端输出(txt/xlsx)、执行日志、汇总报告、资源备份 |
@@ -109,6 +109,9 @@ python3 sshfleet.py -f nodes.csv -s script.sh
 # 上传模式
 python3 sshfleet.py -f nodes.csv -u /local/path -p /remote/path/
 
+# 下载模式
+python3 sshfleet.py -f nodes.csv -d /opt/logs/app.log -p ./downloads
+
 # 内联CSV（单个节点，无需编辑CSV文件）
 python3 sshfleet.py -f "192.168.1.10,22,root,~/.MyPW/pw.txt" -c "ls"
 
@@ -126,10 +129,10 @@ python3 sshfleet.py -z
 ### 参数说明
 
 ```
-python3 sshfleet.py  ( -c | -s | -u | -z )  ( -f ) ( -p ) [可选参数]
+python3 sshfleet.py  ( -c | -s | -u | -d | -z )  ( -f ) ( -p ) [可选参数]
 ```
 
-#### 必填参数（四选一）
+#### 必填参数（五选一）
 
 
 | 参数          | 说明                                                       |
@@ -137,6 +140,7 @@ python3 sshfleet.py  ( -c | -s | -u | -z )  ( -f ) ( -p ) [可选参数]
 | `-c command`  | 命令模式，远程执行命令                                     |
 | `-s script`   | 脚本模式，远程执行本地脚本（.sh/.py）                      |
 | `-u upload`   | 上传模式，本地文件或目录路径                               |
+| `-d download` | 下载模式，远程下载文件或目录路径（绝对路径）               |
 | `-z`          | 打包模式，打包最新历史记录（打包前会删除当前旧打包文件）   |
 
 #### 条件必填参数
@@ -144,8 +148,8 @@ python3 sshfleet.py  ( -c | -s | -u | -z )  ( -f ) ( -p ) [可选参数]
 
 | 参数          | 说明                                                        |
 | ------------- | ----------------------------------------------------------- |
-| `-f csv_file` | 节点 CSV 文件或内联CSV文本（-c/-s/-u 时必填）              |
-| `-p path`     | 上传目标路径（-u 时必填）                                   |
+| `-f csv_file` | 节点 CSV 文件或内联CSV文本（-c/-s/-u/-d 时必填）           |
+| `-p path`     | 上传目标路径（-u 时必填）/ 本地存储目录（-d 时必填）       |
 
 #### 可选参数
 
@@ -233,13 +237,35 @@ python sshfleet.py -f nodes.csv -s deploy.sh -m sudo
 python sshfleet.py -f nodes.csv -u ./app.tar.gz -p /opt/
 ```
 
-### 示例 4：非交互模式
+### 示例 4：批量下载文件
+
+```bash
+# 下载单个文件
+python sshfleet.py -f nodes.csv -d /opt/logs/app.log -p ./downloads
+
+# 下载整个目录
+python sshfleet.py -f nodes.csv -d /opt/logs/ -p ./downloads
+```
+
+下载结果按 IP 建子目录存放：
+
+```
+./downloads/
+├── 10.0.0.1/
+│   └── app.log
+├── 10.0.0.2/
+│   └── app.log
+└── 10.0.0.3/
+    └── app.log
+```
+
+### 示例 5：非交互模式
 
 ```bash
 python sshfleet.py -f nodes.csv -c "df -h" --disinteractive
 ```
 
-### 示例 5：内联CSV（单个节点）
+### 示例 6：内联CSV（单个节点）
 
 无需创建CSV文件，直接在命令行指定节点信息：
 
@@ -251,7 +277,7 @@ python sshfleet.py -f "192.168.1.10,22,root,~/.MyPW/pw.txt" -c "uptime"
 
 ## 技术架构
 
-Python 负责参数解析、安全检查、日志整理、结果输出；Go 负责高并发 SSH 执行引擎（命令执行、文件上传）。两者通过 HTTP SSE（Server-Sent Events）通信：Python 启动 Go 子进程，Go 启动 HTTP 服务器，Python 发送 HTTP 请求并接收 SSE 流式结果。
+Python 负责参数解析、安全检查、日志整理、结果输出；Go 负责高并发 SSH 执行引擎（命令执行、文件上传、文件下载）。两者通过 HTTP SSE（Server-Sent Events）通信：Python 启动 Go 子进程，Go 启动 HTTP 服务器，Python 发送 HTTP 请求并接收 SSE 流式结果。
 
 ### 项目结构
 
@@ -271,7 +297,7 @@ src/
 ├── gotogo/                     # Go 执行器模块
 │   ├── go_to_go.py             #   主执行函数：启动 Go 进程 + HTTP SSE 接收 + Rich 进度条
 │   ├── caller.py               #   Go 进程调用与 HTTP SSE 通信
-│   ├── builder.py              #   请求体构建（命令/上传）
+│   ├── builder.py              #   请求体构建（命令/上传/下载）
 │   ├── parser.py               #   SSE 响应解析、base64 解码
 │   └── classifier.py           #   错误分类
 ├── output/                     # 输出处理模块
@@ -297,7 +323,8 @@ src/
 参数解析(input) → 校验(check) → 用户确认(input)
   ↓
 ┌─ 命令/脚本模式 ─→ gotogo 模块启动 Go 子进程，通过 HTTP SSE 实时接收结果（Rich 进度条显示）
-└─ 上传模式 ─→ gotogo 模块启动 Go 子进程，通过 HTTP SSE 实时接收结果（Rich 进度条显示）
+├─ 上传模式 ─→ gotogo 模块启动 Go 子进程，通过 HTTP SSE 实时接收结果（Rich 进度条显示）
+└─ 下载模式 ─→ gotogo 模块启动 Go 子进程，通过 HTTP SSE 实时接收结果（Rich 进度条显示）
   ↓
 结果统计(output) → 终端输出(output) → 生成报告(output) → 资源备份(output) → 创建 latest_history 链接
 ```

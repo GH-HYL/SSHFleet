@@ -51,7 +51,7 @@ def results_statistics(
     category_counts = Counter(d.get("result_category") for d in results)
 
     # 根据模式移除成功分类
-    if args.u:
+    if args.u or args.d:
         success_category = "传输成功"
         category_counts.pop(success_category, None)
     elif args.c or args.s:
