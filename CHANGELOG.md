@@ -6,6 +6,51 @@
 
 ---
 
+## [0.7.1] - 2026-07-31
+
+### Fixed
+- 修复 `account.password` 为相对路径时未与 `account.password_dir` 拼接的问题（预检查和实际使用时均找不到密码文件），现在相对路径会拼接为 `password_dir/password`，缺失时错误信息显示拼接后的完整路径
+- 修复 `account.password` 为相对路径但 `account.password_dir` 未配置时无明确提示的问题，现在加载配置阶段直接报错说明
+
+---
+
+## [0.7.0] - 2026-07-24
+
+### Added
+- 新增 `POST /api/v1/download` 端点，支持通过 SSH/SFTP 批量下载远程文件/目录到本地
+- 新增 `-d` 参数（下载模式），与 `-c / -s / -u / -z` 互斥
+- 新增 `DownloadRequest` 请求体类型（`remote_path` + `local_path` + `options` + `nodes`）
+- 新增 `ParseDownloadRequest()` 请求解析函数，含完整校验（空路径、空节点、seq 查重、默认值填充）
+- 新增 `progressReader` 进度回调读取器，包装 SFTP 读取器，每 500ms 节流上报进度
+- 新增 `BatchDownloadExecutor` 批量下载执行器，worker 模式 + channel 通信
+- 新增 `DownloadFiles()` 核心下载逻辑：SSH 预检查 + SFTP 流式下载 + 1MB buffer
+- 新增 `sftpDownloadFile()` 单文件下载，支持符号链接跳过和重试机制
+- 新增 `ProgressMsg.DownloadedBytes` 字段，JSON 标签 `downloaded_bytes`
+- Python 端 `build_download_request()` 请求构建函数
+- Python 端下载模式进度条显示（复用上传进度条框架，标签改为"下载进度"）
+- Python 端 `-d` 参数路径规范化和备注自动生成（取 basename）
+- Python 端下载模式校验：`-d` 必须是绝对路径、`-p` 必须是已存在的目录
+- Python 端下载模式参数确认表格显示
+- 测试：`progressReader` 6 项单元测试（Read、AccumulateBytes、Throttle、TimeBetweenCallbacks、EmptyData、FieldsPopulated）
+- 测试：`ParseDownloadRequest` 9 项单元测试（Valid、EmptyRemotePath、EmptyLocalPath、EmptyNodes、ZeroExecTimeout、DuplicateSeq、DefaultValues、InvalidJSON、JSON roundtrip）
+
+### Changed
+- `ProgressMsg` 新增 `DownloadedBytes` 字段（`omitempty`，与 `UploadedBytes` 并存）
+- `ssh_result.go` 复用 `UploadResult` 作为 `DownloadResult`（设计决策 #27，所有字段语义兼容）
+- `classifier.py` 下载成功归入"传输成功"分类（与上传共用）
+- `statistics.py` 下载成功归入"传输成功"统计分类
+- `go_to_go.py` 进度显示分支扩展：`args.u or args.d` 共用双进度条框架
+- `sshfleet.py` 主流程条件新增 `args.d`
+- 更新 `args.py` `-h` 帮助信息：新增下载模式示例
+
+### Architecture
+- 下载作为新的执行模式（`-d`）融入现有 `-c / -s / -u` 体系，不搞独立分支
+- 下载是上传的镜像：架构、协议、进度模型与上传保持一致，降低理解和维护成本
+- 传输行为本身不支持 sudo（纯 SFTP），预处理/预检查使用 SSH 命令支持 sudo 提权
+- 下载模式不发送 init 消息，不显示全局字节进度条
+
+---
+
 ## [0.6.0] - 2026-07-24
 
 ### Added
