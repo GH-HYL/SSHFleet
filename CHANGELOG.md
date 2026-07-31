@@ -14,6 +14,8 @@
 - 修复 `account.password` 为相对路径但 `account.password_dir` 未配置时无明确提示的问题，现在加载配置阶段直接报错说明
 - 修复未指定 `-T` 时连接超时为 `None` 导致 `total_timeout` 计算崩溃的问题（`go_to_go` 中 `(args.T + args.t) * 1.5`），未指定 `-T` 时使用配置的 `timeout_connect`
 - 修复 `-t` / `-T` / `-n` 显式传参被误判为格式错误的问题（argparse 默认返回字符串，现统一转为 `int` 再校验）
+- 修复 `-m` 未指定时 `args.m` 为 `None` 的问题（不传 `-m` 时使用配置的 `execution.mode`，修复配置 `sudo` 却未提权）
+- 修复 `-n` 未指定时 `args.n` 为 `None` 的问题（未传 `-n` 时默认 0，确认阶段替换为节点数，修复并发数最终为 `None` 传给 Go 端）
 
 ---
 
