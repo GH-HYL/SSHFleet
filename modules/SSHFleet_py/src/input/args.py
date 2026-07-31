@@ -81,12 +81,13 @@ def parse_args(config: SSHFleetConfig) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="SSHFleet - 基于 Go 后端的批量 SSH 执行和上传工具",
         formatter_class=argparse.RawTextHelpFormatter,
-        usage="\npython3 sshfleet.py  ( -c | -s | -u | -z )  ( -f ) ( -p ) [其他可选参数]\n",
+        usage="\npython3 sshfleet.py  ( -c | -s | -u | -d | -z )  ( -f ) ( -p ) [其他可选参数]\n",
         epilog=(
             "\n示例:\n"
             '  命令模式: python3 sshfleet.py -f nodes.csv -c "ls -l"\n'
             "  脚本模式: python3 sshfleet.py -f nodes.csv -s script.sh\n"
             "  上传模式: python3 sshfleet.py -f nodes.csv -u /local/path -p /remote/path\n"
+            "  下载模式: python3 sshfleet.py -f nodes.csv -d /remote/path -p /local/path\n"
             "  打包模式: python3 sshfleet.py -z\n"
             "\n上传并发说明:\n"
             "  未指定 -n 时，工具会根据文件大小自动约束并发数（小文件不限，大文件串行）\n"
@@ -98,6 +99,7 @@ def parse_args(config: SSHFleetConfig) -> argparse.Namespace:
         ('-c', 'command', '(命令模式)', '远程执行命令'),
         ('-s', 'script', '(脚本模式)', '远程执行脚本'),
         ('-u', 'upload', '(上传模式)', '本地上传文件或目录路径'),
+        ('-d', 'download', '(下载模式)', '远程下载文件或目录路径'),
         ('-z', None, '(打包模式)', '打包最新日志到当前路径'),
         ('-f', 'csv_file', None, '节点信息的 CSV 文件或内联CSV文本 (-c / -s / -u 时必填)'),
         ('-p', 'path', None, '上传目标路径 (-u 时必填)'),
@@ -153,9 +155,24 @@ def parse_args(config: SSHFleetConfig) -> argparse.Namespace:
         args.t = config.execution.timeout_execute
     elif args.u and args.t is None:
         args.t = config.execution.timeout_transfer
+    elif args.d and args.t is None:
+        args.t = config.execution.timeout_transfer
+
+    # 连接超时默认值（未指定 -T 时使用配置的 timeout_connect）
+    if args.T is None:
+        args.T = config.execution.timeout_connect
+
+    # 数值参数统一转为 int（argparse 默认返回字符串，check_arguments 按 int 校验）
+    for attr in ["t", "T", "n"]:
+        val = getattr(args, attr, None)
+        if val is not None and not isinstance(val, int):
+            try:
+                setattr(args, attr, int(val))
+            except (ValueError, TypeError):
+                pass  # 非法值留给 check_arguments 校验报错
 
     # 路径参数规范化
-    for path_attr in ["s", "f", "u", "p"]:
+    for path_attr in ["s", "f", "u", "p", "d"]:
         path_value = getattr(args, path_attr, None)
         if path_value:
             # 路径中间不能包含空格,不是路径不能包括空格,不能以空格开头
@@ -190,5 +207,8 @@ def parse_args(config: SSHFleetConfig) -> argparse.Namespace:
         elif args.u:
             # 取u路径的文件名部分作为备注
             args.r = os.path.basename(args.u)
+        elif args.d:
+            # 取d路径的文件名部分作为备注
+            args.r = os.path.basename(args.d)
 
     return args
