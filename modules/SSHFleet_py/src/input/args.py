@@ -171,6 +171,14 @@ def parse_args(config: SSHFleetConfig) -> argparse.Namespace:
             except (ValueError, TypeError):
                 pass  # 非法值留给 check_arguments 校验报错
 
+    # 未指定 -m 时使用配置的默认执行模式（参考老代码 default=config.execution.mode）
+    if args.m is None:
+        args.m = config.execution.mode
+
+    # 未指定 -n 时默认 0（参考老代码 default=0，确认阶段替换为节点数）
+    if args.n is None:
+        args.n = 0
+
     # 路径参数规范化
     for path_attr in ["s", "f", "u", "p", "d"]:
         path_value = getattr(args, path_attr, None)
