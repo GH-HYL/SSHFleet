@@ -14,7 +14,7 @@ def parse_result(sse_data: Dict, error_keywords: Dict[str, list[str]], mode: str
     Args:
         sse_data: Go 返回的单条结果
         error_keywords: 错误分类关键词
-        mode: 执行模式，"execute" 或 "upload"
+        mode: 执行模式，"execute"、"upload" 或 "download"
 
     Returns:
         dict: 完整的结果字典（兼容 core.results_statistics）

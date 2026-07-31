@@ -82,7 +82,12 @@ def _format_result(result: Dict, args: argparse.Namespace = None) -> str:
     output = result.get("output", "")
     error = result.get("error")
     result_category = result.get("result_category", "未知")
-    action = "上传" if args and args.u else "执行"
+    if args and args.d:
+        action = "下载"
+    elif args and args.u:
+        action = "上传"
+    else:
+        action = "执行"
 
     # 连接状态
     conn_status = "成功" if connect_success else "失败"
@@ -137,6 +142,10 @@ def go_to_go(
         request_body = builder.build_upload_request(args, nodesinfo)
         url_path = "/api/v1/upload"
         exec_mode = "upload"
+    elif args.d:
+        request_body = builder.build_download_request(args, nodesinfo)
+        url_path = "/api/v1/download"
+        exec_mode = "download"
     else:
         request_body = builder.build_request(args, nodesinfo, transfer_command)
         url_path = "/api/v1/execute"
@@ -177,14 +186,17 @@ def go_to_go(
     # 分界线
     separator = "─" * 50
 
-    # 6. 创建进度条（仅上传模式使用双进度条）
-    if args.u:
+    # 6. 创建进度条
+    if args.u or args.d:
         # 统一前缀宽度
         prefix = "    "
 
-        # 总字节进度
+        # 进度标签
+        progress_label = "下载进度" if args.d else "上传进度"
+
+        # 总字节进度（仅上传模式）
         total_progress = Progress(
-            TextColumn(f"{prefix}上传进度  "),
+            TextColumn(f"{prefix}{progress_label}  "),
             BarColumn(bar_width=40, complete_style="green", finished_style="blue"),
             "[progress.percentage]{task.percentage:>3.0f}%",
             TextColumn("  {task.fields[speed]}"),
@@ -280,9 +292,9 @@ def go_to_go(
                 global_total_bytes = total_nodes_init * total_bytes_per_node
                 total_progress.update(total_task, total=global_total_bytes)
 
-            elif msg_type == "progress" and args.u:
+            elif msg_type == "progress" and (args.u or args.d):
                 seq = sse_data["seq"]
-                uploaded = sse_data.get("uploaded_bytes", 0)
+                uploaded = sse_data.get("uploaded_bytes", 0) or sse_data.get("downloaded_bytes", 0)
                 total_bytes = sse_data.get("total_bytes")
                 success_files = sse_data.get("success_files")
                 failed_files = sse_data.get("failed_files")
@@ -334,7 +346,7 @@ def go_to_go(
             elif msg_type == "result":
                 seq = sse_data.get("seq")
 
-                if args.u and seq is not None:
+                if (args.u or args.d) and seq is not None:
                     # 用 result 的精确值校正（只增不减，防止进度回退）
                     old_approx = node_approximate.get(seq, 0)
                     exact_bytes = sse_data.get("total_bytes", old_approx)
@@ -384,7 +396,7 @@ def go_to_go(
                     except Exception as e:
                         tlog.warning(f"写入 output.txt 失败: {e}")
 
-                if not args.u:
+                if not args.u and not args.d:
                     # 命令模式：打印到终端
                     console.print(formatted)
 
@@ -408,7 +420,7 @@ def go_to_go(
 
             elif msg_type == "done":
                 # 处理完成标记
-                if not args.u:
+                if not args.u and not args.d:
                     # 命令模式：更新进度
                     done_total = sse_data.get("total", total_nodes)
                     done_success = sse_data.get("success", 0)
@@ -432,7 +444,7 @@ def go_to_go(
                     except Exception as e:
                         tlog.warning(f"写入 output.txt 失败: {e}")
 
-                if not args.u:
+                if not args.u and not args.d:
                     # 命令模式：打印到终端
                     console.print(formatted)
 

@@ -1,12 +1,12 @@
 # SSHFleet Go API 接口规范
 
-版本：5.0
+版本：6.0
 
 ---
 
 ## 一、概述
 
-SSHFleet Go 是一个一次性批量 SSH 任务引擎，支持命令执行和文件上传两种模式，通过 HTTP API 接收请求。
+SSHFleet Go 是一个一次性批量 SSH 任务引擎，支持命令执行、文件上传和文件下载三种模式，通过 HTTP API 接收请求。
 
 - **启动方式**：通过环境变量配置端口、日志路径和认证key
 - **认证机制**：所有HTTP请求必须携带`X-SSH-Fleet-Key`请求头
@@ -316,7 +316,197 @@ done 的 total/success/failed 是节点级统计。
 
 ---
 
-### 3.3 POST /api/v1/shutdown — 关闭服务
+### 3.3 POST /api/v1/download — 下载文件
+
+从远程 SSH 节点下载文件到本地，返回 SSE 流式响应。
+
+#### 前提条件
+
+- Go 和 Python 运行在同一台机器上
+- Go 能直接写入本地文件系统
+
+#### 请求体
+
+```json
+{
+  "remote_path": "/opt/logs/app.log",
+  "local_path": "/home/user/downloads",
+  "options": {
+    "concurrency": 10,
+    "connect_timeout": 10,
+    "exec_timeout": 300,
+    "sudo": false
+  },
+  "nodes": [
+    {"seq": 0, "ip": "10.0.0.1", "port": 22, "user": "root", "password": "xxx"}
+  ]
+}
+```
+
+#### 字段说明
+
+**顶层字段**
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `remote_path` | string | 是 | 远程文件或目录路径（绝对路径） |
+| `local_path` | string | 是 | 本地存储目录（必须已存在且是目录） |
+| `options` | object | 否 | 下载配置 |
+| `nodes` | array | 是 | 目标节点列表 |
+
+**options 对象**
+
+| 字段 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| `concurrency` | int | 否 | 节点总数 | 最大并发下载数 |
+| `connect_timeout` | int | 否 | 10 | 连接超时时间（秒） |
+| `exec_timeout` | int | 是 | - | 下载超时时间（秒），必须 > 0 |
+| `sudo` | bool | 否 | false | 是否使用 sudo 权限执行预检查命令（传输本身不使用 sudo） |
+
+**nodes 数组元素**
+
+与 execute 端点相同。
+
+#### 响应格式（SSE）
+
+**进度消息**
+
+下载过程中，每个节点推送进度消息：
+
+```json
+{
+  "type": "progress",
+  "seq": 0,
+  "ip": "10.0.0.1",
+  "downloaded_bytes": 1048576,
+  "total_bytes": 5242880,
+  "total_files": 5,
+  "success_files": 3,
+  "failed_files": 0
+}
+```
+
+**单条结果**
+
+```json
+{
+  "type": "result",
+  "seq": 0,
+  "ip": "10.0.0.1",
+  "port": 22,
+  "user": "root",
+  "connect_success": true,
+  "exit_code": 0,
+  "output": "base64编码的下载结果",
+  "connect_cost_time": 0.123,
+  "exec_cost_time": 2.456,
+  "error": null,
+  "total_bytes": 4096,
+  "total_files": 3,
+  "success_files": 3,
+  "failed_files": 0
+}
+```
+
+**字段说明**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `type` | string | 固定值 `"result"` |
+| `seq` | int | 序列号，与请求中的 seq 对应 |
+| `ip` | string | 节点 IP 地址 |
+| `port` | int | SSH 端口 |
+| `user` | string | 登录用户名 |
+| `connect_success` | bool | SSH 连接是否成功 |
+| `exit_code` | int/null | 0=全部成功，1=有失败，null=连接失败未执行 |
+| `output` | string | 下载结果（base64 编码），格式见下方 |
+| `connect_cost_time` | float | 连接耗时（秒） |
+| `exec_cost_time` | float | 所有文件下载总耗时（秒） |
+| `error` | string/null | 节点级错误（连接失败等），成功时为 null |
+| `total_bytes` | int | 实际下载的字节数 |
+| `total_files` | int | 文件总数 |
+| `success_files` | int | 下载成功文件数 |
+| `failed_files` | int | 下载失败文件数 |
+
+**output 内容格式（base64 解码后）：**
+
+```
+total_files=5, success_files=4, failed_files=1
+app.log: 下载成功 (0.003s)
+test.txt: 下载成功 (0.002s)
+script.sh: 下载成功 (0.208s)
+config.yaml: 下载失败 - 打开远程文件失败: permission denied
+data.json: 下载成功 (0.001s)
+```
+
+**完成标记**
+
+```json
+{
+  "type": "done",
+  "total": 10,
+  "success": 9,
+  "failed": 1
+}
+```
+
+done 的 total/success/failed 是节点级统计。
+
+#### 下载行为
+
+| 场景 | 行为 |
+|------|------|
+| remote_path 不存在 | 该节点报错，其他节点继续 |
+| remote_path 无读权限 | 该节点报错（SFTP Open 权限错误） |
+| local_path 不存在 | HTTP 400 错误 |
+| local_path 不是目录 | HTTP 400 错误 |
+| 远程是空目录 | 该节点报错（目录中没有文件） |
+| 远程是符号链接 | 跳过符号链接（`Lstat` 检查） |
+| 目录内符号链接 | `find -type f` 自动排除 |
+| 本地磁盘空间不足 | 写入失败时删除半成品文件，该节点报错 |
+| SSH 连接失败 | 该节点标记失败 |
+| SFTP 子系统不可用 | 该节点标记失败 |
+| SFTP 读取失败 | 自动重试（最多2次，间隔2秒），仍失败则删除本地半成品文件 |
+| sudo 模式 | sudo 仅用于预检查命令（`test -e`、`find`），传输本身纯 SFTP |
+| root 用户 sudo | 自动跳过 sudo，直接执行预检查 |
+| exec_timeout 超时 | 该节点标记失败 |
+| 下载后本地重名文件 | 直接覆盖 |
+
+#### 本地存放策略
+
+所有下载内容按 IP 建子目录，保持远程目录结构：
+
+```
+用户指定: remote_path=/opt/logs/app.log, local_path=./downloads
+
+下载结果:
+./downloads/
+├── 10.0.0.1/
+│   └── app.log
+├── 10.0.0.2/
+│   └── app.log
+└── 10.0.0.3/
+    └── app.log
+
+用户指定: remote_path=/opt/logs/, local_path=./downloads
+
+下载结果:
+./downloads/
+├── 10.0.0.1/
+│   └── logs/
+│       ├── app.log
+│       └── subdir/
+│           └── debug.log
+└── 10.0.0.2/
+    └── logs/
+        ├── app.log
+        └── subdir/
+            └── debug.log
+```
+
+---
+
+### 3.4 POST /api/v1/shutdown — 关闭服务
 
 通知 Go 服务关闭。
 
@@ -371,7 +561,21 @@ curl -N -X POST http://localhost:9090/api/v1/upload \
   }'
 ```
 
-### 4.4 发送关闭信号
+### 4.4 发送下载请求
+
+```bash
+curl -N -X POST http://localhost:9090/api/v1/download \
+  -H "Content-Type: application/json" \
+  -H "X-SSH-Fleet-Key: your-secret-key" \
+  -d '{
+    "remote_path": "/opt/logs/app.log",
+    "local_path": "/home/user/downloads",
+    "options": {"concurrency": 10, "connect_timeout": 10, "exec_timeout": 300},
+    "nodes": [{"seq": 0, "ip": "10.0.0.1", "port": 22, "user": "root", "password": "xxx"}]
+  }'
+```
+
+### 4.5 发送关闭信号
 
 ```bash
 curl -X POST http://localhost:9090/api/v1/shutdown \
@@ -386,7 +590,7 @@ curl -X POST http://localhost:9090/api/v1/shutdown \
 |----------|----------|------|
 | 无请求超时 | 固定 1 分钟 | 启动后 1 分钟内无请求连接，自动退出 |
 | 单节点连接超时 | `options.connect_timeout` 参数控制 | 超时后该节点标记为连接失败 |
-| 单节点执行/上传超时 | `options.exec_timeout` 参数控制 | 超时后该节点所有未完成任务标记失败 |
+| 单节点执行/上传/下载超时 | `options.exec_timeout` 参数控制 | 超时后该节点所有未完成任务标记失败 |
 | 关闭等待超时 | 固定 10 分钟 | 执行完成后等待关闭信号，超时自动退出 |
 
 ---
@@ -412,8 +616,8 @@ curl -X POST http://localhost:9090/api/v1/shutdown \
 | 错误码 | HTTP 状态码 | 说明 |
 |--------|-------------|------|
 | `INVALID_REQUEST` | 400 | 请求格式错误（JSON 解析失败） |
-| `MISSING_FIELD` | 400 | 必填字段缺失（command/file_path/remote_path 为空、nodes 为空、seq 重复） |
-| `INVALID_PATH` | 400 | file_path 不存在、不可读或不是绝对路径 |
+| `MISSING_FIELD` | 400 | 必填字段缺失（command/file_path/remote_path/local_path 为空、nodes 为空、seq 重复） |
+| `INVALID_PATH` | 400 | file_path 不存在、不可读或不是绝对路径；local_path 不存在或不是目录 |
 | `UNAUTHORIZED` | 401 | 请求头缺少`X-SSH-Fleet-Key`或key无效 |
 | `INTERNAL_ERROR` | 500 | 内部错误（不支持流式响应） |
 | `ALREADY_USED` | 503 | 服务已被调用，仅支持一次请求 |
@@ -426,22 +630,25 @@ curl -X POST http://localhost:9090/api/v1/shutdown \
 ```
 internal/
 ├── httpserver/
-│   ├── server.go              # HTTP 路由 + 请求处理
+│   ├── server.go              # HTTP 路由 + 请求处理（execute/upload/download/shutdown）
 │   └── sse.go                 # SSE 写入工具
 ├── core/
 │   ├── batch_executor.go      # 命令执行器
-│   └── batch_upload_executor.go # 上传执行器
+│   ├── batch_upload_executor.go # 上传执行器
+│   └── batch_download_executor.go # 下载执行器
 ├── jsonproc/
-│   ├── json_type.go           # 请求结构体定义
+│   ├── json_type.go           # 请求结构体定义（ExecuteRequest/UploadRequest/DownloadRequest）
 │   └── json_parser.go         # 请求解析 + 验证
 ├── localfs/
 │   └── collector.go           # 本地文件收集（递归遍历、软链接过滤）
 ├── ssh/
-│   ├── ssh_types.go           # SSH 客户端类型定义
+│   ├── ssh_types.go           # SSH 客户端类型定义（含 progressReader/progressWriter）
 │   ├── ssh_run.go             # SSH 连接 + 命令执行
 │   ├── ssh_upload.go          # SFTP 上传（含重试机制）
+│   ├── ssh_download.go        # SFTP 下载（含重试机制）
 │   ├── ssh_result.go          # 结果结构体定义
-│   └── ssh_run_test.go        # 单元测试
+│   ├── ssh_run_test.go        # 单元测试（progressWriter）
+│   └── progress_reader_test.go # 单元测试（progressReader）
 ├── interrupt/
 │   └── interrupt.go           # 信号中断处理
 └── log/
@@ -456,13 +663,20 @@ internal/
 1. **output 字段为 base64 编码**，调用方需解码后使用
 2. **execute 的 output** 包含 stdout 和 stderr，按交错顺序拼接
 3. **upload 的 output** 包含统计信息和每个文件的上传状态
-4. **exit_code 含义不同**：execute 是命令退出码（0=成功，null=连接失败，其他正值=命令失败），upload 是失败文件数（0=全部成功，null=连接失败）
-5. **seq 用于关联请求与响应**，并发执行时结果顺序可能与请求顺序不同，seq 不可重复
-6. **error 只在 Go 层面出错时有值**（连接失败、Go 内部异常），命令执行失败看 exit_code
-7. **一次性执行**：每次启动只处理一次请求，第二个请求会被拒绝
-8. **优雅退出**：执行完成后需调用 shutdown 端点，否则等待 10 分钟超时退出
-9. **上传前提**：Go 和 Python 必须运行在同一台机器上，Go 直接读取本地文件
-10. **远程路径要求**：upload 端点的 remote_path 必须已存在且是目录，不存在则报错
-11. **上传重试**：SFTP 写入失败时自动重试（最多2次，间隔2秒）
-12. **进度消息**：上传过程推送 `progress` 类型 SSE 消息，节流间隔500ms
-13. **健康检查**：`GET /api/v1/health` 无需认证，可用于检查服务是否存活
+4. **download 的 output** 包含统计信息和每个文件的下载状态
+5. **exit_code 含义不同**：execute 是命令退出码（0=成功，null=连接失败，其他正值=命令失败），upload/download 是失败文件数（0=全部成功，null=连接失败）
+6. **seq 用于关联请求与响应**，并发执行时结果顺序可能与请求顺序不同，seq 不可重复
+7. **error 只在 Go 层面出错时有值**（连接失败、Go 内部异常），命令执行失败看 exit_code
+8. **一次性执行**：每次启动只处理一次请求，第二个请求会被拒绝
+9. **优雅退出**：执行完成后需调用 shutdown 端点，否则等待 10 分钟超时退出
+10. **上传前提**：Go 和 Python 必须运行在同一台机器上，Go 直接读取本地文件
+11. **下载前提**：Go 和 Python 必须运行在同一台机器上，Go 直接写入本地文件
+12. **远程路径要求**：upload 端点的 remote_path 必须已存在且是目录，不存在则报错
+13. **下载路径要求**：download 端点的 remote_path 必须是绝对路径，local_path 必须已存在且是目录
+14. **上传重试**：SFTP 写入失败时自动重试（最多2次，间隔2秒）
+15. **下载重试**：SFTP 读取失败时自动重试（最多2次，间隔2秒）
+16. **进度消息**：upload 推送 `uploaded_bytes`，download 推送 `downloaded_bytes`，节流间隔500ms
+17. **下载符号链接**：remote_path 本身是符号链接时跳过，目录内的符号链接由 `find -type f` 自动排除
+18. **下载 sudo**：sudo 仅用于预检查命令（`test -e`、`find`），传输本身纯 SFTP
+19. **健康检查**：`GET /api/v1/health` 无需认证，可用于检查服务是否存活
+20. **requestUsed**：`/execute`、`/upload`、`/download` 三个端点共享同一个请求标记

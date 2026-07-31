@@ -86,14 +86,51 @@ func (pw *progressWriter) Write(p []byte) (int, error) {
 	return n, err
 }
 
+// progressReader 带进度回调的读取器（用于下载）
+type progressReader struct {
+	src          io.Reader
+	downloaded   int64
+	lastCallback time.Time
+	seq          int
+	ip           string
+	totalBytes   int64
+	totalFiles   int
+	callback     func(ProgressMsg)
+	mu           sync.Mutex
+}
+
+func (pr *progressReader) Read(p []byte) (int, error) {
+	n, err := pr.src.Read(p)
+	pr.mu.Lock()
+	pr.downloaded += int64(n)
+	shouldCallback := time.Since(pr.lastCallback) >= progressThrottle
+	if err == io.EOF {
+		shouldCallback = true
+	}
+	if shouldCallback && pr.callback != nil {
+		pr.lastCallback = time.Now()
+		pr.callback(ProgressMsg{
+			Type:            "progress",
+			Seq:             pr.seq,
+			IP:              pr.ip,
+			DownloadedBytes: pr.downloaded,
+			TotalBytes:      pr.totalBytes,
+			TotalFiles:      pr.totalFiles,
+		})
+	}
+	pr.mu.Unlock()
+	return n, err
+}
+
 // ProgressMsg SSE 进度消息
 type ProgressMsg struct {
-	Type          string `json:"type"`
-	Seq           int    `json:"seq"`
-	IP            string `json:"ip"`
-	UploadedBytes int64  `json:"uploaded_bytes,omitempty"`
-	TotalBytes    int64  `json:"total_bytes,omitempty"`
-	TotalFiles    int    `json:"total_files,omitempty"`
-	SuccessFiles  int    `json:"success_files,omitempty"`
-	FailedFiles   int    `json:"failed_files,omitempty"`
+	Type            string `json:"type"`
+	Seq             int    `json:"seq"`
+	IP              string `json:"ip"`
+	UploadedBytes   int64  `json:"uploaded_bytes,omitempty"`
+	DownloadedBytes int64  `json:"downloaded_bytes,omitempty"`
+	TotalBytes      int64  `json:"total_bytes,omitempty"`
+	TotalFiles      int    `json:"total_files,omitempty"`
+	SuccessFiles    int    `json:"success_files,omitempty"`
+	FailedFiles     int    `json:"failed_files,omitempty"`
 }
