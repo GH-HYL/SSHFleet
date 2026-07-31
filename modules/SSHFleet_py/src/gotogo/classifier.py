@@ -19,7 +19,7 @@ def classify(
         error: Go 层面原始错误信息
         output: 命令输出内容（已解码）
         error_keywords: 分类关键词映射
-        mode: 执行模式，"execute" 或 "upload"
+        mode: 执行模式，"execute"、"upload" 或 "download"
 
     Returns:
         str: 分类名称
@@ -28,7 +28,9 @@ def classify(
         return _match(error or "", error_keywords)
 
     if exit_code == 0:
-        return "传输成功" if mode == "upload" else "执行成功"
+        if mode in ("upload", "download"):
+            return "传输成功"
+        return "执行成功"
 
     if error:
         result = _match(error, error_keywords)

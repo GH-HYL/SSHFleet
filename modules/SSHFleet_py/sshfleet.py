@@ -95,7 +95,6 @@ def main():
     try:
         init_tool_logger(config.paths.logs.historys, config)
         tlog.debug(f"{ '=' * 100}分割线{ '=' * 100}")
-        tlog.debug(f"{ '=' * 100}分割线{ '=' * 100}")
         tlog.success("初始化工具日志成功")
     except Exception as e:
         print(
@@ -160,7 +159,7 @@ def main():
     tlog.success(f"生成日志目录成功: {exec_log_dir}")
 
     # 执行命令、脚本或上传（合并所有执行模式）
-    if args.c or args.s or args.u:
+    if args.c or args.s or args.u or args.d:
         tlog.info("开始执行任务")
         tlog.info("进入主执行器")
         final_results = go_to_go(args, config, nodesinfos, exec_log_dir, error_keywords)
@@ -215,7 +214,6 @@ def main():
     # 退出SSHFleet工具
     print("SSHFleet工具执行结束，已退出")
     tlog.info("SSHFleet工具已退出")
-    tlog.debug(f"{ '=' * 100}分割线{ '=' * 100}")
     tlog.debug(f"{ '=' * 100}分割线{ '=' * 100}" + "\n" * 3)
     sys.exit(0)
 

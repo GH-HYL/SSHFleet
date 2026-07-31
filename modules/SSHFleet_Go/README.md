@@ -5,7 +5,7 @@
 ## 特性
 
 - HTTP API + SSE 流式响应
-- 支持命令执行和文件上传两种模式
+- 支持命令执行、文件上传、文件下载三种模式
 - 多节点并发执行
 - 一次性设计：处理一次请求后自动退出
 
@@ -36,6 +36,12 @@ curl -N -X POST http://localhost:9090/api/v1/upload \
   -H "Content-Type: application/json" \
   -H "X-SSH-Fleet-Key: your-secret-key" \
   -d '{"file_path":"/home/user/config.yaml","remote_path":"/etc/app/","options":{"concurrency":10,"connect_timeout":10,"exec_timeout":300,"sudo":false},"nodes":[{"seq":0,"ip":"10.0.0.1","port":22,"user":"root","password":"xxx"}]}'
+
+# 下载文件
+curl -N -X POST http://localhost:9090/api/v1/download \
+  -H "Content-Type: application/json" \
+  -H "X-SSH-Fleet-Key: your-secret-key" \
+  -d '{"remote_path":"/opt/logs/app.log","local_path":"/home/user/downloads","options":{"concurrency":10,"connect_timeout":10,"exec_timeout":300},"nodes":[{"seq":0,"ip":"10.0.0.1","port":22,"user":"root","password":"xxx"}]}'
 
 # 关闭服务
 curl -X POST http://localhost:9090/api/v1/shutdown \

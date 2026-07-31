@@ -31,3 +31,11 @@ type UploadRequest struct {
 	Options    Options    `json:"options"`
 	Nodes      []NodeInfo `json:"nodes"`
 }
+
+// DownloadRequest 下载请求
+type DownloadRequest struct {
+	RemotePath string     `json:"remote_path"`
+	LocalPath  string     `json:"local_path"`
+	Options    Options    `json:"options"`
+	Nodes      []NodeInfo `json:"nodes"`
+}

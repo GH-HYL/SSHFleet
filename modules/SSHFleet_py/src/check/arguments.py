@@ -13,11 +13,11 @@ def check_arguments(args):
     """检查命令行参数的有效性"""
 
     # 检查互斥执行模式参数
-    lock_args = [args.c, args.s, args.u, args.z]
+    lock_args = [args.c, args.s, args.u, args.d, args.z]
     lock_args_count = sum(1 for arg in lock_args if arg)
     if lock_args_count != 1:
         utils.print_error_information_and_exit(
-            "check_arguments", " 执行模式参数：-c、-s、-u、-z 互斥，只能指定一个"
+            "check_arguments", " 执行模式参数：-c、-s、-u、-d、-z 互斥，只能指定一个"
         )
 
     # 检查 -p 参数
@@ -39,6 +39,23 @@ def check_arguments(args):
             utils.print_error_information_and_exit(
                 "check_arguments",
                 " -p 参数不能搭配 -c 或 -s 使用，请单独使用 -u 参数指定上传文件或目录后再使用 -c 或 -s",
+            )
+
+    # 检查 -d 参数
+    if args.d:
+        if not args.p:
+            utils.print_error_information_and_exit(
+                "check_arguments", " -d 参数必须搭配 -p 参数使用"
+            )
+        if not args.d.startswith("/"):
+            utils.print_error_information_and_exit(
+                "check_arguments",
+                f" 下载模式：-d 参数指定的远程路径必须是绝对路径，当前值：{args.d}",
+            )
+        if not os.path.isdir(args.p):
+            utils.print_error_information_and_exit(
+                "check_arguments",
+                f" 下载模式：-p 参数指定的本地路径必须是已存在的目录，当前值：{args.p}",
             )
 
     # 检查 -u 参数

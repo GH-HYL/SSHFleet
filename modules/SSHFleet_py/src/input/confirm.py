@@ -69,6 +69,11 @@ def _build_info_table(args, nodes):
         info_table.append(("本地路径", args.u))
         info_table.append(("远程路径", args.p))
         info_table.append(("", ""))
+    if args.d:
+        info_table.append(("执行模式", "下载模式"))
+        info_table.append(("远程路径", args.d))
+        info_table.append(("本地路径", args.p))
+        info_table.append(("", ""))
 
     info_table.append(("CSV文件路径", args.f))
     info_table.append(("节点数量", len(nodes)))
@@ -82,6 +87,8 @@ def _build_info_table(args, nodes):
         if args.c or args.s:
             info_table.append(("执行超时", f"{args.t}s"))
         if args.u:
+            info_table.append(("传输超时", f"{args.t}s"))
+        if args.d:
             info_table.append(("传输超时", f"{args.t}s"))
 
     # 备注信息
