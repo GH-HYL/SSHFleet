@@ -1,8 +1,0 @@
-{
-  "openspec_proposal": "openspec/changes/remove-old-transfer-code/proposal.md",
-  "openspec_design": "openspec/changes/remove-old-transfer-code/design.md",
-  "openspec_tasks": "openspec/changes/remove-old-transfer-code/tasks.md",
-  "openspec_delta_spec": "openspec/changes/remove-old-transfer-code/specs/transfer-cleanup/spec.md",
-  "handoff_context": "openspec/changes/remove-old-transfer-code/.comet/handoff/design-context.json",
-  "handoff_markdown": "openspec/changes/remove-old-transfer-code/.comet/handoff/design-context.md"
-}
