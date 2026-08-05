@@ -45,7 +45,7 @@
 ### 前置要求
 
 - Python 3.10+
-- Go 程序已预编译（包含在 `src/go/` 目录下）
+- Go 程序需自行编译：将编译生成的 `SSHFleet_Go`（Linux）/ `SSHFleet_Go.exe`（Windows）放入 `src/go/` 目录；仓库不含预编译二进制
 - 支持的操作系统：Windows / Linux
 
 ### 安装步骤
@@ -53,8 +53,8 @@
 1. **克隆或下载项目**
 
 ```bash
-git clone https://github.com/GH-HYL/Multi-SSHFleet.git
-cd sshfleet_py
+git clone <项目仓库地址>
+cd <Python 工程目录>
 ```
 
 1. **安装 Python 依赖**
