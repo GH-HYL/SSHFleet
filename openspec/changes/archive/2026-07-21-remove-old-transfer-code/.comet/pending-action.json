@@ -1,6 +1,0 @@
-{
-  "id": "classic-archive:remove-old-transfer-code",
-  "stepId": "full.archive.execute",
-  "type": "checkpoint",
-  "ref": "remove-old-transfer-code"
-}

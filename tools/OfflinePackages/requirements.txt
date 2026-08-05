@@ -1,7 +1,0 @@
-# SSHFleet Python 依赖
-loguru
-pydantic
-pyyaml
-rich
-requests
-openpyxl
