@@ -6,6 +6,14 @@
 
 ---
 
+## [0.7.2] - 2026-08-05
+
+### Fixed
+- 修复 `format_output_to_xlsx` 中 `output` 字段未做 `clean_for_excel` 预处理的问题（SSH 远程命令输出的 ANSI 转义序列导致 openpyxl 保存 xlsx 时报 XML 非法字符错误）
+- 修复 xlsx 生成异常导致程序中断退出的问题（`format_output_to_xlsx` 装饰器 `isexit` 从 `True` 改为 `False`，xlsx 为分支输出不应影响主干流程）
+
+---
+
 ## [0.7.1] - 2026-07-31
 
 ### Fixed

@@ -15,7 +15,7 @@ from src.log import tlog
 
 
 @utils.error_and_exit_handling_decorator(
-    "format_output_to_xlsx", "格式化输出结果到Excel文件失败", isexit=True
+    "format_output_to_xlsx", "格式化输出结果到Excel文件失败", isexit=False
 )
 def format_output_to_xlsx(
     final_results: List[Dict[str, Any]],
@@ -89,7 +89,7 @@ def format_output_to_xlsx(
         connect_cost_time = result.get("connect_cost_time", 0)
         exec_cost_time = result.get("exec_cost_time", 0)
         exit_code = result.get("exit_code", -1)
-        output = result.get("output", "")
+        output = utils.clean_for_excel(result.get("output", ""))
         result_category = result.get("result_category", "未知")
 
         # 行1: 连接状态
