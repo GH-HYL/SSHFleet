@@ -365,6 +365,9 @@ def go_to_go(
                         if sse_data.get("exit_code") == 0:
                             node_bars.update(active_bars[seq],
                                 completed=node_total_bytes.get(seq, old_approx))
+                            # 小文件传输太快，progress 与 result 几乎同时到达，
+                            # 在删除前强制刷新一次，确保 100% 完成态被渲染出来
+                            live.refresh()
                         node_bars.remove_task(active_bars[seq])
                         del active_bars[seq]
                     for d in [node_approximate, node_total_bytes]:
