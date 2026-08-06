@@ -401,7 +401,7 @@ Python 3.10+，主要依赖：
 
 ## 仓库
 
-- GitHub: [github.com/GH-HYL/Multi-SSHFleet](https://github.com/GH-HYL/SSHFleet.git)
+- GitHub: [github.com/GH-HYL/SSHFleet](https://github.com/GH-HYL/SSHFleet.git)
 - Gitee: [gitee.com/huang-fugui-123/sshfleet](https://gitee.com/huang-fugui-123/sshfleet)
 - 邮箱: <465317918@qq.com>
 
