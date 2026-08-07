@@ -15,13 +15,13 @@ import src.utils as utils
 from src.yaml import SSHFleetConfig
 
 
-def resolve_password_path(raw_value: str, password_dir: str) -> str:
+def resolve_credential_path(raw_value: str, secret_dir: str) -> str:
     """
-    将 CSV 密码列原始值解析为绝对路径
+    将 CSV 凭据列原始值解析为绝对路径（密码 / 私钥 / 私钥口令 通用）
 
     Args:
-        raw_value: CSV 密码列原始值
-        password_dir: 配置的密码目录
+        raw_value: CSV 凭据列原始值
+        secret_dir: 配置的凭据目录
 
     Returns:
         绝对路径
@@ -39,14 +39,14 @@ def resolve_password_path(raw_value: str, password_dir: str) -> str:
     if os.path.isabs(raw):
         return raw
 
-    # 相对路径：与 password_dir 拼接
-    if not password_dir or password_dir == "None":
+    # 相对路径：与 secret_dir 拼接
+    if not secret_dir or secret_dir == "None":
         utils.print_error_information_and_exit(
-            "resolve_password_path",
-            "密码列包含相对路径，但 password_dir 未配置"
+            "resolve_credential_path",
+            "凭据列包含相对路径，但 secret_dir 未配置"
         )
 
-    return os.path.join(password_dir, raw)
+    return os.path.join(secret_dir, raw)
 
 
 def validate_csv_credentials(csv_infos: List[List[str]], config: SSHFleetConfig) -> Tuple[List[str], bool, bool]:
@@ -74,10 +74,13 @@ def validate_csv_credentials(csv_infos: List[List[str]], config: SSHFleetConfig)
 
         password = row[3].strip()
         key = row[4].strip()
+        # 第5列（私钥路径）留空时，回退到配置默认私钥 account.key
+        if not key and config.account.key and config.account.key != "None":
+            key = config.account.key
 
         if password:
             # 有密码路径：解析并验证文件
-            password_path = resolve_password_path(password, config.account.password_dir)
+            password_path = resolve_credential_path(password, config.account.secret_dir)
             # 检查文件是否存在
             if not os.path.exists(password_path):
                 errors.append(f"行 {idx} (IP: {row[0]}): 密码文件不存在 → {password_path}")
@@ -109,8 +112,8 @@ def validate_csv_credentials(csv_infos: List[List[str]], config: SSHFleetConfig)
             need_default_password = True
 
         if key:
-            # 有密钥路径：解析并验证文件（复用 resolve_password_path）
-            key_path = resolve_password_path(key, config.account.password_dir)
+            # 有密钥路径：解析并验证文件（复用 resolve_credential_path）
+            key_path = resolve_credential_path(key, config.account.secret_dir)
             # 检查文件是否存在
             if not os.path.exists(key_path):
                 errors.append(f"行 {idx} (IP: {row[0]}): 密钥文件不存在 → {key_path}")
@@ -135,7 +138,7 @@ def validate_csv_credentials(csv_infos: List[List[str]], config: SSHFleetConfig)
         if key:
             passphrase_raw = row[5].strip() if len(row) > 5 else ""
             if passphrase_raw:
-                pp_path = resolve_password_path(passphrase_raw, config.account.password_dir)
+                pp_path = resolve_credential_path(passphrase_raw, config.account.secret_dir)
                 if not os.path.exists(pp_path):
                     errors.append(f"行 {idx} (IP: {row[0]}): 私钥口令文件不存在 → {pp_path}")
                 else:
@@ -292,6 +295,9 @@ def read_nodes_infos(csv_path: str, config: SSHFleetConfig, disinteractive: bool
             row.append("")
 
         ip, port, user, password, key = row[:5]
+        # 第5列（私钥路径）留空时回退到配置默认私钥 account.key
+        if not key and config.account.key and config.account.key != "None":
+            key = config.account.key
         errors = []
 
         # 验证IP地址
@@ -386,7 +392,7 @@ def read_nodes_infos(csv_path: str, config: SSHFleetConfig, disinteractive: bool
         # 处理密码 - 按照优先级：CSV > config > 用户之前输入的值 > 用户输入新值
         password = password.strip() if password else ""
         if password:  # CSV中有值，最高优先级
-            password_path = resolve_password_path(password, config.account.password_dir)
+            password_path = resolve_credential_path(password, config.account.secret_dir)
             with open(password_path, "r", encoding="utf-8") as f:
                 password = base64.b64decode(f.read().strip()).decode("utf-8")
         elif (
@@ -432,7 +438,7 @@ def read_nodes_infos(csv_path: str, config: SSHFleetConfig, disinteractive: bool
         key = key.strip() if key else ""
         key_content = ""
         if key:
-            key_path = resolve_password_path(key, config.account.password_dir)
+            key_path = resolve_credential_path(key, config.account.secret_dir)
             with open(key_path, "r", encoding="utf-8") as f:
                 key_content = f.read().strip()
 
@@ -440,7 +446,7 @@ def read_nodes_infos(csv_path: str, config: SSHFleetConfig, disinteractive: bool
         node_key_passphrase = ""
         passphrase_raw = row[5].strip() if len(row) > 5 else ""
         if passphrase_raw:
-            pp_path = resolve_password_path(passphrase_raw, config.account.password_dir)
+            pp_path = resolve_credential_path(passphrase_raw, config.account.secret_dir)
             with open(pp_path, "r", encoding="utf-8") as f:
                 node_key_passphrase = base64.b64decode(f.read().strip()).decode("utf-8")
         elif key_passphrase:
