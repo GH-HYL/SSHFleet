@@ -23,6 +23,9 @@
 ### Fixed
 - 修复仅依赖配置默认密码的旧 CSV（密码列留空）无法使用的问题（密码列留空现在正确回退到默认密码）
 - 修复仅配置密钥、密码列留空的节点被误判需要默认密码、并错误触发交互输密码的问题
+- 修复交互输入分支引用未定义变量 `args` 导致崩溃的问题（`read_nodes_infos` 新增 `disinteractive` 参数并由调用方传入，避免 CSV 端口/用户名/密码留空且无配置默认时 NameError）
+- 修正命令行参数说明的静态类型标注（`_load_json` 标注返回 `Any`，消除 `Any | None` 与危险/错误关键词列表形参的类型不匹配告警）
+- Go 工程执行 `gofmt` 格式化（server.go / ssh_result.go / ssh_types.go / ssh_upload.go），消除 IDE 格式化提示，不改变逻辑
 
 ### Documentation
 - 重写 README 的 CSV 文件格式说明：改为面向新手的端到端教程，补充密码文件 Base64 生成命令（Windows / Linux）、四种常见场景可直接照抄的示例，并修正此前「第六列会被忽略」与实现矛盾的描述

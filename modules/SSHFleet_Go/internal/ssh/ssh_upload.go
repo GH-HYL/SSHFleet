@@ -12,8 +12,8 @@ import (
 
 	"github.com/pkg/sftp"
 
-	"SSHFleet/internal/log"
 	"SSHFleet/internal/localfs"
+	"SSHFleet/internal/log"
 
 	"go.uber.org/zap"
 )

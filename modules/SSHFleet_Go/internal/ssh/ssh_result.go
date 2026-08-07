@@ -9,7 +9,7 @@ type ExecResult struct {
 	User            string  `json:"user"`
 	ConnectSuccess  bool    `json:"connect_success"`
 	ExitCode        *int    `json:"exit_code"` // nil 表示未执行（连接失败）
-	Output          string  `json:"output"` // base64 编码
+	Output          string  `json:"output"`    // base64 编码
 	ConnectCostTime float64 `json:"connect_cost_time"`
 	ExecCostTime    float64 `json:"exec_cost_time"`
 	Error           *string `json:"error"` // 成功时 null
@@ -32,7 +32,7 @@ type UploadResult struct {
 	User            string  `json:"user"`
 	ConnectSuccess  bool    `json:"connect_success"`
 	ExitCode        *int    `json:"exit_code"` // nil 表示未执行（连接失败）
-	Output          string  `json:"output"` // base64 编码
+	Output          string  `json:"output"`    // base64 编码
 	ConnectCostTime float64 `json:"connect_cost_time"`
 	ExecCostTime    float64 `json:"exec_cost_time"`
 	Error           *string `json:"error"`

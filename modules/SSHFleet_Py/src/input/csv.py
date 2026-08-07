@@ -209,7 +209,7 @@ def validate_csv_credentials(csv_infos: List[List[str]], config: SSHFleetConfig)
 
 
 @utils.error_and_exit_handling_decorator("read_nodes_infos", "读取节点信息失败")
-def read_nodes_infos(csv_path: str, config: SSHFleetConfig, is_inline: bool = False) -> List[Dict[str, str]]:
+def read_nodes_infos(csv_path: str, config: SSHFleetConfig, disinteractive: bool = False, is_inline: bool = False) -> List[Dict[str, str]]:
     """
     功能：
         从CSV文件或内联文本中读取节点信息，并进行数据验证和处理
@@ -338,7 +338,7 @@ def read_nodes_infos(csv_path: str, config: SSHFleetConfig, is_inline: bool = Fa
                             if utils.get_user_confirmation(
                                 f"\n{color.COLOR_YELLOW}是否将此端口号应用于所有后续端口为空的节点？{color.COLOR_RESET}",
                                 yorn=True,
-                                disinteractive=getattr(args, 'disinteractive', False),
+                                disinteractive=disinteractive,
                             ):
                                 port_use_input = True
                                 port_input_value = int(port)
@@ -372,7 +372,7 @@ def read_nodes_infos(csv_path: str, config: SSHFleetConfig, is_inline: bool = Fa
                             if utils.get_user_confirmation(
                                 f"\n{color.COLOR_YELLOW}是否将此用户名应用于所有后续用户为空的节点？{color.COLOR_RESET}",
                                 yorn=True,
-                                disinteractive=getattr(args, 'disinteractive', False),
+                                disinteractive=disinteractive,
                             ):
                                 user_use_input = True
                                 user_input_value = user
@@ -417,7 +417,7 @@ def read_nodes_infos(csv_path: str, config: SSHFleetConfig, is_inline: bool = Fa
                             if utils.get_user_confirmation(
                                 f"\n{color.COLOR_YELLOW}是否将此密码应用于所有后续密码为空的节点？{color.COLOR_RESET}",
                                 yorn=True,
-                                disinteractive=getattr(args, 'disinteractive', False),
+                                disinteractive=disinteractive,
                             ):
                                 password_use_input = True
                                 password_input_value = password
