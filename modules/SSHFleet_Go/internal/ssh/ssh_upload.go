@@ -43,13 +43,13 @@ func (c *SSHClient) UploadFiles(
 		result.FailedFiles = len(fileItems)
 		errMsg := conn.err.Error()
 		result.Error = &errMsg
-		log.Zlog.Error("[上传] 连接失败", zap.String("ip", ip), zap.Error(conn.err))
+		log.Zlog.Error("[上传] 连接失败", zap.String("ip", ip), zap.String("登录方式", c.config.authMethodDesc()), zap.Error(conn.err))
 		return result, conn.err
 	}
 	defer func() { _ = c.Close() }()
 
 	result.ConnectSuccess = true
-	log.Zlog.Succ("[上传] 连接成功", zap.String("ip", ip))
+	log.Zlog.Succ("[上传] 连接成功", zap.String("ip", ip), zap.String("登录方式", c.config.authMethodDesc()))
 
 	// 2. 清理残留临时目录（仅 sudo 模式）
 	if useSudo {

@@ -41,13 +41,13 @@ func (c *SSHClient) DownloadFiles(
 		result.ConnectSuccess = false
 		errMsg := conn.err.Error()
 		result.Error = &errMsg
-		log.Zlog.Error("[下载] 连接失败", zap.String("ip", ip), zap.Error(conn.err))
+		log.Zlog.Error("[下载] 连接失败", zap.String("ip", ip), zap.String("登录方式", c.config.authMethodDesc()), zap.Error(conn.err))
 		return result, conn.err
 	}
 	defer func() { _ = c.Close() }()
 
 	result.ConnectSuccess = true
-	log.Zlog.Succ("[下载] 连接成功", zap.String("ip", ip))
+	log.Zlog.Succ("[下载] 连接成功", zap.String("ip", ip), zap.String("登录方式", c.config.authMethodDesc()))
 
 	// 2. 创建 SFTP 客户端
 	sftpClient, err := sftp.NewClient(c.client)

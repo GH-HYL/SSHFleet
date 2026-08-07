@@ -48,14 +48,14 @@ func (c *SSHClient) Connect() error {
 	select {
 	case res := <-result:
 		if res.err != nil {
-			log.Zlog.Error("SSH连接失败", zap.String("user", c.config.User), zap.String("addr", addr), zap.Error(res.err))
+			log.Zlog.Error("SSH连接失败", zap.String("user", c.config.User), zap.String("addr", addr), zap.String("登录方式", c.config.authMethodDesc()), zap.Error(res.err))
 			return fmt.Errorf("建立连接失败 - %w", res.err)
 		}
 		c.client = res.client
-		log.Zlog.Succ("SSH连接成功", zap.String("user", c.config.User), zap.String("addr", addr))
+		log.Zlog.Succ("SSH连接成功", zap.String("user", c.config.User), zap.String("addr", addr), zap.String("登录方式", c.config.authMethodDesc()))
 		return nil
 	case <-time.After(maxTimeout):
-		log.Zlog.Error("SSH连接失败: 握手超时", zap.String("user", c.config.User), zap.String("addr", addr), zap.Duration("timeout", maxTimeout))
+		log.Zlog.Error("SSH连接失败: 握手超时", zap.String("user", c.config.User), zap.String("addr", addr), zap.String("登录方式", c.config.authMethodDesc()), zap.Duration("timeout", maxTimeout))
 		return fmt.Errorf("建立连接失败 - 握手超时%v", maxTimeout)
 	}
 }
@@ -101,6 +101,23 @@ func (cfg *SSHConfig) BuildAuthMethods() ([]ssh.AuthMethod, error) {
 	return authMethods, nil
 }
 
+// authMethodDesc 返回本次连接配置的认证方式描述，用于日志标识。
+// 密钥优先于密码：同时配置时先尝试密钥，密钥失败回退到密码。
+func (cfg *SSHConfig) authMethodDesc() string {
+	hasKey := cfg.KeyContent != ""
+	hasPwd := cfg.Password != ""
+	switch {
+	case hasKey && hasPwd:
+		return "密钥/密码"
+	case hasKey:
+		return "密钥"
+	case hasPwd:
+		return "密码"
+	default:
+		return "未配置"
+	}
+}
+
 // connectSSH 建立 SSH 连接并返回耗时
 func (c *SSHClient) connectSSH() connectResult {
 	start := time.Now()
@@ -124,13 +141,13 @@ func (c *SSHClient) ExecuteCommand(command string, ctx context.Context, ip strin
 		result.ConnectSuccess = false
 		errMsg := conn.err.Error()
 		result.Error = &errMsg
-		log.Zlog.Error("连接失败", zap.String("ip", ip), zap.Error(conn.err))
+		log.Zlog.Error("连接失败", zap.String("ip", ip), zap.String("登录方式", c.config.authMethodDesc()), zap.Error(conn.err))
 		return result, conn.err
 	}
 	defer func() { _ = c.Close() }()
 
 	result.ConnectSuccess = true
-	log.Zlog.Succ("连接成功", zap.String("ip", ip))
+	log.Zlog.Succ("连接成功", zap.String("ip", ip), zap.String("登录方式", c.config.authMethodDesc()))
 
 	// 创建会话
 	session, err := c.client.NewSession()
