@@ -403,8 +403,8 @@ src/
 ├── color.py                    # 终端颜色常量
 └── config/
     ├── SSHFleet.yaml           # 工具配置（账号、超时、路径等）
-    ├── dangerous_keywords.json # 危险命令检测规则
-    └── error_keywords.json     # 错误分类关键词
+    ├── dangerous_keywords.yaml # 危险命令检测规则
+    └── error_keywords.yaml     # 错误分类关键词
 ```
 
 ### 执行流程

@@ -144,3 +144,9 @@ def load_config(config_path: str) -> SSHFleetConfig:
         config_dict["account"]["key_passphrase"] = key_passphrase_path
 
     return SSHFleetConfig(**config_dict)
+
+
+def load_yaml_file(path: str):
+    """读取 YAML 文件并返回解析后的数据（支持 # 注释）"""
+    with open(path, 'r', encoding='utf-8') as f:
+        return yaml.safe_load(f)

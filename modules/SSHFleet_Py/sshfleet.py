@@ -32,8 +32,8 @@
 #     │   └── logger.py                 #   日志初始化与管理
 #     ├── config/                       # 配置文件夹
 #     │   ├── SSHFleet.yaml             #   工具配置
-#     │   ├── dangerous_keywords.json   #   危险命令检测规则
-#     │   └── error_keywords.json       #   错误分类关键词
+#     │   ├── dangerous_keywords.yaml   #   危险命令检测规则
+#     │   └── error_keywords.yaml       #   错误分类关键词
 #     ├── utils.py                      # 工具函数、装饰器
 #     ├── yaml.py                       # 配置文件加载（Pydantic）
 #     └── color.py                      # 终端颜色常量
@@ -42,7 +42,6 @@
 # 系统或第三方模块
 import os
 import sys
-import json
 from datetime import datetime
 from typing import Any
 
@@ -65,18 +64,17 @@ import src.utils as utils
 import src.color as color
 
 
-def _load_json(path) -> Any:
-    """读取JSON文件并返回解析后的数据"""
+def _load_yaml(path) -> Any:
+    """读取 YAML 文件并返回解析后的数据（支持 # 注释）"""
     try:
-        with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
+        return yaml.load_yaml_file(path)
     except Exception as e:
         tlog.error(
-            f"JSON文件{path}读取内容失败\n异常类型：\n{type(e)}\n异常信息：\n{e}"
+            f"YAML文件{path}读取内容失败\n异常类型：\n{type(e)}\n异常信息：\n{e}"
         )
         utils.print_error_information_and_exit(
-            "_load_json",
-            f"JSON文件{path}读取内容失败\n异常类型：\n{type(e)}\n异常信息：\n{e}",
+            "_load_yaml",
+            f"YAML文件{path}读取内容失败\n异常类型：\n{type(e)}\n异常信息：\n{e}",
         )
 
 
@@ -116,7 +114,7 @@ def main():
     tlog.success("检查代码文件存在性成功")
 
     # 获取危险命令分类正则关键字
-    dangerous_keywords = _load_json(config.paths.jsons.dangerous_keywords)
+    dangerous_keywords = _load_yaml(config.paths.jsons.dangerous_keywords)
 
     # 参数解析
     args = parse_args(config)
@@ -150,7 +148,7 @@ def main():
     tlog.debug(f"{'-' * 30}SSHFleet工具 - 执行阶段{'-' * 30}")
 
     # 获取错误分类关键字
-    error_keywords = _load_json(config.paths.jsons.error_keywords)
+    error_keywords = _load_yaml(config.paths.jsons.error_keywords)
 
     # "全局"开始时间计时
     global_start_time = datetime.now()
