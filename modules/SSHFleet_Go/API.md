@@ -72,7 +72,9 @@ SSHFleet Go 是一个一次性批量 SSH 任务引擎，支持命令执行、文
       "ip": "string",
       "port": "int",
       "user": "string",
-      "password": "string"
+      "password": "string",
+      "key_content": "string",
+      "key_passphrase": "string"
     }
   ]
 }
@@ -104,7 +106,9 @@ SSHFleet Go 是一个一次性批量 SSH 任务引擎，支持命令执行、文
 | `ip` | string | 是 | - | 目标服务器 IP 地址 |
 | `port` | int | 否 | 22 | SSH 端口号 |
 | `user` | string | 是 | - | 登录用户名 |
-| `password` | string | 是 | - | 登录密码 |
+| `password` | string | 否 | "" | 登录密码（明文），与key_content至少提供一个 |
+| `key_content` | string | 否 | "" | PEM私钥原始文本，与password至少提供一个 |
+| `key_passphrase` | string | 否 | "" | 密钥密码（明文），仅在使用加密私钥时提供 |
 
 #### 响应格式（SSE）
 
@@ -184,7 +188,7 @@ SSHFleet Go 是一个一次性批量 SSH 任务引擎，支持命令执行、文
     "sudo": false
   },
   "nodes": [
-    {"seq": 0, "ip": "10.0.0.1", "port": 22, "user": "root", "password": "xxx"}
+    {"seq": 0, "ip": "10.0.0.1", "port": 22, "user": "root", "password": "xxx", "key_content": "", "key_passphrase": ""}
   ]
 }
 ```
@@ -338,7 +342,7 @@ done 的 total/success/failed 是节点级统计。
     "sudo": false
   },
   "nodes": [
-    {"seq": 0, "ip": "10.0.0.1", "port": 22, "user": "root", "password": "xxx"}
+    {"seq": 0, "ip": "10.0.0.1", "port": 22, "user": "root", "password": "xxx", "key_content": "", "key_passphrase": ""}
   ]
 }
 ```
@@ -557,7 +561,7 @@ curl -N -X POST http://localhost:9090/api/v1/upload \
     "file_path": "/home/user/config.yaml",
     "remote_path": "/etc/app/",
     "options": {"concurrency": 10, "connect_timeout": 10, "exec_timeout": 300, "sudo": false},
-    "nodes": [{"seq": 0, "ip": "10.0.0.1", "port": 22, "user": "root", "password": "xxx"}]
+    "nodes": [{"seq": 0, "ip": "10.0.0.1", "port": 22, "user": "root", "password": "xxx", "key_content": "", "key_passphrase": ""}]
   }'
 ```
 
@@ -571,7 +575,7 @@ curl -N -X POST http://localhost:9090/api/v1/download \
     "remote_path": "/opt/logs/app.log",
     "local_path": "/home/user/downloads",
     "options": {"concurrency": 10, "connect_timeout": 10, "exec_timeout": 300},
-    "nodes": [{"seq": 0, "ip": "10.0.0.1", "port": 22, "user": "root", "password": "xxx"}]
+    "nodes": [{"seq": 0, "ip": "10.0.0.1", "port": 22, "user": "root", "password": "xxx", "key_content": "", "key_passphrase": ""}]
   }'
 ```
 
@@ -647,8 +651,6 @@ internal/
 │   ├── ssh_upload.go          # SFTP 上传（含重试机制）
 │   ├── ssh_download.go        # SFTP 下载（含重试机制）
 │   ├── ssh_result.go          # 结果结构体定义
-│   ├── ssh_run_test.go        # 单元测试（progressWriter）
-│   └── progress_reader_test.go # 单元测试（progressReader）
 ├── interrupt/
 │   └── interrupt.go           # 信号中断处理
 └── log/

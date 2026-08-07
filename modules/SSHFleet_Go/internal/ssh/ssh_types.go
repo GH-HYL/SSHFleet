@@ -27,6 +27,8 @@ type SSHConfig struct {
 	Port           int
 	User           string
 	Password       string
+	KeyContent     string
+	KeyPassphrase  string
 	ConnectTimeout time.Duration
 	ExecTimeout    time.Duration
 }

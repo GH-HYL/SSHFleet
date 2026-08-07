@@ -17,11 +17,13 @@ type Options struct {
 
 // NodeInfo 节点信息
 type NodeInfo struct {
-	Seq      int    `json:"seq"`
-	IP       string `json:"ip"`
-	Port     int    `json:"port"`
-	User     string `json:"user"`
-	Password string `json:"password"`
+	Seq           int    `json:"seq"`
+	IP            string `json:"ip"`
+	Port          int    `json:"port"`
+	User          string `json:"user"`
+	Password      string `json:"password"`
+	KeyContent    string `json:"key_content,omitempty"`
+	KeyPassphrase string `json:"key_passphrase,omitempty"`
 }
 
 // UploadRequest 上传请求

@@ -7,6 +7,7 @@ account:
   user: "jx_zyc"                             # CSV文件默认用户名
   password_dir: "~/.MyPW"       # 密码存放目录（必填，用于拼接相对路径）
   password: 'SSHFleet_pw'         # 密码文件路径，文件内容为base64编码的密码，支持绝对路径（Windows/Linux） # 转化命令：echo -n "your_password" | base64 > SSHFleet_pw
+  key_passphrase: ""             # SSH密钥的passphrase文件路径（base64编码），无则留空
 
 # 执行参数
 execution:
