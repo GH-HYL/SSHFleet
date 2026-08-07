@@ -8,7 +8,7 @@ import io
 import os
 import re
 import sys
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 import src.color as color
 import src.utils as utils
@@ -49,26 +49,31 @@ def resolve_password_path(raw_value: str, password_dir: str) -> str:
     return os.path.join(password_dir, raw)
 
 
-def validate_csv_passwords(csv_infos: List[List[str]], config: SSHFleetConfig) -> None:
+def validate_csv_credentials(csv_infos: List[List[str]], config: SSHFleetConfig) -> Tuple[List[str], bool, bool]:
     """
-    预检查所有密码文件，通过才继续处理节点
+    预检查所有凭据文件（密码+密钥），通过才继续处理节点
 
     Args:
         csv_infos: 已移除表头的CSV行列表
         config: 配置对象
 
-    Raises:
-        SystemExit: 验证失败
+    Returns:
+        (errors, need_default_password, any_node_uses_key):
+        - errors: 校验错误信息列表（为空表示通过）
+        - need_default_password: 是否存在依赖默认密码的节点
+        - any_node_uses_key: 是否存在使用密钥认证的节点
     """
 
     errors = []
     need_default_password = False
+    any_node_uses_key = False  # 是否有节点使用了密钥
 
     for idx, row in enumerate(csv_infos, start=1):
-        while len(row) < 4:
+        while len(row) < 5:
             row.append("")
 
         password = row[3].strip()
+        key = row[4].strip()
 
         if password:
             # 有密码路径：解析并验证文件
@@ -96,9 +101,35 @@ def validate_csv_passwords(csv_infos: List[List[str]], config: SSHFleetConfig) -
             if not decoded:
                 errors.append(f"行 {idx} (IP: {row[0]}): 密码文件解码后内容为空 → {password_path}")
                 continue
+        elif key:
+            # 仅提供密钥：无需默认密码
+            pass
         else:
-            # 密码为空：标记需要默认密码
+            # 密码列和密钥列均为空：依赖配置中的默认密码
             need_default_password = True
+
+        if key:
+            # 有密钥路径：解析并验证文件（复用 resolve_password_path）
+            key_path = resolve_password_path(key, config.account.password_dir)
+            # 检查文件是否存在
+            if not os.path.exists(key_path):
+                errors.append(f"行 {idx} (IP: {row[0]}): 密钥文件不存在 → {key_path}")
+                continue
+            # 检查文件是否可读且非空
+            try:
+                with open(key_path, "r", encoding="utf-8") as f:
+                    content = f.read().strip()
+            except Exception as e:
+                errors.append(f"行 {idx} (IP: {row[0]}): 密钥文件无法读取 → {key_path} ({e})")
+                continue
+            if not content:
+                errors.append(f"行 {idx} (IP: {row[0]}): 密钥文件内容为空 → {key_path}")
+                continue
+            # 检查PEM格式（以 -----BEGIN 开头）
+            if not content.startswith("-----BEGIN"):
+                errors.append(f"行 {idx} (IP: {row[0]}): 密钥文件不是有效的PEM格式（缺少 -----BEGIN 头） → {key_path}")
+                continue
+            any_node_uses_key = True
 
     # 如果有空密码行，验证一次默认密码
     if need_default_password:
@@ -125,11 +156,34 @@ def validate_csv_passwords(csv_infos: List[List[str]], config: SSHFleetConfig) -
                             if not decoded:
                                 errors.append(f"默认密码文件解码后内容为空 → {config.account.password}")
 
+    # 如果有节点使用密钥且配置了passphrase，验证passphrase文件
+    if any_node_uses_key and config.account.key_passphrase and config.account.key_passphrase != "":
+        passphrase_path = config.account.key_passphrase
+        if not os.path.exists(passphrase_path):
+            errors.append(f"密钥passphrase文件不存在 → {passphrase_path}")
+        else:
+            try:
+                with open(passphrase_path, "r", encoding="utf-8") as f:
+                    content = f.read().strip()
+            except Exception as e:
+                errors.append(f"密钥passphrase文件无法读取 → {passphrase_path} ({e})")
+            else:
+                if not content:
+                    errors.append(f"密钥passphrase文件内容为空 → {passphrase_path}")
+                else:
+                    try:
+                        decoded = base64.b64decode(content)
+                    except Exception:
+                        errors.append(f"密钥passphrase文件不是有效的Base64编码 → {passphrase_path}")
+                    else:
+                        if not decoded:
+                            errors.append(f"密钥passphrase文件解码后内容为空 → {passphrase_path}")
+
     if errors:
-        print(f"{color.COLOR_RED}[ERROR]{color.COLOR_RESET} CSV密码预检查失败：")
+        print(f"{color.COLOR_RED}[ERROR]{color.COLOR_RESET} CSV凭据预检查失败：")
         for error in errors:
             print(f"  {error}")
-        sys.exit(1)
+    return errors, need_default_password, any_node_uses_key
 
 
 @utils.error_and_exit_handling_decorator("read_nodes_infos", "读取节点信息失败")
@@ -198,16 +252,24 @@ def read_nodes_infos(csv_path: str, config: SSHFleetConfig, is_inline: bool = Fa
     password_use_input = False  # 是否使用用户输入的密码值
     password_input_value = None  # 用户输入的密码值
 
-    # 密码路径预检查（全部通过才继续处理节点）
-    validate_csv_passwords(csv_infos, config)
+    # 凭据路径预检查（全部通过才继续处理节点）
+    validate_errors, _, _ = validate_csv_credentials(csv_infos, config)
+    if validate_errors:
+        sys.exit(1)
+
+    # 读取全局passphrase（仅一次，所有节点共用）
+    key_passphrase = ""
+    if config.account.key_passphrase and config.account.key_passphrase != "":
+        with open(config.account.key_passphrase, "r", encoding="utf-8") as f:
+            key_passphrase = base64.b64decode(f.read().strip()).decode("utf-8")
 
     # 处理每个节点
     for idx, row in enumerate(csv_infos, start=1):
         # 确保行有足够的列
-        while len(row) < 4:
+        while len(row) < 5:
             row.append("")
 
-        ip, port, user, password = row[:4]
+        ip, port, user, password, key = row[:5]
         errors = []
 
         # 验证IP地址
@@ -311,6 +373,8 @@ def read_nodes_infos(csv_path: str, config: SSHFleetConfig, is_inline: bool = Fa
             # 读取密码文件内容并解码base64（预检查已验证文件有效性）
             with open(config.account.password, "r", encoding="utf-8") as f:
                 password = base64.b64decode(f.read().strip()).decode("utf-8")
+        elif key:  # 仅使用密钥认证，无需密码
+            password = ""
         elif password_use_input:  # 使用之前用户输入的值
             password = password_input_value
         else:  # 请求用户输入新值
@@ -342,6 +406,14 @@ def read_nodes_infos(csv_path: str, config: SSHFleetConfig, is_inline: bool = Fa
                     print("\n用户取消输入")
                     sys.exit(1)
 
+        # 处理密钥内容（PEM原始文本，无需base64编码）
+        key = key.strip() if key else ""
+        key_content = ""
+        if key:
+            key_path = resolve_password_path(key, config.account.password_dir)
+            with open(key_path, "r", encoding="utf-8") as f:
+                key_content = f.read().strip()
+
         # 如果有错误，添加到错误列表
         if errors:
             error_msg = "，".join(errors)
@@ -349,7 +421,14 @@ def read_nodes_infos(csv_path: str, config: SSHFleetConfig, is_inline: bool = Fa
         else:
             # 验证通过，添加到节点列表
             node_infos.append(
-                {"ip": ip, "port": port, "user": user, "password": password}
+                {
+                    "ip": ip,
+                    "port": port,
+                    "user": user,
+                    "password": password,
+                    "key_content": key_content,
+                    "key_passphrase": key_passphrase,
+                }
             )
 
     # 检查是否有错误
