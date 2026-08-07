@@ -56,8 +56,9 @@ class Execution(BaseModel):
 class Account(BaseModel):
     port: int
     user: str
-    password_dir: str
+    secret_dir: str
     password: str
+    key: str = ""                  # 默认私钥文件路径（CSV 第 5 列留空时回退）
     key_passphrase: str = ""
 
 
@@ -94,37 +95,51 @@ def load_config(config_path: str) -> SSHFleetConfig:
     with open(config_path, 'r', encoding='utf-8') as f:
         config_dict = yaml.safe_load(f)
 
-    # 读取密码目录路径（不验证）
-    password_dir = config_dict["account"].get("password_dir", "")
-    if password_dir:
-        password_dir = os.path.expanduser(password_dir)
-        config_dict["account"]["password_dir"] = password_dir
+    # 读取凭据目录路径（不验证）：密码 / 私钥 / 私钥口令的相对路径都拼到这里
+    secret_dir = config_dict["account"].get("secret_dir", "")
+    if secret_dir:
+        secret_dir = os.path.expanduser(secret_dir)
+        config_dict["account"]["secret_dir"] = secret_dir
 
-    # 读取密码文件路径（不验证，相对路径与 password_dir 拼接）
+    # 读取默认密码文件路径（不验证，相对路径与 secret_dir 拼接）
     password_path = config_dict["account"]["password"]
     if password_path:
         password_path = os.path.expanduser(password_path)
         if not os.path.isabs(password_path):
-            if password_dir:
-                password_path = os.path.join(password_dir, password_path)
+            if secret_dir:
+                password_path = os.path.join(secret_dir, password_path)
             else:
                 raise ValueError(
                     f"account.password 为相对路径 '{password_path}'，"
-                    f"但 account.password_dir 未配置，无法拼接密码文件路径"
+                    f"但 account.secret_dir 未配置，无法拼接密码文件路径"
                 )
         config_dict["account"]["password"] = password_path
 
-    # 读取密钥passphrase文件路径（不验证，相对路径与 password_dir 拼接）
+    # 读取默认私钥文件路径（不验证，相对路径与 secret_dir 拼接）
+    key_path = config_dict["account"].get("key", "")
+    if key_path:
+        key_path = os.path.expanduser(key_path)
+        if not os.path.isabs(key_path):
+            if secret_dir:
+                key_path = os.path.join(secret_dir, key_path)
+            else:
+                raise ValueError(
+                    f"account.key 为相对路径 '{key_path}'，"
+                    f"但 account.secret_dir 未配置，无法拼接私钥文件路径"
+                )
+        config_dict["account"]["key"] = key_path
+
+    # 读取默认私钥口令文件路径（不验证，相对路径与 secret_dir 拼接）
     key_passphrase_path = config_dict["account"].get("key_passphrase", "")
     if key_passphrase_path:
         key_passphrase_path = os.path.expanduser(key_passphrase_path)
         if not os.path.isabs(key_passphrase_path):
-            if password_dir:
-                key_passphrase_path = os.path.join(password_dir, key_passphrase_path)
+            if secret_dir:
+                key_passphrase_path = os.path.join(secret_dir, key_passphrase_path)
             else:
                 raise ValueError(
                     f"account.key_passphrase 为相对路径 '{key_passphrase_path}'，"
-                    f"但 account.password_dir 未配置，无法拼接路径"
+                    f"但 account.secret_dir 未配置，无法拼接路径"
                 )
         config_dict["account"]["key_passphrase"] = key_passphrase_path
 
