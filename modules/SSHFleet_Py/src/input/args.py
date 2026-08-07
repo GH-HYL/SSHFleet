@@ -96,20 +96,20 @@ def parse_args(config: SSHFleetConfig) -> argparse.Namespace:
     )
     # 三列对齐的帮助信息（argparse自动显示第一列选项名，help只写第二列+第三列）
     help_entries = [
-        ('-c', 'command', '(命令模式)', '远程执行命令'),
-        ('-s', 'script', '(脚本模式)', '远程执行脚本'),
-        ('-u', 'upload', '(上传模式)', '本地上传文件或目录路径'),
-        ('-d', 'download', '(下载模式)', '远程下载文件或目录路径'),
-        ('-z', None, '(打包模式)', '打包最新日志到当前路径'),
-        ('-f', 'csv_file', None, '节点信息的 CSV 文件或内联CSV文本 (-c / -s / -u / -d 时必填)'),
-        ('-p', 'path', None, '远程目标节点路径 (-u / -d 时必填)'),
-        ('-m', 'mode', f'[默认: {config.execution.mode or "direct"}]', '执行权限: direct=用户权限, sudo=root权限'),
-        ('-t', 'timeout', f'[默认: 命令{config.execution.timeout_execute}s/上传{config.execution.timeout_transfer}s]', '执行或传输超时 (秒)'),
-        ('-T', 'timeout', f'[默认: {config.execution.timeout_connect}]', '连接超时 (秒)'),
-        ('-n', 'number', '[默认: 节点数]', '并发执行或传输的数值'),
-        ('-r', 'remark', None, '备注信息, 用于生成历史记录文件名后缀，默认自动生成'),
-        ('--nobash', None, None, '命令模式: 不使用 bash 环境, 直接执行原始命令'),
-        ('--disinteractive', None, None, '跳过交互确认, 直接执行'),
+        ('-c', 'command', '(命令模式)', '远程在多台服务器上执行一条命令'),
+        ('-s', 'script', '(脚本模式)', '远程在多台服务器上执行一个本地脚本'),
+        ('-u', 'upload', '(上传模式)', '把本地文件或目录传到服务器'),
+        ('-d', 'download', '(下载模式)', '从服务器下载文件或目录到本地'),
+        ('-z', None, '(打包模式)', '把最近一次的执行记录打包到当前目录'),
+        ('-f', 'csv_file', None, '节点清单：CSV 文件路径，或直接在命令行写一行节点信息 (-c/-s/-u/-d 时必须带)'),
+        ('-p', 'path', None, '目标路径：上传到服务器的目录 / 从服务器下载到的本地目录 (-u/-d 时必须带)'),
+        ('-m', 'mode', f'[默认: {config.execution.mode or "direct"}]', '执行身份: direct=用登录用户身份, sudo=用 root 身份执行'),
+        ('-t', 'timeout', f'[默认: 命令{config.execution.timeout_execute}s/上传{config.execution.timeout_transfer}s]', '单台执行或传输的超时时间 (秒)'),
+        ('-T', 'timeout', f'[默认: {config.execution.timeout_connect}]', '连接每台服务器的超时时间 (秒)'),
+        ('-n', 'number', '[默认: 同时跑全部节点]', '并发数：同时操作几台服务器 (不填则全部并行)'),
+        ('-r', 'remark', None, '给这次任务起个名字，会作为历史记录文件夹的后缀 (不填自动生成)'),
+        ('--nobash', None, None, '命令模式专用: 不套一层 bash 环境，直接执行原始命令'),
+        ('--disinteractive', None, None, '跳过所有确认提示直接执行 (批量跑脚本时常用)'),
     ]
 
     def display_width(s):
