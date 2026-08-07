@@ -5,13 +5,14 @@
 account:
   port: 10022                               # CSV文件默认IP端口 10022
   user: "jx_zyc"                             # CSV文件默认用户名
-  password_dir: "~/.MyPW"       # 密码存放目录（必填，用于拼接相对路径）
-  password: 'SSHFleet_pw'         # 密码文件路径，文件内容为base64编码的密码，支持绝对路径（Windows/Linux） # 转化命令：echo -n "your_password" | base64 > SSHFleet_pw
-  key_passphrase: ""             # SSH密钥的passphrase文件路径（base64编码），无则留空
+  secret_dir: "~/.MyPW"          # 凭据目录：密码 / 私钥 / 私钥口令文件的相对路径都拼到这里
+  password: "~/.MyPW/pw.txt"     # 默认密码文件路径：文件内容为 base64 编码的密码；支持绝对路径或相对 secret_dir 的路径
+  key: ""                        # 默认私钥文件路径：内容为 PEM 私钥；支持绝对路径或相对 secret_dir 的路径
+  key_passphrase: ""             # 默认私钥口令文件路径：内容为 base64 编码的私钥口令，无则留空；支持绝对路径或相对 secret_dir 的路径
 
 # 执行参数
 execution:
-  mode: "sudo"                        # 执行模式，默认值 "direct" or "sudo"
+  mode: "sudo"                        # 执行身份：direct=用登录用户身份执行，sudo=用 root 身份执行（默认 direct）
   timeout_connect: 10            # 连接超时，连接远程主机的超时，默认值 50秒
   timeout_execute: 60            # 执行超时，执行命令或脚本的超时，默认值 60秒
   timeout_transfer: 300          # 传输超时，上传或下载文件的超时，默认值 300秒
