@@ -69,7 +69,7 @@ def validate_csv_credentials(csv_infos: List[List[str]], config: SSHFleetConfig)
     any_node_uses_key = False  # 是否有节点使用了密钥
 
     for idx, row in enumerate(csv_infos, start=1):
-        while len(row) < 5:
+        while len(row) < 6:
             row.append("")
 
         password = row[3].strip()
@@ -130,6 +130,28 @@ def validate_csv_credentials(csv_infos: List[List[str]], config: SSHFleetConfig)
                 errors.append(f"行 {idx} (IP: {row[0]}): 密钥文件不是有效的PEM格式（缺少 -----BEGIN 头） → {key_path}")
                 continue
             any_node_uses_key = True
+
+        # 第6列：私钥口令文件（仅当密钥存在时有意义）
+        if key:
+            passphrase_raw = row[5].strip() if len(row) > 5 else ""
+            if passphrase_raw:
+                pp_path = resolve_password_path(passphrase_raw, config.account.password_dir)
+                if not os.path.exists(pp_path):
+                    errors.append(f"行 {idx} (IP: {row[0]}): 私钥口令文件不存在 → {pp_path}")
+                else:
+                    try:
+                        with open(pp_path, "r", encoding="utf-8") as f:
+                            pp_content = f.read().strip()
+                    except Exception as e:
+                        errors.append(f"行 {idx} (IP: {row[0]}): 私钥口令文件无法读取 → {pp_path} ({e})")
+                    else:
+                        if not pp_content:
+                            errors.append(f"行 {idx} (IP: {row[0]}): 私钥口令文件内容为空 → {pp_path}")
+                        else:
+                            try:
+                                base64.b64decode(pp_content)
+                            except Exception:
+                                errors.append(f"行 {idx} (IP: {row[0]}): 私钥口令文件不是有效的Base64编码 → {pp_path}")
 
     # 如果有空密码行，验证一次默认密码
     if need_default_password:
@@ -266,7 +288,7 @@ def read_nodes_infos(csv_path: str, config: SSHFleetConfig, is_inline: bool = Fa
     # 处理每个节点
     for idx, row in enumerate(csv_infos, start=1):
         # 确保行有足够的列
-        while len(row) < 5:
+        while len(row) < 6:
             row.append("")
 
         ip, port, user, password, key = row[:5]
@@ -414,6 +436,17 @@ def read_nodes_infos(csv_path: str, config: SSHFleetConfig, is_inline: bool = Fa
             with open(key_path, "r", encoding="utf-8") as f:
                 key_content = f.read().strip()
 
+        # 处理私钥口令（passphrase）：CSV 第6列优先，缺省用全局配置
+        node_key_passphrase = ""
+        passphrase_raw = row[5].strip() if len(row) > 5 else ""
+        if passphrase_raw:
+            pp_path = resolve_password_path(passphrase_raw, config.account.password_dir)
+            with open(pp_path, "r", encoding="utf-8") as f:
+                node_key_passphrase = base64.b64decode(f.read().strip()).decode("utf-8")
+        elif key_passphrase:
+            # 全局配置（已在文件开头解码）
+            node_key_passphrase = key_passphrase
+
         # 如果有错误，添加到错误列表
         if errors:
             error_msg = "，".join(errors)
@@ -427,7 +460,7 @@ def read_nodes_infos(csv_path: str, config: SSHFleetConfig, is_inline: bool = Fa
                     "user": user,
                     "password": password,
                     "key_content": key_content,
-                    "key_passphrase": key_passphrase,
+                    "key_passphrase": node_key_passphrase,
                 }
             )
 
