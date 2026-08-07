@@ -3,50 +3,50 @@
 
 # 账号信息
 account:
-  port: 10022                               # CSV文件默认IP端口 10022
-  user: "jx_zyc"                             # CSV文件默认用户名
-  secret_dir: "~/.MyPW"          # 凭据目录：密码 / 私钥 / 私钥口令文件的相对路径都拼到这里
-  password: "~/.MyPW/pw.txt"     # 默认密码文件路径：文件内容为 base64 编码的密码；支持绝对路径或相对 secret_dir 的路径
-  key: ""                        # 默认私钥文件路径：内容为 PEM 私钥；支持绝对路径或相对 secret_dir 的路径
-  key_passphrase: ""             # 默认私钥口令文件路径：内容为 base64 编码的私钥口令，无则留空；支持绝对路径或相对 secret_dir 的路径
+  port: 10022                 # CSV文件默认IP端口 10022
+  user: "jx_zyc"              # CSV文件默认用户名
+  secret_dir: "~/.MyPW"       # 凭据目录：密码 / 私钥 / 私钥口令文件的相对路径都拼到这里
+  password: "~/.MyPW/pw.txt"  # 默认密码文件路径：文件内容为 base64 编码的密码；支持绝对路径或相对 secret_dir 的路径
+  key: ""                     # 默认私钥文件路径：内容为 PEM 私钥；支持绝对路径或相对 secret_dir 的路径
+  key_passphrase: ""          # 默认私钥口令文件路径：内容为 base64 编码的私钥口令，无则留空；支持绝对路径或相对 secret_dir 的路径
 
 # 执行参数
 execution:
-  mode: "sudo"                        # 执行身份：direct=用登录用户身份执行，sudo=用 root 身份执行（默认 direct）
-  timeout_connect: 10            # 连接超时，连接远程主机的超时，默认值 50秒
-  timeout_execute: 60            # 执行超时，执行命令或脚本的超时，默认值 60秒
-  timeout_transfer: 300          # 传输超时，上传或下载文件的超时，默认值 300秒
+  mode: "sudo"           # 执行身份：direct=用登录用户身份执行，sudo=用 root 身份执行（默认 direct）
+  timeout_connect: 10    # 连接超时，连接远程主机的超时，默认值 50秒
+  timeout_execute: 60    # 执行超时，执行命令或脚本的超时，默认值 60秒
+  timeout_transfer: 300  # 传输超时，上传或下载文件的超时，默认值 300秒
 
 # 功能开关
 enable:
-  output_to_xlsx: true             # true：终端内容输出到xlsx文件；false：只输出到txt文件
-  results_to_xlsx: true             # true：结果固化到xlsx格式的文件；false：不输出到本地文件
+  output_to_xlsx: true   # true：终端内容输出到xlsx文件；false：只输出到txt文件
+  results_to_xlsx: true  # true：结果固化到xlsx格式的文件；false：不输出到本地文件
 
 # JSON路径
 paths:
   jsons:
-    error_keywords: "./src/config/error_keywords.json"                      # 错误分类关键词JSON文件路径
-    dangerous_keywords: "./src/config/dangerous_keywords.json"   # 危险命令分类正则关键字JSON文件路径
+    error_keywords: "./src/config/error_keywords.json"          # 错误分类关键词JSON文件路径
+    dangerous_keywords: "./src/config/dangerous_keywords.json"  # 危险命令分类正则关键字JSON文件路径
 
   # 程序路径
   exe:
-    batch_tool_windows: "./src/go/SSHFleet_Go.exe"    # Windows 环境的批量执行程序路径
-    batch_tool_linux: "./src/go/SSHFleet_Go"                 # Linux   环境的批量执行程序路径
+    batch_tool_windows: "./src/go/SSHFleet_Go.exe"  # Windows 环境的批量执行程序路径
+    batch_tool_linux: "./src/go/SSHFleet_Go"        # Linux   环境的批量执行程序路径
 
   # 日志路径
   logs:
-    zip: ""                                      # 打包日志文件生成路径，为空表示在工作路径生成，可用绝对路径
-    historys: "historys"                # 存放历史记录文件夹名称
-    tool: "SSHFleetTools.log"      # 工具日志文件名
-    exec: "SSHFleet_Go.log"        # 执行日志文件名
+    zip: ""                    # 打包日志文件生成路径，为空表示在工作路径生成，可用绝对路径
+    historys: "historys"       # 存放历史记录文件夹名称
+    tool: "SSHFleetTools.log"  # 工具日志文件名
+    exec: "SSHFleet_Go.log"    # 执行日志文件名
 
   # 结果文件路径
   files:
-    asset: "assets"                          # 历史记录中转存资产文件夹名称（csv文件、脚本、上传文件，都会备份到这里）
-    output: "output.txt"                # 终端输出文件名（txt格式）
-    output_xlsx: "output.xlsx"      # 终端输出文件名（xlsx格式）
-    report: "report.txt"                  # 统计报告文件名
-    results_xlsx: "results.xlsx"       # 结果固化文件名（xlsx格式）
+    asset: "assets"               # 历史记录中转存资产文件夹名称（csv文件、脚本、上传文件，都会备份到这里）
+    output: "output.txt"          # 终端输出文件名（txt格式）
+    output_xlsx: "output.xlsx"    # 终端输出文件名（xlsx格式）
+    report: "report.txt"          # 统计报告文件名（txt格式）
+    results_xlsx: "results.xlsx"  # 结果固化文件名（xlsx格式）
 
 # 上传并发阈值（未指定 -n 时自动约束，指定 -n 时仅提示）
 # file_size < small_file: 全并发（等于节点数）
@@ -54,6 +54,6 @@ paths:
 # 两者之间: 最多 medium_concurrency 并发
 upload:
   concurrency_thresholds:
-    small_file: 1048576              # 1MB
-    large_file: 10485760            # 10MB
-    medium_concurrency: 10   #并发数量 10
+    small_file: 1048576     # 1MB
+    large_file: 10485760    # 10MB
+    medium_concurrency: 10  #并发数量 10
