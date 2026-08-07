@@ -21,9 +21,14 @@ func (c *SSHClient) Connect() error {
 	addr := fmt.Sprintf("%s:%d", c.config.IP, c.config.Port)
 	log.Zlog.Debug("SSH连接", zap.String("addr", addr))
 
+	authMethods, err := c.config.BuildAuthMethods()
+	if err != nil {
+		return err
+	}
+
 	sshClientConfig := &ssh.ClientConfig{
 		User:            c.config.User,
-		Auth:            []ssh.AuthMethod{ssh.Password(c.config.Password)},
+		Auth:            authMethods,
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 		Timeout:         c.config.ConnectTimeout,
 	}
@@ -53,6 +58,47 @@ func (c *SSHClient) Connect() error {
 		log.Zlog.Error("SSH连接失败: 握手超时", zap.String("user", c.config.User), zap.String("addr", addr), zap.Duration("timeout", maxTimeout))
 		return fmt.Errorf("建立连接失败 - 握手超时%v", maxTimeout)
 	}
+}
+
+// BuildAuthMethods 根据配置构建 SSH 认证方法列表。
+// 密钥优先；若密钥解析失败且同时配置了密码，则回退到密码认证。
+func (cfg *SSHConfig) BuildAuthMethods() ([]ssh.AuthMethod, error) {
+	var authMethods []ssh.AuthMethod
+
+	// 密钥认证（优先）
+	if cfg.KeyContent != "" {
+		keyBytes := []byte(cfg.KeyContent)
+		var (
+			signer ssh.Signer
+			err    error
+		)
+		if cfg.KeyPassphrase != "" {
+			signer, err = ssh.ParsePrivateKeyWithPassphrase(keyBytes, []byte(cfg.KeyPassphrase))
+		} else {
+			signer, err = ssh.ParsePrivateKey(keyBytes)
+		}
+		if err != nil {
+			// 密钥解析失败：若同时配置了密码则回退到密码认证，否则直接报错
+			if cfg.Password == "" {
+				return nil, fmt.Errorf("解析密钥失败 - %w", err)
+			}
+			log.Zlog.Warn("密钥解析失败，回退到密码认证", zap.Error(err))
+		} else {
+			authMethods = append(authMethods, ssh.PublicKeys(signer))
+		}
+	}
+
+	// 密码认证（fallback）
+	if cfg.Password != "" {
+		authMethods = append(authMethods, ssh.Password(cfg.Password))
+	}
+
+	// 防御：至少一种认证方式
+	if len(authMethods) == 0 {
+		return nil, fmt.Errorf("未提供有效的认证方式（密码或密钥至少提供一种）")
+	}
+
+	return authMethods, nil
 }
 
 // connectSSH 建立 SSH 连接并返回耗时

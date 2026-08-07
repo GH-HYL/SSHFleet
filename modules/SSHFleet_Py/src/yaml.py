@@ -58,6 +58,7 @@ class Account(BaseModel):
     user: str
     password_dir: str
     password: str
+    key_passphrase: str = ""
 
 
 class UploadConcurrencyThreshold(BaseModel):
@@ -112,5 +113,19 @@ def load_config(config_path: str) -> SSHFleetConfig:
                     f"但 account.password_dir 未配置，无法拼接密码文件路径"
                 )
         config_dict["account"]["password"] = password_path
+
+    # 读取密钥passphrase文件路径（不验证，相对路径与 password_dir 拼接）
+    key_passphrase_path = config_dict["account"].get("key_passphrase", "")
+    if key_passphrase_path:
+        key_passphrase_path = os.path.expanduser(key_passphrase_path)
+        if not os.path.isabs(key_passphrase_path):
+            if password_dir:
+                key_passphrase_path = os.path.join(password_dir, key_passphrase_path)
+            else:
+                raise ValueError(
+                    f"account.key_passphrase 为相对路径 '{key_passphrase_path}'，"
+                    f"但 account.password_dir 未配置，无法拼接路径"
+                )
+        config_dict["account"]["key_passphrase"] = key_passphrase_path
 
     return SSHFleetConfig(**config_dict)

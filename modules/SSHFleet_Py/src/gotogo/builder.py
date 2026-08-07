@@ -39,6 +39,8 @@ def build_request(
                 "port": node.get("port", 22),
                 "user": node["user"],
                 "password": node["password"],
+                "key_content": node.get("key_content", ""),
+                "key_passphrase": node.get("key_passphrase", ""),
             }
             for i, node in enumerate(nodesinfo)
         ],
@@ -58,7 +60,9 @@ def build_upload_request(args: argparse.Namespace, nodesinfo: List[Dict]) -> Dic
         },
         "nodes": [
             {"seq": i, "ip": node["ip"], "port": node.get("port", 22),
-             "user": node["user"], "password": node["password"]}
+             "user": node["user"], "password": node["password"],
+             "key_content": node.get("key_content", ""),
+             "key_passphrase": node.get("key_passphrase", "")}
             for i, node in enumerate(nodesinfo)
         ],
     }
@@ -77,7 +81,9 @@ def build_download_request(args: argparse.Namespace, nodesinfo: List[Dict]) -> D
         },
         "nodes": [
             {"seq": i, "ip": node["ip"], "port": node.get("port", 22),
-             "user": node["user"], "password": node["password"]}
+             "user": node["user"], "password": node["password"],
+             "key_content": node.get("key_content", ""),
+             "key_passphrase": node.get("key_passphrase", "")}
             for i, node in enumerate(nodesinfo)
         ],
     }

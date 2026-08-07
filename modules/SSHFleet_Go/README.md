@@ -7,6 +7,7 @@
 - HTTP API + SSE 流式响应
 - 支持命令执行、文件上传、文件下载三种模式
 - 多节点并发执行
+- 密钥认证：支持 PEM 私钥登录，密钥优先、密码兜底
 - 一次性设计：处理一次请求后自动退出
 
 ## 编译
@@ -30,6 +31,12 @@ curl -N -X POST http://localhost:9090/api/v1/execute \
   -H "Content-Type: application/json" \
   -H "X-SSH-Fleet-Key: your-secret-key" \
   -d '{"command":"df -h","options":{"concurrency":10,"connect_timeout":10,"exec_timeout":60},"nodes":[{"seq":0,"ip":"10.0.0.1","port":22,"user":"root","password":"xxx"}]}'
+
+# 使用密钥登录（key_content 为 PEM 私钥文本，key_passphrase 为私钥密码，可选）
+curl -N -X POST http://localhost:9090/api/v1/execute \
+  -H "Content-Type: application/json" \
+  -H "X-SSH-Fleet-Key: your-secret-key" \
+  -d '{"command":"df -h","options":{"concurrency":10,"connect_timeout":10,"exec_timeout":60},"nodes":[{"seq":0,"ip":"10.0.0.1","port":22,"user":"root","key_content":"-----BEGIN OPENSSH PRIVATE KEY-----\n...","key_passphrase":"optional"}]}'
 
 # 上传文件
 curl -N -X POST http://localhost:9090/api/v1/upload \
