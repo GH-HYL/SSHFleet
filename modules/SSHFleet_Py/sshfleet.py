@@ -44,6 +44,7 @@ import os
 import sys
 import json
 from datetime import datetime
+from typing import Any
 
 # 自定义模块 - 新模块路径
 from src.input.args import parse_args
@@ -64,7 +65,7 @@ import src.utils as utils
 import src.color as color
 
 
-def _load_json(path):
+def _load_json(path) -> Any:
     """读取JSON文件并返回解析后的数据"""
     try:
         with open(path, "r", encoding="utf-8") as f:
@@ -137,7 +138,7 @@ def main():
     tlog.success("[check] 执行危险字典内容检查成功")
 
     # 读取节点信息
-    nodesinfos = read_nodes_infos(args.f, config, is_inline=getattr(args, 'f_is_inline', False))
+    nodesinfos = read_nodes_infos(args.f, config, args.disinteractive, is_inline=getattr(args, 'f_is_inline', False))
     tlog.success("读取节点信息成功")
 
     # 参数信息确认

@@ -32,9 +32,9 @@ type ErrorResponse struct {
 }
 
 var server *http.Server
-var requestUsed int32  // 0=可用, 1=已处理
+var requestUsed int32            // 0=可用, 1=已处理
 var shutdownSignal chan struct{} // 通知Go关闭的信号通道
-var processKey string  // 进程认证key
+var processKey string            // 进程认证key
 
 // Start 启动 HTTP Server，处理一次请求后退出
 func Start(port int, logPath string, key string) error {
@@ -274,8 +274,8 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 
 	// 发送 init 消息
 	initMsg := map[string]interface{}{
-		"type":               "init",
-		"total_nodes":        len(req.Nodes),
+		"type":                 "init",
+		"total_nodes":          len(req.Nodes),
 		"total_bytes_per_node": totalBytesPerNode,
 	}
 	WriteSSE(w, initMsg)
