@@ -49,13 +49,19 @@ def resolve_credential_path(raw_value: str, secret_dir: str) -> str:
     return os.path.join(secret_dir, raw)
 
 
-def validate_csv_credentials(csv_infos: List[List[str]], config: SSHFleetConfig) -> Tuple[List[str], bool, bool]:
+def validate_csv_credentials(csv_infos: List[List[str]], config: SSHFleetConfig, args) -> Tuple[List[str], bool, bool]:
     """
     预检查所有凭据文件（密码+密钥），通过才继续处理节点
+
+    密钥预检查受 -k 三态控制：
+      - 状态1(off, 未指定 -k)：跳过所有密钥相关检查
+      - 状态2(default, 仅 -k)：逐节点检查 CSV 第5列/account.key 密钥文件及第6列口令文件
+      - 状态3(universal, -k 路径)：统一检查 -k 指定的私钥文件一次，忽略节点自带密钥/口令
 
     Args:
         csv_infos: 已移除表头的CSV行列表
         config: 配置对象
+        args: 命令行参数对象（使用 args.k 判断密钥模式）
 
     Returns:
         (errors, need_default_password, any_node_uses_key):
@@ -68,15 +74,46 @@ def validate_csv_credentials(csv_infos: List[List[str]], config: SSHFleetConfig)
     need_default_password = False
     any_node_uses_key = False  # 是否有节点使用了密钥
 
+    # 三态：off=状态1(无-k)；default=状态2(-k 无路径)；universal=状态3(-k 路径)
+    if not args.k:
+        key_mode = "off"
+    elif args.k == "no_value":
+        key_mode = "default"
+    else:
+        key_mode = "universal"
+
+    # 状态3：统一检查命令行私钥一次（不走 secret_dir，走终端工作目录）
+    if key_mode == "universal":
+        kp = os.path.expanduser(args.k)
+        if not os.path.exists(kp):
+            errors.append(f"-k 指定的私钥文件不存在 → {kp}")
+        elif not os.access(kp, os.R_OK):
+            errors.append(f"-k 指定的私钥文件不可读 → {kp}")
+        else:
+            try:
+                with open(kp, "r", encoding="utf-8") as f:
+                    content = f.read()
+            except Exception as e:
+                errors.append(f"-k 指定的私钥文件读取失败 → {kp} ({e})")
+            else:
+                if not content.strip():
+                    errors.append(f"-k 指定的私钥文件内容为空 → {kp}")
+                elif not content.strip().startswith("-----BEGIN"):
+                    errors.append(f"-k 指定的文件不是有效的PEM私钥 → {kp}")
+
     for idx, row in enumerate(csv_infos, start=1):
         while len(row) < 6:
             row.append("")
 
         password = row[3].strip()
         key = row[4].strip()
-        # 第5列（私钥路径）留空时，回退到配置默认私钥 account.key
-        if not key and config.account.key and config.account.key != "None":
-            key = config.account.key
+
+        # 状态3：所有节点统一用命令行私钥；状态2：CSV > 配置默认；状态1：强制空
+        if key_mode == "universal":
+            key = args.k
+        elif key_mode == "default":
+            if not key and config.account.key and config.account.key != "None":
+                key = config.account.key
 
         if password:
             # 有密码路径：解析并验证文件
@@ -111,7 +148,8 @@ def validate_csv_credentials(csv_infos: List[List[str]], config: SSHFleetConfig)
             # 密码列和密钥列均为空：依赖配置中的默认密码
             need_default_password = True
 
-        if key:
+        # 密钥文件检查：仅状态2 逐节点（状态3 已统一检查；状态1 key 为空跳过）
+        if key_mode == "default" and key:
             # 有密钥路径：解析并验证文件（复用 resolve_credential_path）
             key_path = resolve_credential_path(key, config.account.secret_dir)
             # 检查文件是否存在
@@ -134,8 +172,8 @@ def validate_csv_credentials(csv_infos: List[List[str]], config: SSHFleetConfig)
                 continue
             any_node_uses_key = True
 
-        # 第6列：私钥口令文件（仅当密钥存在时有意义）
-        if key:
+        # 第6列：私钥口令文件（仅状态2 检查；状态3 走交互忽略第6列；状态1 跳过）
+        if key_mode == "default" and key:
             passphrase_raw = row[5].strip() if len(row) > 5 else ""
             if passphrase_raw:
                 pp_path = resolve_credential_path(passphrase_raw, config.account.secret_dir)
@@ -181,8 +219,8 @@ def validate_csv_credentials(csv_infos: List[List[str]], config: SSHFleetConfig)
                             if not decoded:
                                 errors.append(f"默认密码文件解码后内容为空 → {config.account.password}")
 
-    # 如果有节点使用密钥且配置了passphrase，验证passphrase文件
-    if any_node_uses_key and config.account.key_passphrase and config.account.key_passphrase != "":
+    # 如果有节点使用密钥且配置了passphrase，验证passphrase文件（仅状态2）
+    if key_mode == "default" and any_node_uses_key and config.account.key_passphrase and config.account.key_passphrase != "":
         passphrase_path = config.account.key_passphrase
         if not os.path.exists(passphrase_path):
             errors.append(f"密钥passphrase文件不存在 → {passphrase_path}")
@@ -212,7 +250,7 @@ def validate_csv_credentials(csv_infos: List[List[str]], config: SSHFleetConfig)
 
 
 @utils.error_and_exit_handling_decorator("read_nodes_infos", "读取节点信息失败")
-def read_nodes_infos(csv_path: str, config: SSHFleetConfig, disinteractive: bool = False, is_inline: bool = False) -> List[Dict[str, str]]:
+def read_nodes_infos(csv_path: str, config: SSHFleetConfig, args, is_inline: bool = False) -> List[Dict[str, str]]:
     """
     功能：
         从CSV文件或内联文本中读取节点信息，并进行数据验证和处理
@@ -220,11 +258,22 @@ def read_nodes_infos(csv_path: str, config: SSHFleetConfig, disinteractive: bool
     参数：
         csv_path (str): CSV文件的路径或内联CSV文本
         config (SSHFleetConfig): 配置对象
+        args: 命令行参数对象（使用 args.disinteractive / args.k 判断密钥模式）
         is_inline (bool): 是否为内联文本模式
 
     返回：
         List[Dict[str, str]]: 处理后的节点信息列表，每个节点是一个字典，包含ip、port、user和password字段
     """
+
+    disinteractive = args.disinteractive
+
+    # 三态：off=状态1(无-k)；default=状态2(-k 无路径)；universal=状态3(-k 路径)
+    if not args.k:
+        key_mode = "off"
+    elif args.k == "no_value":
+        key_mode = "default"
+    else:
+        key_mode = "universal"
 
     # debug=True，跳过IP重复检查
     debug = True
@@ -278,15 +327,31 @@ def read_nodes_infos(csv_path: str, config: SSHFleetConfig, disinteractive: bool
     password_input_value = None  # 用户输入的密码值
 
     # 凭据路径预检查（全部通过才继续处理节点）
-    validate_errors, _, _ = validate_csv_credentials(csv_infos, config)
+    validate_errors, _, _ = validate_csv_credentials(csv_infos, config, args)
     if validate_errors:
         sys.exit(1)
 
-    # 读取全局passphrase（仅一次，所有节点共用）
+    # 读取全局passphrase（仅状态2，一次读取所有节点共用）
     key_passphrase = ""
-    if config.account.key_passphrase and config.account.key_passphrase != "":
+    if key_mode == "default" and config.account.key_passphrase and config.account.key_passphrase != "":
         with open(config.account.key_passphrase, "r", encoding="utf-8") as f:
             key_passphrase = base64.b64decode(f.read().strip()).decode("utf-8")
+
+    # 状态3：统一私钥——循环前读取一次，口令直接问用户（空/回车=无口令，真不真交给 Go）
+    universal_key_content = ""
+    universal_key_passphrase = ""
+    if key_mode == "universal":
+        kp = os.path.expanduser(args.k)
+        with open(kp, "r", encoding="utf-8") as f:
+            universal_key_content = f.read().strip()
+        if args.disinteractive:
+            utils.print_error_information_and_exit(
+                "read_nodes_infos",
+                "状态3(-k 路径)需交互输入私钥口令，但处于 --disinteractive 模式；"
+                "请去掉 --disinteractive 或改用状态2(-k 不带路径)"
+            )
+        import getpass
+        universal_key_passphrase = getpass.getpass("请输入私钥口令(无口令直接回车): ")
 
     # 处理每个节点
     for idx, row in enumerate(csv_infos, start=1):
@@ -295,9 +360,13 @@ def read_nodes_infos(csv_path: str, config: SSHFleetConfig, disinteractive: bool
             row.append("")
 
         ip, port, user, password, key = row[:5]
-        # 第5列（私钥路径）留空时回退到配置默认私钥 account.key
-        if not key and config.account.key and config.account.key != "None":
-            key = config.account.key
+        # 密钥路径按三态决定：命令行 -k 路径 > CSV第5列 > 配置默认 account.key
+        if key_mode == "universal":
+            key = args.k
+        elif key_mode == "default":
+            if not key and config.account.key and config.account.key != "None":
+                key = config.account.key
+        # 状态1(off)：key 保持空
         errors = []
 
         # 验证IP地址
@@ -437,21 +506,28 @@ def read_nodes_infos(csv_path: str, config: SSHFleetConfig, disinteractive: bool
         # 处理密钥内容（PEM原始文本，无需base64编码）
         key = key.strip() if key else ""
         key_content = ""
-        if key:
+        if key_mode == "universal":
+            key_content = universal_key_content
+        elif key:
             key_path = resolve_credential_path(key, config.account.secret_dir)
             with open(key_path, "r", encoding="utf-8") as f:
                 key_content = f.read().strip()
 
-        # 处理私钥口令（passphrase）：CSV 第6列优先，缺省用全局配置
+        # 处理私钥口令（passphrase）
         node_key_passphrase = ""
-        passphrase_raw = row[5].strip() if len(row) > 5 else ""
-        if passphrase_raw:
-            pp_path = resolve_credential_path(passphrase_raw, config.account.secret_dir)
-            with open(pp_path, "r", encoding="utf-8") as f:
-                node_key_passphrase = base64.b64decode(f.read().strip()).decode("utf-8")
-        elif key_passphrase:
-            # 全局配置（已在文件开头解码）
-            node_key_passphrase = key_passphrase
+        if key_mode == "universal":
+            # 状态3：统一口令（交互输入，可能为空的字符串）
+            node_key_passphrase = universal_key_passphrase
+        else:
+            # 状态1/状态2：CSV 第6列优先，缺省用全局配置
+            passphrase_raw = row[5].strip() if len(row) > 5 else ""
+            if passphrase_raw:
+                pp_path = resolve_credential_path(passphrase_raw, config.account.secret_dir)
+                with open(pp_path, "r", encoding="utf-8") as f:
+                    node_key_passphrase = base64.b64decode(f.read().strip()).decode("utf-8")
+            elif key_passphrase:
+                # 全局配置（已在文件开头解码）
+                node_key_passphrase = key_passphrase
 
         # 如果有错误，添加到错误列表
         if errors:
