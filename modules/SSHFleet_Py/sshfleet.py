@@ -6,34 +6,34 @@
 # ├── sshfleet.py                       # 主程序
 # └── src/                              # 源代码文件夹
 #     ├── input/                        # 输入处理模块
-#     │   ├── args.py                   #   命令行参数解析
-#     │   ├── csv.py                    #   CSV 节点文件读取
-#     │   └── confirm.py                #   参数信息交互确认
+#     │   ├── args.py                   # 命令行参数解析
+#     │   ├── csv.py                    # CSV 节点文件读取
+#     │   └── confirm.py                # 参数信息交互确认
 #     ├── check/                        # 校验模块
-#     │   ├── arguments.py              #   参数合规性检查
-#     │   ├── dangerous.py              #   危险命令检测
-#     │   └── files.py                  #   文件存在性检查
+#     │   ├── arguments.py              # 参数合规性检查
+#     │   ├── dangerous.py              # 危险命令检测
+#     │   └── files.py                  # 文件存在性检查
 #     ├── command/                      # 命令构建模块
-#     │   └── builder.py                #   最终执行命令构建
+#     │   └── builder.py                # 最终执行命令构建
 #     ├── gotogo/                       # Go 执行器模块
-#     │   ├── go_to_go.py               #   主执行函数
-#     │   ├── caller.py                 #   Go 进程调用与 HTTP SSE 通信
-#     │   ├── builder.py                #   请求体构建（命令/上传/下载/密钥登录）
-#     │   ├── parser.py                 #   SSE 响应解析
-#     │   └── classifier.py             #   错误分类
+#     │   ├── go_to_go.py               # 主执行函数
+#     │   ├── caller.py                 # Go 进程调用与 HTTP SSE 通信
+#     │   ├── builder.py                # 请求体构建（命令/上传/下载/密钥登录）
+#     │   ├── parser.py                 # SSE 响应解析
+#     │   └── classifier.py             # 错误分类
 #     ├── go/                           # Go 引擎二进制目录（放入 SSHFleet-Go 可执行文件）
 #     ├── output/                       # 输出处理模块
-#     │   ├── terminal.py               #   终端格式化输出
-#     │   ├── report.py                 #   执行报告生成
-#     │   ├── xlsx.py                   #   Excel 文件生成
-#     │   ├── statistics.py             #   结果统计计算
-#     │   └── archive.py                #   资源文件备份与打包
+#     │   ├── terminal.py               # 终端格式化输出
+#     │   ├── report.py                 # 执行报告生成
+#     │   ├── xlsx.py                   # Excel 文件生成
+#     │   ├── statistics.py             # 结果统计计算
+#     │   └── archive.py                # 资源文件备份与打包
 #     ├── log/                          # 日志模块
-#     │   └── logger.py                 #   日志初始化与管理
+#     │   └── logger.py                 # 日志初始化与管理
 #     ├── config/                       # 配置文件夹
-#     │   ├── SSHFleet.yaml             #   工具配置
-#     │   ├── dangerous_keywords.yaml   #   危险命令检测规则
-#     │   └── error_keywords.yaml       #   错误分类关键词
+#     │   ├── SSHFleet.yaml             # 工具配置
+#     │   ├── dangerous_keywords.yaml   # 危险命令检测规则
+#     │   └── error_keywords.yaml       # 错误分类关键词
 #     ├── utils.py                      # 工具函数、装饰器
 #     ├── yaml.py                       # 配置文件加载（Pydantic）
 #     └── color.py                      # 终端颜色常量
