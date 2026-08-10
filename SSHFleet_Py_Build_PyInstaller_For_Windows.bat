@@ -118,6 +118,13 @@ if not exist "!BUILD!\SSHFleet_Go.exe" (
     echo        已复制 src\go
 )
 
+if not exist "!BUILD!\SSHFleet" (
+    echo [提示] 构建目录中未找到 Linux 打包文件 build\SSHFleet，已跳过
+) else (
+    copy "!BUILD!\SSHFleet" "!DEST!\" >nul
+    echo        已复制 Linux 打包文件 SSHFleet
+)
+
 echo.
 echo ========================================
 echo   构建完成!
