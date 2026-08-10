@@ -14,7 +14,7 @@ set "RELEASE=!SCRIPT_DIR!release"
 
 for /f %%I in ('powershell -NoProfile -Command "Get-Date -Format yyyy-MM-dd_HH-mm-ss"') do set "TS=%%I"
 
-set "DEST=!RELEASE!\!TS!"
+set "DEST=!RELEASE!\SSHFleet_Py源码版_!TS!"
 
 echo [1/6] 正在创建目录...
 if not exist "!RELEASE!" mkdir "!RELEASE!"
