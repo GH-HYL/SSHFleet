@@ -6,6 +6,8 @@
 # 更新日志
 !CHANGELOG.md 
 !README.md
+# 个人使用的批处理
+!SSHFleet_*.bat
 
 # 只跟踪源代码模块
 !modules/
@@ -23,3 +25,4 @@ modules/SSHFleet_Py/**/__pycache__/
 modules/SSHFleet_Py/historys/
 # 过滤 go 的编译文件
 modules/SSHFleet_Py/src/go/
+
