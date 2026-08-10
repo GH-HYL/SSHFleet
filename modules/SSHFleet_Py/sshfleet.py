@@ -136,7 +136,7 @@ def main():
     tlog.success("[check] 执行危险字典内容检查成功")
 
     # 读取节点信息
-    nodesinfos = read_nodes_infos(args.f, config, args.disinteractive, is_inline=getattr(args, 'f_is_inline', False))
+    nodesinfos = read_nodes_infos(args.f, config, args, is_inline=getattr(args, 'f_is_inline', False))
     tlog.success("读取节点信息成功")
 
     # 参数信息确认

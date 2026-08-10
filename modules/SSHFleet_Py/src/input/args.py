@@ -110,6 +110,7 @@ def parse_args(config: SSHFleetConfig) -> argparse.Namespace:
         ('-r', 'remark', None, '给这次任务起个名字，会作为历史记录文件夹的后缀 (不填自动生成)'),
         ('--nobash', None, None, '命令模式专用: 不套一层 bash 环境，直接执行原始命令'),
         ('--disinteractive', None, None, '跳过所有确认提示直接执行 (批量跑脚本时常用)'),
+        ('-k', 'KEY_PATH', '(密钥登录)', '不指定=纯密码; 仅 -k=用CSV/配置默认密钥; -k 路径=所有节点统一私钥', '?'),
     ]
 
     def display_width(s):
@@ -128,13 +129,17 @@ def parse_args(config: SSHFleetConfig) -> argparse.Namespace:
         return s + ' ' * (target_width - display_width(s))
 
     # 计算第二列最大显示宽度
-    col2_width = max(display_width(tag) if tag else 0 for _, _, tag, _ in help_entries)
+    col2_width = max(display_width(item[2]) if item[2] else 0 for item in help_entries)
 
     try:
-        for opt, metavar, tag, desc in help_entries:
+        for item in help_entries:
+            opt, metavar, tag, desc = item[0], item[1], item[2], item[3]
+            nargs = item[4] if len(item) > 4 else None
             col2 = tag if tag else ''
             help_str = f'{pad_to_width(col2, col2_width)}  {desc}'
-            if metavar:
+            if nargs == '?':
+                parser.add_argument(opt, metavar=metavar, nargs='?', const='no_value', default='', help=help_str)
+            elif metavar:
                 parser.add_argument(opt, metavar=metavar, help=help_str)
             else:
                 parser.add_argument(opt, action='store_true', help=help_str)
