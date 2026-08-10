@@ -14,7 +14,7 @@ set "RELEASE=!SCRIPT_DIR!release"
 set "PY_TOOLS=!SCRIPT_DIR!tools\Pyinstaller"
 
 for /f %%I in ('powershell -NoProfile -Command "Get-Date -Format yyyy-MM-dd_HH-mm-ss"') do set "TS=%%I"
-set "DEST=!RELEASE!\!TS!"
+set "DEST=!RELEASE!\SSHFleet_Py打包版_!TS!"
 
 echo [1/8] 正在检查 Python...
 python --version >nul 2>&1
