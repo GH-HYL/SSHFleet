@@ -4,7 +4,7 @@
 # 用法: 在某一行前加 # 即禁用该关键词；在分类名前加 # 即禁用整类
 # ============================================================
 
-# --- 网络不可达 （7 条） ---
+# --- 网络不可达---
 网络不可达:
   - no route to host
   - network is unreachable
@@ -14,32 +14,32 @@
   - 无法访问目标主机
   - 无路由到主机
 
-# --- 握手超时 （1 条） ---
+# --- 握手超时---
 握手超时:
   - 握手超时
 
-# --- 秘钥不匹配 （1 条） ---
+# --- 秘钥不匹配---
 秘钥不匹配:
   - none publickey
 
-# --- 端口不可达 （2 条） ---
+# --- 端口不可达---
 端口不可达:
   - unable to connect to port
   - 端口不可达
 
-# --- 目标不可达 （2 条） ---
+# --- 目标不可达---
 目标不可达:
   - connect call failed
   - 目标不可达
 
-# --- 密码过期 （4 条） ---
+# --- 密码过期---
 密码过期:
   - password expired
   - change your password now
   - has expired
   - 密码过期
 
-# --- 连接超时 （5 条） ---
+# --- 连接超时---
 连接超时:
   - 连接超时
   - connect timeout
@@ -47,11 +47,11 @@
   - authentication timeout
   - i/o timeout
 
-# --- 执行超时 （1 条） ---
+# --- 执行超时---
 执行超时:
   - 命令执行超时
 
-# --- 连接中断 （8 条） ---
+# --- 连接中断---
 连接中断:
   - connection lost
   - connection closed
@@ -62,7 +62,7 @@
   - 连接已断开
   - 管道破裂
 
-# --- 拒绝网络连接 （9 条） ---
+# --- 拒绝网络连接---
 拒绝网络连接:
   - connection refused
   - connection reset
@@ -74,7 +74,7 @@
   - conn refused
   - reset by peer
 
-# --- 身份验证失败 （9 条） ---
+# --- 身份验证失败---
 身份验证失败:
   - authentication failed
   - unable to authenticate
@@ -86,7 +86,7 @@
   - 身份验证失败
   - auth failed
 
-# --- DNS解析失败 （8 条） ---
+# --- DNS解析失败---
 DNS解析失败:
   - name or service not known
   - cannot resolve hostname
@@ -97,14 +97,14 @@ DNS解析失败:
   - 域名解析失败
   - 无法解析主机名
 
-# --- 端口被占用 （4 条） ---
+# --- 端口被占用---
 端口被占用:
   - address already in use
   - port already in use
   - 端口被占用
   - 地址已使用
 
-# --- 防火墙阻止 （6 条） ---
+# --- 防火墙阻止---
 防火墙阻止:
   - firewall blocked
   - connection filtered
@@ -113,7 +113,7 @@ DNS解析失败:
   - blocked by firewall
   - filtered
 
-# --- 证书错误 （6 条） ---
+# --- 证书错误---
 证书错误:
   - certificate error
   - SSL error
@@ -122,32 +122,32 @@ DNS解析失败:
   - SSL握手失败
   - cert verify failed
 
-# --- 协议不支持 （3 条） ---
+# --- 协议不支持---
 协议不支持:
   - protocol not supported
   - unsupported protocol
   - 协议不支持
 
-# --- 主机名验证失败 （3 条） ---
+# --- 主机名验证失败---
 主机名验证失败:
   - hostname verification failed
   - hostname mismatch
   - 主机名验证失败
 
-# --- 连接数限制 （4 条） ---
+# --- 连接数限制---
 连接数限制:
   - too many connections
   - connection limit exceeded
   - 连接数过多
   - 达到连接限制
 
-# --- 网络配置错误 （3 条） ---
+# --- 网络配置错误---
 网络配置错误:
   - network configuration error
   - invalid network config
   - 网络配置错误
 
-# --- SSH协议错误 （6 条） ---
+# --- SSH协议错误---
 SSH协议错误:
   - ssh protocol error
   - incompatible ssh version
@@ -156,25 +156,25 @@ SSH协议错误:
   - protocol mismatch
   - 协议错误
 
-# --- 本地客户端配置错误 （1 条） ---
+# --- 本地客户端配置错误---
 本地客户端配置错误:
   - match does not allow
 
-# --- 传输大小与预期不符 （1 条） ---
+# --- 传输大小与预期不符---
 传输大小与预期不符:
   - size mismatch in put
 
-# --- 远程路径不存在 （2 条） ---
+# --- 远程路径不存在---
 远程路径不存在:
   - 远程目标路径不存在
   - 不存在或不是目录
 
-# --- 远程文件已存在 （2 条） ---
+# --- 远程文件已存在---
 远程文件已存在:
   - 文件已存在
   - already exists
 
-# --- SFTP失败 （5 条） ---
+# --- SFTP失败---
 SFTP失败:
   - 创建远程文件失败
   - 写入远程文件失败
@@ -182,16 +182,16 @@ SFTP失败:
   - 创建临时目录失败
   - SFTP 客户端创建失败
 
-# --- sudo失败 （2 条） ---
+# --- sudo失败---
 sudo失败:
   - sudo mv 失败
   - sudo权限
 
-# --- 本地文件错误 （2 条） ---
+# --- 本地文件错误---
 本地文件错误:
   - 打开本地文件失败
   - 读取本地文件权限失败
 
-# --- 上传超时 （1 条） ---
+# --- 上传超时---
 上传超时:
   - 上传超时被取消
