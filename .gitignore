@@ -11,13 +11,15 @@
 !modules/
 !modules/**
 
-# Go 模块
+# 过滤 Go 模块 离线包
 modules/SSHFleet_Go/vendor/
 modules/SSHFleet_Go/vendor/**
 
-# Python 模块
+# 过滤 Python 模块 编译文件
 modules/SSHFleet_Py/__pycache__/
 modules/SSHFleet_Py/**/__pycache__/
 *.pyc
+# 过滤 Python 模块 历史记录
 modules/SSHFleet_Py/historys/
+# 过滤 go 的编译文件
 modules/SSHFleet_Py/src/go/

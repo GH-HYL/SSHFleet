@@ -37,18 +37,8 @@
   risk_level: forbidden
 
 - name:       系统关机
-  example:    shutdown
-  regex:      \bshutdown\b
-  risk_level: forbidden
-
-- name:       系统关机2
   example:    shutdown -h now
-  regex:      ^\bshutdown\s+-h\s+now\b
-  risk_level: forbidden
-
-- name:       系统关机3
-  example:    shutdown now
-  regex:      ^\bshutdown\s+now\b
+  regex:      \bshutdown\b
   risk_level: forbidden
 
 - name:       运行级别0
@@ -68,12 +58,7 @@
 
 - name:       屏蔽关键服务
   example:    systemctl mask sshd
-  regex:      '^\bsystemctl\s+mask\s+(?:ssh|network|firewalld)\b'
-  risk_level: forbidden
-
-- name:       关闭关键服务
-  example:    systemctl mask sshd
-  regex:      '^\bsystemctl\s+mask\s+(?:ssh|network)\b'
+  regex:      '^\bsystemctl\s+mask\s+(?:sshd?|network|firewalld)\b'
   risk_level: forbidden
 
 
@@ -81,7 +66,7 @@
 
 - name:       递归强制删除
   example:    'rm -rf /tmp/*'
-  regex:      '^\s*rm\s+(-(?:r\s+f|f\s+r)|-rf|--no-preserve-root)\b'
+  regex:      '^\s*rm\s+(-[rf]+|--no-preserve-root|-(?:r\s+f|f\s+r))\b'
   risk_level: high
 
 - name:       强制删除文件
@@ -134,7 +119,7 @@
 
 - name:       权限修改
   example:    chmod 777 file.sh
-  regex:      '^\bchmod\s+[0-7][0-7][0-7]7\b'
+  regex:      '^\bchmod\s+[0-7]?[0-7][0-7]7\b'
   risk_level: medium
 
 - name:       设置SUID权限
@@ -149,7 +134,7 @@
 
 - name:       修改文件所有者
   example:    'chown root:root /etc/passwd'
-  regex:      '^\bchown\s+root:root\b'
+  regex:      '^\bchown\s+(?:root|:root)\b'
   risk_level: medium
 
 - name:       禁用系统服务
