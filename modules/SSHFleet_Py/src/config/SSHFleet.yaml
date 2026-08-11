@@ -6,7 +6,7 @@ account:
   port: 10022                 # CSV文件默认IP端口 10022
   user: "jx_zyc"              # CSV文件默认用户名
   secret_dir: "~/.MyPW"       # 凭据目录：密码 / 私钥 / 私钥口令文件的相对路径都拼到这里
-  password: "~/.MyPW/pw.txt"  # 默认密码文件路径：文件内容为 base64 编码的密码；支持绝对路径或相对 secret_dir 的路径
+  password: "SSHFleet_pw"  # 默认密码文件路径：文件内容为 base64 编码的密码；支持绝对路径或相对 secret_dir 的路径
   key: ""                     # 默认私钥文件路径：内容为 PEM 私钥；支持绝对路径或相对 secret_dir 的路径
   key_passphrase: ""          # 默认私钥口令文件路径：内容为 base64 编码的私钥口令，无则留空；支持绝对路径或相对 secret_dir 的路径
 
