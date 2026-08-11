@@ -47,7 +47,8 @@ def build_final_command(args: argparse.Namespace) -> str:
     --nobash 模式：直接返回用户输入的原始命令，不做任何预处理
     默认模式：语言变量、sudo 权限与命令统一收进登录 shell（bash -lc）内执行
         - 命令模式（args.c）和脚本模式（args.s）都通过 base64 通道传递，
-          避免 sudo bash -c '<cmd>' 与 bash -lc '<inner>' 两层单引号嵌套产生的引号转义套娃。
+          base64 字符集安全无 shell 特殊字符，inner_command 完全裸写不带引号，
+          外层 shlex.quote 只需在最外层做一次单引号包裹，杜绝 '\"'\"' 引号转义套娃。
 
     Args:
         args: 参数字典
@@ -69,15 +70,16 @@ def build_final_command(args: argparse.Namespace) -> str:
     # bash -lc 在完整环境里定位 sudo 并执行，无任何组件裸露在极简 PATH 下
     if args.c:
         # 编码为 base64，通过 stdin 通道交给 sudo bash 执行
-        # 避免 sudo bash -c '<cmd>' 与外层 bash -lc 单引号字符串嵌套引号转义
+        # 关键设计：base64 字符集 [A-Za-z0-9+/=] 与 %s 都不含 shell 特殊字符，
+        # 因此 inner_command 中完全不带引号；外层 shlex.quote 只有一层 quote，不再嵌套 '\"'\"' 转义
         encoded_cmd = base64.b64encode(args.c.encode("utf-8")).decode("ascii")
         if args.m == "sudo":
             inner_command = (
-                f"{env_prefix} printf '%s' '{encoded_cmd}' | base64 -d | sudo bash"
+                f"{env_prefix} printf %s {encoded_cmd} | base64 -d | sudo bash"
             )
         else:
             inner_command = (
-                f"{env_prefix} printf '%s' '{encoded_cmd}' | base64 -d | bash"
+                f"{env_prefix} printf %s {encoded_cmd} | base64 -d | bash"
             )
 
     elif args.s:
@@ -94,12 +96,12 @@ def build_final_command(args: argparse.Namespace) -> str:
         )
 
         # 内层命令：printf输出base64字符串，解码后交给解释器执行
-        # base64编码字符集安全，不包含引号，因此使用单引号包裹
-        # printf '%s' 意思是原样输出字符串，不进行转义，确保内容完整传递
+        # base64 字符集安全（[A-Za-z0-9+/=]），不含引号，%s 也不需要 quote，
+        # 这样 inner_command 全程裸写无引号，外层 shlex.quote 只有一层
         # sudo 模式直接提升解释器权限执行脚本（| sudo bash / | sudo python3）
         sudo_prefix = "sudo " if args.m == "sudo" else ""
         inner_command = (
-            f"{env_prefix} printf '%s' '{encoded_content}' | base64 -d | "
+            f"{env_prefix} printf %s {encoded_content} | base64 -d | "
             f"{sudo_prefix}{interpreter}"
         )
 
