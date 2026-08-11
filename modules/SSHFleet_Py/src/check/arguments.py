@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 # SSHFleet 参数检查模块
 
+import ipaddress
 import os
 import re
 
@@ -126,23 +127,25 @@ def check_arguments(args):
         if not script_path.endswith((".sh", ".py")):
             utils.print_error_information_and_exit(
                 "check_arguments",
-                f" -s 参数指定的脚本文件扩展名必须是 .sh 或 .py，当前值：{script_path}",
+                error_str=f" -s 参数指定的脚本文件扩展名必须是 .sh 或 .py，当前值：{script_path}",
             )
         check_script_file(script_path)
 
     # 检查 -f 参数
     if args.f:
         if not os.path.exists(args.f):
-            # 文件不存在，询问是否作为内联CSV文本传入
-            if utils.get_user_confirmation(
-                f"[-f] 指定的内容 '{args.f}' 不是有效的文件路径，是否将其作为CSV文本传入",
-                disinteractive=getattr(args, 'disinteractive', False),
-            ):
-                args.f_is_inline = True
-            else:
+            # 文件不存在：前置防御检查——首字段是 IP 才视为内联 CSV 文本，否则直接报路径不存在
+            # 不再询问"是否作为CSV文本传入"，避免随便写的非 IP 内容混入后续解析流程
+            first_field = args.f.split(",")[0].strip()
+            try:
+                ipaddress.ip_address(first_field)
+            except ValueError:
                 utils.print_error_information_and_exit(
-                    "check_arguments", f" -f 参数指定的文件不存在：{args.f}"
+                    "check_arguments",
+                    f" -f 参数指定的文件不存在：{args.f}\n"
+                    f" 提示：如需内联传入节点，请以 IP 开头（如 192.168.1.1,22,root,密码）",
                 )
+            args.f_is_inline = True
         else:
             # 文件存在，执行原有检查
             args.f_is_inline = False
@@ -154,7 +157,7 @@ def check_arguments(args):
             with open(args.f, "rb") as f:
                 if b"\x00" in f.read(1024):
                     utils.print_error_information_and_exit(
-                        "check_arguments", f" 错误: {args.f} 是二进制文件"
+                        "check_arguments", error_str=f" 错误: {args.f} 是二进制文件"
                     )
 
     # 检查 -n 参数
