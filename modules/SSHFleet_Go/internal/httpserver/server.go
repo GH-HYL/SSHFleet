@@ -216,7 +216,7 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 	// 收集文件清单（CollectFiles 内部 IsAbs 防御在此生效）
 	fileItems, err := localfs.CollectFiles(req.FilePath)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "INVALID_PATH", err.Error())
+		writeError(w, http.StatusBadRequest, "INVALID_PATH", fmt.Sprintf("upload 文件清单收集失败: %s", err.Error()))
 		go server.Shutdown(context.Background())
 		return
 	}
