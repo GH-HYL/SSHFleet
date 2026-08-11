@@ -45,7 +45,7 @@ def build_final_command(args: argparse.Namespace) -> str:
     根据参数构建命令字符串
 
     --nobash 模式：直接返回用户输入的原始命令，不做任何预处理
-    默认模式：添加环境变量、sudo 权限，用登录 shell（bash -lc / bash -l）包裹
+    默认模式：添加环境变量、sudo 权限，用登录 shell（bash -lc）包裹
 
     Args:
         args: 参数字典
@@ -66,14 +66,13 @@ def build_final_command(args: argparse.Namespace) -> str:
     if args.m == "sudo":
         components.append("sudo")
 
-    # 命令主体
+    # 命令主体：先构造内层命令，再统一用登录 shell 包裹（与 Go 端逻辑一致）
     if args.c:
-        safe_command = shlex.quote(args.c)
-        components.append(f"bash -lc {safe_command}")
+        inner_command = args.c
 
     elif args.s:
-        # 脚本解释器选择
-        interpreter = "python3" if args.s.endswith(".py") else "bash -l"
+        # 脚本解释器选择（内层解释器）
+        interpreter = "python3" if args.s.endswith(".py") else "bash"
 
         # 读取脚本内容并正确使用heredoc
         with open(args.s, "r", encoding="utf-8") as f:
@@ -84,12 +83,10 @@ def build_final_command(args: argparse.Namespace) -> str:
             "utf-8"
         )
 
-        # 构建命令：使用printf输出base64字符串，然后解码并执行
+        # 内层命令：printf输出base64字符串，然后解码并交给解释器执行
         # base64编码字符集安全，不包含引号，因此使用单引号包裹
         # printf '%s' 意思是原样输出字符串，不进行转义，确保内容完整传递
-        command = f"printf '%s' '{encoded_content}' | base64 -d | {'sudo ' if args.m == 'sudo' else ''}{interpreter}"
-
-        components.append(command)
+        inner_command = f"printf '%s' '{encoded_content}' | base64 -d | {interpreter}"
 
     else:
         from src.utils import print_error_information_and_exit
@@ -98,6 +95,9 @@ def build_final_command(args: argparse.Namespace) -> str:
             "add_env_sudo_to_commands",
             "参数出现严重异常，args.c 和 args.s 不能同时为空",
         )
+
+    # 统一以登录 shell 包裹，保证命令/脚本均在完整环境变量下执行
+    components.append(f"bash -lc {shlex.quote(inner_command)}")
 
     # 组合完整命令
     final_command = " ".join(filter(None, components))
