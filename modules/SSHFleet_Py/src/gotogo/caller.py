@@ -171,7 +171,8 @@ def call_go(
             continue
         if data.get("type") == "done":
             tlog.info(f"SSE 完成标记: total={data['total']}")
-            return
+            # break 退出循环，让循环尾部的 response.close() 执行（return 会跳过关闭）
+            break
 
         yield data
 
