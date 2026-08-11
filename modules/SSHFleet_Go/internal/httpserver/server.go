@@ -1,14 +1,14 @@
 package httpserver
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"SSHFleet/internal/core"
@@ -17,7 +17,6 @@ import (
 	"SSHFleet/internal/localfs"
 	"SSHFleet/internal/log"
 	"SSHFleet/internal/ssh"
-	"context"
 
 	"go.uber.org/zap"
 )
@@ -79,26 +78,20 @@ func Start(port int, logPath string, key string) error {
 // handleExecute 处理执行请求，完成后关闭服务器
 func handleExecute(w http.ResponseWriter, r *http.Request) {
 	// 一次性防护：只允许处理一次请求
-	if !atomic.CompareAndSwapInt32(&requestUsed, 0, 1) {
-		log.Zlog.Warn("请求被拒绝: 服务已被调用，仅支持一次请求", zap.String("path", r.URL.Path))
-		writeError(w, http.StatusServiceUnavailable, "ALREADY_USED", "服务已被调用，仅支持一次请求")
+	if !acquireRequestSlot(w, r) {
 		return
 	}
 
 	log.Zlog.Info("收到执行请求，开始处理...")
 
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "读取请求体失败")
-		go server.Shutdown(context.Background())
+	body, ok := readBody(w, r)
+	if !ok {
 		return
 	}
-	defer r.Body.Close()
 
 	req, err := jsonproc.ParseRequest(body)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "MISSING_FIELD", err.Error())
-		go server.Shutdown(context.Background())
+		writeParseError(w, "execute", err)
 		return
 	}
 
@@ -109,9 +102,11 @@ func handleExecute(w http.ResponseWriter, r *http.Request) {
 		zap.Int("connectTimeout", req.Options.ConnectTimeout),
 		zap.Int("execTimeout", req.Options.ExecTimeout))
 
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
+	// 设置 SSE 响应（决策 C1：先 Flusher 检查、后设 header）
+	flusher, ok := setupSSE(w)
+	if !ok {
+		return
+	}
 
 	tasks := make([]*core.SSHTask, 0, len(req.Nodes))
 	for _, node := range req.Nodes {
@@ -131,13 +126,6 @@ func handleExecute(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "不支持流式响应")
-		go server.Shutdown(context.Background())
-		return
-	}
-
 	// 使用独立的 context，不依赖 HTTP 请求（防止客户端断开导致所有任务终止）
 	execCtx, execCancel := context.WithCancel(context.Background())
 	defer execCancel()
@@ -145,7 +133,7 @@ func handleExecute(w http.ResponseWriter, r *http.Request) {
 	executor := core.NewBatchExecutor(req.Options.Concurrency, len(tasks), execCtx)
 	resultChan := executor.Run(tasks)
 
-	total, success, failed := len(tasks), 0, 0
+	total := len(tasks)
 	connSuccess, connFailed := 0, 0
 	for result := range resultChan {
 		if err := WriteSSE(w, result); err != nil {
@@ -158,30 +146,18 @@ func handleExecute(w http.ResponseWriter, r *http.Request) {
 		} else {
 			connFailed++
 		}
-		if result.ConnectSuccess && result.ExitCode != nil && *result.ExitCode == 0 {
-			success++
-		} else {
-			failed++
-		}
 	}
 
 	log.Zlog.Info("连接统计", zap.Int("total", total), zap.Int("connSuccess", connSuccess), zap.Int("connFailed", connFailed))
 
-	done := ssh.DoneResponse{Type: "done", Total: total, Success: success, Failed: failed}
+	done := ssh.DoneResponse{Type: "done", Total: total}
 	WriteSSE(w, done)
 	flusher.Flush()
 
-	log.Zlog.Succ("任务执行完成", zap.Int("total", total), zap.Int("success", success), zap.Int("failed", failed))
+	log.Zlog.Succ("任务执行完成", zap.Int("total", total))
 
 	// 等待客户端发送关闭信号，2分钟超时防御
-	log.Zlog.Info("等待客户端发送关闭信号...")
-	select {
-	case <-shutdownSignal:
-		// handleShutdown 已记录日志
-	case <-time.After(2 * time.Minute):
-		log.Zlog.Warn("等待关闭信号超时(2分钟)，强制退出")
-	}
-	go server.Shutdown(context.Background())
+	waitForShutdown()
 }
 
 // handleShutdown 处理客户端关闭请求
@@ -201,26 +177,20 @@ func handleShutdown(w http.ResponseWriter, r *http.Request) {
 // handleUpload 处理上传请求
 func handleUpload(w http.ResponseWriter, r *http.Request) {
 	// 一次性防护
-	if !atomic.CompareAndSwapInt32(&requestUsed, 0, 1) {
-		log.Zlog.Warn("请求被拒绝: 服务已被调用，仅支持一次请求", zap.String("path", r.URL.Path))
-		writeError(w, http.StatusServiceUnavailable, "ALREADY_USED", "服务已被调用，仅支持一次请求")
+	if !acquireRequestSlot(w, r) {
 		return
 	}
 
 	log.Zlog.Info("收到上传请求，开始处理...")
 
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "读取请求体失败")
-		go server.Shutdown(context.Background())
+	body, ok := readBody(w, r)
+	if !ok {
 		return
 	}
-	defer r.Body.Close()
 
 	req, err := jsonproc.ParseUploadRequest(body)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "MISSING_FIELD", err.Error())
-		go server.Shutdown(context.Background())
+		writeParseError(w, "upload", err)
 		return
 	}
 	log.Zlog.Info("上传请求解析成功",
@@ -229,23 +199,21 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 		zap.Int("nodes", len(req.Nodes)),
 		zap.Bool("sudo", req.Options.Sudo))
 
-	// 将 file_path 转为绝对路径（支持相对路径）
-	absPath, err := filepath.Abs(req.FilePath)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "INVALID_PATH", fmt.Sprintf("file_path 路径解析失败: %s", req.FilePath))
+	// 决策 B7：file_path 必须绝对路径（拒绝相对路径，不再静默转绝对）
+	if !filepath.IsAbs(req.FilePath) {
+		writeError(w, http.StatusBadRequest, "INVALID_PATH", fmt.Sprintf("upload 路径校验失败: file_path 必须是绝对路径: %s", req.FilePath))
 		go server.Shutdown(context.Background())
 		return
 	}
-	req.FilePath = absPath
 
 	// 校验本地 file_path
 	if _, err := os.Stat(req.FilePath); err != nil {
-		writeError(w, http.StatusBadRequest, "INVALID_PATH", fmt.Sprintf("file_path 不存在或不可读: %s", req.FilePath))
+		writeError(w, http.StatusBadRequest, "INVALID_PATH", fmt.Sprintf("upload 路径校验失败: file_path 不存在或不可读: %s", req.FilePath))
 		go server.Shutdown(context.Background())
 		return
 	}
 
-	// 收集文件清单
+	// 收集文件清单（CollectFiles 内部 IsAbs 防御在此生效）
 	fileItems, err := localfs.CollectFiles(req.FilePath)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "INVALID_PATH", err.Error())
@@ -254,15 +222,9 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Zlog.Info("文件清单收集完成", zap.Int("count", len(fileItems)))
 
-	// 设置 SSE header
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-
-	flusher, ok := w.(http.Flusher)
+	// 设置 SSE 响应（决策 C1：先 Flusher 检查、后设 header）
+	flusher, ok := setupSSE(w)
 	if !ok {
-		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "不支持流式响应")
-		go server.Shutdown(context.Background())
 		return
 	}
 
@@ -317,17 +279,7 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 		return nil
 	}
 
-	var progressWg sync.WaitGroup
-	progressWg.Add(1)
-	go func() {
-		defer progressWg.Done()
-		for msg := range progressChan {
-			if err := writeSSESafe(msg); err != nil {
-				log.Zlog.Error("SSE progress 写入失败", zap.Error(err))
-				return
-			}
-		}
-	}()
+	progressWg := startProgressConsumer(progressChan, writeSSESafe)
 
 	// 使用独立的 context，不依赖 HTTP 请求（防止客户端断开导致所有任务终止）
 	uploadCtx, uploadCancel := context.WithCancel(context.Background())
@@ -337,7 +289,7 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 	executor := core.NewBatchUploadExecutor(req.Options.Concurrency, len(tasks), uploadCtx, progressChan)
 	resultChan := executor.Run(tasks)
 
-	total, success, failed := len(tasks), 0, 0
+	total := len(tasks)
 	connSuccess, connFailed := 0, 0
 	for result := range resultChan {
 		if err := writeSSESafe(result); err != nil {
@@ -350,11 +302,6 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 		} else {
 			connFailed++
 		}
-		if result.ConnectSuccess && result.Error == nil && result.ExitCode != nil && *result.ExitCode == 0 {
-			success++
-		} else {
-			failed++
-		}
 	}
 
 	// 关闭 progress channel 并等待消费完毕
@@ -363,45 +310,33 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 
 	log.Zlog.Info("连接统计", zap.Int("total", total), zap.Int("connSuccess", connSuccess), zap.Int("connFailed", connFailed))
 
-	done := ssh.DoneResponse{Type: "done", Total: total, Success: success, Failed: failed}
+	done := ssh.DoneResponse{Type: "done", Total: total}
 	WriteSSE(w, done)
 	flusher.Flush()
 
-	log.Zlog.Succ("上传任务完成", zap.Int("total", total), zap.Int("success", success), zap.Int("failed", failed))
+	log.Zlog.Succ("上传任务完成", zap.Int("total", total))
 
-	// 等待关闭信号，2分钟超时防御
-	log.Zlog.Info("等待客户端发送关闭信号...")
-	select {
-	case <-shutdownSignal:
-	case <-time.After(2 * time.Minute):
-		log.Zlog.Warn("等待关闭信号超时(2分钟)，强制退出")
-	}
-	go server.Shutdown(context.Background())
+	// 等待客户端发送关闭信号，2分钟超时防御
+	waitForShutdown()
 }
 
 // handleDownload 处理下载请求
 func handleDownload(w http.ResponseWriter, r *http.Request) {
 	// 一次性防护
-	if !atomic.CompareAndSwapInt32(&requestUsed, 0, 1) {
-		log.Zlog.Warn("请求被拒绝: 服务已被调用，仅支持一次请求", zap.String("path", r.URL.Path))
-		writeError(w, http.StatusServiceUnavailable, "ALREADY_USED", "服务已被调用，仅支持一次请求")
+	if !acquireRequestSlot(w, r) {
 		return
 	}
 
 	log.Zlog.Info("收到下载请求，开始处理...")
 
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "INVALID_REQUEST", "读取请求体失败")
-		go server.Shutdown(context.Background())
+	body, ok := readBody(w, r)
+	if !ok {
 		return
 	}
-	defer r.Body.Close()
 
 	req, err := jsonproc.ParseDownloadRequest(body)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "MISSING_FIELD", err.Error())
-		go server.Shutdown(context.Background())
+		writeParseError(w, "download", err)
 		return
 	}
 	log.Zlog.Info("下载请求解析成功",
@@ -410,31 +345,30 @@ func handleDownload(w http.ResponseWriter, r *http.Request) {
 		zap.Int("nodes", len(req.Nodes)),
 		zap.Bool("sudo", req.Options.Sudo))
 
-	// 将 local_path 转为绝对路径
-	absLocalPath, err := filepath.Abs(req.LocalPath)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "INVALID_PATH", fmt.Sprintf("local_path 路径解析失败: %s", req.LocalPath))
+	// 决策 B4：remote_path 必须绝对路径（远程为 Linux 路径，以 / 开头）
+	if !strings.HasPrefix(req.RemotePath, "/") {
+		writeError(w, http.StatusBadRequest, "INVALID_PATH", fmt.Sprintf("download 路径校验失败: remote_path 必须是绝对路径: %s", req.RemotePath))
 		go server.Shutdown(context.Background())
 		return
 	}
-	req.LocalPath = absLocalPath
+
+	// 决策 B8：local_path 必须绝对路径（对称拒绝，不再静默转绝对）
+	if !filepath.IsAbs(req.LocalPath) {
+		writeError(w, http.StatusBadRequest, "INVALID_PATH", fmt.Sprintf("download 路径校验失败: local_path 必须是绝对路径: %s", req.LocalPath))
+		go server.Shutdown(context.Background())
+		return
+	}
 
 	// 校验本地 local_path 是否存在且是目录
 	if info, err := os.Stat(req.LocalPath); err != nil || !info.IsDir() {
-		writeError(w, http.StatusBadRequest, "INVALID_PATH", fmt.Sprintf("local_path 不存在或不是目录: %s", req.LocalPath))
+		writeError(w, http.StatusBadRequest, "INVALID_PATH", fmt.Sprintf("download 路径校验失败: local_path 不存在或不是目录: %s", req.LocalPath))
 		go server.Shutdown(context.Background())
 		return
 	}
 
-	// 设置 SSE header
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-
-	flusher, ok := w.(http.Flusher)
+	// 设置 SSE 响应（决策 C1：先 Flusher 检查、后设 header）
+	flusher, ok := setupSSE(w)
 	if !ok {
-		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "不支持流式响应")
-		go server.Shutdown(context.Background())
 		return
 	}
 
@@ -474,17 +408,7 @@ func handleDownload(w http.ResponseWriter, r *http.Request) {
 		return nil
 	}
 
-	var progressWg sync.WaitGroup
-	progressWg.Add(1)
-	go func() {
-		defer progressWg.Done()
-		for msg := range progressChan {
-			if err := writeSSESafe(msg); err != nil {
-				log.Zlog.Error("SSE progress 写入失败", zap.Error(err))
-				return
-			}
-		}
-	}()
+	progressWg := startProgressConsumer(progressChan, writeSSESafe)
 
 	// 使用独立的 context
 	downloadCtx, downloadCancel := context.WithCancel(context.Background())
@@ -494,7 +418,7 @@ func handleDownload(w http.ResponseWriter, r *http.Request) {
 	executor := core.NewBatchDownloadExecutor(req.Options.Concurrency, len(tasks), downloadCtx, progressChan)
 	resultChan := executor.Run(tasks)
 
-	total, success, failed := len(tasks), 0, 0
+	total := len(tasks)
 	connSuccess, connFailed := 0, 0
 	for result := range resultChan {
 		if err := writeSSESafe(result); err != nil {
@@ -507,11 +431,6 @@ func handleDownload(w http.ResponseWriter, r *http.Request) {
 		} else {
 			connFailed++
 		}
-		if result.ConnectSuccess && result.Error == nil && result.ExitCode != nil && *result.ExitCode == 0 {
-			success++
-		} else {
-			failed++
-		}
 	}
 
 	// 关闭 progress channel 并等待消费完毕
@@ -520,20 +439,14 @@ func handleDownload(w http.ResponseWriter, r *http.Request) {
 
 	log.Zlog.Info("连接统计", zap.Int("total", total), zap.Int("connSuccess", connSuccess), zap.Int("connFailed", connFailed))
 
-	done := ssh.DoneResponse{Type: "done", Total: total, Success: success, Failed: failed}
+	done := ssh.DoneResponse{Type: "done", Total: total}
 	WriteSSE(w, done)
 	flusher.Flush()
 
-	log.Zlog.Succ("下载任务完成", zap.Int("total", total), zap.Int("success", success), zap.Int("failed", failed))
+	log.Zlog.Succ("下载任务完成", zap.Int("total", total))
 
-	// 等待关闭信号
-	log.Zlog.Info("等待客户端发送关闭信号...")
-	select {
-	case <-shutdownSignal:
-	case <-time.After(2 * time.Minute):
-		log.Zlog.Warn("等待关闭信号超时(2分钟)，强制退出")
-	}
-	go server.Shutdown(context.Background())
+	// 等待客户端发送关闭信号，2分钟超时防御
+	waitForShutdown()
 }
 
 // handleHealth 健康检查端点，无需认证

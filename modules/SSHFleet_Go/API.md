@@ -104,7 +104,7 @@ SSHFleet Go 是一个一次性批量 SSH 任务引擎，支持命令执行、文
 |------|------|------|--------|------|
 | `seq` | int | 是 | - | 序列号，用于关联响应结果，不可重复 |
 | `ip` | string | 是 | - | 目标服务器 IP 地址 |
-| `port` | int | 否 | 22 | SSH 端口号 |
+| `port` | int | 否 | 22 | SSH 端口号（0 或缺省时默认 22；显式传值必须在 1~65535） |
 | `user` | string | 是 | - | 登录用户名 |
 | `password` | string | 否 | "" | 登录密码（明文），与key_content至少提供一个 |
 | `key_content` | string | 否 | "" | PEM私钥原始文本，与password至少提供一个 |
@@ -149,11 +149,11 @@ SSHFleet Go 是一个一次性批量 SSH 任务引擎，支持命令执行、文
 ```json
 {
   "type": "done",
-  "total": 10,
-  "success": 8,
-  "failed": 2
+  "total": 10
 }
 ```
+
+> `done` 只报节点总数；各节点的成功/失败由调用方根据 result 流的 `exit_code` / `error` / `success_files` / `failed_files` 字段自行统计（Go 端不统计、不处理）。
 
 #### 执行流程
 
@@ -245,7 +245,7 @@ SSHFleet Go 是一个一次性批量 SSH 任务引擎，支持命令执行、文
 | `port` | int | SSH 端口 |
 | `user` | string | 登录用户名 |
 | `connect_success` | bool | SSH 连接是否成功 |
-| `exit_code` | int/null | 失败文件数：0=全部成功，null=连接失败未执行，N=N个文件失败 |
+| `exit_code` | int/null | SSH 执行退出码：0=全部成功，1=有失败，null=连接失败未执行（具体失败数量看 failed_files） |
 | `output` | string | 上传结果（base64 编码），格式见下方 |
 | `connect_cost_time` | float | 连接耗时（秒） |
 | `exec_cost_time` | float | 所有文件上传总耗时（秒） |
@@ -271,13 +271,11 @@ data.json: 上传成功 (0.001s)
 ```json
 {
   "type": "done",
-  "total": 10,
-  "success": 9,
-  "failed": 1
+  "total": 10
 }
 ```
 
-done 的 total/success/failed 是节点级统计。
+> `done` 只报节点总数；各节点的成功/失败由调用方根据 result 流的 `exit_code` / `error` / `success_files` / `failed_files` 字段自行统计（Go 端不统计、不处理）。
 
 #### 上传行为
 
@@ -354,7 +352,7 @@ done 的 total/success/failed 是节点级统计。
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | `remote_path` | string | 是 | 远程文件或目录路径（绝对路径） |
-| `local_path` | string | 是 | 本地存储目录（必须已存在且是目录） |
+| `local_path` | string | 是 | 本地存储目录（必须是绝对路径，且已存在是目录） |
 | `options` | object | 否 | 下载配置 |
 | `nodes` | array | 是 | 目标节点列表 |
 
@@ -448,13 +446,11 @@ data.json: 下载成功 (0.001s)
 ```json
 {
   "type": "done",
-  "total": 10,
-  "success": 9,
-  "failed": 1
+  "total": 10
 }
 ```
 
-done 的 total/success/failed 是节点级统计。
+> `done` 只报节点总数；各节点的成功/失败由调用方根据 result 流的 `exit_code` / `error` / `success_files` / `failed_files` 字段自行统计（Go 端不统计、不处理）。
 
 #### 下载行为
 
@@ -462,6 +458,8 @@ done 的 total/success/failed 是节点级统计。
 |------|------|
 | remote_path 不存在 | 该节点报错，其他节点继续 |
 | remote_path 无读权限 | 该节点报错（SFTP Open 权限错误） |
+| remote_path 不是绝对路径 | HTTP 400 错误 |
+| local_path 不是绝对路径 | HTTP 400 错误 |
 | local_path 不存在 | HTTP 400 错误 |
 | local_path 不是目录 | HTTP 400 错误 |
 | 远程是空目录 | 该节点报错（目录中没有文件） |
@@ -601,16 +599,30 @@ curl -X POST http://localhost:9090/api/v1/shutdown \
 
 ## 六、错误处理
 
+### 6.0 错误处理原则（两层体系）
+
+SSHFleet 的错误分两层，互不混淆：
+
+**第一层：HTTP 请求级错误** —— 请求本身有问题，直接返回错误响应（见 6.1 / 6.2），不会进入执行阶段。典型：JSON 语法错误、必填字段缺失（含节点内部字段）、路径非法、认证失败、服务已被使用。
+
+**第二层：SSH 任务执行结果** —— 请求合法、进入执行阶段后，每个节点的执行结果通过 SSE 的 `result` 消息返回。节点是否成功看 `exit_code`（0=成功，1=有失败，null=连接失败未执行）与 `error` 字段；文件级数量看 `success_files` / `failed_files`。
+
+设计原则：**错误就是错误，有自己的返回规则**。SSH 执行结果（`exit_code` 的 0/1）与 HTTP 状态码/业务错误码是两个独立体系，不允许把文件级统计（如失败文件数 N）塞进 `exit_code`——文件级数量由 `failed_files` 字段承载。
+
+**Go 是无状态执行引擎**：拿到请求就执行，执行就返回结果，**不统计、不处理**。`done` 消息只报节点总数，节点的成功/失败分析由调用方根据 result 流的 `exit_code` / `error` / `success_files` / `failed_files` 字段自行完成。
+
+**本地路径参数一律严格遵守绝对路径**：`file_path` / `local_path` / `remote_path`(绝对路径要求) 传相对路径直接返回 400；相对路径如何转绝对是调用方的适配职责，Go 不处理。
+
 ### 6.1 错误响应
 
-当请求格式错误或服务内部异常时，返回错误响应：
+错误响应的 `message` 采用「位置描述 + 错误原文」格式：先标明是哪个接口、哪个阶段、哪个字段报错，再附具体错误内容原文。例如：
 
 ```json
 {
   "success": false,
   "error": {
-    "code": "INVALID_REQUEST",
-    "message": "nodes 数组不能为空"
+    "code": "MISSING_FIELD",
+    "message": "execute 请求解析失败: nodes[2] 校验失败: ip 不能为空"
   }
 }
 ```
@@ -619,8 +631,8 @@ curl -X POST http://localhost:9090/api/v1/shutdown \
 
 | 错误码 | HTTP 状态码 | 说明 |
 |--------|-------------|------|
-| `INVALID_REQUEST` | 400 | 请求格式错误（JSON 解析失败） |
-| `MISSING_FIELD` | 400 | 必填字段缺失（command/file_path/remote_path/local_path 为空、nodes 为空、seq 重复） |
+| `INVALID_REQUEST` | 400 | 请求体 JSON 解析失败（语法错误） |
+| `MISSING_FIELD` | 400 | 必填字段缺失或无效：command/file_path/remote_path/local_path 为空、nodes 为空、seq 重复、节点 ip 为空、节点 user 为空、节点 password 与 key_content 同时为空、exec_timeout 必须 > 0 |
 | `INVALID_PATH` | 400 | file_path 不存在、不可读或不是绝对路径；local_path 不存在或不是目录 |
 | `UNAUTHORIZED` | 401 | 请求头缺少`X-SSH-Fleet-Key`或key无效 |
 | `INTERNAL_ERROR` | 500 | 内部错误（不支持流式响应） |
@@ -666,7 +678,7 @@ internal/
 2. **execute 的 output** 包含 stdout 和 stderr，按交错顺序拼接
 3. **upload 的 output** 包含统计信息和每个文件的上传状态
 4. **download 的 output** 包含统计信息和每个文件的下载状态
-5. **exit_code 含义不同**：execute 是命令退出码（0=成功，null=连接失败，其他正值=命令失败），upload/download 是失败文件数（0=全部成功，null=连接失败）
+5. **exit_code 是 SSH 执行结果退出码（第二层）**：execute 为命令退出码（0=成功，null=连接失败未执行，其他正值=命令失败）；upload/download 为 0=全部成功 / 1=有失败 / null=连接失败未执行；具体失败数量看 failed_files 字段
 6. **seq 用于关联请求与响应**，并发执行时结果顺序可能与请求顺序不同，seq 不可重复
 7. **error 只在 Go 层面出错时有值**（连接失败、Go 内部异常），命令执行失败看 exit_code
 8. **一次性执行**：每次启动只处理一次请求，第二个请求会被拒绝
@@ -674,11 +686,13 @@ internal/
 10. **上传前提**：Go 和 Python 必须运行在同一台机器上，Go 直接读取本地文件
 11. **下载前提**：Go 和 Python 必须运行在同一台机器上，Go 直接写入本地文件
 12. **远程路径要求**：upload 端点的 remote_path 必须已存在且是目录，不存在则报错
-13. **下载路径要求**：download 端点的 remote_path 必须是绝对路径，local_path 必须已存在且是目录
-14. **上传重试**：SFTP 写入失败时自动重试（最多2次，间隔2秒）
-15. **下载重试**：SFTP 读取失败时自动重试（最多2次，间隔2秒）
-16. **进度消息**：upload 推送 `uploaded_bytes`，download 推送 `downloaded_bytes`，节流间隔500ms
-17. **下载符号链接**：remote_path 本身是符号链接时跳过，目录内的符号链接由 `find -type f` 自动排除
-18. **下载 sudo**：sudo 仅用于预检查命令（`test -e`、`find`），传输本身纯 SFTP
-19. **健康检查**：`GET /api/v1/health` 无需认证，可用于检查服务是否存活
-20. **requestUsed**：`/execute`、`/upload`、`/download` 三个端点共享同一个请求标记
+13. **下载路径要求**：download 端点的 remote_path 必须是绝对路径，local_path 必须是绝对路径且已存在是目录
+14. **本地路径要求**：upload 端点的 file_path 必须是绝对路径；相对路径（含 download 的 local_path）一律返回 400，如何转绝对是调用方的适配职责
+15. **done 只报 total**：节点成功/失败由调用方数 result 流自行统计，Go 端不统计不处理
+16. **上传重试**：SFTP 写入失败时自动重试（最多2次，间隔2秒）
+17. **下载重试**：SFTP 读取失败时自动重试（最多2次，间隔2秒）
+18. **进度消息**：upload 推送 `uploaded_bytes`，download 推送 `downloaded_bytes`，节流间隔500ms
+19. **下载符号链接**：remote_path 本身是符号链接时跳过，目录内的符号链接由 `find -type f` 自动排除
+20. **下载 sudo**：sudo 仅用于预检查命令（`test -e`、`find`），传输本身纯 SFTP
+21. **健康检查**：`GET /api/v1/health` 无需认证，可用于检查服务是否存活
+22. **requestUsed**：`/execute`、`/upload`、`/download` 三个端点共享同一个请求标记

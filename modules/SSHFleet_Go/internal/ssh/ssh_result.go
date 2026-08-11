@@ -16,11 +16,10 @@ type ExecResult struct {
 }
 
 // DoneResponse SSE 完成标记
+// 只报节点总数，节点成功/失败由调用方根据 result 流自行统计（Go 端不统计、不处理）
 type DoneResponse struct {
-	Type    string `json:"type"`
-	Total   int    `json:"total"`
-	Success int    `json:"success"`
-	Failed  int    `json:"failed"`
+	Type  string `json:"type"`
+	Total int    `json:"total"`
 }
 
 // UploadResult 上传结果（单个节点）

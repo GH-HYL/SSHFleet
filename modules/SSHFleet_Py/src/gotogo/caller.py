@@ -170,7 +170,7 @@ def call_go(
             tlog.warning(f"SSE 数据解析失败: {e}")
             continue
         if data.get("type") == "done":
-            tlog.info(f"SSE 完成标记: total={data['total']}, success={data['success']}, failed={data['failed']}")
+            tlog.info(f"SSE 完成标记: total={data['total']}")
             return
 
         yield data
