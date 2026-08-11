@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -61,6 +62,18 @@ func Start(port int, logPath string, key string) error {
 		Handler: mux,
 	}
 
+	// 无请求超时：1 分钟内无任何连接自动退出（首个连接到来即取消计时器，
+	// 防止误杀"执行完成后等待 shutdown 信号"的服务）
+	requestTimer := time.AfterFunc(1*time.Minute, func() {
+		log.Zlog.Warn("1 分钟内无请求连接，自动退出")
+		server.Shutdown(context.Background())
+	})
+	server.ConnState = func(conn net.Conn, state http.ConnState) {
+		if state == http.StateNew {
+			requestTimer.Stop()
+		}
+	}
+
 	go func() {
 		<-interruptHandler.Done()
 		log.Zlog.Info("收到中断信号，开始退出...")
@@ -102,9 +115,8 @@ func handleExecute(w http.ResponseWriter, r *http.Request) {
 		zap.Int("connectTimeout", req.Options.ConnectTimeout),
 		zap.Int("execTimeout", req.Options.ExecTimeout))
 
-	// 设置 SSE 响应（决策 C1：先 Flusher 检查、后设 header）
-	flusher, ok := setupSSE(w)
-	if !ok {
+	// 设置 SSE 响应（决策 C1：先 Flusher 检查、后设 header；Flush 由 WriteSSE 内部完成）
+	if !setupSSE(w) {
 		return
 	}
 
@@ -140,7 +152,6 @@ func handleExecute(w http.ResponseWriter, r *http.Request) {
 			log.Zlog.Error("SSE 写入失败", zap.Error(err))
 			return
 		}
-		flusher.Flush()
 		if result.ConnectSuccess {
 			connSuccess++
 		} else {
@@ -152,7 +163,6 @@ func handleExecute(w http.ResponseWriter, r *http.Request) {
 
 	done := ssh.DoneResponse{Type: "done", Total: total}
 	WriteSSE(w, done)
-	flusher.Flush()
 
 	log.Zlog.Succ("任务执行完成", zap.Int("total", total))
 
@@ -222,9 +232,8 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Zlog.Info("文件清单收集完成", zap.Int("count", len(fileItems)))
 
-	// 设置 SSE 响应（决策 C1：先 Flusher 检查、后设 header）
-	flusher, ok := setupSSE(w)
-	if !ok {
+	// 设置 SSE 响应（决策 C1：先 Flusher 检查、后设 header；Flush 由 WriteSSE 内部完成）
+	if !setupSSE(w) {
 		return
 	}
 
@@ -241,7 +250,6 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 		"total_bytes_per_node": totalBytesPerNode,
 	}
 	WriteSSE(w, initMsg)
-	flusher.Flush()
 
 	// 构建上传任务
 	tasks := make([]*core.UploadTask, 0, len(req.Nodes))
@@ -268,15 +276,12 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 	progressChan := make(chan ssh.ProgressMsg, len(tasks)*10)
 
 	// 使用 mutex 保护 SSE 写入，防止并发写入导致分块编码错误
+	// Flush 由 WriteSSE 内部完成（仍在锁内执行）
 	var sseMu sync.Mutex
 	writeSSESafe := func(data interface{}) error {
 		sseMu.Lock()
 		defer sseMu.Unlock()
-		if err := WriteSSE(w, data); err != nil {
-			return err
-		}
-		flusher.Flush()
-		return nil
+		return WriteSSE(w, data)
 	}
 
 	progressWg := startProgressConsumer(progressChan, writeSSESafe)
@@ -312,7 +317,6 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 
 	done := ssh.DoneResponse{Type: "done", Total: total}
 	WriteSSE(w, done)
-	flusher.Flush()
 
 	log.Zlog.Succ("上传任务完成", zap.Int("total", total))
 
@@ -366,9 +370,8 @@ func handleDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 设置 SSE 响应（决策 C1：先 Flusher 检查、后设 header）
-	flusher, ok := setupSSE(w)
-	if !ok {
+	// 设置 SSE 响应（决策 C1：先 Flusher 检查、后设 header；Flush 由 WriteSSE 内部完成）
+	if !setupSSE(w) {
 		return
 	}
 
@@ -397,15 +400,12 @@ func handleDownload(w http.ResponseWriter, r *http.Request) {
 	progressChan := make(chan ssh.ProgressMsg, len(tasks)*10)
 
 	// 使用 mutex 保护 SSE 写入
+	// Flush 由 WriteSSE 内部完成（仍在锁内执行）
 	var sseMu sync.Mutex
 	writeSSESafe := func(data interface{}) error {
 		sseMu.Lock()
 		defer sseMu.Unlock()
-		if err := WriteSSE(w, data); err != nil {
-			return err
-		}
-		flusher.Flush()
-		return nil
+		return WriteSSE(w, data)
 	}
 
 	progressWg := startProgressConsumer(progressChan, writeSSESafe)
@@ -441,7 +441,6 @@ func handleDownload(w http.ResponseWriter, r *http.Request) {
 
 	done := ssh.DoneResponse{Type: "done", Total: total}
 	WriteSSE(w, done)
-	flusher.Flush()
 
 	log.Zlog.Succ("下载任务完成", zap.Int("total", total))
 
