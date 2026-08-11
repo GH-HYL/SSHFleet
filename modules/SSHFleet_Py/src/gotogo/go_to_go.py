@@ -423,12 +423,15 @@ def go_to_go(
 
             elif msg_type == "done":
                 # 处理完成标记
+                done_total = sse_data.get("total", total_nodes)
                 if not args.u and not args.d:
                     # 命令模式：更新进度
-                    done_total = sse_data.get("total", total_nodes)
-                    done_success = sse_data.get("success", 0)
-                    done_failed = sse_data.get("failed", 0)
                     node_progress.update(node_task, completed=done_total)
+                # total 一致性校验（P4）：仅不一致时警告，不中断
+                if done_total != len(results):
+                    warn_msg = f"SSE 流可能不完整: 收到 {len(results)} 条结果, 预期 {done_total} 条"
+                    tlog.warning(warn_msg)
+                    console.print(f"[yellow]警告: {warn_msg}[/yellow]")
                 break
 
             else:
