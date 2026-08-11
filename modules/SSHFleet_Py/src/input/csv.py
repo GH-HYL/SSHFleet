@@ -309,6 +309,14 @@ def read_nodes_infos(csv_path: str, config: SSHFleetConfig, args, is_inline: boo
         )
         sys.exit(1)
 
+    # 有效节点判空（前置）：csv_infos 里每行就是一个候选节点，一行都没有直接提示退出
+    # 同时避免下方 csv_infos[0][0] 在空列表时 IndexError 崩溃
+    if not csv_infos:
+        print(
+            f"{color.COLOR_RED}[ERROR]{color.COLOR_RESET}{color.COLOR_YELLOW} [function:read_nodes_infos]{color.COLOR_RESET} CSV 中未解析出任何有效节点，请检查节点文件或内联文本内容"
+        )
+        sys.exit(1)
+
     try:
         # 第0行0列不是ip格式，移除表头
         ipaddress.ip_address(csv_infos[0][0])  # 尝试解析 IP
@@ -317,6 +325,12 @@ def read_nodes_infos(csv_path: str, config: SSHFleetConfig, args, is_inline: boo
         print(
             f"{color.COLOR_RED}[INFO]{color.COLOR_RESET}{color.COLOR_YELLOW} [function:read_nodes_infos]{color.COLOR_RESET} 第一行不是IP格式，已移除表头行"
         )
+        # 移除表头后仍无有效行（如文件只有表头一行）→ 提示退出
+        if not csv_infos:
+            print(
+                f"{color.COLOR_RED}[ERROR]{color.COLOR_RESET}{color.COLOR_YELLOW} [function:read_nodes_infos]{color.COLOR_RESET} CSV 中未解析出任何有效节点，请检查节点文件或内联文本内容"
+            )
+            sys.exit(1)
 
     # 处理端口和用户的默认值及用户输入标志
     port_use_input = False  # 是否使用用户输入的端口值
