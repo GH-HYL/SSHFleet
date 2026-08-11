@@ -646,7 +646,9 @@ SSHFleet 的错误分两层，互不混淆：
 ```
 internal/
 ├── httpserver/
-│   ├── server.go              # HTTP 路由 + 请求处理（execute/upload/download/shutdown）
+│   ├── server.go              # HTTP 路由注册 + 启动/关闭生命周期
+│   ├── batch.go               # 泛型批处理骨架 runBatch + 三个端点操作描述符（execute/upload/download）
+│   ├── common.go              # 公共处理函数（readBody/setupSSE/waitForShutdown 等）
 │   └── sse.go                 # SSE 写入工具
 ├── core/
 │   ├── batch_executor.go      # 命令执行器
