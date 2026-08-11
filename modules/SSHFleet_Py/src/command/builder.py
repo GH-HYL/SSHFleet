@@ -45,7 +45,7 @@ def build_final_command(args: argparse.Namespace) -> str:
     根据参数构建命令字符串
 
     --nobash 模式：直接返回用户输入的原始命令，不做任何预处理
-    默认模式：添加环境变量、sudo 权限，用 bash -c 包裹
+    默认模式：添加环境变量、sudo 权限，用登录 shell（bash -lc / bash -l）包裹
 
     Args:
         args: 参数字典
@@ -69,11 +69,11 @@ def build_final_command(args: argparse.Namespace) -> str:
     # 命令主体
     if args.c:
         safe_command = shlex.quote(args.c)
-        components.append(f"bash -c {safe_command}")
+        components.append(f"bash -lc {safe_command}")
 
     elif args.s:
         # 脚本解释器选择
-        interpreter = "python3" if args.s.endswith(".py") else "bash"
+        interpreter = "python3" if args.s.endswith(".py") else "bash -l"
 
         # 读取脚本内容并正确使用heredoc
         with open(args.s, "r", encoding="utf-8") as f:
@@ -87,10 +87,7 @@ def build_final_command(args: argparse.Namespace) -> str:
         # 构建命令：使用printf输出base64字符串，然后解码并执行
         # base64编码字符集安全，不包含引号，因此使用单引号包裹
         # printf '%s' 意思是原样输出字符串，不进行转义，确保内容完整传递
-        if interpreter == "bash":
-            command = f"printf '%s' '{encoded_content}' | base64 -d | {'sudo ' if args.m == 'sudo' else ''}bash"
-        else:  # python3
-            command = f"printf '%s' '{encoded_content}' | base64 -d | {'sudo ' if args.m == 'sudo' else ''}python3"
+        command = f"printf '%s' '{encoded_content}' | base64 -d | {'sudo ' if args.m == 'sudo' else ''}{interpreter}"
 
         components.append(command)
 
