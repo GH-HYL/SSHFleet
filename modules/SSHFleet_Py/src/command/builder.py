@@ -46,6 +46,8 @@ def build_final_command(args: argparse.Namespace) -> str:
 
     --nobash 模式：直接返回用户输入的原始命令，不做任何预处理
     默认模式：语言变量、sudo 权限与命令统一收进登录 shell（bash -lc）内执行
+        - 命令模式（args.c）和脚本模式（args.s）都通过 base64 通道传递，
+          避免 sudo bash -c '<cmd>' 与 bash -lc '<inner>' 两层单引号嵌套产生的引号转义套娃。
 
     Args:
         args: 参数字典
@@ -66,11 +68,17 @@ def build_final_command(args: argparse.Namespace) -> str:
     # 命令主体：语言变量、sudo 权限与命令统一收进登录 shell（bash -lc）内部，
     # bash -lc 在完整环境里定位 sudo 并执行，无任何组件裸露在极简 PATH 下
     if args.c:
-        # 命令模式：sudo 模式由 sudo 提升 bash -c 的权限执行原始命令
+        # 编码为 base64，通过 stdin 通道交给 sudo bash 执行
+        # 避免 sudo bash -c '<cmd>' 与外层 bash -lc 单引号字符串嵌套引号转义
+        encoded_cmd = base64.b64encode(args.c.encode("utf-8")).decode("ascii")
         if args.m == "sudo":
-            inner_command = f"{env_prefix} sudo bash -c {shlex.quote(args.c)}"
+            inner_command = (
+                f"{env_prefix} printf '%s' '{encoded_cmd}' | base64 -d | sudo bash"
+            )
         else:
-            inner_command = f"{env_prefix} {args.c}"
+            inner_command = (
+                f"{env_prefix} printf '%s' '{encoded_cmd}' | base64 -d | bash"
+            )
 
     elif args.s:
         # 脚本解释器选择（内层解释器）
@@ -106,5 +114,21 @@ def build_final_command(args: argparse.Namespace) -> str:
     # 统一以登录 shell 包裹，保证命令/脚本均在完整环境变量下执行
     final_command = f"bash -lc {shlex.quote(inner_command)}"
 
-    tlog.success(f"完整命令拼接完成: {final_command}")
+    # 日志交代清楚：原始内容 -> 处理方式 -> 最终命令
+    # （命令/脚本均经 base64 编码传递，日志里只显示编码串，需把原始内容一并打印）
+    if args.c:
+        log_detail = (
+            f"  原始命令: {args.c}\n"
+            f"  处理方式: 已通过 base64 编码后经管道传递，避免引号转义嵌套\n"
+            f"  最终命令: {final_command}"
+        )
+    elif args.s:
+        log_detail = (
+            f"  原始脚本: {args.s}（内容已通过 base64 编码后经管道传递）\n"
+            f"  最终命令: {final_command}"
+        )
+    else:
+        log_detail = f"  最终命令: {final_command}"
+
+    tlog.success(f"完整命令拼接完成\n{log_detail}")
     return final_command.strip()

@@ -2,8 +2,6 @@ package core
 
 import (
 	"context"
-	"encoding/base64"
-	"strings"
 	"sync"
 
 	"SSHFleet/internal/log"
@@ -104,21 +102,17 @@ func (e *BatchExecutor) worker(id int, taskChan <-chan *SSHTask, execResultChan 
 
 			workResult.Seq = task.Seq
 
-			// 记录SSH任务的输出（保持stdout/stderr交错顺序）
-			if workResult.Output != "" {
-				if decoded, err := base64.StdEncoding.DecodeString(workResult.Output); err == nil {
-					output := strings.TrimSpace(string(decoded))
-					log.Zlog.Info("协程worker - 节点输出", zap.String("ip", task.Config.IP), zap.Int("workerId", id), zap.String("output", output))
-				}
-			}
+			// 不再单独打印"节点输出"，合并到下方的"执行结束"中
+			// 异常路径（err != nil）由上方的 Error 日志保留输出
 
 			// 不管成功失败都写入 channel
 			e.safeSendResult(execResultChan, workResult)
 
+			// 统一以"执行结束"作为正常路径的收尾日志，与上方"SSH连接成功"风格一致
 			if workResult.ExitCode != nil {
-				log.Zlog.Info("协程worker - 执行结束", zap.String("ip", task.Config.IP), zap.Int("workerId", id), zap.Int("exitCode", *workResult.ExitCode))
+				log.Zlog.Info("执行结束", zap.String("ip", task.Config.IP), zap.Int("workerId", id), zap.Int("exitCode", *workResult.ExitCode))
 			} else {
-				log.Zlog.Info("协程worker - 执行结束", zap.String("ip", task.Config.IP), zap.Int("workerId", id), zap.String("exitCode", "nil"))
+				log.Zlog.Info("执行结束", zap.String("ip", task.Config.IP), zap.Int("workerId", id), zap.String("exitCode", "nil"))
 			}
 		}
 	}

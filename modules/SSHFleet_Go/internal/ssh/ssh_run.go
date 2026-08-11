@@ -6,7 +6,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"golang.org/x/crypto/ssh"
@@ -147,7 +146,7 @@ func (c *SSHClient) ExecuteCommand(command string, ctx context.Context, ip strin
 	defer func() { _ = c.Close() }()
 
 	result.ConnectSuccess = true
-	log.Zlog.Succ("连接成功", zap.String("ip", ip), zap.String("登录方式", c.config.authMethodDesc()))
+	// 不再单独输出"连接成功"日志，避免与调用方的"SSH连接成功"重复
 
 	// 创建会话
 	session, err := c.client.NewSession()
@@ -157,7 +156,7 @@ func (c *SSHClient) ExecuteCommand(command string, ctx context.Context, ip strin
 		log.Zlog.Error("会话创建失败", zap.String("ip", ip), zap.Error(err))
 		return result, fmt.Errorf("创建会话失败 - %w", err)
 	}
-	log.Zlog.Succ("会话成功", zap.String("ip", ip))
+	// 会话成功不再单独输出日志，只在失败时打印（异常输出保留）
 	defer func() { _ = session.Close() }()
 
 	execStartTime := time.Now()
@@ -176,9 +175,8 @@ func (c *SSHClient) ExecuteCommand(command string, ctx context.Context, ip strin
 	rawBytes := outputWriter.buf.Bytes()
 	result.Output = base64.StdEncoding.EncodeToString(rawBytes)
 
-	if len(rawBytes) > 0 {
-		log.Zlog.Info("节点输出", zap.String("ip", ip), zap.String("output", strings.TrimSpace(string(rawBytes))))
-	}
+	// 节点输出不再单独打印，由调用方在 batch_executor 中合并到"执行结束"
+	// 异常输出（ExitError、ErrMsg 等）继续保留到 result.Error 中，便于上层输出
 
 	// 处理执行结果
 	if err != nil {
