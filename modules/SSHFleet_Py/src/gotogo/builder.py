@@ -8,6 +8,36 @@ from typing import Dict, List, Optional
 from src.command.builder import build_final_command
 
 
+def _build_node_dict(node: Dict, seq: int) -> Dict:
+    """单个节点信息 → Go API 节点字典（三个请求构建函数共用）"""
+    return {
+        "seq": seq,
+        "ip": node["ip"],
+        "port": node.get("port", 22),
+        "user": node["user"],
+        "password": node["password"],
+        "key_content": node.get("key_content", ""),
+        "key_passphrase": node.get("key_passphrase", ""),
+    }
+
+
+def _build_nodes_list(nodesinfo: List[Dict]) -> List[Dict]:
+    """节点信息列表 → Go API nodes 数组"""
+    return [_build_node_dict(node, i) for i, node in enumerate(nodesinfo)]
+
+
+def _build_options_dict(args: argparse.Namespace, with_sudo: bool = False) -> Dict:
+    """公共执行配置 → Go API options 对象"""
+    options = {
+        "concurrency": args.n,
+        "connect_timeout": args.T,
+        "exec_timeout": args.t,
+    }
+    if with_sudo:
+        options["sudo"] = args.m == "sudo"
+    return options
+
+
 def build_request(
     args: argparse.Namespace,
     nodesinfo: List[Dict],
@@ -28,23 +58,8 @@ def build_request(
 
     return {
         "command": command,
-        "options": {
-            "concurrency": args.n,
-            "connect_timeout": args.T,
-            "exec_timeout": args.t,
-        },
-        "nodes": [
-            {
-                "seq": i,
-                "ip": node["ip"],
-                "port": node.get("port", 22),
-                "user": node["user"],
-                "password": node["password"],
-                "key_content": node.get("key_content", ""),
-                "key_passphrase": node.get("key_passphrase", ""),
-            }
-            for i, node in enumerate(nodesinfo)
-        ],
+        "options": _build_options_dict(args),
+        "nodes": _build_nodes_list(nodesinfo),
     }
 
 
@@ -55,19 +70,8 @@ def build_upload_request(args: argparse.Namespace, nodesinfo: List[Dict]) -> Dic
         "file_path": os.path.abspath(args.u),
         # args.p 在 upload 模式是远程路径，不转绝对
         "remote_path": args.p,
-        "options": {
-            "concurrency": args.n,
-            "connect_timeout": args.T,
-            "exec_timeout": args.t,
-            "sudo": args.m == "sudo",
-        },
-        "nodes": [
-            {"seq": i, "ip": node["ip"], "port": node.get("port", 22),
-             "user": node["user"], "password": node["password"],
-             "key_content": node.get("key_content", ""),
-             "key_passphrase": node.get("key_passphrase", "")}
-            for i, node in enumerate(nodesinfo)
-        ],
+        "options": _build_options_dict(args, with_sudo=True),
+        "nodes": _build_nodes_list(nodesinfo),
     }
 
 
@@ -78,17 +82,6 @@ def build_download_request(args: argparse.Namespace, nodesinfo: List[Dict]) -> D
         "remote_path": args.d,
         # args.p 在 download 模式是本地目录，转绝对（Go 契约：local_path 必须绝对路径）
         "local_path": os.path.abspath(args.p),
-        "options": {
-            "concurrency": args.n,
-            "connect_timeout": args.T,
-            "exec_timeout": args.t,
-            "sudo": args.m == "sudo",
-        },
-        "nodes": [
-            {"seq": i, "ip": node["ip"], "port": node.get("port", 22),
-             "user": node["user"], "password": node["password"],
-             "key_content": node.get("key_content", ""),
-             "key_passphrase": node.get("key_passphrase", "")}
-            for i, node in enumerate(nodesinfo)
-        ],
+        "options": _build_options_dict(args, with_sudo=True),
+        "nodes": _build_nodes_list(nodesinfo),
     }
