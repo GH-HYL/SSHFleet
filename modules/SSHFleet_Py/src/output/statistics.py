@@ -8,6 +8,12 @@ from datetime import datetime
 
 import src.utils as utils
 from src.log import tlog
+from src.output.result_format import (
+    SUCCESS_CATEGORY_EXECUTE,
+    SUCCESS_CATEGORY_TRANSPORT,
+    get_mode,
+    sort_ips,
+)
 
 
 @utils.error_and_exit_handling_decorator(
@@ -51,11 +57,11 @@ def results_statistics(
     category_counts = Counter(d.get("result_category") for d in results)
 
     # 根据模式移除成功分类
-    if args.u or args.d:
-        success_category = "传输成功"
+    if get_mode(args) in ("upload", "download"):
+        success_category = SUCCESS_CATEGORY_TRANSPORT
         category_counts.pop(success_category, None)
-    elif args.c or args.s:
-        success_category = "执行成功"
+    else:
+        success_category = SUCCESS_CATEGORY_EXECUTE
         category_counts.pop(success_category, None)
 
     # 按数量正（倒）序排序（reverse逆转）失败分类
@@ -80,17 +86,10 @@ def results_statistics(
 
     # 对每个分类的IP进行数字排序
     for category in category_ip_map:
-        category_ip_map[category] = sorted(
-            category_ip_map[category],
-            key=lambda ip: [int(part) for part in ip.split(".")],
-        )
+        category_ip_map[category] = sort_ips(category_ip_map[category])
 
     # 对成功IP进行数字排序
-    sorted_success_ips = (
-        sorted(success_ips, key=lambda ip: [int(part) for part in ip.split(".")])
-        if success_ips
-        else []
-    )
+    sorted_success_ips = sort_ips(success_ips) if success_ips else []
 
     # 构建统计结果字典
     statistics = {

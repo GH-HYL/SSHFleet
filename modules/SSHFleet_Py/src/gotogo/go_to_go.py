@@ -21,6 +21,7 @@ from rich.table import Table
 from rich.text import Text
 
 from src.gotogo import builder, caller, parser
+from src.output.result_format import format_conn_status, get_action_name, get_mode
 from src.yaml import SSHFleetConfig
 from src.log import tlog
 
@@ -82,16 +83,10 @@ def _format_result(result: Dict, args: argparse.Namespace = None) -> str:
     output = result.get("output", "")
     error = result.get("error")
     result_category = result.get("result_category", "未知")
-    if args and args.d:
-        action = "下载"
-    elif args and args.u:
-        action = "上传"
-    else:
-        action = "执行"
+    action = get_action_name(get_mode(args))
 
     # 连接状态
-    conn_status = "成功" if connect_success else "失败"
-    lines.append(f"【{ip}】 连接: {conn_status} - {connect_cost_time:.3f}s")
+    lines.append(f"【{ip}】 {format_conn_status(connect_success, connect_cost_time)}")
 
     if connect_success:
         # 执行/上传状态

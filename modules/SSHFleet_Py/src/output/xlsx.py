@@ -10,6 +10,7 @@ from posixpath import join as posix_join
 import src.color as color
 
 from src import utils
+from src.output.result_format import format_conn_status, get_action_name, get_mode
 from src.yaml import SSHFleetConfig
 from src.log import tlog
 
@@ -81,7 +82,7 @@ def format_output_to_xlsx(
 
     # 从结构化数据生成行
     row_idx = 2
-    action = "上传" if args.u else "执行"
+    action = get_action_name(get_mode(args))
 
     for result in final_results:
         ip = result.get("ip", "未知IP")
@@ -93,9 +94,8 @@ def format_output_to_xlsx(
         result_category = result.get("result_category", "未知")
 
         # 行1: 连接状态
-        conn_status = "成功" if connect_success else "失败"
         ws.cell(row=row_idx, column=1, value=ip)
-        ws.cell(row=row_idx, column=2, value=f"连接: {conn_status} - {connect_cost_time:.3f}s")
+        ws.cell(row=row_idx, column=2, value=format_conn_status(connect_success, connect_cost_time))
         row_idx += 1
 
         # 行2: 执行/上传状态
