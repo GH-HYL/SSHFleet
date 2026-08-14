@@ -419,7 +419,14 @@ src/
 │   └── archive.py              # 资源文件备份与打包
 ├── log/                        # 日志模块
 │   └── logger.py               # 日志初始化与管理
-├── utils.py                    # 工具函数、装饰器
+├── common/                     # 共享层（跨模块公共工具）
+│   ├── constants.py            # 公共常量（如成功分类名）
+│   └── format_utils.py         # 结果呈现公共函数（模式/状态行/IP排序）
+├── error_handler.py            # 错误打印/退出约定/异常装饰器
+├── interaction.py              # 用户交互确认
+├── path_utils.py               # 路径规范化
+├── text_utils.py               # Excel 字符清洗、大小格式化
+├── utils.py                    # 兼容转发层（函数已拆分至上述模块，新代码请直接引用对应模块）
 ├── yaml.py                     # 配置文件加载（Pydantic 模型校验）
 ├── color.py                    # 终端颜色常量
 └── config/
