@@ -8,7 +8,6 @@ from pathlib import Path
 import src.color as color
 import src.utils as utils
 from src.log import tlog
-from src.command.builder import remove_command_fist_last_same_symbol
 
 
 def _check_upload_concurrency(args, config, nodes_count: int, n_explicit: bool) -> None:
@@ -171,7 +170,7 @@ def _check_concurrency_threshold(file_size: int, config) -> int:
 
 
 @utils.error_and_exit_handling_decorator("arguments_confirm", "确认执行参数失败")
-def arguments_confirm(args, nodes, config=None):
+def arguments_confirm(args, nodes, config=None, remove_symbol=None):
     """
     功能：
         确认执行参数
@@ -180,14 +179,11 @@ def arguments_confirm(args, nodes, config=None):
         args: 命令行参数
         nodes: 节点列表
         config: 配置对象（可选，用于上传并发阈值检查）
+        remove_symbol: 命令边界符号移除提示（可选，由调用方在命令构建阶段处理并传入）
 
     返回：
         None
     """
-
-    if args.c:
-        # 检测并移除命令的边界符号
-        remove_symbol, args.c = remove_command_fist_last_same_symbol(args.c)
 
     # 上传并发阈值检查（在默认值赋值之前，判断用户是否显式指定了 -n）
     n_explicit = args.n != 0
