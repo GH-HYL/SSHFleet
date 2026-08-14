@@ -10,7 +10,7 @@ from posixpath import join as posix_join
 import src.color as color
 
 from src import utils
-from src.output.result_format import format_conn_status, get_action_name, get_mode
+from src.common.format_utils import format_conn_status, get_action_name, get_mode
 from src.yaml import SSHFleetConfig
 from src.log import tlog
 

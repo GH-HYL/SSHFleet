@@ -651,9 +651,10 @@ internal/
 │   ├── common.go              # 公共处理函数（readBody/setupSSE/waitForShutdown 等）
 │   └── sse.go                 # SSE 写入工具
 ├── core/
-│   ├── batch_executor.go      # 命令执行器
-│   ├── batch_upload_executor.go # 上传执行器
-│   └── batch_download_executor.go # 下载执行器
+│   ├── batch_core.go           # 泛型批处理骨架 runPool（worker 启动/提交/关闭/取消）
+│   ├── batch_executor.go       # 命令执行器（薄壳）
+│   ├── batch_upload_executor.go # 上传执行器（薄壳）
+│   └── batch_download_executor.go # 下载执行器（薄壳）
 ├── jsonproc/
 │   ├── json_type.go           # 请求结构体定义（ExecuteRequest/UploadRequest/DownloadRequest）
 │   └── json_parser.go         # 请求解析 + 验证
