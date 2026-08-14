@@ -1,10 +1,7 @@
 # -*- coding: utf-8 -*-
-# SSHFleet 结果呈现公共模块
-# 单条结果的状态行格式、动作名、成功分类名、IP 排序等在多个输出端（终端/Excel/统计）复用的纯函数与常量
-
-# 成功分类名（classifier 与 statistics 共用，改动只此一处）
-SUCCESS_CATEGORY_EXECUTE = "执行成功"
-SUCCESS_CATEGORY_TRANSPORT = "传输成功"
+# SSHFleet 结果呈现公共工具模块
+# 单条结果的状态行格式、动作名、IP 排序等在多个输出端（终端/Excel/统计）复用的纯函数。
+# 放置于共享层 src/common：被执行层（gotogo）与呈现层（output）共同引用，避免跨层倒挂。
 
 
 def get_mode(args) -> str:
