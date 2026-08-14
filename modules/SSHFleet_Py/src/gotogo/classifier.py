@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 # 错误分类模块
 
+from src.output.result_format import SUCCESS_CATEGORY_EXECUTE, SUCCESS_CATEGORY_TRANSPORT
+
 
 def classify(
     connect_success: bool,
@@ -29,8 +31,8 @@ def classify(
 
     if exit_code == 0:
         if mode in ("upload", "download"):
-            return "传输成功"
-        return "执行成功"
+            return SUCCESS_CATEGORY_TRANSPORT
+        return SUCCESS_CATEGORY_EXECUTE
 
     if error:
         result = _match(error, error_keywords)
