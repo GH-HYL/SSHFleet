@@ -40,12 +40,12 @@ func NewBatchDownloadExecutor(concurrency int, totalTasks int, ctx context.Conte
 }
 
 // Run 启动下载执行，返回结果 channel
-func (e *BatchDownloadExecutor) Run(tasks []*DownloadTask) <-chan *ssh.UploadResult {
+func (e *BatchDownloadExecutor) Run(tasks []*DownloadTask) <-chan *ssh.DownloadResult {
 	return runBatch(
 		e.ctx, e.maxConcurrency, e.totalTasks,
 		"下载", "下载任务数量为0",
 		tasks, e.progressChan,
-		func(id int, task *DownloadTask, onProgress func(ssh.ProgressMsg)) *ssh.UploadResult {
+		func(id int, task *DownloadTask, onProgress func(ssh.ProgressMsg)) *ssh.DownloadResult {
 			log.Zlog.Debug("下载worker - 开始", zap.String("ip", task.Config.IP))
 
 			client := ssh.NewSSHClient(task.Config)
