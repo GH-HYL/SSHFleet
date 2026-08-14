@@ -34,7 +34,6 @@ def parse_result(sse_data: Dict, error_keywords: Dict[str, list[str]], mode: str
         "connect_cost_time": sse_data.get("connect_cost_time", 0),
         "exec_cost_time": sse_data.get("exec_cost_time", 0),
         "result_category": classify(
-            connect_success=sse_data.get("connect_success", False),
             exit_code=sse_data.get("exit_code"),
             error=error,
             output=output,
