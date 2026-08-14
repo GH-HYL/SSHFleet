@@ -24,9 +24,9 @@ type batchRequest interface {
 	jsonproc.ExecuteRequest | jsonproc.UploadRequest | jsonproc.DownloadRequest
 }
 
-// batchResult 结果类型约束：所有批量操作的结果都带 ConnectSuccess 字段
+// batchResult 结果类型约束：所有批量操作的结果（ExecuteResult/UploadResult/DownloadResult）
 type batchResult interface {
-	ssh.ExecResult | ssh.UploadResult
+	ssh.ExecResult | ssh.UploadResult | ssh.DownloadResult
 }
 
 // batchRunner executor 统一接口，屏蔽三个 executor 的具体类型
@@ -269,7 +269,7 @@ var uploadOp = batchOperation[jsonproc.UploadRequest, core.UploadTask, ssh.Uploa
 	},
 }
 
-var downloadOp = batchOperation[jsonproc.DownloadRequest, core.DownloadTask, ssh.UploadResult]{
+var downloadOp = batchOperation[jsonproc.DownloadRequest, core.DownloadTask, ssh.DownloadResult]{
 	api:     "download",
 	logName: "下载",
 	doneLog: "下载任务完成",
@@ -320,10 +320,10 @@ var downloadOp = batchOperation[jsonproc.DownloadRequest, core.DownloadTask, ssh
 	getOptions: func(req *jsonproc.DownloadRequest) jsonproc.Options {
 		return req.Options
 	},
-	isConnectSuccess: func(result *ssh.UploadResult) bool {
+	isConnectSuccess: func(result *ssh.DownloadResult) bool {
 		return result.ConnectSuccess
 	},
-	makeExecutor: func(concurrency, total int, ctx context.Context, progressChan chan ssh.ProgressMsg) batchRunner[core.DownloadTask, ssh.UploadResult] {
+	makeExecutor: func(concurrency, total int, ctx context.Context, progressChan chan ssh.ProgressMsg) batchRunner[core.DownloadTask, ssh.DownloadResult] {
 		return core.NewBatchDownloadExecutor(concurrency, total, ctx, progressChan)
 	},
 }

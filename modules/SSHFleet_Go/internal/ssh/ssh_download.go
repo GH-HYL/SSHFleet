@@ -26,8 +26,8 @@ func (c *SSHClient) DownloadFiles(
 	seq int,
 	ip string,
 	onProgress func(ProgressMsg),
-) (*UploadResult, error) {
-	result := &UploadResult{
+) (*DownloadResult, error) {
+	result := &DownloadResult{
 		Type: "result",
 		IP:   c.config.IP,
 		Port: c.config.Port,
@@ -186,16 +186,7 @@ func (c *SSHClient) DownloadFiles(
 			result.Error = &errMsg
 			log.Zlog.Error("[下载] 创建本地子目录失败", zap.String("ip", ip), zap.String("localDir", localDir), zap.Error(err))
 			if onProgress != nil {
-				onProgress(ProgressMsg{
-					Type:            "progress",
-					Seq:             seq,
-					IP:              ip,
-					DownloadedBytes: downloadedBytes,
-					TotalBytes:      totalBytes,
-					TotalFiles:      totalFiles,
-					SuccessFiles:    successFiles,
-					FailedFiles:     failedFiles,
-				})
+				onProgress(buildDownloadProgress(seq, ip, downloadedBytes, totalBytes, totalFiles, successFiles, failedFiles))
 			}
 			break
 		}
@@ -229,16 +220,7 @@ func (c *SSHClient) DownloadFiles(
 			// 删除半成品文件
 			_ = os.Remove(localFilePath)
 			if onProgress != nil {
-				onProgress(ProgressMsg{
-					Type:            "progress",
-					Seq:             seq,
-					IP:              ip,
-					DownloadedBytes: downloadedBytes,
-					TotalBytes:      totalBytes,
-					TotalFiles:      totalFiles,
-					SuccessFiles:    successFiles,
-					FailedFiles:     failedFiles,
-				})
+				onProgress(buildDownloadProgress(seq, ip, downloadedBytes, totalBytes, totalFiles, successFiles, failedFiles))
 			}
 			break
 		} else {
@@ -250,16 +232,7 @@ func (c *SSHClient) DownloadFiles(
 
 		// 发送进度更新
 		if onProgress != nil {
-			msg := ProgressMsg{
-				Type:            "progress",
-				Seq:             seq,
-				IP:              ip,
-				DownloadedBytes: downloadedBytes,
-				TotalBytes:      totalBytes,
-				TotalFiles:      totalFiles,
-				SuccessFiles:    successFiles,
-				FailedFiles:     failedFiles,
-			}
+			msg := buildDownloadProgress(seq, ip, downloadedBytes, totalBytes, totalFiles, successFiles, failedFiles)
 			log.Zlog.Info("[下载] 发送进度", zap.Int("seq", seq), zap.Int64("downloadedBytes", downloadedBytes), zap.Int("success", successFiles), zap.Int("failed", failedFiles))
 			onProgress(msg)
 		}
@@ -340,4 +313,18 @@ func (c *SSHClient) sftpRunCommand(command string) (string, error) {
 
 	output, err := session.CombinedOutput(command)
 	return string(output), err
+}
+
+// buildDownloadProgress 组装下载进度消息（三处调用共用）
+func buildDownloadProgress(seq int, ip string, downloadedBytes, totalBytes int64, totalFiles, successFiles, failedFiles int) ProgressMsg {
+	return ProgressMsg{
+		Type:            "progress",
+		Seq:             seq,
+		IP:              ip,
+		DownloadedBytes: downloadedBytes,
+		TotalBytes:      totalBytes,
+		TotalFiles:      totalFiles,
+		SuccessFiles:    successFiles,
+		FailedFiles:     failedFiles,
+	}
 }
