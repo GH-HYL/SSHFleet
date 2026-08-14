@@ -28,13 +28,20 @@
 #     │   ├── xlsx.py                   # Excel 文件生成
 #     │   ├── statistics.py             # 结果统计计算
 #     │   └── archive.py                # 资源文件备份与打包
+#     ├── common/                       # 共享层（跨模块公共工具）
+#     │   ├── constants.py              # 公共常量（如成功分类名）
+#     │   └── format_utils.py           # 结果呈现公共函数（模式/状态行/IP排序）
 #     ├── log/                          # 日志模块
 #     │   └── logger.py                 # 日志初始化与管理
 #     ├── config/                       # 配置文件夹
 #     │   ├── SSHFleet.yaml             # 工具配置
 #     │   ├── dangerous_keywords.yaml   # 危险命令检测规则
 #     │   └── error_keywords.yaml       # 错误分类关键词
-#     ├── utils.py                      # 工具函数、装饰器
+#     ├── error_handler.py              # 错误打印/退出约定/异常装饰器
+#     ├── interaction.py                # 用户交互确认
+#     ├── path_utils.py                 # 路径规范化
+#     ├── text_utils.py                 # Excel 字符清洗、大小格式化
+#     ├── utils.py                      # 兼容转发层（函数已拆分至上述模块，新代码请直接引用对应模块）
 #     ├── yaml.py                       # 配置文件加载（Pydantic）
 #     └── color.py                      # 终端颜色常量
 
