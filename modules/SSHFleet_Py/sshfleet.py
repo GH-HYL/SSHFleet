@@ -131,6 +131,12 @@ def main():
         tlog.info("SSHFleet工具已退出")
         sys.exit(0)
 
+    # 命令模式：先移除命令首尾相同的边界符号（供危险检查/确认/执行共用）
+    remove_symbol = None
+    if args.c:
+        from src.command.builder import remove_command_fist_last_same_symbol
+        remove_symbol, args.c = remove_command_fist_last_same_symbol(args.c)
+
     # 执行危险字典内容检查
     check_dangerous_content(args, dangerous_keywords)
     tlog.success("[check] 执行危险字典内容检查成功")
@@ -141,7 +147,7 @@ def main():
 
     # 参数信息确认
     tlog.info("开始进行参数信息确认")
-    arguments_confirm(args, nodesinfos, config)
+    arguments_confirm(args, nodesinfos, config, remove_symbol)
     tlog.info("用户已核实通过参数信息")
 
     tlog.debug(f"{'-' * 20}SSHFleet工具 - 准备结束{'-' * 20}\n")
