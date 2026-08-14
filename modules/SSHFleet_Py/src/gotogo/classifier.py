@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # 错误分类模块
 
-from src.output.result_format import SUCCESS_CATEGORY_EXECUTE, SUCCESS_CATEGORY_TRANSPORT
+from src.common.constants import SUCCESS_CATEGORY_EXECUTE, SUCCESS_CATEGORY_TRANSPORT
 
 
 def classify(

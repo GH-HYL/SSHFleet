@@ -10,7 +10,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// runBatch 泛型批处理骨架：三个 executor 共享的 worker-pool 逻辑只写一份。
+// runPool 泛型批处理骨架：三个 executor 共享的 worker-pool 逻辑只写一份。
 // 差异点（任务类型 TASK、结果类型 RESULT、具体工作 work）由调用方闭包注入。
 //
 // 参数：
@@ -22,7 +22,7 @@ import (
 //   - tasks:          任务列表
 //   - progressChan:   进度通道（execute 传 nil；upload/download 传真实通道）
 //   - work:           单个任务的实际执行逻辑（worker 协程内调用）
-func runBatch[TASK any, RESULT any](
+func runPool[TASK any, RESULT any](
 	ctx context.Context,
 	maxConcurrency int,
 	totalTasks int,

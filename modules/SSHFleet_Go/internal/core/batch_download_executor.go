@@ -9,7 +9,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// BatchDownloadExecutor 下载批量任务执行器（薄壳：复用泛型批处理骨架 runBatch）
+// BatchDownloadExecutor 下载批量任务执行器（薄壳：复用泛型批处理骨架 runPool）
 type BatchDownloadExecutor struct {
 	maxConcurrency int
 	totalTasks     int
@@ -41,7 +41,7 @@ func NewBatchDownloadExecutor(concurrency int, totalTasks int, ctx context.Conte
 
 // Run 启动下载执行，返回结果 channel
 func (e *BatchDownloadExecutor) Run(tasks []*DownloadTask) <-chan *ssh.DownloadResult {
-	return runBatch(
+	return runPool(
 		e.ctx, e.maxConcurrency, e.totalTasks,
 		"下载", "下载任务数量为0",
 		tasks, e.progressChan,

@@ -8,12 +8,8 @@ from datetime import datetime
 
 import src.utils as utils
 from src.log import tlog
-from src.output.result_format import (
-    SUCCESS_CATEGORY_EXECUTE,
-    SUCCESS_CATEGORY_TRANSPORT,
-    get_mode,
-    sort_ips,
-)
+from src.common.constants import SUCCESS_CATEGORY_EXECUTE, SUCCESS_CATEGORY_TRANSPORT
+from src.common.format_utils import get_mode, sort_ips
 
 
 @utils.error_and_exit_handling_decorator(

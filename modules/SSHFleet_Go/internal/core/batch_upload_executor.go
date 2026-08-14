@@ -10,7 +10,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// BatchUploadExecutor 上传批量任务执行器（薄壳：复用泛型批处理骨架 runBatch）
+// BatchUploadExecutor 上传批量任务执行器（薄壳：复用泛型批处理骨架 runPool）
 type BatchUploadExecutor struct {
 	maxConcurrency int
 	totalTasks     int
@@ -42,7 +42,7 @@ func NewBatchUploadExecutor(concurrency int, totalTasks int, ctx context.Context
 
 // Run 启动上传执行，返回结果 channel
 func (e *BatchUploadExecutor) Run(tasks []*UploadTask) <-chan *ssh.UploadResult {
-	return runBatch(
+	return runPool(
 		e.ctx, e.maxConcurrency, e.totalTasks,
 		"上传", "上传任务数量为0",
 		tasks, e.progressChan,

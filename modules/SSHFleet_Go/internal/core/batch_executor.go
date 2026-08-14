@@ -9,7 +9,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// BatchExecutor 批量命令执行器（薄壳：复用泛型批处理骨架 runBatch）
+// BatchExecutor 批量命令执行器（薄壳：复用泛型批处理骨架 runPool）
 type BatchExecutor struct {
 	maxConcurrency int
 	totalTasks     int
@@ -37,7 +37,7 @@ func NewBatchExecutor(concurrency int, totalTasks int, ctx context.Context) *Bat
 
 // Run 启动执行，返回结果 channel（执行完毕后自动关闭）
 func (e *BatchExecutor) Run(tasks []*SSHTask) <-chan *ssh.ExecResult {
-	return runBatch(
+	return runPool(
 		e.ctx, e.maxConcurrency, e.totalTasks,
 		"批量", "任务数量为0，程序退出，若为符合预期，请排查有效节点数量",
 		tasks, nil,
