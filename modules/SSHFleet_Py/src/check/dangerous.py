@@ -9,6 +9,40 @@ import src.color as color
 
 from src import utils
 
+# 命令分隔符（&&/|| 双字符在前，避免 | 或 & 单字符先拆导致组合符被拆坏）
+_SEPARATORS_RE = re.compile(r"&&|\|\||[;&|]")
+
+
+def _split_by_separators(line: str) -> List[str]:
+    """
+    按命令分隔符切分一行命令，支持一行内多种分隔符嵌套。
+
+    示例：
+        "echo a; rm -rf / && chmod 777 x"
+        -> ["echo a", "rm -rf /", "chmod 777 x"]
+    """
+    parts = _SEPARATORS_RE.split(line)
+    return [p.strip() for p in parts if p.strip()]
+
+
+def _strip_command_prefixes(cmd: str) -> str:
+    """
+    去除命令开头的常见前缀（支持多前缀叠加，如 "sudo nohup chmod ..."）。
+
+    示例：
+        "sudo nohup chmod 777 /x" -> "chmod 777 /x"
+    """
+    prefixes = ["sudo", "time", "nohup", "setsid", "stdbuf"]
+    changed = True
+    while changed:
+        changed = False
+        for prefix in prefixes:
+            if cmd.startswith(prefix + " "):
+                cmd = cmd[len(prefix):].strip()
+                changed = True
+                break  # 去除一个前缀后重新扫描，支持叠加
+    return cmd
+
 
 @utils.error_and_exit_handling_decorator(
     "check_dangerous_content", "危险字典内容检查失败"
@@ -106,34 +140,14 @@ def check_dangerous_patterns(args, dangerous_keywords: List, disinteractive=Fals
         if not stripped_line or stripped_line.startswith("#"):
             continue
 
-        # 第一步：按命令分隔符分割
-        commands = []
-        temp_line = stripped_line
+        # 第一步：按命令分隔符分割（支持一行内多种分隔符嵌套）
+        # 用正则一次性切分 ; && || | &（&&/|| 优先于单个 &/|，避免拆错）
+        commands = _split_by_separators(stripped_line)
 
-        # 处理所有可能的分隔符
-        separators = [";", "&&", "||", "|", "&"]
-        for sep in separators:
-            if sep in temp_line:
-                parts = temp_line.split(sep)
-                # 将分隔符前后的部分分别处理
-                for i, part in enumerate(parts):
-                    if part.strip():  # 非空部分
-                        commands.append(part.strip())
-                break  # 一次只处理一种分隔符，避免复杂嵌套
-        else:
-            # 如果没有分隔符，整个作为一条命令
-            commands = [temp_line]
-
-        # 第二步：处理每条命令的前缀（如sudo）
+        # 第二步：处理每条命令的前缀（如 sudo，支持多前缀叠加）
         final_commands = []
         for cmd in commands:
-            # 去除常见的前缀命令
-            prefixes = ["sudo", "time", "nohup", "setsid", "stdbuf"]
-            for prefix in prefixes:
-                if cmd.startswith(prefix + " "):
-                    # 去掉前缀和后面的空格
-                    cmd = cmd[len(prefix) :].strip()
-                    break  # 一次只去除一个前缀
+            cmd = _strip_command_prefixes(cmd)
 
             if cmd:  # 如果去除前缀后还有内容
                 final_commands.append(cmd)
