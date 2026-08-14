@@ -49,12 +49,11 @@ func (c *SSHClient) UploadFiles(
 	defer func() { _ = c.Close() }()
 
 	result.ConnectSuccess = true
-	log.Zlog.Succ("[上传] 连接成功", zap.String("ip", ip), zap.String("登录方式", c.config.authMethodDesc()))
+	// 不再单独输出"连接成功"日志，避免与调用方的"SSH连接成功"重复
 
 	// 2. 清理残留临时目录（仅 sudo 模式）
 	if useSudo {
 		c.runCommand("sudo rm -rf /tmp/.SSHFleet_tmp/")
-		log.Zlog.Debug("[上传] 清理残留临时目录", zap.String("ip", ip))
 	}
 
 	// 3. 创建 SFTP 客户端
@@ -66,7 +65,6 @@ func (c *SSHClient) UploadFiles(
 		return result, err
 	}
 	defer func() { _ = sftpClient.Close() }()
-	log.Zlog.Debug("[上传] SFTP 客户端创建成功", zap.String("ip", ip))
 
 	// 4. 计算总字节数并发送首次进度（必须在路径检查之前，确保 Python 能创建进度条）
 	var totalBytes int64
@@ -74,7 +72,6 @@ func (c *SSHClient) UploadFiles(
 		totalBytes += item.FileSize
 	}
 	if onProgress != nil {
-		log.Zlog.Info("[上传] 发送首次进度", zap.Int("seq", seq), zap.Int64("totalBytes", totalBytes), zap.Int("totalFiles", len(fileItems)))
 		onProgress(ProgressMsg{
 			Type:       "progress",
 			Seq:        seq,
@@ -98,7 +95,6 @@ func (c *SSHClient) UploadFiles(
 		log.Zlog.Error("[上传] 远程目标路径不是目录", zap.String("ip", ip), zap.String("remotePath", remotePath))
 		return result, fmt.Errorf("%s", errMsg)
 	}
-	log.Zlog.Debug("[上传] 远程目标路径检查通过", zap.String("ip", ip), zap.String("remotePath", remotePath))
 
 	// 6. 预检本地文件
 	for _, item := range fileItems {
@@ -110,7 +106,6 @@ func (c *SSHClient) UploadFiles(
 			return result, fmt.Errorf("%s", errMsg)
 		}
 	}
-	log.Zlog.Debug("[上传] 本地文件预检通过", zap.String("ip", ip), zap.Int("files", len(fileItems)))
 
 	// 7. 判断 sudo 是否实际生效
 	effectiveSudo := useSudo && c.config.User != "root"
@@ -225,7 +220,6 @@ func (c *SSHClient) UploadFiles(
 			successFiles++
 			uploadedBytes += fileWritten // 累加已上传字节数
 			outputLines = append(outputLines, fmt.Sprintf("%s: 上传成功 (%.3fs)", item.FileName, costTime))
-			log.Zlog.Debug("[上传] 文件上传成功", zap.String("ip", ip), zap.String("fileName", item.FileName), zap.Float64("costTime", costTime))
 		}
 
 		// 文件完成：发送进度更新
@@ -240,7 +234,6 @@ func (c *SSHClient) UploadFiles(
 				SuccessFiles:  successFiles,
 				FailedFiles:   failedFiles,
 			}
-			log.Zlog.Info("[上传] 发送进度", zap.Int("seq", seq), zap.Int64("uploadedBytes", uploadedBytes), zap.Int("success", successFiles), zap.Int("failed", failedFiles))
 			onProgress(msg)
 		}
 	}
@@ -263,7 +256,7 @@ func (c *SSHClient) UploadFiles(
 	result.SuccessFiles = successFiles
 	result.FailedFiles = failedFiles
 
-	log.Zlog.Succ("[上传] 节点完成", zap.String("ip", ip), zap.Int("success", successFiles), zap.Int("total", totalFiles))
+	log.Zlog.Succ("[上传] 节点完成", zap.String("ip", ip), zap.Int("success", successFiles), zap.Int("total", totalFiles), zap.Int64("bytes", uploadedBytes))
 	return result, nil
 }
 
@@ -318,7 +311,6 @@ func (c *SSHClient) sftpUploadWithSudo(sftpClient *sftp.Client, localPath, fileN
 	if err := c.runCommand(fmt.Sprintf("sudo mkdir -p '%s' && sudo chmod 777 '%s'", tmpDir, tmpDir)); err != nil {
 		return 0, fmt.Errorf("创建临时目录失败: %w", err)
 	}
-	log.Zlog.Debug("[上传] 创建临时目录", zap.String("ip", ip), zap.String("tmpDir", tmpDir))
 
 	// 清理函数
 	cleanup := func() {
@@ -377,7 +369,6 @@ func (c *SSHClient) sftpUploadWithSudo(sftpClient *sftp.Client, localPath, fileN
 		cleanup()
 		return 0, fmt.Errorf("sudo mv 失败: %w", err)
 	}
-	log.Zlog.Info("[上传] sudo mv 完成", zap.String("ip", ip), zap.String("fileName", fileName), zap.String("remotePath", remotePath))
 
 	// 清理临时目录
 	cleanup()

@@ -47,7 +47,7 @@ func (c *SSHClient) DownloadFiles(
 	defer func() { _ = c.Close() }()
 
 	result.ConnectSuccess = true
-	log.Zlog.Succ("[下载] 连接成功", zap.String("ip", ip), zap.String("登录方式", c.config.authMethodDesc()))
+	// 不再单独输出"连接成功"日志，避免与调用方的"SSH连接成功"重复
 
 	// 2. 创建 SFTP 客户端
 	sftpClient, err := sftp.NewClient(c.client)
@@ -58,7 +58,6 @@ func (c *SSHClient) DownloadFiles(
 		return result, err
 	}
 	defer func() { _ = sftpClient.Close() }()
-	log.Zlog.Debug("[下载] SFTP 客户端创建成功", zap.String("ip", ip))
 
 	// 3. 预检查远程路径是否存在（可选 sudo）
 	effectiveSudo := useSudo && c.config.User != "root"
@@ -137,8 +136,6 @@ func (c *SSHClient) DownloadFiles(
 		log.Zlog.Error("[下载] 没有可下载的文件", zap.String("ip", ip))
 		return result, fmt.Errorf("%s", errMsg)
 	}
-
-	log.Zlog.Info("[下载] 文件清单", zap.String("ip", ip), zap.Int("totalFiles", totalFiles), zap.Int64("totalBytes", totalBytes))
 
 	// 6. 创建本地目录
 	ipDir := filepath.Join(localPath, ip)
@@ -227,13 +224,11 @@ func (c *SSHClient) DownloadFiles(
 			successFiles++
 			downloadedBytes += fileWritten
 			outputLines = append(outputLines, fmt.Sprintf("%s: 下载成功 (%.3fs)", file.relativePath, costTime))
-			log.Zlog.Debug("[下载] 文件下载成功", zap.String("ip", ip), zap.String("remoteFilePath", remoteFilePath), zap.Float64("costTime", costTime))
 		}
 
 		// 发送进度更新
 		if onProgress != nil {
 			msg := buildDownloadProgress(seq, ip, downloadedBytes, totalBytes, totalFiles, successFiles, failedFiles)
-			log.Zlog.Info("[下载] 发送进度", zap.Int("seq", seq), zap.Int64("downloadedBytes", downloadedBytes), zap.Int("success", successFiles), zap.Int("failed", failedFiles))
 			onProgress(msg)
 		}
 	}
@@ -255,7 +250,7 @@ func (c *SSHClient) DownloadFiles(
 	result.SuccessFiles = successFiles
 	result.FailedFiles = failedFiles
 
-	log.Zlog.Succ("[下载] 节点完成", zap.String("ip", ip), zap.Int("success", successFiles), zap.Int("total", totalFiles))
+	log.Zlog.Succ("[下载] 节点完成", zap.String("ip", ip), zap.Int("success", successFiles), zap.Int("total", totalFiles), zap.Int64("bytes", downloadedBytes))
 	return result, nil
 }
 
