@@ -257,4 +257,5 @@ def print_danger_warning(matches, is_forbidden=False):
         ]
     )
 
-    print("\n".join(warning_msg))
+    # 末尾必须重置颜色，否则终端颜色状态残留（尤其 forbidden 直接退出时，后续输入会一直保持红色）
+    print("\n".join(warning_msg) + color.COLOR_RESET)
