@@ -12,3 +12,7 @@ COLOR_BLUE = "\033[34m"  # 蓝色
 COLOR_MAGENTA = "\033[35m"  # 品红色
 COLOR_WHITE = "\033[37m"  # 白色
 COLOR_RESET = "\033[0m"  # 重置颜色
+COLOR_BOLD = "\033[1m"  # 加粗
+COLOR_BRIGHT_YELLOW = "\033[93m"  # 亮黄（黑底终端上比 33 更醒目）
+COLOR_BRIGHT_CYAN = "\033[96m"  # 亮青（黑底终端上比 36 更醒目）
+COLOR_BRIGHT_ORANGE = "\033[38;5;214m"  # 亮橙（256 色，黑底终端上醒目）
