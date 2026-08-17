@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
 # SSHFleet 终端输出模块
 
-import src.color as color
+import src.common.constants as color
 
-from src import utils
+from src.common.error_handler import error_and_exit_handling_decorator
 from src.log import tlog
 
 
-@utils.error_and_exit_handling_decorator(
+@error_and_exit_handling_decorator(
     "format_statistic_results_to_terminal",
     "格式化统计结果信息输出到终端失败",
     isexit=True,

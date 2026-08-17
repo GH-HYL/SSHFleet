@@ -6,13 +6,13 @@ from typing import Dict, List
 from collections import Counter
 from datetime import datetime
 
-import src.utils as utils
+from src.common.error_handler import error_and_exit_handling_decorator
 from src.log import tlog
 from src.common.constants import SUCCESS_CATEGORY_EXECUTE, SUCCESS_CATEGORY_TRANSPORT
 from src.common.format_utils import get_mode, sort_ips
 
 
-@utils.error_and_exit_handling_decorator(
+@error_and_exit_handling_decorator(
     "results_statistics", "计算统计结果信息失败", isexit=True
 )
 def results_statistics(

@@ -5,9 +5,10 @@ import re
 import sys
 from typing import List
 
-import src.color as color
+import src.common.constants as color
 
-from src import utils
+from src.common.error_handler import error_and_exit_handling_decorator, print_error_information_and_exit
+from src.input.interaction import get_user_confirmation
 
 # 命令分隔符（&&/|| 双字符在前，避免 | 或 & 单字符先拆导致组合符被拆坏）
 _SEPARATORS_RE = re.compile(r"&&|\|\||[;&|]")
@@ -44,7 +45,7 @@ def _strip_command_prefixes(cmd: str) -> str:
     return cmd
 
 
-@utils.error_and_exit_handling_decorator(
+@error_and_exit_handling_decorator(
     "check_dangerous_content", "危险关键词内容检查失败"
 )
 def check_dangerous_content(args, dangerous_keywords: List):
@@ -53,7 +54,7 @@ def check_dangerous_content(args, dangerous_keywords: List):
     try:
         check_dangerous_dict(dangerous_keywords)
     except Exception as e:
-        utils.print_error_information_and_exit(
+        print_error_information_and_exit(
             "check_dangerous_dict", f" 危险命令筛查失败: {str(e)}"
         )
 
@@ -62,7 +63,7 @@ def check_dangerous_content(args, dangerous_keywords: List):
         if args.c or args.s:
             check_dangerous_patterns(args, dangerous_keywords)
     except Exception as e:
-        utils.print_error_information_and_exit(
+        print_error_information_and_exit(
             "check_dangerous_patterns", f" 危险命令检查失败: {str(e)}"
         )
 
@@ -83,13 +84,13 @@ def check_dangerous_dict(dangerous_patterns: List):
 
     # 1. 检查规则是否为空
     if not dangerous_patterns:
-        utils.print_error_information_and_exit(
+        print_error_information_and_exit(
             "check_dangerous_dict", "危险命令检测规则为空，程序退出！"
         )
 
     # 2. 检查规则数量是否足够（至少10行）
     if len(dangerous_patterns) < 10:
-        utils.print_error_information_and_exit(
+        print_error_information_and_exit(
             "check_dangerous_dict",
             f"危险命令检测规则不足（当前{len(dangerous_patterns)}条，需要至少10条），程序退出！",
         )
@@ -99,12 +100,12 @@ def check_dangerous_dict(dangerous_patterns: List):
     for i, pattern in enumerate(dangerous_patterns):
         for field in required_fields:
             if field not in pattern:
-                utils.print_error_information_and_exit(
+                print_error_information_and_exit(
                     "check_dangerous_dict",
                     f"危险命令检测规则不完整（第{i+1}条缺少字段'{field}'），程序退出！",
                 )
             if not pattern[field]:
-                utils.print_error_information_and_exit(
+                print_error_information_and_exit(
                     "check_dangerous_dict",
                     f"危险命令检测规则不完整（第{i+1}条字段'{field}'为空），程序退出！",
                 )
@@ -125,7 +126,7 @@ def check_dangerous_patterns(args, dangerous_keywords: List, disinteractive=Fals
             with open(args.s, "r", encoding="utf-8") as f:
                 lines = f.readlines()
         except Exception as e:
-            utils.print_error_information_and_exit(
+            print_error_information_and_exit(
                 "check_dangerous_patterns", f"读取脚本内容失败: {str(e)}"
             )
     else:
@@ -196,7 +197,7 @@ def check_dangerous_patterns(args, dangerous_keywords: List, disinteractive=Fals
         print_danger_warning([highest_risk_match], is_forbidden=False)
 
         # 获取用户确认
-        if not utils.get_user_confirmation(
+        if not get_user_confirmation(
             f"\n{color.COLOR_YELLOW}已明确风险继续执行？{color.COLOR_RESET}",
             yorn=False,
             disinteractive=disinteractive,

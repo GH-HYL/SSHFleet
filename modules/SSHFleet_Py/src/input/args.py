@@ -6,8 +6,9 @@ import base64
 import os
 import sys
 
-import src.utils as utils
-from src.keywords import SSHFleetConfig
+from src.common.error_handler import error_and_exit_handling_decorator, print_error_information_and_exit
+from src.common.text_utils import args_normalize_path
+from src.config.loader import SSHFleetConfig
 
 
 def validate_password_file(file_path: str) -> None:
@@ -20,11 +21,10 @@ def validate_password_file(file_path: str) -> None:
     Raises:
         SystemExit: 验证失败时退出程序
     """
-    import src.utils as utils
 
     # 1. 检查文件是否存在
     if not os.path.exists(file_path):
-        utils.print_error_information_and_exit(
+        print_error_information_and_exit(
             "validate_password_file",
             f"密码文件不存在：{file_path}"
         )
@@ -34,19 +34,19 @@ def validate_password_file(file_path: str) -> None:
         with open(file_path, "r", encoding="utf-8") as f:
             content = f.read().strip()
     except PermissionError:
-        utils.print_error_information_and_exit(
+        print_error_information_and_exit(
             "validate_password_file",
             f"密码文件无法读取：{file_path}"
         )
     except Exception as e:
-        utils.print_error_information_and_exit(
+        print_error_information_and_exit(
             "validate_password_file",
             f"读取密码文件失败：{file_path}\n异常信息：{e}"
         )
 
     # 3. 检查文件内容是否为空
     if not content:
-        utils.print_error_information_and_exit(
+        print_error_information_and_exit(
             "validate_password_file",
             f"密码文件内容为空：{file_path}"
         )
@@ -55,20 +55,19 @@ def validate_password_file(file_path: str) -> None:
     try:
         decoded = base64.b64decode(content)
     except Exception as e:
-        utils.print_error_information_and_exit(
+        print_error_information_and_exit(
             "validate_password_file",
             f"密码文件内容不是有效的 Base64 编码：{file_path}\n异常信息：{e}"
         )
 
     # 5. 检查解码后是否为空
     if not decoded:
-        utils.print_error_information_and_exit(
+        print_error_information_and_exit(
             "validate_password_file",
             f"密码文件解码后内容为空：{file_path}"
         )
 
-
-@utils.error_and_exit_handling_decorator("parse_args", "参数解析失败")
+@error_and_exit_handling_decorator("parse_args", "参数解析失败")
 def parse_args(config: SSHFleetConfig) -> argparse.Namespace:
     """
     功能：
@@ -144,7 +143,7 @@ def parse_args(config: SSHFleetConfig) -> argparse.Namespace:
             else:
                 parser.add_argument(opt, action='store_true', help=help_str)
     except Exception as e:
-        utils.print_error_information_and_exit(
+        print_error_information_and_exit(
             "parse_args", f"参数初始化失败\n异常类型：\n{type(e)}\n异常信息：\n{e}"
         )
 
@@ -190,10 +189,10 @@ def parse_args(config: SSHFleetConfig) -> argparse.Namespace:
         if path_value:
             # 路径中间不能包含空格,不是路径不能包括空格,不能以空格开头
             if " " in path_value.strip():
-                utils.print_error_information_and_exit(
+                print_error_information_and_exit(
                     "parse_args", "路径参数中间不能包含空格"
                 )
-            setattr(args, path_attr, utils.args_normalize_path(path_value))
+            setattr(args, path_attr, args_normalize_path(path_value))
 
     # 处理备注参数，如果不指定，默认使用空字符串
     if not args.r:  # 用户未输入备注
