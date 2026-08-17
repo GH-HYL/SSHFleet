@@ -12,12 +12,17 @@ from src.input.interaction import get_user_confirmation
 from src.log import tlog
 
 
-def _check_upload_concurrency(args, config, nodes_count: int, n_explicit: bool) -> None:
-    """检查上传并发阈值，根据文件大小约束并发数
+def _check_upload_concurrency(args, config) -> None:
+    """按配置阈值输出上传并发建议，用户确认后应用
 
-    约束规则：
-    - 用户显式指定了 -n → 跳过检查，信任用户选择（仅提示）
-    - 未指定 -n 且默认值超过约束 → 提示并要求确认，拒绝则退出
+    建议规则（见 SSHFleet.yaml 中 upload.concurrency_thresholds）：
+    - file_size < small_file: 全并发（0 = 不限制，无需建议）
+    - file_size > large_file: 串行（并发=1）
+    - 两者之间: 最多 medium_concurrency 并发
+
+    交互规则：
+    - 输入 y：使用建议并发数
+    - 输入 n：保留原值继续执行（不退出）
     """
     if not args.u or not config:
         return
@@ -25,31 +30,21 @@ def _check_upload_concurrency(args, config, nodes_count: int, n_explicit: bool) 
     file_size = _calculate_upload_size(args.u)
     allowed = _check_concurrency_threshold(file_size, config)
 
+    # 小文件不限制并发，无需建议
     if allowed == 0:
         return
 
-    if n_explicit:
-        if args.n > allowed:
-            print(
-                f"{color.COLOR_YELLOW}提示：上传文件总大小 {format_size(file_size)}，"
-                f"建议并发数为 {allowed}（当前指定 {args.n}），已按您的指定执行{color.COLOR_RESET}"
-            )
-        return
-
-    if nodes_count > allowed:
-        print(
-            f"{color.COLOR_YELLOW}上传文件总大小 {format_size(file_size)}，"
-            f"建议并发数为 {allowed}（默认节点数 {nodes_count}）{color.COLOR_RESET}"
-        )
-        if get_user_confirmation(
-            f"是否使用建议并发数 {allowed} ？",
-            yorn=True,
-            disinteractive=getattr(args, 'disinteractive', False),
-        ):
-            args.n = allowed
-        else:
-            print(f"{color.COLOR_RED}操作已取消{color.COLOR_RESET}")
-            sys.exit(1)
+    print(
+        f"{color.COLOR_YELLOW}上传文件总大小 {format_size(file_size)}，"
+        f"建议并发数为 {allowed}{color.COLOR_RESET}"
+    )
+    if get_user_confirmation(
+        f"是否使用建议并发数 {allowed} ？",
+        yorn=True,
+        disinteractive=getattr(args, 'disinteractive', False),
+    ):
+        args.n = allowed
+    # 输入 n：保留原值（未指定 -n 时后续默认使用节点数），继续执行
 
 
 def _build_info_table(args, nodes):
@@ -187,9 +182,8 @@ def arguments_confirm(args, nodes, config=None, remove_symbol=None):
         None
     """
 
-    # 上传并发阈值检查（在默认值赋值之前，判断用户是否显式指定了 -n）
-    n_explicit = args.n != 0
-    _check_upload_concurrency(args, config, len(nodes), n_explicit)
+    # 上传并发建议（y 用建议值，n 保留原值继续执行，不退出）
+    _check_upload_concurrency(args, config)
 
     # 未输入并发数，默认使用nodes数量进行并发
     args.n = len(nodes) if args.n == 0 else args.n

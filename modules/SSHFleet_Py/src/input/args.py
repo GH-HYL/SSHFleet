@@ -89,8 +89,8 @@ def parse_args(config: SSHFleetConfig) -> argparse.Namespace:
             "  下载模式: python3 sshfleet.py -f nodes.csv -d /remote/path -p /local/path\n"
             "  打包模式: python3 sshfleet.py -z\n"
             "\n上传并发说明:\n"
-            "  未指定 -n 时，工具会根据文件大小自动约束并发数（小文件不限，大文件串行）\n"
-            "  显式指定 -n 时，工具信任您的选择，仅提示建议值\n"
+            "  上传模式下，工具根据配置文件中的文件大小阈值输出建议并发数\n"
+            "  输入 y 使用建议值，输入 n 保留原值继续执行\n"
         ),
     )
     # 三列对齐的帮助信息（argparse自动显示第一列选项名，help只写第二列+第三列）
