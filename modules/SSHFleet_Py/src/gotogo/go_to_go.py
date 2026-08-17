@@ -108,6 +108,129 @@ def _format_result(result: Dict, args: argparse.Namespace = None) -> str:
     return "\n".join(lines)
 
 
+def _build_progress(args: argparse.Namespace, total_nodes: int) -> dict:
+    """
+    构建进度条 UI（上传/下载 与 命令 两种模式）
+
+    Returns:
+        dict: 传输模式含 progress_table/total_progress/total_task/
+              node_progress/node_task/node_bars/speed_tracker；
+              命令模式仅 progress_table/node_progress/node_task
+    """
+    # 分界线
+    separator = "─" * 50
+
+    if args.u or args.d:
+        # 统一前缀宽度
+        prefix = "    "
+
+        # 进度标签
+        progress_label = "下载进度" if args.d else "上传进度"
+
+        # 总字节进度（仅上传模式）
+        total_progress = Progress(
+            TextColumn(f"{prefix}{progress_label}  "),
+            BarColumn(bar_width=40, complete_style="green", finished_style="blue"),
+            "[progress.percentage]{task.percentage:>3.0f}%",
+            TextColumn("  {task.fields[speed]}"),
+            DownloadColumn(),
+        )
+        total_task = total_progress.add_task("", total=1, speed="0B/s")
+
+        # 节点完成进度
+        node_progress = Progress(
+            TextColumn(f"{prefix}节点进度  "),
+            BarColumn(bar_width=40, complete_style="green", finished_style="blue"),
+            "[progress.percentage]{task.percentage:>3.0f}%",
+            "[green]{task.completed}/{task.total}",
+            TimeElapsedColumn(),
+            TextColumn("  [bright_green]Succ:[bright_black]{task.fields[success_nodes]} [bright_red]Fail:[bright_black]{task.fields[fail_nodes]}"),
+        )
+        node_task = node_progress.add_task("", total=total_nodes, success_nodes=0, fail_nodes=0)
+
+        # 单节点进度（动态增删）
+        node_bars = Progress(
+            TextColumn(f"{prefix}"),
+            BarColumn(bar_width=40, complete_style="cyan", finished_style="blue"),
+            "[progress.percentage]{task.percentage:>3.0f}%",
+            TransferSpeedColumn(),
+            TextColumn("  {task.fields[ip]}  Total:{task.fields[total_files]} Succ:{task.fields[success_files]} Fail:{task.fields[fail_files]}"),
+        )
+
+        # 布局
+        progress_table = Table.grid()
+        progress_table.add_row(total_progress)
+        progress_table.add_row(node_progress)
+        progress_table.add_row(Text(f"{prefix}{separator}"))
+        progress_table.add_row(node_bars)
+
+        return {
+            "progress_table": progress_table,
+            "total_progress": total_progress,
+            "total_task": total_task,
+            "node_progress": node_progress,
+            "node_task": node_task,
+            "node_bars": node_bars,
+            "speed_tracker": SpeedTracker(),
+        }
+
+    # 命令模式：简单进度条
+    node_progress = Progress(
+        TextColumn("    执行进度"),
+        BarColumn(bar_width=40, complete_style="green", finished_style="blue"),
+        TextColumn("{task.fields[percent_display]}"),
+        "[green]{task.completed}/{task.total}",
+        TimeElapsedColumn(),
+        TextColumn("  [bright_green]Succ:[bright_black]{task.fields[success_nodes]} [bright_red]Fail:[bright_black]{task.fields[fail_nodes]}"),
+    )
+    node_task = node_progress.add_task("", total=total_nodes, percent_display="  0%", success_nodes=0, fail_nodes=0)
+    return {
+        "progress_table": node_progress,
+        "node_progress": node_progress,
+        "node_task": node_task,
+    }
+
+
+def _record_result(result: Dict, args: argparse.Namespace, output_file) -> None:
+    """格式化单条结果并落盘/打印（result 与兼容旧格式分支共用）"""
+    formatted = _format_result(result, args)
+
+    # 写入 output.txt（两种模式共用）
+    if output_file:
+        try:
+            output_file.write(formatted + "\n")
+            output_file.flush()
+        except Exception as e:
+            tlog.warning(f"写入 output.txt 失败: {e}")
+
+    # 命令模式：打印到终端
+    if not args.u and not args.d:
+        console.print(formatted)
+
+
+def _shutdown_go(process, port, process_key, go_dead, health_stop, health_thread, live, output_file) -> None:
+    """Go 进程与资源的统一收尾（正常退出与 Ctrl+C 中断共用）"""
+    # 停止健康检查线程
+    health_stop.set()
+    health_thread.join(timeout=2)
+    live.stop()
+    # 关闭 output.txt
+    if output_file:
+        output_file.close()
+
+    # 通知 Go 服务器关闭（即使 Ctrl+C 中断也要收尾，避免残留孤儿进程）
+    if not go_dead.is_set():
+        caller.shutdown_go_server(port, process_key)
+
+    # 等待 Go 进程退出
+    try:
+        process.wait(timeout=10)
+    except Exception:
+        process.kill()
+        process.wait()
+    tlog.info("Go 进程已退出")
+
+
 def go_to_go(
     args: argparse.Namespace,
     config: SSHFleetConfig,
@@ -178,68 +301,16 @@ def go_to_go(
     health_thread = threading.Thread(target=health_checker, daemon=True)
     health_thread.start()
 
-    # 分界线
-    separator = "─" * 50
-
-    # 6. 创建进度条
+    # 6. 创建进度条（上传/下载 与 命令 两种模式）
+    ui = _build_progress(args, total_nodes)
+    progress_table = ui["progress_table"]
+    node_progress = ui["node_progress"]
+    node_task = ui["node_task"]
     if args.u or args.d:
-        # 统一前缀宽度
-        prefix = "    "
-
-        # 进度标签
-        progress_label = "下载进度" if args.d else "上传进度"
-
-        # 总字节进度（仅上传模式）
-        total_progress = Progress(
-            TextColumn(f"{prefix}{progress_label}  "),
-            BarColumn(bar_width=40, complete_style="green", finished_style="blue"),
-            "[progress.percentage]{task.percentage:>3.0f}%",
-            TextColumn("  {task.fields[speed]}"),
-            DownloadColumn(),
-        )
-        total_task = total_progress.add_task("", total=1, speed="0B/s")
-
-        # 节点完成进度
-        node_progress = Progress(
-            TextColumn(f"{prefix}节点进度  "),
-            BarColumn(bar_width=40, complete_style="green", finished_style="blue"),
-            "[progress.percentage]{task.percentage:>3.0f}%",
-            "[green]{task.completed}/{task.total}",
-            TimeElapsedColumn(),
-            TextColumn("  [bright_green]Succ:[bright_black]{task.fields[success_nodes]} [bright_red]Fail:[bright_black]{task.fields[fail_nodes]}"),
-        )
-        node_task = node_progress.add_task("", total=total_nodes, success_nodes=0, fail_nodes=0)
-
-        # 单节点进度（动态增删）
-        node_bars = Progress(
-            TextColumn(f"{prefix}"),
-            BarColumn(bar_width=40, complete_style="cyan", finished_style="blue"),
-            "[progress.percentage]{task.percentage:>3.0f}%",
-            TransferSpeedColumn(),
-            TextColumn("  {task.fields[ip]}  Total:{task.fields[total_files]} Succ:{task.fields[success_files]} Fail:{task.fields[fail_files]}"),
-        )
-
-        # 布局
-        progress_table = Table.grid()
-        progress_table.add_row(total_progress)
-        progress_table.add_row(node_progress)
-        progress_table.add_row(Text(f"{prefix}{separator}"))
-        progress_table.add_row(node_bars)
-
-        # 速度追踪器
-        speed_tracker = SpeedTracker()
-    else:
-        # 命令模式：简单进度条
-        node_progress = Progress(
-            TextColumn("    执行进度"),
-            BarColumn(bar_width=40, complete_style="green", finished_style="blue"),
-            TextColumn("{task.fields[percent_display]}"),
-            "[green]{task.completed}/{task.total}",
-            TimeElapsedColumn(),
-            TextColumn("  [bright_green]Succ:[bright_black]{task.fields[success_nodes]} [bright_red]Fail:[bright_black]{task.fields[fail_nodes]}"),
-        )
-        node_task = node_progress.add_task("", total=total_nodes, percent_display="  0%", success_nodes=0, fail_nodes=0)
-        progress_table = node_progress
+        total_progress = ui["total_progress"]
+        total_task = ui["total_task"]
+        node_bars = ui["node_bars"]
+        speed_tracker = ui["speed_tracker"]
 
     # 7. 发送请求并接收 SSE 流
     results = []
@@ -383,21 +454,10 @@ def go_to_go(
                 result = parser.parse_result(sse_data, error_keywords, mode=exec_mode)
                 results.append(result)
 
-                # 格式化输出（两种模式共用）
-                formatted = _format_result(result, args)
-
-                # 写入 output.txt（两种模式共用）
-                if output_file:
-                    try:
-                        output_file.write(formatted + "\n")
-                        output_file.flush()
-                    except Exception as e:
-                        tlog.warning(f"写入 output.txt 失败: {e}")
+                # 格式化输出 + 落盘/打印（result 与兼容分支共用）
+                _record_result(result, args, output_file)
 
                 if not args.u and not args.d:
-                    # 命令模式：打印到终端
-                    console.print(formatted)
-
                     # 统计成功/失败节点
                     if result.get("exit_code") == 0:
                         success_nodes += 1
@@ -434,21 +494,10 @@ def go_to_go(
                 result = parser.parse_result(sse_data, error_keywords, mode=exec_mode)
                 results.append(result)
 
-                # 格式化输出（两种模式共用）
-                formatted = _format_result(result, args)
-
-                # 写入 output.txt（两种模式共用）
-                if output_file:
-                    try:
-                        output_file.write(formatted + "\n")
-                        output_file.flush()
-                    except Exception as e:
-                        tlog.warning(f"写入 output.txt 失败: {e}")
+                # 格式化输出 + 落盘/打印（result 与兼容分支共用）
+                _record_result(result, args, output_file)
 
                 if not args.u and not args.d:
-                    # 命令模式：打印到终端
-                    console.print(formatted)
-
                     # 更新进度
                     completed = len(results)
                     percent_int = int(completed / total_nodes * 100)
@@ -460,25 +509,8 @@ def go_to_go(
                     )
 
     finally:
-        # 停止健康检查线程
-        health_stop.set()
-        health_thread.join(timeout=2)
-        live.stop()
-        # 关闭 output.txt
-        if output_file:
-            output_file.close()
-
-        # 通知 Go 服务器关闭（放在 finally：即使 Ctrl+C 中断也要收尾，避免残留孤儿进程）
-        if not go_dead.is_set():
-            caller.shutdown_go_server(port, process_key)
-
-        # 等待 Go 进程退出
-        try:
-            process.wait(timeout=10)
-        except Exception:
-            process.kill()
-            process.wait()
-        tlog.info("Go 进程已退出")
+        # 统一收尾：停止线程/live、关闭文件、通知并回收 Go 进程
+        _shutdown_go(process, port, process_key, go_dead, health_stop, health_thread, live, output_file)
 
     # 10. 统计结果
     success_count = sum(1 for r in results if r.get("connect_success") and r.get("exit_bool"))
