@@ -468,17 +468,17 @@ def go_to_go(
         if output_file:
             output_file.close()
 
-    # 8. 通知 Go 服务器关闭
-    if not go_dead.is_set():
-        caller.shutdown_go_server(port, process_key)
+        # 通知 Go 服务器关闭（放在 finally：即使 Ctrl+C 中断也要收尾，避免残留孤儿进程）
+        if not go_dead.is_set():
+            caller.shutdown_go_server(port, process_key)
 
-    # 9. 等待 Go 进程退出
-    try:
-        process.wait(timeout=10)
-    except Exception:
-        process.kill()
-        process.wait()
-    tlog.info("Go 进程已退出")
+        # 等待 Go 进程退出
+        try:
+            process.wait(timeout=10)
+        except Exception:
+            process.kill()
+            process.wait()
+        tlog.info("Go 进程已退出")
 
     # 10. 统计结果
     success_count = sum(1 for r in results if r.get("connect_success") and r.get("exit_bool"))

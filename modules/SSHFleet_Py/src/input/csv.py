@@ -434,7 +434,7 @@ def read_nodes_infos(csv_path: str, config: SSHFleetConfig, args, is_inline: boo
                         break
                     else:
                         print("端口必须是1-65535之间的整数")
-                except KeyboardInterrupt:
+                except (KeyboardInterrupt, EOFError):  # EOFError：管道/重定向输入结束时同样优雅退出
                     print("\n用户取消输入")
                     sys.exit(1)
 
@@ -468,7 +468,7 @@ def read_nodes_infos(csv_path: str, config: SSHFleetConfig, args, is_inline: boo
                         break
                     else:
                         print("用户名不能为空")
-                except KeyboardInterrupt:
+                except (KeyboardInterrupt, EOFError):  # EOFError：管道/重定向输入结束时同样优雅退出
                     print("\n用户取消输入")
                     sys.exit(1)
 
@@ -513,7 +513,7 @@ def read_nodes_infos(csv_path: str, config: SSHFleetConfig, args, is_inline: boo
                         break
                     else:
                         print("密码不能为空，请重新输入")
-                except KeyboardInterrupt:
+                except (KeyboardInterrupt, EOFError):  # EOFError：管道/重定向输入结束时同样优雅退出
                     print("\n用户取消输入")
                     sys.exit(1)
 
