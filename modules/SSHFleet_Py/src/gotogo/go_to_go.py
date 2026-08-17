@@ -5,7 +5,8 @@ import argparse
 import os
 import threading
 import time
-from typing import Dict, List, Optional
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional
 
 from rich.console import Console
 from rich.live import Live
@@ -29,6 +30,36 @@ console = Console()
 
 # 可配置变量：最大显示节点数
 MAX_VISIBLE_NODES = 20
+
+
+@dataclass
+class SseSession:
+    """一次 SSE 接收循环的共享上下文（进度状态 + UI 引用 + 结果集）"""
+
+    # 上传/下载模式状态
+    active_bars: Dict = field(default_factory=dict)         # {seq: task_id}
+    node_approximate: Dict = field(default_factory=dict)    # {seq: uploaded_bytes}
+    node_total_bytes: Dict = field(default_factory=dict)    # {seq: total_bytes}
+    completed_nodes: int = 0
+    upload_success_nodes: int = 0
+    upload_fail_nodes: int = 0
+    total_uploaded: int = 0
+    global_total_bytes: int = 0
+    # 命令模式状态
+    success_nodes: int = 0
+    fail_nodes: int = 0
+    # 结果与输出
+    results: List = field(default_factory=list)
+    output_file: Any = None
+    # UI 引用（传输模式才有 total_progress/total_task/node_bars/speed_tracker）
+    progress_table: Any = None
+    node_progress: Any = None
+    node_task: Any = None
+    total_progress: Any = None
+    total_task: Any = None
+    node_bars: Any = None
+    speed_tracker: Any = None
+    live: Any = None
 
 
 def _format_speed(bytes_per_sec: float) -> str:
@@ -231,6 +262,153 @@ def _shutdown_go(process, port, process_key, go_dead, health_stop, health_thread
     tlog.info("Go 进程已退出")
 
 
+def _handle_init(session: SseSession, sse_data: Dict, total_nodes: int) -> bool:
+    """处理 init 消息：初始化传输全局总量（仅上传模式调用）"""
+    total_nodes_init = sse_data.get("total_nodes", total_nodes)
+    total_bytes_per_node = sse_data.get("total_bytes_per_node", 0)
+    session.global_total_bytes = total_nodes_init * total_bytes_per_node
+    session.total_progress.update(session.total_task, total=session.global_total_bytes)
+    return True
+
+
+def _handle_progress(session: SseSession, sse_data: Dict) -> bool:
+    """处理 progress 消息：更新上传/下载进度条（排队满则跳过本条）"""
+    seq = sse_data["seq"]
+    uploaded = sse_data.get("uploaded_bytes", 0) or sse_data.get("downloaded_bytes", 0)
+    total_bytes = sse_data.get("total_bytes")
+    success_files = sse_data.get("success_files")
+    failed_files = sse_data.get("failed_files")
+
+    # 排队时也要记录 total_bytes
+    if total_bytes is not None:
+        session.node_total_bytes[seq] = total_bytes
+
+    if seq not in session.active_bars:
+        # 排队：满 N 个则等待
+        if len(session.active_bars) >= MAX_VISIBLE_NODES:
+            return True
+        # 初始化节点进度条
+        task_id = session.node_bars.add_task("",
+            ip=sse_data.get("ip", "?"),
+            total_files=str(sse_data.get("total_files", "?")),
+            success_files="0",
+            fail_files="0",
+            total=total_bytes or session.node_total_bytes.get(seq, 1),
+        )
+        session.active_bars[seq] = task_id
+        session.node_approximate[seq] = 0
+
+    if total_bytes is not None:
+        # 首次：更新 total
+        session.node_bars.update(session.active_bars[seq], total=total_bytes)
+
+    # 更新 success_files/failed_files
+    if success_files is not None:
+        session.node_bars.update(session.active_bars[seq],
+            success_files=str(success_files),
+            fail_files=str(failed_files or 0))
+
+    # 补偿：用精确值替换近似值
+    if uploaded > 0:
+        old = session.node_approximate.get(seq, 0)
+        delta = uploaded - old
+        session.total_uploaded += delta
+        session.node_approximate[seq] = uploaded
+
+    # 更新进度条
+    speed = session.speed_tracker.update(session.total_uploaded)
+    session.total_progress.update(session.total_task,
+        completed=session.total_uploaded,
+        speed=_format_speed(speed))
+    if seq in session.active_bars:
+        session.node_bars.update(session.active_bars[seq], completed=uploaded)
+    return True
+
+
+def _handle_result(session: SseSession, sse_data: Dict, args, error_keywords: Dict, exec_mode: str, total_nodes: int) -> bool:
+    """处理 result 消息：上传进度校正 + 结果解析记录 + 命令模式进度"""
+    seq = sse_data.get("seq")
+
+    if (args.u or args.d) and seq is not None:
+        # 用 result 的精确值校正（只增不减，防止进度回退）
+        old_approx = session.node_approximate.get(seq, 0)
+        exact_bytes = sse_data.get("total_bytes", old_approx)
+        if exact_bytes > old_approx:
+            session.total_uploaded += (exact_bytes - old_approx)
+
+        # 更新总进度
+        speed = session.speed_tracker.update(session.total_uploaded)
+        session.total_progress.update(session.total_task,
+            completed=session.total_uploaded,
+            speed=_format_speed(speed))
+
+        # 移除节点进度条
+        if seq in session.active_bars:
+            # 成功节点直接 100%
+            if sse_data.get("exit_code") == 0:
+                session.node_bars.update(session.active_bars[seq],
+                    completed=session.node_total_bytes.get(seq, old_approx))
+                # 小文件传输太快，progress 与 result 几乎同时到达，
+                # 在删除前强制刷新一次，确保 100% 完成态被渲染出来
+                session.live.refresh()
+            session.node_bars.remove_task(session.active_bars[seq])
+            del session.active_bars[seq]
+        for d in [session.node_approximate, session.node_total_bytes]:
+            d.pop(seq, None)
+
+        session.completed_nodes += 1
+        # 统计上传成功/失败节点
+        if sse_data.get("exit_code") == 0:
+            session.upload_success_nodes += 1
+        else:
+            session.upload_fail_nodes += 1
+        session.node_progress.update(session.node_task,
+            completed=session.completed_nodes,
+            success_nodes=session.upload_success_nodes,
+            fail_nodes=session.upload_fail_nodes)
+
+    # 解析结果（兼容旧逻辑）
+    result = parser.parse_result(sse_data, error_keywords, mode=exec_mode)
+    session.results.append(result)
+
+    # 格式化输出 + 落盘/打印（result 与兼容分支共用）
+    _record_result(result, args, session.output_file)
+
+    if not args.u and not args.d:
+        # 统计成功/失败节点
+        if result.get("exit_code") == 0:
+            session.success_nodes += 1
+        else:
+            session.fail_nodes += 1
+
+        # 更新进度
+        completed = len(session.results)
+        percent_int = int(completed / total_nodes * 100)
+        session.node_progress.update(
+            session.node_task,
+            description=f"执行进度 [bright_yellow]已完成: [bright_black]{completed}/{total_nodes}",
+            completed=completed,
+            percent_display=f"{percent_int:>3}%",
+            success_nodes=session.success_nodes,
+            fail_nodes=session.fail_nodes,
+        )
+    return True
+
+
+def _handle_done(session: SseSession, sse_data: Dict, args, total_nodes: int) -> bool:
+    """处理 done 消息：完成标记 + 一致性校验，结束循环（返回 False）"""
+    done_total = sse_data.get("total", total_nodes)
+    if not args.u and not args.d:
+        # 命令模式：更新进度
+        session.node_progress.update(session.node_task, completed=done_total)
+    # total 一致性校验（P4）：仅不一致时警告，不中断
+    if done_total != len(session.results):
+        warn_msg = f"SSE 流可能不完整: 收到 {len(session.results)} 条结果, 预期 {done_total} 条"
+        tlog.warning(warn_msg)
+        console.print(f"[yellow]警告: {warn_msg}[/yellow]")
+    return False
+
+
 def go_to_go(
     args: argparse.Namespace,
     config: SSHFleetConfig,
@@ -313,22 +491,7 @@ def go_to_go(
         speed_tracker = ui["speed_tracker"]
 
     # 7. 发送请求并接收 SSE 流
-    results = []
     total_timeout = (args.T + args.t) * 1.5
-
-    # 上传模式的状态
-    active_bars = {}  # {seq: task_id}
-    node_approximate = {}  # {seq: uploaded_bytes}
-    node_total_bytes = {}  # {seq: total_bytes}
-    completed_nodes = 0
-    upload_success_nodes = 0
-    upload_fail_nodes = 0
-    total_uploaded = 0
-    global_total_bytes = 0
-
-    # 命令模式的状态
-    success_nodes = 0
-    fail_nodes = 0
 
     # 打开 output.txt 文件（两种模式均写入）
     output_file_path = os.path.join(exec_log_dir, config.paths.files.output)
@@ -338,7 +501,19 @@ def go_to_go(
     except Exception as e:
         tlog.warning(f"无法创建 output.txt 文件: {e}")
 
+    # SSE 会话上下文（进度状态 + UI 引用 + 结果集；传输模式才注入 total/node_bars/speed_tracker）
+    session = SseSession(
+        output_file=output_file,
+        progress_table=progress_table,
+        node_progress=node_progress,
+        node_task=node_task,
+        total_progress=total_progress if (args.u or args.d) else None,
+        total_task=total_task if (args.u or args.d) else None,
+        node_bars=node_bars if (args.u or args.d) else None,
+        speed_tracker=speed_tracker if (args.u or args.d) else None,
+    )
     live = Live(progress_table, console=console, refresh_per_second=20)
+    session.live = live
     live.start()
 
     try:
@@ -348,173 +523,38 @@ def go_to_go(
                 tlog.error("Go 进程已崩溃，终止接收")
                 break
 
-            # 判断消息类型
+            # 按消息类型分派（Go 端仅 4 种 type：init/progress/result/done）
             msg_type = sse_data.get("type")
-
-            if msg_type == "init" and args.u:
-                # 初始化全局总量
-                total_nodes_init = sse_data.get("total_nodes", total_nodes)
-                total_bytes_per_node = sse_data.get("total_bytes_per_node", 0)
-                global_total_bytes = total_nodes_init * total_bytes_per_node
-                total_progress.update(total_task, total=global_total_bytes)
-
-            elif msg_type == "progress" and (args.u or args.d):
-                seq = sse_data["seq"]
-                uploaded = sse_data.get("uploaded_bytes", 0) or sse_data.get("downloaded_bytes", 0)
-                total_bytes = sse_data.get("total_bytes")
-                success_files = sse_data.get("success_files")
-                failed_files = sse_data.get("failed_files")
-
-                # 排队时也要记录 total_bytes
-                if total_bytes is not None:
-                    node_total_bytes[seq] = total_bytes
-
-                if seq not in active_bars:
-                    # 排队：满 N 个则等待
-                    if len(active_bars) >= MAX_VISIBLE_NODES:
-                        continue
-                    # 初始化节点进度条
-                    task_id = node_bars.add_task("",
-                        ip=sse_data.get("ip", "?"),
-                        total_files=str(sse_data.get("total_files", "?")),
-                        success_files="0",
-                        fail_files="0",
-                        total=total_bytes or node_total_bytes.get(seq, 1),
-                    )
-                    active_bars[seq] = task_id
-                    node_approximate[seq] = 0
-
-                if total_bytes is not None:
-                    # 首次：更新 total
-                    node_bars.update(active_bars[seq], total=total_bytes)
-
-                # 更新 success_files/failed_files
-                if success_files is not None:
-                    node_bars.update(active_bars[seq],
-                        success_files=str(success_files),
-                        fail_files=str(failed_files or 0))
-
-                # 补偿：用精确值替换近似值
-                if uploaded > 0:
-                    old = node_approximate.get(seq, 0)
-                    delta = uploaded - old
-                    total_uploaded += delta
-                    node_approximate[seq] = uploaded
-
-                # 更新进度条
-                speed = speed_tracker.update(total_uploaded)
-                total_progress.update(total_task,
-                    completed=total_uploaded,
-                    speed=_format_speed(speed))
-                if seq in active_bars:
-                    node_bars.update(active_bars[seq], completed=uploaded)
-
+            if msg_type == "init":
+                if args.u:
+                    if not _handle_init(session, sse_data, total_nodes):
+                        break
+                else:
+                    tlog.warning("非上传模式收到 init 消息，已忽略")
+            elif msg_type == "progress":
+                if args.u or args.d:
+                    if not _handle_progress(session, sse_data):
+                        break
+                else:
+                    tlog.warning("命令模式收到 progress 消息，已忽略")
             elif msg_type == "result":
-                seq = sse_data.get("seq")
-
-                if (args.u or args.d) and seq is not None:
-                    # 用 result 的精确值校正（只增不减，防止进度回退）
-                    old_approx = node_approximate.get(seq, 0)
-                    exact_bytes = sse_data.get("total_bytes", old_approx)
-                    if exact_bytes > old_approx:
-                        total_uploaded += (exact_bytes - old_approx)
-
-                    # 更新总进度
-                    speed = speed_tracker.update(total_uploaded)
-                    total_progress.update(total_task,
-                        completed=total_uploaded,
-                        speed=_format_speed(speed))
-
-                    # 移除节点进度条
-                    if seq in active_bars:
-                        # 成功节点直接 100%
-                        if sse_data.get("exit_code") == 0:
-                            node_bars.update(active_bars[seq],
-                                completed=node_total_bytes.get(seq, old_approx))
-                            # 小文件传输太快，progress 与 result 几乎同时到达，
-                            # 在删除前强制刷新一次，确保 100% 完成态被渲染出来
-                            live.refresh()
-                        node_bars.remove_task(active_bars[seq])
-                        del active_bars[seq]
-                    for d in [node_approximate, node_total_bytes]:
-                        d.pop(seq, None)
-
-                    completed_nodes += 1
-                    # 统计上传成功/失败节点
-                    if sse_data.get("exit_code") == 0:
-                        upload_success_nodes += 1
-                    else:
-                        upload_fail_nodes += 1
-                    node_progress.update(node_task,
-                        completed=completed_nodes,
-                        success_nodes=upload_success_nodes,
-                        fail_nodes=upload_fail_nodes)
-
-                # 解析结果（兼容旧逻辑）
-                result = parser.parse_result(sse_data, error_keywords, mode=exec_mode)
-                results.append(result)
-
-                # 格式化输出 + 落盘/打印（result 与兼容分支共用）
-                _record_result(result, args, output_file)
-
-                if not args.u and not args.d:
-                    # 统计成功/失败节点
-                    if result.get("exit_code") == 0:
-                        success_nodes += 1
-                    else:
-                        fail_nodes += 1
-
-                    # 更新进度
-                    completed = len(results)
-                    percent_int = int(completed / total_nodes * 100)
-                    node_progress.update(
-                        node_task,
-                        description=f"执行进度 [bright_yellow]已完成: [bright_black]{completed}/{total_nodes}",
-                        completed=completed,
-                        percent_display=f"{percent_int:>3}%",
-                        success_nodes=success_nodes,
-                        fail_nodes=fail_nodes,
-                    )
-
+                if not _handle_result(session, sse_data, args, error_keywords, exec_mode, total_nodes):
+                    break
             elif msg_type == "done":
-                # 处理完成标记
-                done_total = sse_data.get("total", total_nodes)
-                if not args.u and not args.d:
-                    # 命令模式：更新进度
-                    node_progress.update(node_task, completed=done_total)
-                # total 一致性校验（P4）：仅不一致时警告，不中断
-                if done_total != len(results):
-                    warn_msg = f"SSE 流可能不完整: 收到 {len(results)} 条结果, 预期 {done_total} 条"
-                    tlog.warning(warn_msg)
-                    console.print(f"[yellow]警告: {warn_msg}[/yellow]")
-                break
-
+                if not _handle_done(session, sse_data, args, total_nodes):
+                    break
             else:
-                # 其他消息（兼容旧的 result 格式）
-                result = parser.parse_result(sse_data, error_keywords, mode=exec_mode)
-                results.append(result)
-
-                # 格式化输出 + 落盘/打印（result 与兼容分支共用）
-                _record_result(result, args, output_file)
-
-                if not args.u and not args.d:
-                    # 更新进度
-                    completed = len(results)
-                    percent_int = int(completed / total_nodes * 100)
-                    node_progress.update(
-                        node_task,
-                        description=f"执行进度 [bright_yellow]已完成: [bright_black]{completed}/{total_nodes}",
-                        completed=completed,
-                        percent_display=f"{percent_int:>3}%",
-                    )
+                # 未知消息类型：忽略并告警（ADR-0002-B；Go 端当前仅 4 种 type）
+                tlog.warning(f"收到未知 SSE 消息类型: {msg_type!r}，已忽略")
+                continue
 
     finally:
         # 统一收尾：停止线程/live、关闭文件、通知并回收 Go 进程
         _shutdown_go(process, port, process_key, go_dead, health_stop, health_thread, live, output_file)
 
     # 10. 统计结果
-    success_count = sum(1 for r in results if r.get("connect_success") and r.get("exit_bool"))
-    fail_count = len(results) - success_count
-    tlog.info(f"任务执行完成，共 {len(results)} 条结果: 成功 {success_count}, 失败 {fail_count}")
+    success_count = sum(1 for r in session.results if r.get("connect_success") and r.get("exit_bool"))
+    fail_count = len(session.results) - success_count
+    tlog.info(f"任务执行完成，共 {len(session.results)} 条结果: 成功 {success_count}, 失败 {fail_count}")
 
-    return results
+    return session.results
