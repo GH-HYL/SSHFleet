@@ -5,45 +5,41 @@
 # 项目目录/
 # ├── sshfleet.py                       # 主程序
 # └── src/                              # 源代码文件夹
-#     ├── input/                        # 输入处理模块
-#     │   ├── args.py                   # 命令行参数解析
-#     │   ├── csv.py                    # CSV 节点文件读取
-#     │   └── confirm.py                # 参数信息交互确认
 #     ├── check/                        # 校验模块
 #     │   ├── arguments.py              # 参数合规性检查
 #     │   ├── dangerous.py              # 危险命令检测
 #     │   └── files.py                  # 文件存在性检查
 #     ├── command/                      # 命令构建模块
 #     │   └── builder.py                # 最终执行命令构建
+#     ├── common/                       # 共享层（跨模块公共工具）
+#     │   ├── constants.py              # 公共常量（成功分类名、颜色常量）
+#     │   ├── format_utils.py           # 结果呈现公共函数（模式/状态行/IP排序）
+#     │   ├── error_handler.py          # 错误打印/退出约定/异常装饰器
+#     │   └── text_utils.py             # 文本清洗、大小格式化、路径规范化
+#     ├── config/                       # 配置文件夹
+#     │   ├── loader.py                 # 配置文件加载（Pydantic）
+#     │   ├── SSHFleet.yaml             # 工具配置
+#     │   ├── dangerous_keywords.yaml   # 危险命令检测规则
+#     │   └── error_keywords.yaml       # 错误分类关键词
 #     ├── gotogo/                       # Go 执行器模块
 #     │   ├── go_to_go.py               # 主执行函数
 #     │   ├── caller.py                 # Go 进程调用与 HTTP SSE 通信
 #     │   ├── builder.py                # 请求体构建（命令/上传/下载/密钥登录）
 #     │   ├── parser.py                 # SSE 响应解析
 #     │   └── classifier.py             # 错误分类
-#     ├── go/                           # Go 引擎二进制目录（放入 SSHFleet-Go 可执行文件）
-#     ├── output/                       # 输出处理模块
-#     │   ├── terminal.py               # 终端格式化输出
-#     │   ├── report.py                 # 执行报告生成
-#     │   ├── xlsx.py                   # Excel 文件生成
-#     │   ├── statistics.py             # 结果统计计算
-#     │   └── archive.py                # 资源文件备份与打包
-#     ├── common/                       # 共享层（跨模块公共工具）
-#     │   ├── constants.py              # 公共常量（如成功分类名）
-#     │   └── format_utils.py           # 结果呈现公共函数（模式/状态行/IP排序）
+#     ├── input/                        # 输入交互模块
+#     │   ├── args.py                   # 命令行参数解析
+#     │   ├── csv.py                    # CSV 节点文件读取
+#     │   ├── confirm.py                # 参数信息交互确认
+#     │   └── interaction.py            # 用户交互确认
 #     ├── log/                          # 日志模块
 #     │   └── logger.py                 # 日志初始化与管理
-#     ├── config/                       # 配置文件夹
-#     │   ├── SSHFleet.yaml             # 工具配置
-#     │   ├── dangerous_keywords.yaml   # 危险命令检测规则
-#     │   └── error_keywords.yaml       # 错误分类关键词
-#     ├── error_handler.py              # 错误打印/退出约定/异常装饰器
-#     ├── interaction.py                # 用户交互确认
-#     ├── path_utils.py                 # 路径规范化
-#     ├── text_utils.py                 # Excel 字符清洗、大小格式化
-#     ├── utils.py                      # 兼容转发层（函数已拆分至上述模块，新代码请直接引用对应模块）
-#     ├── keywords.py                   # 配置文件加载（Pydantic）
-#     └── color.py                      # 终端颜色常量
+#     └── output/                       # 输出处理模块
+#         ├── terminal.py               # 终端格式化输出
+#         ├── report.py                 # 执行报告生成
+#         ├── xlsx.py                   # Excel 文件生成
+#         ├── statistics.py             # 结果统计计算
+#         └── archive.py                # 资源文件备份与打包
 
 
 # 系统或第三方模块
@@ -66,20 +62,20 @@ from src.output.terminal import format_statistic_results_to_terminal
 from src.output.report import format_statistic_results_to_report
 from src.output.xlsx import format_output_to_xlsx, format_dict_list_to_xlsx
 from src.gotogo.go_to_go import go_to_go
-from src import keywords
-import src.utils as utils
-import src.color as color
+from src.config.loader import load_config, load_yaml_file
+from src.common.error_handler import print_error_information_and_exit
+import src.common.constants as color
 
 
 def _load_yaml(path) -> Any:
     """读取 YAML 文件并返回解析后的数据（支持 # 注释）"""
     try:
-        return keywords.load_yaml_file(path)
+        return load_yaml_file(path)
     except Exception as e:
         tlog.error(
             f"YAML文件{path}读取内容失败\n异常类型：\n{type(e)}\n异常信息：\n{e}"
         )
-        utils.print_error_information_and_exit(
+        print_error_information_and_exit(
             "_load_yaml",
             f"YAML文件{path}读取内容失败\n异常类型：\n{type(e)}\n异常信息：\n{e}",
         )
@@ -91,7 +87,7 @@ def main():
     # 加载配置文件
     config_path = "src/config/SSHFleet.yaml"
     try:
-        config = keywords.load_config(config_path)
+        config = load_config(config_path)
     except Exception as e:
         print(
             f"{color.COLOR_RED}[ERROR]{color.COLOR_RESET}{color.COLOR_YELLOW} [function:load_config]{color.COLOR_RESET} 加载配置文件失败\n异常类型：\n{type(e)}\n异常信息：\n{e}"
@@ -190,7 +186,7 @@ def main():
     tlog.debug(f"{'-' * 20}SSHFleet工具 - 整理阶段{'-' * 20}")
 
     if not final_results:
-        utils.print_error_information_and_exit(
+        print_error_information_and_exit(
             "main",
             f"{color.COLOR_RED}results结果未能正常生成，跳过整理阶段{color.COLOR_RESET}",
         )

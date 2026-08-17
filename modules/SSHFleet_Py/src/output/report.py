@@ -5,12 +5,12 @@ import argparse
 import sys
 from posixpath import join as posix_join
 
-from src import utils
-from src.keywords import SSHFleetConfig
+from src.common.error_handler import error_and_exit_handling_decorator
+from src.config.loader import SSHFleetConfig
 from src.log import tlog
 
 
-@utils.error_and_exit_handling_decorator(
+@error_and_exit_handling_decorator(
     "format_statistic_results_to_report",
     "格式化统计结果信息输出到报告文件失败",
     isexit=True,

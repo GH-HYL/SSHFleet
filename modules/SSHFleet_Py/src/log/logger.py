@@ -10,8 +10,8 @@ from posixpath import join as posix_join
 from loguru import logger
 
 # 自定义模块
-import src.color as color
-from src.keywords import SSHFleetConfig
+import src.common.constants as color
+from src.config.loader import SSHFleetConfig
 
 # 初始化全局logger变量
 tlog = logger.bind(logger_type="tool")
@@ -51,7 +51,7 @@ def create_exec_log_dir(args, config) -> str:
     返回：
         日志目录路径
     """
-    from src.utils import print_error_information_and_exit
+    from src.common.error_handler import print_error_information_and_exit
 
     try:
         # 使用可读的日期时间格式，而不是时间戳
@@ -89,7 +89,7 @@ def create_exec_log_dir(args, config) -> str:
 def init_execution_logger(log_dir: str, log_exec: str):
     global elog
 
-    from src.utils import print_error_information_and_exit
+    from src.common.error_handler import print_error_information_and_exit
 
     try:
         os.makedirs(log_dir, exist_ok=True)
@@ -126,7 +126,7 @@ def create_latest_log_symlink(config: SSHFleetConfig):
         None
     """
 
-    from src.utils import print_error_information_and_exit
+    from src.common.error_handler import print_error_information_and_exit
 
     try:
         # 检查一下当前系统环境

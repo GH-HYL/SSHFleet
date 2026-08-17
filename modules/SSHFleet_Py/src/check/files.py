@@ -4,11 +4,11 @@
 import os
 from posixpath import join as posix_join
 
-from src.keywords import SSHFleetConfig
-import src.utils as utils
+from src.config.loader import SSHFleetConfig
+from src.common.error_handler import error_and_exit_handling_decorator, print_error_information_and_exit
 
 
-@utils.error_and_exit_handling_decorator("check_files_exist", "检查配置文件存在性失败")
+@error_and_exit_handling_decorator("check_files_exist", "检查配置文件存在性失败")
 def check_files_exist(config: SSHFleetConfig) -> None:
     """检查所有配置文件必须存在"""
     current_dir = os.getcwd()
@@ -26,7 +26,7 @@ def check_files_exist(config: SSHFleetConfig) -> None:
             missing_files.append(config_file)
 
     if missing_files:
-        utils.print_error_information_and_exit(
+        print_error_information_and_exit(
             "check_files_exist", f" 配置文件缺失: {', '.join(missing_files)}"
         )
 
@@ -40,7 +40,7 @@ def check_script_file(script_path):
 
         # 不能是二进制文件
         if b"\x00" in raw_data:
-            utils.print_error_information_and_exit(
+            print_error_information_and_exit(
                 "check_script_file", f" 错误: {script_path} 是二进制文件"
             )
 
@@ -50,7 +50,7 @@ def check_script_file(script_path):
         else:
             data = raw_data
         if not data.decode("utf-8", errors="ignore").encode("utf-8") == data:
-            utils.print_error_information_and_exit(
+            print_error_information_and_exit(
                 "check_script_file", f" 错误: {script_path} 不是UTF-8编码"
             )
 

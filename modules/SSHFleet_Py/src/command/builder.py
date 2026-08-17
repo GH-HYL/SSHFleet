@@ -106,7 +106,7 @@ def build_final_command(args: argparse.Namespace) -> str:
         )
 
     else:
-        from src.utils import print_error_information_and_exit
+        from src.common.error_handler import print_error_information_and_exit
         tlog.error("参数出现严重异常，args.c 和 args.s 不能同时为空")
         print_error_information_and_exit(
             "add_env_sudo_to_commands",

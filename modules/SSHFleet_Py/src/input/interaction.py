@@ -4,7 +4,7 @@
 
 import sys
 
-import src.color as color
+import src.common.constants as color
 
 
 def get_user_confirmation(prompt, yorn=False, disinteractive=False):
