@@ -394,16 +394,22 @@ Python 负责参数解析、安全检查、日志整理、结果输出；Go 负�
 ```
 sshfleet.py                     # 入口：参数解析、流程编排
 src/
-├── input/                      # 输入处理模块
-│   ├── args.py                 # 命令行参数解析
-│   ├── csv.py                  # CSV 节点文件读取
-│   └── confirm.py              # 参数信息交互确认
 ├── check/                      # 校验模块
 │   ├── arguments.py            # 参数合规性检查
 │   ├── dangerous.py            # 危险命令检测
 │   └── files.py                # 文件存在性检查
 ├── command/                    # 命令构建模块
 │   └── builder.py              # 最终执行命令构建
+├── common/                     # 共享层（跨模块公共工具）
+│   ├── constants.py            # 公共常量（成功分类名、颜色常量）
+│   ├── format_utils.py         # 结果呈现公共函数（模式/状态行/IP排序）
+│   ├── error_handler.py        # 错误打印/退出约定/异常装饰器
+│   └── text_utils.py           # 文本清洗、大小格式化、路径规范化
+├── config/                     # 配置文件夹
+│   ├── loader.py               # 配置文件加载（Pydantic 模型校验）
+│   ├── SSHFleet.yaml           # 工具配置（账号、超时、路径等）
+│   ├── dangerous_keywords.yaml # 危险命令检测规则
+│   └── error_keywords.yaml     # 错误分类关键词
 ├── gotogo/                     # Go 执行器模块
 │   ├── go_to_go.py             # 主执行函数：启动 Go 进程 + HTTP SSE 接收 + Rich 进度条
 │   ├── caller.py               # Go 进程调用与 HTTP SSE 通信
@@ -411,28 +417,19 @@ src/
 │   ├── parser.py               # SSE 响应解析、base64 解码
 │   └── classifier.py           # 错误分类
 ├── go/                         # Go 引擎二进制目录（放入 SSHFleet-Go 可执行文件，仓库不含预编译）
-├── output/                     # 输出处理模块
-│   ├── terminal.py             # 终端格式化输出
-│   ├── report.py               # 执行报告生成
-│   ├── xlsx.py                 # Excel 文件生成
-│   ├── statistics.py           # 结果统计计算
-│   └── archive.py              # 资源文件备份与打包
+├── input/                      # 输入交互模块
+│   ├── args.py                 # 命令行参数解析
+│   ├── csv.py                  # CSV 节点文件读取
+│   ├── confirm.py              # 参数信息交互确认
+│   └── interaction.py          # 用户交互确认
 ├── log/                        # 日志模块
 │   └── logger.py               # 日志初始化与管理
-├── common/                     # 共享层（跨模块公共工具）
-│   ├── constants.py            # 公共常量（如成功分类名）
-│   └── format_utils.py         # 结果呈现公共函数（模式/状态行/IP排序）
-├── error_handler.py            # 错误打印/退出约定/异常装饰器
-├── interaction.py              # 用户交互确认
-├── path_utils.py               # 路径规范化
-├── text_utils.py               # Excel 字符清洗、大小格式化
-├── utils.py                    # 兼容转发层（函数已拆分至上述模块，新代码请直接引用对应模块）
-├── keywords.py                 # 配置文件加载（Pydantic 模型校验）
-├── color.py                    # 终端颜色常量
-└── config/
-    ├── SSHFleet.yaml           # 工具配置（账号、超时、路径等）
-    ├── dangerous_keywords.yaml # 危险命令检测规则
-    └── error_keywords.yaml     # 错误分类关键词
+└── output/                     # 输出处理模块
+    ├── terminal.py             # 终端格式化输出
+    ├── report.py               # 执行报告生成
+    ├── xlsx.py                 # Excel 文件生成
+    ├── statistics.py           # 结果统计计算
+    └── archive.py              # 资源文件备份与打包
 ```
 
 ### 执行流程
