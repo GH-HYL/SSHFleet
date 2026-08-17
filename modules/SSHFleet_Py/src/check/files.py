@@ -8,12 +8,12 @@ from src.yaml import SSHFleetConfig
 import src.utils as utils
 
 
-@utils.error_and_exit_handling_decorator("check_files_exist", "检查代码文件存在性失败")
+@utils.error_and_exit_handling_decorator("check_files_exist", "检查配置文件存在性失败")
 def check_files_exist(config: SSHFleetConfig) -> None:
-    """检查所有代码文件必须存在"""
+    """检查所有配置文件必须存在"""
     current_dir = os.getcwd()
 
-    code_files = [
+    config_files = [
         "src/config/SSHFleet.yaml",
         config.paths.jsons.dangerous_keywords,
         config.paths.jsons.error_keywords,
@@ -21,13 +21,13 @@ def check_files_exist(config: SSHFleetConfig) -> None:
 
     # 循环检查文件，然后把所有缺失文件打印出来
     missing_files = []
-    for code_file in code_files:
-        if not os.path.exists(posix_join(current_dir, code_file)):
-            missing_files.append(code_file)
+    for config_file in config_files:
+        if not os.path.exists(posix_join(current_dir, config_file)):
+            missing_files.append(config_file)
 
     if missing_files:
         utils.print_error_information_and_exit(
-            "check_files_exist", f" 代码文件缺失: {', '.join(missing_files)}"
+            "check_files_exist", f" 配置文件缺失: {', '.join(missing_files)}"
         )
 
 
