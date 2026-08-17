@@ -45,11 +45,11 @@ def _strip_command_prefixes(cmd: str) -> str:
 
 
 @utils.error_and_exit_handling_decorator(
-    "check_dangerous_content", "危险字典内容检查失败"
+    "check_dangerous_content", "危险关键词内容检查失败"
 )
 def check_dangerous_content(args, dangerous_keywords: List):
 
-    # 执行危险字典内容检查
+    # 执行危险关键词内容检查
     try:
         check_dangerous_dict(dangerous_keywords)
     except Exception as e:

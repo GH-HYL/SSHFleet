@@ -144,9 +144,9 @@ def main():
         from src.command.builder import remove_command_fist_last_same_symbol
         remove_symbol, args.c = remove_command_fist_last_same_symbol(args.c)
 
-    # 执行危险字典内容检查
+    # 执行危险关键词内容检查
     check_dangerous_content(args, dangerous_keywords)
-    tlog.success("[check] 执行危险字典内容检查成功")
+    tlog.success("危险关键词内容检查成功")
 
     # 读取节点信息
     nodesinfos = read_nodes_infos(args.f, config, args, is_inline=getattr(args, 'f_is_inline', False))
