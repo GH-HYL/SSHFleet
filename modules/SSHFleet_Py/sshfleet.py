@@ -116,9 +116,9 @@ def main():
     )
     tlog.debug(f"{ '-' * 20}SSHFleet工具 - 准备阶段{ '-' * 20}")
 
-    # 检查代码文件是否都存在
+    # 检查配置文件是否都存在
     check_files_exist(config)
-    tlog.success("检查代码文件存在性成功")
+    tlog.success("检查配置文件存在性成功")
 
     # 获取危险命令分类正则关键字
     dangerous_keywords = _load_yaml(config.paths.jsons.dangerous_keywords)
