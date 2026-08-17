@@ -42,7 +42,7 @@ def _check_upload_concurrency(args, config, nodes_count: int, n_explicit: bool) 
             f"建议并发数为 {allowed}（默认节点数 {nodes_count}）{color.COLOR_RESET}"
         )
         if get_user_confirmation(
-            f"是否使用建议并发数 {allowed}？",
+            f"是否使用建议并发数 {allowed} ？",
             yorn=True,
             disinteractive=getattr(args, 'disinteractive', False),
         ):
