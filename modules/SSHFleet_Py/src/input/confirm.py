@@ -115,7 +115,7 @@ def _print_info_table(info_table) -> None:
 
             display_label = label + " " * padding
             print(
-                f"{color.COLOR_GREEN}▶ {display_label}-→   {color.COLOR_RESET}{color.COLOR_MAGENTA}{value}{color.COLOR_RESET}"
+                f"{color.COLOR_BRIGHT_CYAN}▶ {display_label}-→   {color.COLOR_RESET}{color.COLOR_BRIGHT_ORANGE}{value}{color.COLOR_RESET}"
             )
 
 
@@ -226,7 +226,7 @@ def arguments_confirm(args, nodes, config=None, remove_symbol=None):
     # 4. 获取用户确认
     print("\n" + "═" * 60)
     if not utils.get_user_confirmation(
-        f"\n{color.COLOR_YELLOW}是否执行上述参数？{color.COLOR_RESET}",
+        f"\n{color.COLOR_BRIGHT_YELLOW}是否执行上述参数？{color.COLOR_RESET}",
         yorn=True,
         disinteractive=getattr(args, 'disinteractive', False),
     ):
