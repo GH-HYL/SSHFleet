@@ -12,7 +12,7 @@ from typing import Dict, Generator, Optional
 
 import requests
 
-from src.keywords import SSHFleetConfig
+from src.config.loader import SSHFleetConfig
 from src.log import tlog
 
 

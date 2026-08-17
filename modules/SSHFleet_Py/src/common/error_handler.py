@@ -4,7 +4,7 @@
 
 import sys
 
-import src.color as color
+import src.common.constants as color
 from src.log import tlog
 
 

@@ -9,13 +9,15 @@ import sys
 from pathlib import Path
 from posixpath import join as posix_join
 
-import src.color as color
-import src.utils as utils
-from src.keywords import SSHFleetConfig
+import src.common.constants as color
+from src.common.error_handler import error_and_exit_handling_decorator
+from src.common.text_utils import args_normalize_path
+from src.input.interaction import get_user_confirmation
+from src.config.loader import SSHFleetConfig
 from src.log import tlog
 
 
-@utils.error_and_exit_handling_decorator(
+@error_and_exit_handling_decorator(
     "save_execute_resource_files", "保存执行资源文件失败", isexit=True
 )
 def save_execute_resource_files(
@@ -53,7 +55,7 @@ def save_execute_resource_files(
     tlog.success("保存执行资源文件成功")
 
 
-@utils.error_and_exit_handling_decorator("zip_latest_history", "打包历史记录失败")
+@error_and_exit_handling_decorator("zip_latest_history", "打包历史记录失败")
 def zip_latest_history(args, config: SSHFleetConfig):
     """
     功能：
@@ -108,7 +110,7 @@ def zip_latest_history(args, config: SSHFleetConfig):
     # 如果配置文件为空或不存在，打包路径存放在工作路径下，过存在，检查是绝对路径还是相对路径，按照路径配置生成
     if zip_dir:
         # 格式化路径，确保使用正斜杠
-        default_zip_dir = utils.args_normalize_path(zip_dir)
+        default_zip_dir = args_normalize_path(zip_dir)
 
         # 检查是否是绝对路径
         if os.path.isabs(default_zip_dir):
@@ -120,7 +122,7 @@ def zip_latest_history(args, config: SSHFleetConfig):
 
     # 检查打包路径是否存在，不存在则创建
     if not os.path.exists(zip_dir):
-        utils.get_user_confirmation(
+        get_user_confirmation(
             f"{zip_dir} \n 配置文件的默认打包路径不存在，是否创建？",
             yorn=True,
             disinteractive=getattr(args, 'disinteractive', False),

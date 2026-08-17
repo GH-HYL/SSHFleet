@@ -10,10 +10,10 @@ import re
 import sys
 from typing import Dict, List, Tuple
 
-import src.color as color
-import src.utils as utils
-from src.keywords import SSHFleetConfig
-
+import src.common.constants as color
+from src.common.error_handler import error_and_exit_handling_decorator, print_error_information_and_exit
+from src.config.loader import SSHFleetConfig
+from src.input.interaction import get_user_confirmation
 
 def resolve_credential_path(raw_value: str, secret_dir: str) -> str:
     """
@@ -41,13 +41,12 @@ def resolve_credential_path(raw_value: str, secret_dir: str) -> str:
 
     # 相对路径：与 secret_dir 拼接
     if not secret_dir or secret_dir == "None":
-        utils.print_error_information_and_exit(
+        print_error_information_and_exit(
             "resolve_credential_path",
             "凭据列包含相对路径，但 secret_dir 未配置"
         )
 
     return os.path.join(secret_dir, raw)
-
 
 def validate_csv_credentials(csv_infos: List[List[str]], config: SSHFleetConfig, args) -> Tuple[List[str], bool, bool]:
     """
@@ -248,8 +247,7 @@ def validate_csv_credentials(csv_infos: List[List[str]], config: SSHFleetConfig,
             print(f"  {error}")
     return errors, need_default_password, any_node_uses_key
 
-
-@utils.error_and_exit_handling_decorator("read_nodes_infos", "读取节点信息失败")
+@error_and_exit_handling_decorator("read_nodes_infos", "读取节点信息失败")
 def read_nodes_infos(csv_path: str, config: SSHFleetConfig, args, is_inline: bool = False) -> List[Dict[str, str]]:
     """
     功能：
@@ -359,7 +357,7 @@ def read_nodes_infos(csv_path: str, config: SSHFleetConfig, args, is_inline: boo
         with open(kp, "r", encoding="utf-8") as f:
             universal_key_content = f.read().strip()
         if args.disinteractive:
-            utils.print_error_information_and_exit(
+            print_error_information_and_exit(
                 "read_nodes_infos",
                 "状态3(-k 路径)需交互输入私钥口令，但处于 --disinteractive 模式；"
                 "请去掉 --disinteractive 或改用状态2(-k 不带路径)"
@@ -424,7 +422,7 @@ def read_nodes_infos(csv_path: str, config: SSHFleetConfig, args, is_inline: boo
                         if not port_use_input and idx < len(
                             csv_infos
                         ):  # 检查是否还有后续节点
-                            if utils.get_user_confirmation(
+                            if get_user_confirmation(
                                 f"\n{color.COLOR_YELLOW}是否将此端口号应用于所有后续端口为空的节点？{color.COLOR_RESET}",
                                 yorn=True,
                                 disinteractive=disinteractive,
@@ -458,7 +456,7 @@ def read_nodes_infos(csv_path: str, config: SSHFleetConfig, args, is_inline: boo
                         if not user_use_input and idx < len(
                             csv_infos
                         ):  # 检查是否还有后续节点
-                            if utils.get_user_confirmation(
+                            if get_user_confirmation(
                                 f"\n{color.COLOR_YELLOW}是否将此用户名应用于所有后续用户为空的节点？{color.COLOR_RESET}",
                                 yorn=True,
                                 disinteractive=disinteractive,
@@ -503,7 +501,7 @@ def read_nodes_infos(csv_path: str, config: SSHFleetConfig, args, is_inline: boo
                         if not password_use_input and idx < len(
                             csv_infos
                         ):  # 检查是否还有后续节点
-                            if utils.get_user_confirmation(
+                            if get_user_confirmation(
                                 f"\n{color.COLOR_YELLOW}是否将此密码应用于所有后续密码为空的节点？{color.COLOR_RESET}",
                                 yorn=True,
                                 disinteractive=disinteractive,

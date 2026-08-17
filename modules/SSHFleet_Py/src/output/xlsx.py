@@ -7,15 +7,16 @@ import sys
 from typing import Dict, List, Any
 from posixpath import join as posix_join
 
-import src.color as color
+import src.common.constants as color
 
-from src import utils
+from src.common.error_handler import error_and_exit_handling_decorator
+from src.common.text_utils import clean_for_excel
 from src.common.format_utils import format_conn_status, get_action_name, get_mode
-from src.keywords import SSHFleetConfig
+from src.config.loader import SSHFleetConfig
 from src.log import tlog
 
 
-@utils.error_and_exit_handling_decorator(
+@error_and_exit_handling_decorator(
     "format_output_to_xlsx", "格式化输出结果到Excel文件失败", isexit=False
 )
 def format_output_to_xlsx(
@@ -90,7 +91,7 @@ def format_output_to_xlsx(
         connect_cost_time = result.get("connect_cost_time", 0)
         exec_cost_time = result.get("exec_cost_time", 0)
         exit_code = result.get("exit_code", -1)
-        output = utils.clean_for_excel(result.get("output", ""))
+        output = clean_for_excel(result.get("output", ""))
         result_category = result.get("result_category", "未知")
 
         # 行1: 连接状态
@@ -157,7 +158,7 @@ def format_output_to_xlsx(
         wb.close()
 
 
-@utils.error_and_exit_handling_decorator(
+@error_and_exit_handling_decorator(
     "format_dict_list_to_xlsx", "格式化字典列表到Excel文件失败", isexit=False
 )
 def format_dict_list_to_xlsx(
@@ -186,7 +187,7 @@ def format_dict_list_to_xlsx(
         return
 
     # clean_for_excel 清理字典列表中的ANSI转义序列和非法XML字符
-    final_results = [{k: utils.clean_for_excel(v) for k, v in item.items()} for item in final_results]
+    final_results = [{k: clean_for_excel(v) for k, v in item.items()} for item in final_results]
 
     # 生成输出路径
     os.makedirs(log_dir, exist_ok=True)

@@ -5,8 +5,10 @@ import os
 import sys
 from pathlib import Path
 
-import src.color as color
-import src.utils as utils
+import src.common.constants as color
+from src.common.error_handler import error_and_exit_handling_decorator
+from src.common.text_utils import format_size
+from src.input.interaction import get_user_confirmation
 from src.log import tlog
 
 
@@ -29,17 +31,17 @@ def _check_upload_concurrency(args, config, nodes_count: int, n_explicit: bool) 
     if n_explicit:
         if args.n > allowed:
             print(
-                f"{color.COLOR_YELLOW}提示：上传文件总大小 {utils.format_size(file_size)}，"
+                f"{color.COLOR_YELLOW}提示：上传文件总大小 {format_size(file_size)}，"
                 f"建议并发数为 {allowed}（当前指定 {args.n}），已按您的指定执行{color.COLOR_RESET}"
             )
         return
 
     if nodes_count > allowed:
         print(
-            f"{color.COLOR_YELLOW}上传文件总大小 {utils.format_size(file_size)}，"
+            f"{color.COLOR_YELLOW}上传文件总大小 {format_size(file_size)}，"
             f"建议并发数为 {allowed}（默认节点数 {nodes_count}）{color.COLOR_RESET}"
         )
-        if utils.get_user_confirmation(
+        if get_user_confirmation(
             f"是否使用建议并发数 {allowed}？",
             yorn=True,
             disinteractive=getattr(args, 'disinteractive', False),
@@ -169,7 +171,7 @@ def _check_concurrency_threshold(file_size: int, config) -> int:
         return t.medium_concurrency
 
 
-@utils.error_and_exit_handling_decorator("arguments_confirm", "确认执行参数失败")
+@error_and_exit_handling_decorator("arguments_confirm", "确认执行参数失败")
 def arguments_confirm(args, nodes, config=None, remove_symbol=None):
     """
     功能：
@@ -225,7 +227,7 @@ def arguments_confirm(args, nodes, config=None, remove_symbol=None):
 
     # 4. 获取用户确认
     print("\n" + "═" * 60)
-    if not utils.get_user_confirmation(
+    if not get_user_confirmation(
         f"\n{color.COLOR_BRIGHT_YELLOW}是否执行上述参数？{color.COLOR_RESET}",
         yorn=True,
         disinteractive=getattr(args, 'disinteractive', False),
