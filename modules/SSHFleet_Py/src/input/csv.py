@@ -12,7 +12,7 @@ from typing import Dict, List, Tuple
 
 import src.color as color
 import src.utils as utils
-from src.yaml import SSHFleetConfig
+from src.keywords import SSHFleetConfig
 
 
 def resolve_credential_path(raw_value: str, secret_dir: str) -> str:
