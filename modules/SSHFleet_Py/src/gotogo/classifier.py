@@ -35,7 +35,7 @@ def classify(
             if mode in ("upload", "download"):
                 return SUCCESS_CATEGORY_TRANSPORT
             return SUCCESS_CATEGORY_EXECUTE
-        return f"退出码={exit_code}"
+        return f"执行失败(退出码{exit_code})"
 
     # 无退出码：命令未执行，问题在连接等环节，用关键词匹配推断
     if error:
