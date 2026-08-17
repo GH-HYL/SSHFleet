@@ -427,7 +427,7 @@ src/
 ├── path_utils.py               # 路径规范化
 ├── text_utils.py               # Excel 字符清洗、大小格式化
 ├── utils.py                    # 兼容转发层（函数已拆分至上述模块，新代码请直接引用对应模块）
-├── yaml.py                     # 配置文件加载（Pydantic 模型校验）
+├── keywords.py                 # 配置文件加载（Pydantic 模型校验）
 ├── color.py                    # 终端颜色常量
 └── config/
     ├── SSHFleet.yaml           # 工具配置（账号、超时、路径等）
