@@ -11,7 +11,7 @@ from posixpath import join as posix_join
 
 import src.color as color
 import src.utils as utils
-from src.yaml import SSHFleetConfig
+from src.keywords import SSHFleetConfig
 from src.log import tlog
 
 

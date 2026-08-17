@@ -29,13 +29,13 @@ class Exe(BaseModel):
     batch_tool_linux: str
 
 
-class Jsons(BaseModel):
+class Keywords(BaseModel):
     error_keywords: str
     dangerous_keywords: str
 
 
 class Paths(BaseModel):
-    jsons: Jsons
+    keywords: Keywords
     exe: Exe
     logs: Logs
     files: Files

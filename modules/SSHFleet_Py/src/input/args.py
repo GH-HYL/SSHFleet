@@ -7,7 +7,7 @@ import os
 import sys
 
 import src.utils as utils
-from src.yaml import SSHFleetConfig
+from src.keywords import SSHFleetConfig
 
 
 def validate_password_file(file_path: str) -> None:

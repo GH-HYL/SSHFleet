@@ -11,7 +11,7 @@ import src.color as color
 
 from src import utils
 from src.common.format_utils import format_conn_status, get_action_name, get_mode
-from src.yaml import SSHFleetConfig
+from src.keywords import SSHFleetConfig
 from src.log import tlog
 
 
