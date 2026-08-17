@@ -22,9 +22,9 @@ enable:
   output_to_xlsx: true   # true：终端内容输出到xlsx文件；false：只输出到txt文件
   results_to_xlsx: true  # true：结果固化到xlsx格式的文件；false：不输出到本地文件
 
-# JSON路径
+# 关键词文件路径
 paths:
-  jsons:
+  keywords:
     error_keywords: "./src/config/error_keywords.yaml"          # 错误分类关键词YAML文件路径（支持 # 注释，整类或单个关键词均可注释）
     dangerous_keywords: "./src/config/dangerous_keywords.yaml"  # 危险命令分类正则关键字YAML文件路径（支持 # 注释，整条规则前加 # 即可禁用）
 

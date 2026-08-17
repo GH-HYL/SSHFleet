@@ -6,7 +6,7 @@ import sys
 from posixpath import join as posix_join
 
 from src import utils
-from src.yaml import SSHFleetConfig
+from src.keywords import SSHFleetConfig
 from src.log import tlog
 
 

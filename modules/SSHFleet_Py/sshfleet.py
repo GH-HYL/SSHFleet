@@ -66,7 +66,7 @@ from src.output.terminal import format_statistic_results_to_terminal
 from src.output.report import format_statistic_results_to_report
 from src.output.xlsx import format_output_to_xlsx, format_dict_list_to_xlsx
 from src.gotogo.go_to_go import go_to_go
-from src import yaml
+from src import keywords
 import src.utils as utils
 import src.color as color
 
@@ -74,7 +74,7 @@ import src.color as color
 def _load_yaml(path) -> Any:
     """读取 YAML 文件并返回解析后的数据（支持 # 注释）"""
     try:
-        return yaml.load_yaml_file(path)
+        return keywords.load_yaml_file(path)
     except Exception as e:
         tlog.error(
             f"YAML文件{path}读取内容失败\n异常类型：\n{type(e)}\n异常信息：\n{e}"
@@ -91,7 +91,7 @@ def main():
     # 加载配置文件
     config_path = "src/config/SSHFleet.yaml"
     try:
-        config = yaml.load_config(config_path)
+        config = keywords.load_config(config_path)
     except Exception as e:
         print(
             f"{color.COLOR_RED}[ERROR]{color.COLOR_RESET}{color.COLOR_YELLOW} [function:load_config]{color.COLOR_RESET} 加载配置文件失败\n异常类型：\n{type(e)}\n异常信息：\n{e}"
@@ -121,7 +121,7 @@ def main():
     tlog.success("检查配置文件存在性成功")
 
     # 获取危险命令分类正则关键字
-    dangerous_keywords = _load_yaml(config.paths.jsons.dangerous_keywords)
+    dangerous_keywords = _load_yaml(config.paths.keywords.dangerous_keywords)
 
     # 参数解析
     args = parse_args(config)
@@ -161,7 +161,7 @@ def main():
     tlog.debug(f"{'-' * 30}SSHFleet工具 - 执行阶段{'-' * 30}")
 
     # 获取错误分类关键字
-    error_keywords = _load_yaml(config.paths.jsons.error_keywords)
+    error_keywords = _load_yaml(config.paths.keywords.error_keywords)
 
     # "全局"开始时间计时
     global_start_time = datetime.now()

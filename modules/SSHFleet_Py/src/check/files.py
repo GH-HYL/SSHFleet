@@ -4,7 +4,7 @@
 import os
 from posixpath import join as posix_join
 
-from src.yaml import SSHFleetConfig
+from src.keywords import SSHFleetConfig
 import src.utils as utils
 
 
@@ -15,8 +15,8 @@ def check_files_exist(config: SSHFleetConfig) -> None:
 
     config_files = [
         "src/config/SSHFleet.yaml",
-        config.paths.jsons.dangerous_keywords,
-        config.paths.jsons.error_keywords,
+        config.paths.keywords.dangerous_keywords,
+        config.paths.keywords.error_keywords,
     ]
 
     # 循环检查文件，然后把所有缺失文件打印出来
