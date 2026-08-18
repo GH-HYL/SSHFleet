@@ -48,37 +48,46 @@ def _strip_command_prefixes(cmd: str) -> str:
 def remove_command_first_last_same_symbol(cmd_str):
     """
     功能：
-        去除命令字符串首尾相同的特殊符号（引号等包裹符号）
+        去除命令字符串首尾相同的特殊符号（引号等包裹符号），循环剥除多层嵌套
 
     说明：
         危险检测的锚定规则（^ 开头）对带引号包裹的命令会漏检，
         如 'rm -rf /' 需先剥壳为 rm -rf / 才能命中锚定规则；
         shell 只剥除最外层引号，内层包裹符号会原样进入命令字符串，由这里处理。
 
+        循环剥壳覆盖多层嵌套（如 "'rm -rf /'"、`'rm -rf /'`）与
+        符号-空格-符号 嵌套（如 ' "rm -rf /" '）；
+        $()/${} 等命令替换语法由危险规则自行匹配，不在本函数处理范围。
+
     参数：
         cmd_str: 命令字符串
 
     返回：
-        removed_symbol: 被移除的特殊符号（无则 None）
+        removed_symbol: 最后被移除的包裹符号（无则 None）
         cmd_str: 处理后的命令字符串
     """
 
     # 特殊符号黑名单，以下符号不移除
     forbidden_chars = r"^$*+?.()[]{}|\/"
 
-    # 命令大于一个字符、首尾相同、首尾不是字母或数字、首尾不在特殊符号黑名单中
-    if (
-        len(cmd_str) > 1
-        and cmd_str[0] == cmd_str[-1]
-        and not cmd_str[0].isalnum()
-        and cmd_str[0] not in forbidden_chars
-    ):
+    removed_symbol = None
+    while True:
+        # 剥壳前后清理空白，支持 符号-空格-符号 嵌套包裹
+        cmd_str = cmd_str.strip()
 
-        removed_symbol = cmd_str[0]  # 记录被移除的符号
-        cmd_str = cmd_str[1:-1]  # 实际移除操作
-        return removed_symbol, cmd_str
-    else:
-        return None, cmd_str
+        # 命令大于一个字符、首尾相同、首尾不是字母或数字、首尾不在特殊符号黑名单中
+        if (
+            len(cmd_str) > 1
+            and cmd_str[0] == cmd_str[-1]
+            and not cmd_str[0].isalnum()
+            and cmd_str[0] not in forbidden_chars
+        ):
+            removed_symbol = cmd_str[0]  # 记录被移除的符号
+            cmd_str = cmd_str[1:-1]  # 实际移除操作
+        else:
+            break
+
+    return removed_symbol, cmd_str
 
 
 @error_and_exit_handling_decorator(
