@@ -107,9 +107,7 @@ def main():
     tlog.info(f"SSHFleet工具开始执行，时间：{datetime.now()}")
     tlog.info(f"工作路径：{os.getcwd()}")
     tlog.info(f"原始命令行参数：{sys.argv}")
-    tlog.info(
-        f"日志目录：{config.paths.logs.historys}，工具日志文件名：{config.paths.logs.tool}"
-    )
+    tlog.info(f"日志目录：{config.paths.logs.historys}，工具日志文件名：{config.paths.logs.tool}")
     tlog.debug(f"{ '-' * 20}SSHFleet工具 - 准备阶段{ '-' * 20}")
 
     # 检查配置文件是否都存在
