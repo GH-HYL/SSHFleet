@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"SSHFleet/internal/core"
@@ -45,7 +44,7 @@ type batchOperation[TReq any, TTask any, TResult any] struct {
 	hasProgress      bool
 	getOptions       func(req *TReq) jsonproc.Options                    // 提取并发配置
 	isConnectSuccess func(result *TResult) bool                         // 判断节点连接成功
-	makeExecutor     func(concurrency, total int, ctx context.Context, progressChan chan ssh.ProgressMsg) batchRunner[TTask, TResult]
+	makeExecutor     func(concurrency, total int, ctx context.Context, progressChan chan<- ssh.ProgressMsg) batchRunner[TTask, TResult]
 }
 
 // runBatch 泛型骨架：三个端点的公共流程只写一份
@@ -82,42 +81,44 @@ func runBatch[TReq batchRequest, TTask any, TResult batchResult](op batchOperati
 			return
 		}
 
-		// 发送 init 消息（仅 upload；原行为：忽略写入错误，继续执行）
-		if initMsg != nil {
-			WriteSSE(w, initMsg)
-		}
+		// SSE 会话：统一写入入口 + 进度通道所有权（主循环与消费协程共用写锁）
+		session := NewSseSession(w)
 
-		// progress 通道与加锁写入（仅 upload/download）
-		var progressChan chan ssh.ProgressMsg
-		var progressWg *sync.WaitGroup
-		writeSSE := func(data interface{}) error { return WriteSSE(w, data) }
-		if op.hasProgress {
-			progressChan = make(chan ssh.ProgressMsg, len(tasks)*10)
-			var sseMu sync.Mutex
-			base := writeSSE
-			writeSSE = func(data interface{}) error {
-				sseMu.Lock()
-				defer sseMu.Unlock()
-				return base(data)
+		// 发送 init 消息（仅 upload）。写失败说明客户端已断开，触发关服退出
+		if initMsg != nil {
+			if err := session.Write(initMsg); err != nil {
+				log.Zlog.Error("SSE init 写入失败", zap.Error(err))
+				go server.Shutdown(context.Background())
+				return
 			}
-			progressWg = startProgressConsumer(progressChan, writeSSE)
 		}
 
 		// 使用独立的 context，不依赖 HTTP 请求（防止客户端断开导致所有任务终止）
 		execCtx, execCancel := context.WithCancel(context.Background())
 		defer execCancel()
 
-		executor := op.makeExecutor(op.getOptions(req).Concurrency, len(tasks), execCtx, progressChan)
+		if op.hasProgress {
+			session.EnableProgress(len(tasks) * 10)
+			// 进度消费失败（客户端断开）时取消执行，避免 worker 阻塞在满通道上
+			session.SetCancel(execCancel)
+		}
+
+		executor := op.makeExecutor(op.getOptions(req).Concurrency, len(tasks), execCtx, session.Progress())
 		resultChan := executor.Run(tasks)
 
 		total := len(tasks)
 		connSuccess, connFailed := 0, 0
 		for result := range resultChan {
-			if err := writeSSE(result); err != nil {
+			if err := session.Write(result); err != nil {
+				// 故障路径（客户端断开）：先取消执行上下文让 worker 停止，
+				// 排空结果流等全部 worker 退出，再安全关闭进度通道（close 时无发送者），
+				// 最后等待关闭信号（30 秒超时兜底），服务不挂死
 				log.Zlog.Error("SSE 写入失败", zap.Error(err))
-				if op.hasProgress {
-					close(progressChan)
+				execCancel()
+				for range resultChan {
 				}
+				session.CloseProgress()
+				waitForShutdown()
 				return
 			}
 			if op.isConnectSuccess(result) {
@@ -126,16 +127,15 @@ func runBatch[TReq batchRequest, TTask any, TResult batchResult](op batchOperati
 				connFailed++
 			}
 		}
-		if op.hasProgress {
-			close(progressChan)
-			progressWg.Wait()
-		}
+		session.CloseProgress()
 
 		log.Zlog.Info("连接统计", zap.Int("total", total), zap.Int("connSuccess", connSuccess), zap.Int("connFailed", connFailed))
 
 		done := ssh.DoneResponse{Type: "done", Total: total}
-		// 原行为：忽略 done 写入错误，继续等待关闭信号并关服
-		WriteSSE(w, done)
+		// 与 result 一致走会话统一写入入口；写失败记录日志后仍继续等待关闭信号
+		if err := session.Write(done); err != nil {
+			log.Zlog.Error("SSE done 写入失败", zap.Error(err))
+		}
 		log.Zlog.Succ(op.doneLog, zap.Int("total", total))
 
 		// 等待客户端发送关闭信号，30秒超时防御
@@ -190,7 +190,7 @@ var executeOp = batchOperation[jsonproc.ExecuteRequest, core.SSHTask, ssh.ExecRe
 	isConnectSuccess: func(result *ssh.ExecResult) bool {
 		return result.ConnectSuccess
 	},
-	makeExecutor: func(concurrency, total int, ctx context.Context, _ chan ssh.ProgressMsg) batchRunner[core.SSHTask, ssh.ExecResult] {
+	makeExecutor: func(concurrency, total int, ctx context.Context, _ chan<- ssh.ProgressMsg) batchRunner[core.SSHTask, ssh.ExecResult] {
 		return core.NewBatchExecutor(concurrency, total, ctx)
 	},
 }
@@ -264,7 +264,7 @@ var uploadOp = batchOperation[jsonproc.UploadRequest, core.UploadTask, ssh.Uploa
 	isConnectSuccess: func(result *ssh.UploadResult) bool {
 		return result.ConnectSuccess
 	},
-	makeExecutor: func(concurrency, total int, ctx context.Context, progressChan chan ssh.ProgressMsg) batchRunner[core.UploadTask, ssh.UploadResult] {
+	makeExecutor: func(concurrency, total int, ctx context.Context, progressChan chan<- ssh.ProgressMsg) batchRunner[core.UploadTask, ssh.UploadResult] {
 		return core.NewBatchUploadExecutor(concurrency, total, ctx, progressChan)
 	},
 }
@@ -323,7 +323,7 @@ var downloadOp = batchOperation[jsonproc.DownloadRequest, core.DownloadTask, ssh
 	isConnectSuccess: func(result *ssh.DownloadResult) bool {
 		return result.ConnectSuccess
 	},
-	makeExecutor: func(concurrency, total int, ctx context.Context, progressChan chan ssh.ProgressMsg) batchRunner[core.DownloadTask, ssh.DownloadResult] {
+	makeExecutor: func(concurrency, total int, ctx context.Context, progressChan chan<- ssh.ProgressMsg) batchRunner[core.DownloadTask, ssh.DownloadResult] {
 		return core.NewBatchDownloadExecutor(concurrency, total, ctx, progressChan)
 	},
 }
