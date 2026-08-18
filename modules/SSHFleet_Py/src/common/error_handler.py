@@ -5,7 +5,6 @@
 import sys
 
 import src.common.constants as color
-from src.log import tlog
 
 
 def print_error_information_and_exit(
@@ -54,6 +53,10 @@ def error_and_exit_handling_decorator(
                 result = func(*args, **kwargs)
                 return result
             except Exception as e:
+                # 延迟导入：error_handler 被 loader 等底层模块引用，
+                # 顶层 import tlog 会形成 loader -> error_handler -> log -> loader 循环依赖
+                from src.log import tlog
+
                 tlog.error(
                     f"{func_name}，{error_str}\n异常类型：\n{type(e)}\n异常信息：\n{e}"
                 )

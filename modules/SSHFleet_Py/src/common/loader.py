@@ -8,6 +8,8 @@ import os
 import yaml
 from pydantic import BaseModel
 
+from src.common.error_handler import error_and_exit_handling_decorator
+
 
 class Files(BaseModel):
     asset: str
@@ -146,6 +148,7 @@ def load_config(config_path: str) -> SSHFleetConfig:
     return SSHFleetConfig(**config_dict)
 
 
+@error_and_exit_handling_decorator("load_yaml_file", "YAML文件读取内容失败")
 def load_yaml_file(path: str):
     """读取 YAML 文件并返回解析后的数据（支持 # 注释）"""
     with open(path, 'r', encoding='utf-8') as f:
