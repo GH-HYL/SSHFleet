@@ -80,14 +80,13 @@ def parse_args(config: SSHFleetConfig) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="SSHFleet - 基于 Go 后端的批量 SSH 执行命令和传输文件工具",
         formatter_class=argparse.RawTextHelpFormatter,
-        usage="\npython3 sshfleet.py  ( -c | -s | -u | -d | -z )  ( -f ) ( -p ) [其他可选参数]\n",
+        usage="\npython3 sshfleet.py  ( -c | -s | -u | -d )  ( -f ) ( -p ) [其他可选参数]\n",
         epilog=(
             "\n示例:\n"
             '  命令模式: python3 sshfleet.py -f nodes.csv -c "ls -l"\n'
             "  脚本模式: python3 sshfleet.py -f nodes.csv -s script.sh\n"
             "  上传模式: python3 sshfleet.py -f nodes.csv -u /local/path -p /remote/path\n"
             "  下载模式: python3 sshfleet.py -f nodes.csv -d /remote/path -p /local/path\n"
-            "  打包模式: python3 sshfleet.py -z\n"
             "\n上传并发说明:\n"
             "  上传模式下，工具根据配置文件中的文件大小阈值输出建议并发数\n"
             "  输入 y 使用建议值，输入 n 保留原值继续执行\n"
@@ -99,7 +98,6 @@ def parse_args(config: SSHFleetConfig) -> argparse.Namespace:
         ('-s', 'script', '(脚本模式)', '远程在多台服务器上执行一个本地脚本'),
         ('-u', 'upload', '(上传模式)', '把本地文件或目录传到服务器'),
         ('-d', 'download', '(下载模式)', '从服务器下载文件或目录到本地'),
-        ('-z', None, '(打包模式)', '把最近一次的执行记录打包到当前目录'),
         ('-f', 'csv_file', None, '节点清单：CSV 文件路径，或直接在命令行写一行节点信息 (-c/-s/-u/-d 时必须带)'),
         ('-p', 'path', None, '目标路径：上传到服务器的目录 / 从服务器下载到的本地目录 (-u/-d 时必须带)'),
         ('-m', 'mode', f'[默认: {config.execution.mode or "direct"}]', '执行身份: direct=用登录用户身份, sudo=用 root 身份执行'),

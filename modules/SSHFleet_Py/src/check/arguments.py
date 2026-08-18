@@ -14,11 +14,11 @@ def check_arguments(args):
     """检查命令行参数的有效性"""
 
     # 检查互斥执行模式参数
-    lock_args = [args.c, args.s, args.u, args.d, args.z]
+    lock_args = [args.c, args.s, args.u, args.d]
     lock_args_count = sum(1 for arg in lock_args if arg)
     if lock_args_count != 1:
         print_error_information_and_exit(
-            "check_arguments", " 执行模式参数：-c、-s、-u、-d、-z 互斥，只能指定一个"
+            "check_arguments", " 执行模式参数：-c、-s、-u、-d 互斥，只能指定一个"
         )
 
     # 检查 -p 参数
@@ -174,12 +174,6 @@ def check_arguments(args):
             print_error_information_and_exit(
                 "check_arguments", f" -k 指向的秘钥文件不存在，请检查路径：{args.k}"
             )
-
-    # 检查 --disinteractive 参数
-    if args.disinteractive and args.z:
-        print_error_information_and_exit(
-            "check_arguments", " --disinteractive 参数不能与 -z 一起使用"
-        )
 
     # 检查 -t 参数, 必须是 int 类型
     if args.t:

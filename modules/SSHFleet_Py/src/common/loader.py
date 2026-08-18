@@ -20,7 +20,6 @@ class Files(BaseModel):
 
 
 class Logs(BaseModel):
-    zip: str
     historys: str
     tool: str
     exec: str

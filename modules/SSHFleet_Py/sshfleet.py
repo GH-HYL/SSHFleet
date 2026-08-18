@@ -56,7 +56,7 @@ from src.check.arguments import check_arguments
 from src.check.dangerous import check_dangerous_content
 from src.check.files import check_files_exist
 from src.output.statistics import results_statistics
-from src.output.archive import save_execute_resource_files, zip_latest_history
+from src.output.archive import save_execute_resource_files
 from src.output.terminal import format_statistic_results_to_terminal
 from src.output.report import format_statistic_results_to_report
 from src.output.xlsx import format_output_to_xlsx, format_dict_list_to_xlsx
@@ -109,13 +109,6 @@ def main():
     # 参数合规性检查
     check_arguments(args)
     tlog.success("输入的参数合规性检查成功")
-
-    # 执行打包历史记录
-    if args.z:
-        zip_latest_history(args, config)
-        tlog.success("打包历史记录成功")
-        tlog.info("SSHFleet工具已退出")
-        sys.exit(0)
 
     # 命令模式：先移除命令首尾相同的边界符号（供危险检查/确认/执行共用）
     remove_symbol = None

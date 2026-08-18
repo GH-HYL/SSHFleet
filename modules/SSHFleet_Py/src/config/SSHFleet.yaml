@@ -35,7 +35,6 @@ paths:
 
   # 日志路径
   logs:
-    zip: ""                    # 打包日志文件生成路径，为空表示在工作路径生成，可用绝对路径
     historys: "historys"       # 存放历史记录文件夹名称
     tool: "SSHFleetTools.log"  # 工具日志文件名
     exec: "SSHFleet_Go.log"    # 执行日志文件名
