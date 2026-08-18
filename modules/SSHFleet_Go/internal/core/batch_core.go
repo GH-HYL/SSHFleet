@@ -56,11 +56,17 @@ func runPool[TASK any, RESULT any](
 						return
 					}
 
-					// 进度回调：仅 upload/download 有真实通道，execute 传 nil
+					// 进度回调：仅 upload/download 有真实通道，execute 传 nil。
+					// 取消防护：通道缓冲满且上下文取消时不再阻塞（select 不豁免
+					// send-on-closed-channel panic——关闭通道前必须保证无发送者，
+					// 由调用方按「取消 → 排空结果流 → 关闭通道」的顺序保证）
 					var onProgress func(ssh.ProgressMsg)
 					if progressChan != nil {
 						onProgress = func(msg ssh.ProgressMsg) {
-							progressChan <- msg
+							select {
+							case progressChan <- msg:
+							case <-ctx.Done():
+							}
 						}
 					}
 

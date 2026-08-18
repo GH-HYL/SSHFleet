@@ -6,13 +6,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"sync"
 	"sync/atomic"
 	"time"
 
 	"SSHFleet/internal/jsonproc"
 	"SSHFleet/internal/log"
-	"SSHFleet/internal/ssh"
 
 	"go.uber.org/zap"
 )
@@ -67,23 +65,6 @@ func setupSSE(w http.ResponseWriter) bool {
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	return true
-}
-
-// startProgressConsumer 启动 progress 消费协程，返回等待组（供后续 Wait）
-// writeSSE 为调用方提供的加锁写入回调
-func startProgressConsumer(progressChan <-chan ssh.ProgressMsg, writeSSE func(interface{}) error) *sync.WaitGroup {
-	var progressWg sync.WaitGroup
-	progressWg.Add(1)
-	go func() {
-		defer progressWg.Done()
-		for msg := range progressChan {
-			if err := writeSSE(msg); err != nil {
-				log.Zlog.Error("SSE progress 写入失败", zap.Error(err))
-				return
-			}
-		}
-	}()
-	return &progressWg
 }
 
 // waitForShutdown 等待客户端发送关闭信号，30秒超时防御

@@ -12,7 +12,9 @@ func WriteSSE(w http.ResponseWriter, data interface{}) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(w, "data: %s\n\n", jsonData)
+	if _, err := fmt.Fprintf(w, "data: %s\n\n", jsonData); err != nil {
+		return err
+	}
 	w.(http.Flusher).Flush()
 	return nil
 }
