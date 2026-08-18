@@ -15,9 +15,9 @@
 #     │   ├── constants.py              # 公共常量（成功分类名、颜色常量）
 #     │   ├── format_utils.py           # 结果呈现公共函数（模式/状态行/IP排序）
 #     │   ├── error_handler.py          # 错误打印/退出约定/异常装饰器
+#     │   ├── loader.py                 # 配置文件加载（Pydantic）
 #     │   └── text_utils.py             # 文本清洗、大小格式化、路径规范化
 #     ├── config/                       # 配置文件夹
-#     │   ├── loader.py                 # 配置文件加载（Pydantic）
 #     │   ├── SSHFleet.yaml             # 工具配置
 #     │   ├── dangerous_keywords.yaml   # 危险命令检测规则
 #     │   └── error_keywords.yaml       # 错误分类关键词
