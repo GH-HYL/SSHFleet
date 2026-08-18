@@ -13,7 +13,7 @@ import src.common.constants as color
 from src.common.error_handler import error_and_exit_handling_decorator
 from src.common.text_utils import args_normalize_path
 from src.input.interaction import get_user_confirmation
-from src.config.loader import SSHFleetConfig
+from src.common.loader import SSHFleetConfig
 from src.log import tlog
 
 

@@ -62,7 +62,7 @@ from src.output.terminal import format_statistic_results_to_terminal
 from src.output.report import format_statistic_results_to_report
 from src.output.xlsx import format_output_to_xlsx, format_dict_list_to_xlsx
 from src.gotogo.go_to_go import go_to_go
-from src.config.loader import load_config, load_yaml_file
+from src.common.loader import load_config, load_yaml_file
 from src.common.error_handler import print_error_information_and_exit
 import src.common.constants as color
 

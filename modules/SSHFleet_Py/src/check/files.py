@@ -4,7 +4,7 @@
 import os
 from posixpath import join as posix_join
 
-from src.config.loader import SSHFleetConfig
+from src.common.loader import SSHFleetConfig
 from src.common.error_handler import error_and_exit_handling_decorator, print_error_information_and_exit
 
 

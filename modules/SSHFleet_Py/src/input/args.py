@@ -8,7 +8,7 @@ import sys
 
 from src.common.error_handler import error_and_exit_handling_decorator, print_error_information_and_exit
 from src.common.text_utils import args_normalize_path
-from src.config.loader import SSHFleetConfig
+from src.common.loader import SSHFleetConfig
 
 
 def validate_password_file(file_path: str) -> None:
