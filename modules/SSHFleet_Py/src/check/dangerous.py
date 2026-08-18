@@ -45,6 +45,42 @@ def _strip_command_prefixes(cmd: str) -> str:
     return cmd
 
 
+def remove_command_first_last_same_symbol(cmd_str):
+    """
+    功能：
+        去除命令字符串首尾相同的特殊符号（引号等包裹符号）
+
+    说明：
+        危险检测的锚定规则（^ 开头）对带引号包裹的命令会漏检，
+        如 'rm -rf /' 需先剥壳为 rm -rf / 才能命中锚定规则；
+        shell 只剥除最外层引号，内层包裹符号会原样进入命令字符串，由这里处理。
+
+    参数：
+        cmd_str: 命令字符串
+
+    返回：
+        removed_symbol: 被移除的特殊符号（无则 None）
+        cmd_str: 处理后的命令字符串
+    """
+
+    # 特殊符号黑名单，以下符号不移除
+    forbidden_chars = r"^$*+?.()[]{}|\/"
+
+    # 命令大于一个字符、首尾相同、首尾不是字母或数字、首尾不在特殊符号黑名单中
+    if (
+        len(cmd_str) > 1
+        and cmd_str[0] == cmd_str[-1]
+        and not cmd_str[0].isalnum()
+        and cmd_str[0] not in forbidden_chars
+    ):
+
+        removed_symbol = cmd_str[0]  # 记录被移除的符号
+        cmd_str = cmd_str[1:-1]  # 实际移除操作
+        return removed_symbol, cmd_str
+    else:
+        return None, cmd_str
+
+
 @error_and_exit_handling_decorator(
     "check_dangerous_content", "危险关键词内容检查失败"
 )
@@ -140,6 +176,9 @@ def check_dangerous_patterns(args, dangerous_keywords: List, disinteractive=Fals
         # 跳过注释行和空行
         if not stripped_line or stripped_line.startswith("#"):
             continue
+
+        # 第零步：剥除首尾相同的包裹符号（引号等），防止引号包裹绕过锚定规则
+        stripped_line = remove_command_first_last_same_symbol(stripped_line)[1]
 
         # 第一步：按命令分隔符分割（支持一行内多种分隔符嵌套）
         # 用正则一次性切分 ; && || | &（&&/|| 优先于单个 &/|，避免拆错）

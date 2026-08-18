@@ -9,37 +9,6 @@ import shlex
 from src.log import tlog
 
 
-def remove_command_fist_last_same_symbol(cmd_str):
-    """
-    功能：
-        去除 command 命令 首尾相同的特殊符号
-
-    参数：
-        cmd_str: 命令字符串
-
-    返回：
-        removed_symbol: 被移除的特殊符号
-        cmd_str: 处理后的命令字符串
-    """
-
-    # 特殊符号黑名单，以下符号不移除
-    forbidden_chars = r"^$*+?.()[]{}|\/"
-
-    # 判断并处理 , 命令大于一个字符、首尾相同、首尾不是字母或数字、首尾不在特殊符号黑名单中
-    if (
-        len(cmd_str) > 1
-        and cmd_str[0] == cmd_str[-1]
-        and not cmd_str[0].isalnum()
-        and cmd_str[0] not in forbidden_chars
-    ):
-
-        removed_symbol = cmd_str[0]  # 记录被移除的符号
-        cmd_str = cmd_str[1:-1]  # 实际移除操作
-        return removed_symbol, cmd_str
-    else:
-        return None, cmd_str
-
-
 def build_final_command(args: argparse.Namespace) -> str:
     """
     根据参数构建命令字符串
