@@ -12,7 +12,7 @@ import src.common.constants as color
 from src.common.error_handler import error_and_exit_handling_decorator
 from src.common.text_utils import clean_for_excel
 from src.common.format_utils import format_conn_status, get_action_name, get_mode
-from src.config.loader import SSHFleetConfig
+from src.common.loader import SSHFleetConfig
 from src.log import tlog
 
 

@@ -6,7 +6,7 @@ import sys
 from posixpath import join as posix_join
 
 from src.common.error_handler import error_and_exit_handling_decorator
-from src.config.loader import SSHFleetConfig
+from src.common.loader import SSHFleetConfig
 from src.log import tlog
 
 
