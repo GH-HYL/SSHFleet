@@ -167,7 +167,7 @@ def _check_concurrency_threshold(file_size: int, config) -> int:
 
 
 @error_and_exit_handling_decorator("arguments_confirm", "确认执行参数失败")
-def arguments_confirm(args, nodes, config=None, remove_symbol=None):
+def arguments_confirm(args, nodes, config=None):
     """
     功能：
         确认执行参数
@@ -176,7 +176,6 @@ def arguments_confirm(args, nodes, config=None, remove_symbol=None):
         args: 命令行参数
         nodes: 节点列表
         config: 配置对象（可选，用于上传并发阈值检查）
-        remove_symbol: 命令边界符号移除提示（可选，由调用方在命令构建阶段处理并传入）
 
     返回：
         None
@@ -205,12 +204,6 @@ def arguments_confirm(args, nodes, config=None, remove_symbol=None):
 
     # 1.构建显示信息的表格
     info_table = _build_info_table(args, nodes)
-
-    # 如果有命令边界符号移除提示
-    if args.c and remove_symbol:
-        print(
-            f"{color.COLOR_YELLOW}▶ 重要提示: {color.COLOR_RESET}系统检测并移除了命令的边界符号 [ {color.COLOR_RED}{remove_symbol}{color.COLOR_RESET} ] \n"
-        )
 
     # 2. 打印信息表格
     _print_info_table(info_table)
