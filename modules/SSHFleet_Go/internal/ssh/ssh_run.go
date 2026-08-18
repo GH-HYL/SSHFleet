@@ -180,10 +180,8 @@ func (c *SSHClient) ExecuteCommand(command string, ctx context.Context, ip strin
 
 	// 处理执行结果
 	if err != nil {
-		var exitErr *ssh.ExitError
-		if errors.As(err, &exitErr) {
-			code := exitErr.ExitStatus()
-			result.ExitCode = &code
+		if code := extractExitCode(err); code != nil {
+			result.ExitCode = code
 		} else {
 			// 超时或中断等非命令执行错误，靠 error 字段分类
 			errMsg := err.Error()
@@ -234,4 +232,16 @@ func (c *SSHClient) runCommand(command string) error {
 	}
 	defer func() { _ = session.Close() }()
 	return session.Run(command)
+}
+
+// extractExitCode 从 SSH 命令执行错误中提取真实退出码。
+// 仅 *ssh.ExitError（命令以非 0 退出）才返回退出码；
+// 超时/中断等非命令执行错误返回 nil。
+func extractExitCode(err error) *int {
+	var exitErr *ssh.ExitError
+	if errors.As(err, &exitErr) {
+		code := exitErr.ExitStatus()
+		return &code
+	}
+	return nil
 }

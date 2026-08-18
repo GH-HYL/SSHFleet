@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 # SSHFleet 公共常量模块
 
-# 成功分类名（classifier 与 statistics 共用，改动只此一处）
+# 成功/部分成功分类名（classifier 与 statistics 共用，改动只此一处）
 SUCCESS_CATEGORY_EXECUTE = "执行成功"
 SUCCESS_CATEGORY_TRANSPORT = "传输成功"
+PARTIAL_SUCCESS_CATEGORY = "部分成功"
 
 # 颜色常量（原 src/color.py 并入，用于终端输出着色，谨慎修改）
 COLOR_GREEN = "\033[32m"  # 绿色

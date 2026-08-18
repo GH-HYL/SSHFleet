@@ -242,11 +242,10 @@ func (c *SSHClient) UploadFiles(
 	header := fmt.Sprintf("total_files=%d, success_files=%d, failed_files=%d", totalFiles, successFiles, failedFiles)
 	outputText := header + "\n" + strings.Join(outputLines, "\n")
 	result.Output = base64.StdEncoding.EncodeToString([]byte(outputText))
-	// ExitCode: 0=全部成功, 1=有失败
-	if failedFiles > 0 {
-		code := 1
-		result.ExitCode = &code
-	} else {
+	// 退出码语义（ADR-0003）：exit_code 只描述命令执行结果。
+	// 传输阶段（SFTP 读写）不是命令执行，失败时不设置退出码（保持 nil），
+	// 失败信息由 result.Error 与 output 明细承载；仅全部成功时置 0。
+	if failedFiles == 0 {
 		code := 0
 		result.ExitCode = &code
 	}
