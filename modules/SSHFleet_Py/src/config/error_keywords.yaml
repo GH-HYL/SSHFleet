@@ -79,12 +79,22 @@
   - authentication failed
   - unable to authenticate
   - password not accepted
-  - permission denied
   - access denied
+  # OpenSSH 认证被拒原文形如 "Permission denied (publickey,password)"，
+  # 带认证上下文的括号后缀归本类；不带括号的通用 "permission denied"
+  # 是文件系统权限问题，归"权限不足"（本类在前，先命中则先返回）
+  - permission denied (publickey
+  - permission denied (password
+  - permission denied (keyboard
   - 认证失败
   - 密码错误
   - 身份验证失败
   - auth failed
+
+# --- 权限不足---
+# 文件系统层面的读写权限被拒绝
+权限不足:
+  - permission denied
 
 # --- DNS解析失败---
 DNS解析失败:
