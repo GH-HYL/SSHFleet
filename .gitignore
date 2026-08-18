@@ -8,6 +8,9 @@
 !README.md
 # 个人使用的批处理
 !SSHFleet_*.bat
+# 文档（ADR 决策记录仅本地留存，不入库）
+docs/adr/
+docs/adr/**
 
 # 只跟踪源代码模块
 !modules/
