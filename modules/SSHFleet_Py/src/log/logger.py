@@ -39,7 +39,7 @@ def init_tool_logger(log_dir: str, config: SSHFleetConfig):
     return tlog
 
 
-def create_exec_log_dir(args, config) -> str:
+def create_exec_log_dir(args, config) -> str:  # pyright: ignore[reportReturnType]
     """
     功能：
         创建日志目录
@@ -58,16 +58,18 @@ def create_exec_log_dir(args, config) -> str:
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
         if args.c:
-            file_name = "command"
+            sort_name = "command"
         elif args.s:
-            file_name = "script"
+            sort_name = "script"
         elif args.u:
-            file_name = "upload"
+            sort_name = "upload"
+        elif args.d:
+            sort_name = "download"
         else:
-            file_name = "unknown"  # 添加默认值避免未定义
+            sort_name = "unknown"  # 添加默认值避免未定义
 
         # 最后拼接成的大概路径样子是 history/2025-08-20_12-12-12_command/
-        log_dir = posix_join(config.paths.logs.historys, f"{timestamp}_{file_name}")
+        log_dir = posix_join(config.paths.logs.historys, f"{timestamp}_{sort_name}")
 
         if args.r:
             log_dir = log_dir + f"_{args.r.strip()}"
