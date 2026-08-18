@@ -78,7 +78,7 @@ def parse_args(config: SSHFleetConfig) -> argparse.Namespace:
     """
 
     parser = argparse.ArgumentParser(
-        description="SSHFleet - 基于 Go 后端的批量 SSH 执行和上传工具",
+        description="SSHFleet - 基于 Go 后端的批量 SSH 执行命令和传输文件工具",
         formatter_class=argparse.RawTextHelpFormatter,
         usage="\npython3 sshfleet.py  ( -c | -s | -u | -d | -z )  ( -f ) ( -p ) [其他可选参数]\n",
         epilog=(
