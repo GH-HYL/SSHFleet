@@ -168,12 +168,12 @@ def check_arguments(args):
                 f" -n 参数格式错误，并发连接数必须是正整数，当前值：{args.n}",
             )
 
-    # # 检查 -k 参数
-    # if args.k:
-    #     if not os.path.isfile(args.k):
-    #         print_error_information_and_exit(
-    #             "check_arguments", f" -k 指向的秘钥文件不存在，请检查路径：{args.k}"
-    #         )
+    # 检查 -k 参数
+    if args.k:
+        if not os.path.isfile(args.k):
+            print_error_information_and_exit(
+                "check_arguments", f" -k 指向的秘钥文件不存在，请检查路径：{args.k}"
+            )
 
     # 检查 --disinteractive 参数
     if args.disinteractive and args.z:
