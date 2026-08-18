@@ -15,7 +15,6 @@ from src.common.loader import SSHFleetConfig
 
 # 初始化全局logger变量
 tlog = logger.bind(logger_type="tool")
-elog = logger.bind(logger_type="exec")
 
 
 def init_tool_logger(log_dir: str, config: SSHFleetConfig):
@@ -85,34 +84,6 @@ def create_exec_log_dir(args, config) -> str:  # pyright: ignore[reportReturnTyp
         print_error_information_and_exit(
             "create_exec_log_dir",
             f"创建日志目录失败\n异常类型：{type(e)}\n异常信息：\n{e}",
-        )
-
-
-def init_execution_logger(log_dir: str, log_exec: str):
-    global elog
-
-    from src.common.error_handler import print_error_information_and_exit
-
-    try:
-        os.makedirs(log_dir, exist_ok=True)
-
-        # 添加execution日志handler
-        elog.add(
-            os.path.join(log_dir, log_exec),
-            level="DEBUG",
-            enqueue=True,  # 启用线程安全队列
-            encoding="utf-8",
-            format="{time:YYYY-MM-DD HH:mm:ss.SSS} - [{level: ^7}] - {message}",
-            filter=lambda record: record["extra"].get("logger_type") == "exec",
-        )
-        return elog
-    except Exception as e:
-        tlog.error(
-            f"init_execution_logger，初始化执行日志记录器失败\n异常类型：\n{type(e)}\n异常信息：\n{e}"
-        )
-        print_error_information_and_exit(
-            "init_execution_logger",
-            f"初始化执行日志记录器失败\n异常类型：{type(e)}\n异常信息：\n{e}",
         )
 
 
