@@ -6,12 +6,18 @@
 import os
 
 import yaml
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from src.common.error_handler import error_and_exit_handling_decorator
 
 
-class Files(BaseModel):
+class StrictModel(BaseModel):
+    """严格配置模型：遇到未知字段（如已移除的 paths.logs.zip）直接报错，不做静默忽略"""
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class Files(StrictModel):
     asset: str
     output: str
     output_xlsx: str
@@ -19,42 +25,42 @@ class Files(BaseModel):
     results_xlsx: str
 
 
-class Logs(BaseModel):
+class Logs(StrictModel):
     historys: str
     tool: str
     exec: str
 
 
-class Exe(BaseModel):
+class Exe(StrictModel):
     batch_tool_windows: str
     batch_tool_linux: str
 
 
-class Keywords(BaseModel):
+class Keywords(StrictModel):
     error_keywords: str
     dangerous_keywords: str
 
 
-class Paths(BaseModel):
+class Paths(StrictModel):
     keywords: Keywords
     exe: Exe
     logs: Logs
     files: Files
 
 
-class Enable(BaseModel):
+class Enable(StrictModel):
     output_to_xlsx: bool
     results_to_xlsx: bool
 
 
-class Execution(BaseModel):
+class Execution(StrictModel):
     mode: str
     timeout_connect: int
     timeout_execute: int
     timeout_transfer: int
 
 
-class Account(BaseModel):
+class Account(StrictModel):
     port: int
     user: str
     secret_dir: str
@@ -63,17 +69,17 @@ class Account(BaseModel):
     key_passphrase: str = ""
 
 
-class UploadConcurrencyThreshold(BaseModel):
+class UploadConcurrencyThreshold(StrictModel):
     small_file: int        # < 此值：全并发（等于节点数）
     large_file: int        # > 此值：串行（并发=1）
     medium_concurrency: int  # 中间档并发数
 
 
-class Upload(BaseModel):
+class Upload(StrictModel):
     concurrency_thresholds: UploadConcurrencyThreshold
 
 
-class SSHFleetConfig(BaseModel):
+class SSHFleetConfig(StrictModel):
     account: Account
     execution: Execution
     enable: Enable
