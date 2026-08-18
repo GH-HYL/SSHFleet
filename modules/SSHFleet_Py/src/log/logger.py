@@ -11,7 +11,7 @@ from loguru import logger
 
 # 自定义模块
 import src.common.constants as color
-from src.config.loader import SSHFleetConfig
+from src.common.loader import SSHFleetConfig
 
 # 初始化全局logger变量
 tlog = logger.bind(logger_type="tool")
