@@ -1,12 +1,22 @@
 # -*- coding: utf-8 -*-
 # 错误分类模块
 #
-# 设计原则：
-#   退出码是命令执行结果的权威信号。
-#   - 有退出码 → 命令/传输流程正常执行到了产生结果，直接按退出码分类；
-#   - 无退出码 → 命令未执行，问题在连接/会话/预检等环节，才用关键词匹配推断。
+# 设计原则（ADR-0003：退出码语义统一——只属于命令执行）：
+#   exit_code 只描述"命令执行结果"，三态语义：
+#   - 0     → 命令全部成功（execute=命令本身，upload/download=预处理+传输全部成功）；
+#   - 非 0  → 有命令失败（execute=命令本身，upload/download=预处理命令失败），
+#             退出码是权威信号，直接分类，不再匹配关键词；
+#   - None  → 未执行任何命令（连接失败/传输失败/超时/中断），
+#             靠 error/output 关键词匹配推断。
+#
+#   upload/download 的传输阶段（SFTP 读写）不是命令执行，失败时 Go 不设置退出码
+#   （nil），由 error 报文关键词匹配分类；部分成功（failed>0 且 success>0）优先分类。
 
-from src.common.constants import SUCCESS_CATEGORY_EXECUTE, SUCCESS_CATEGORY_TRANSPORT
+from src.common.constants import (
+    SUCCESS_CATEGORY_EXECUTE,
+    SUCCESS_CATEGORY_TRANSPORT,
+    PARTIAL_SUCCESS_CATEGORY,
+)
 
 
 def classify(
@@ -15,16 +25,20 @@ def classify(
     output: str,
     error_keywords: dict[str, list[str]],
     mode: str = "execute",
+    success_files: int = 0,
+    failed_files: int = 0,
 ) -> str:
     """
     根据响应体字段进行错误分类
 
     Args:
-        exit_code: 命令退出码，None 表示未执行（连接失败/超时/中断等）
+        exit_code: 命令退出码，None 表示未执行命令（连接失败/传输失败/超时/中断等）
         error: Go 层面原始错误信息
         output: 命令输出内容（已解码）
         error_keywords: 分类关键词映射
         mode: 执行模式，"execute"、"upload" 或 "download"
+        success_files: 成功传输文件数（仅 upload/download 模式使用）
+        failed_files: 失败传输文件数（仅 upload/download 模式使用）
 
     Returns:
         str: 分类名称
@@ -37,7 +51,11 @@ def classify(
             return SUCCESS_CATEGORY_EXECUTE
         return f"执行失败(退出码{exit_code})"
 
-    # 无退出码：命令未执行，问题在连接等环节，用关键词匹配推断
+    # 无退出码：命令未执行，问题在连接/传输等环节，用关键词匹配推断
+    # 传输模式部分成功优先：有成功有失败是结构性状态，先于失败原因展示
+    if mode in ("upload", "download") and failed_files > 0 and success_files > 0:
+        return PARTIAL_SUCCESS_CATEGORY
+
     if error:
         result = _match(error, error_keywords)
         if result != "错误未分类":

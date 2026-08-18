@@ -39,6 +39,8 @@ def parse_result(sse_data: Dict, error_keywords: Dict[str, list[str]], mode: str
             output=output,
             error_keywords=error_keywords,
             mode=mode,
+            success_files=sse_data.get("success_files", 0),
+            failed_files=sse_data.get("failed_files", 0),
         ),
         "error": error,
         # 上传专属字段

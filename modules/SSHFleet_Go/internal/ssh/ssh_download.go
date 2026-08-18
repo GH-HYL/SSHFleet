@@ -66,6 +66,7 @@ func (c *SSHClient) DownloadFiles(
 		checkCmd = fmt.Sprintf("sudo test -e '%s'", remotePath)
 	}
 	if err := c.runCommand(checkCmd); err != nil {
+		result.ExitCode = extractExitCode(err)
 		errMsg := fmt.Sprintf("远程路径不存在: %s", remotePath)
 		result.Error = &errMsg
 		log.Zlog.Error("[下载] 远程路径不存在", zap.String("ip", ip), zap.String("remotePath", remotePath))
@@ -97,6 +98,7 @@ func (c *SSHClient) DownloadFiles(
 		}
 		output, err := c.sftpRunCommand(findCmd)
 		if err != nil {
+			result.ExitCode = extractExitCode(err)
 			errMsg := fmt.Sprintf("获取远程文件列表失败: %v", err)
 			result.Error = &errMsg
 			log.Zlog.Error("[下载] 获取远程文件列表失败", zap.String("ip", ip), zap.Error(err))
@@ -237,10 +239,10 @@ func (c *SSHClient) DownloadFiles(
 	header := fmt.Sprintf("total_files=%d, success_files=%d, failed_files=%d", totalFiles, successFiles, failedFiles)
 	outputText := header + "\n" + strings.Join(outputLines, "\n")
 	result.Output = base64.StdEncoding.EncodeToString([]byte(outputText))
-	if failedFiles > 0 {
-		code := 1
-		result.ExitCode = &code
-	} else {
+	// 退出码语义（ADR-0003）：exit_code 只描述命令执行结果。
+	// 传输阶段（SFTP 读写）不是命令执行，失败时不设置退出码（保持 nil），
+	// 失败信息由 result.Error 与 output 明细承载；仅全部成功时置 0。
+	if failedFiles == 0 {
 		code := 0
 		result.ExitCode = &code
 	}
