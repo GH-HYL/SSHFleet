@@ -41,7 +41,7 @@ def _format_exit_code_hints(sorted_fail_categories) -> str:
         return ""
 
     ordered = sorted(seen.items(), key=lambda x: x[1], reverse=True)
-    items = "  ".join(f"{code}={EXIT_CODE_HINTS[code]}" for code, _ in ordered)
+    items = "  ".join(f"{code} >> {EXIT_CODE_HINTS[code]}" for code, _ in ordered)
     return f"常见退出码: {items}"
 
 
