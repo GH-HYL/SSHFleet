@@ -94,7 +94,7 @@ class SpeedTracker:
         return 0
 
 
-def _format_result(result: Dict, args: argparse.Namespace = None) -> str:
+def _format_result(result: Dict, args: argparse.Namespace = None) -> str:  # pyright: ignore[reportArgumentType]
     """
     格式化单条结果
 
