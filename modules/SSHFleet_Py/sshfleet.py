@@ -143,6 +143,11 @@ def main():
         tlog.info("进入主执行器")
         final_results = go_to_go(args, config, nodesinfos, exec_log_dir, error_keywords)
         tlog.success("go_to_go主执行器执行完成")
+    else:
+        print_error_information_and_exit(
+            "main",
+            f"{color.COLOR_RED}未指定执行模式（命令/脚本/上传/下载），请使用 -c/-s/-u/-d 参数指定{color.COLOR_RESET}",
+        )
 
     # "全局"结束时间计时
     global_stop_time = datetime.now()
