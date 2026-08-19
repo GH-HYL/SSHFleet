@@ -167,9 +167,7 @@ def main():
         )
 
     # 计算统计结果信息
-    results_stat = results_statistics(
-        final_results, nodesinfos, args, global_start_time, global_stop_time
-    )
+    results_stat = results_statistics(final_results, nodesinfos, args, global_start_time, global_stop_time)
 
     # 格式化统计结果信息输出到终端
     format_statistic_results_to_terminal(results_stat)
