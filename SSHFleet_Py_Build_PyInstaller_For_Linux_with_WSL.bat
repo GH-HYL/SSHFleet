@@ -126,7 +126,7 @@ rem ============================================================
 rem [6/9] 清理 WSL 中的旧构建产物
 rem ============================================================
 echo [6/9] 正在清理 WSL 中的旧构建产物...
-wsl -d %WSL_DISTRO% bash -c "rm -rf %WSL_SRC%/dist %WSL_SRC%/build %WSL_SRC%/historys %WSL_SRC%/__pycache__ %WSL_SRC%/src/__pycache__ %WSL_SRC%/src/gotogo/__pycache__ %WSL_SRC%/src/transfer/__pycache__"
+wsl -d %WSL_DISTRO% bash -c "rm -rf %WSL_SRC%/dist %WSL_SRC%/build %WSL_SRC%/historys %WSL_SRC%/__pycache__ %WSL_SRC%/src/__pycache__ %WSL_SRC%/src/gotogo/__pycache__ %WSL_SRC%/src/common/__pycache__"
 echo        完成
 
 rem ============================================================

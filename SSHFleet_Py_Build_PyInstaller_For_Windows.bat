@@ -57,7 +57,7 @@ if exist "!SRC!\historys" rmdir /s /q "!SRC!\historys"
 if exist "!SRC!\__pycache__" rmdir /s /q "!SRC!\__pycache__"
 if exist "!SRC!\src\__pycache__" rmdir /s /q "!SRC!\src\__pycache__"
 if exist "!SRC!\src\gotogo\__pycache__" rmdir /s /q "!SRC!\src\gotogo\__pycache__"
-if exist "!SRC!\src\transfer\__pycache__" rmdir /s /q "!SRC!\src\transfer\__pycache__"
+if exist "!SRC!\src\common\__pycache__" rmdir /s /q "!SRC!\src\common\__pycache__"
 echo        完成
 
 echo [5/8] 正在使用 PyInstaller 构建...

@@ -147,7 +147,7 @@ if errorlevel 1 ( echo [错误] 缺少 %WSL_SRC%/sshfleet.py & goto :fail )
 wsl -d %WSL_DISTRO% bash -c "test -f %WSL_SPEC%"
 if errorlevel 1 ( echo [错误] 缺少 %WSL_SPEC% & goto :fail )
 echo        [6/9] 正在清理 WSL 中的旧构建产物...
-wsl -d %WSL_DISTRO% bash -c "rm -rf %WSL_SRC%/dist %WSL_SRC%/build %WSL_SRC%/historys %WSL_SRC%/__pycache__ %WSL_SRC%/src/__pycache__ %WSL_SRC%/src/gotogo/__pycache__ %WSL_SRC%/src/transfer/__pycache__"
+wsl -d %WSL_DISTRO% bash -c "rm -rf %WSL_SRC%/dist %WSL_SRC%/build %WSL_SRC%/historys %WSL_SRC%/__pycache__ %WSL_SRC%/src/__pycache__ %WSL_SRC%/src/gotogo/__pycache__ %WSL_SRC%/src/common/__pycache__"
 echo        [7/9] 正在使用 PyInstaller 在 WSL 中构建...
 wsl -d %WSL_DISTRO% bash -c "cd %WSL_SRC% && python3 -m PyInstaller --clean --noconfirm %WSL_SPEC%" 2>&1
 if errorlevel 1 ( echo [错误] 构建失败 & goto :fail )
@@ -190,7 +190,7 @@ if exist "%SRC%\historys" rmdir /s /q "%SRC%\historys"
 if exist "%SRC%\__pycache__" rmdir /s /q "%SRC%\__pycache__"
 if exist "%SRC%\src\__pycache__" rmdir /s /q "%SRC%\src\__pycache__"
 if exist "%SRC%\src\gotogo\__pycache__" rmdir /s /q "%SRC%\src\gotogo\__pycache__"
-if exist "%SRC%\src\transfer\__pycache__" rmdir /s /q "%SRC%\src\transfer\__pycache__"
+if exist "%SRC%\src\common\__pycache__" rmdir /s /q "%SRC%\src\common\__pycache__"
 echo        [5/8] 正在使用 PyInstaller 构建...
 python -m PyInstaller --clean --noconfirm SSHFleet.spec
 if errorlevel 1 ( popd & echo [错误] 构建失败 & goto :fail )
