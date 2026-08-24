@@ -63,6 +63,7 @@ from src.output.xlsx import format_output_to_xlsx, format_dict_list_to_xlsx
 from src.gotogo.go_to_go import go_to_go
 from src.common.loader import load_config, load_yaml_file
 from src.common.error_handler import print_error_information_and_exit
+from src.security.master_key import handle_gen_key
 import src.common.constants as color
 
 
@@ -105,6 +106,12 @@ def main():
     # 参数解析
     args = parse_args(config)
     tlog.success(f"参数解析成功,解析结果: {args}")
+
+    # 密钥管理模式：生成主密钥后直接退出，不走批量执行流程
+    if getattr(args, "gen_key", False):
+        tlog.info("进入密钥管理模式（--gen-key）")
+        handle_gen_key()
+        sys.exit(0)
 
     # 参数合规性检查
     check_arguments(args)
