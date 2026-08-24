@@ -85,7 +85,7 @@ def _read_credential(path: str, decode_base64: bool = True, level: str = "medium
         except CipherError as e:
             print_error_information_and_exit(
                 "_read_credential",
-                f"凭据文件解密失败（文件可能尚未用 --encrypt-password 升级，或主密钥不匹配）：{path}\n{e}",
+                f"凭据文件解密失败（文件可能尚未用 --convert-password 转换，或主密钥不匹配）：{path}\n{e}",
             )
     if decode_base64:
         return base64.b64decode(content).decode("utf-8")
@@ -141,7 +141,7 @@ _CREDENTIAL_MSG = {
     "bad_base64": "不是有效的Base64编码",
     "empty_decoded": "解码后内容为空",
     "bad_pem": "不是有效的PEM格式（缺少 -----BEGIN 头）",
-    "bad_cipher": "不是有效的加密格式或主密钥不匹配（请先用 --encrypt-password 升级该文件）",
+    "bad_cipher": "不是有效的加密格式或主密钥不匹配（请先用 --convert-password 转换该文件）",
 }
 
 
