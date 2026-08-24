@@ -67,6 +67,7 @@ class Account(StrictModel):
     password: str
     key: str = ""                  # 默认私钥文件路径（CSV 第 5 列留空时回退）
     key_passphrase: str = ""
+    password_security: str = "medium"  # 密码安全等级：low=明文 / medium=base64 / high=加密
 
 
 class UploadConcurrencyThreshold(StrictModel):
@@ -107,6 +108,13 @@ def load_config(config_path: str) -> SSHFleetConfig:
     if secret_dir:
         secret_dir = os.path.expanduser(secret_dir)
         config_dict["account"]["secret_dir"] = secret_dir
+
+    # 校验密码安全等级取值（非法值直接报错，避免静默回退到默认）
+    security_level = config_dict["account"].get("password_security", "medium")
+    if security_level not in ("low", "medium", "high"):
+        raise ValueError(
+            f"account.password_security 取值非法：'{security_level}'（仅支持 low / medium / high）"
+        )
 
     # 读取默认密码文件路径（不验证，相对路径与 secret_dir 拼接）
     password_path = config_dict["account"]["password"]

@@ -15,6 +15,8 @@ import src.common.constants as color
 from src.common.error_handler import error_and_exit_handling_decorator, print_error_information_and_exit
 from src.common.loader import SSHFleetConfig
 from src.input.interaction import get_user_confirmation
+from src.security.cipher import CipherError, decrypt_password, looks_encrypted
+from src.security.master_key import get_master_key_or_exit
 
 
 @dataclass
@@ -72,22 +74,32 @@ def _get_key_mode(args) -> str:
     return "universal"
 
 
-def _read_credential(path: str, decode_base64: bool = True) -> str:
-    """读取凭据文件：去空白，按需 Base64 解码为 UTF-8 文本"""
+def _read_credential(path: str, decode_base64: bool = True, level: str = "medium") -> str:
+    """读取凭据文件并按密码安全等级还原明文：high=主密钥解密；medium=Base64 解码；decode_base64=False=原样（PEM 专用）"""
     with open(path, "r", encoding="utf-8") as f:
         content = f.read().strip()
+    if level == "high" and decode_base64:
+        master_key = get_master_key_or_exit("_read_credential")
+        try:
+            return decrypt_password(content, master_key)
+        except CipherError as e:
+            print_error_information_and_exit(
+                "_read_credential",
+                f"凭据文件解密失败（文件可能尚未用 --encrypt-password 升级，或主密钥不匹配）：{path}\n{e}",
+            )
     if decode_base64:
         return base64.b64decode(content).decode("utf-8")
     return content
 
 
-def _check_credential_file(path: str, kind: str = "base64") -> List[Tuple[str, Optional[str]]]:
+def _check_credential_file(path: str, kind: str = "base64", level: str = "medium") -> List[Tuple[str, Optional[str]]]:
     """校验凭据文件，返回 [(错误码, 细节)] 列表，空列表=通过
 
     kind: "base64"=内容可解码（与原实现的口令校验一致，不判空）；
          "base64_nonempty"=内容可解码且非空（密码类校验）；
          "pem"=内容以 -----BEGIN 开头
-    错误码: missing / read_error / empty / bad_base64 / empty_decoded / bad_pem
+    level: 密码安全等级；high 时 base64 类检查替换为加密格式+可解密性检查
+    错误码: missing / read_error / empty / bad_base64 / empty_decoded / bad_pem / bad_cipher
     """
     if not os.path.exists(path):
         return [("missing", None)]
@@ -99,6 +111,17 @@ def _check_credential_file(path: str, kind: str = "base64") -> List[Tuple[str, O
     if not content:
         return [("empty", None)]
     if kind in ("base64", "base64_nonempty"):
+        if level == "high":
+            if not looks_encrypted(content):
+                return [("bad_cipher", None)]
+            master_key = get_master_key_or_exit("_check_credential_file")
+            try:
+                decoded = decrypt_password(content, master_key)
+            except CipherError as e:
+                return [("bad_cipher", str(e))]
+            if kind == "base64_nonempty" and not decoded:
+                return [("empty_decoded", None)]
+            return []
         try:
             decoded = base64.b64decode(content)
         except Exception:
@@ -118,6 +141,7 @@ _CREDENTIAL_MSG = {
     "bad_base64": "不是有效的Base64编码",
     "empty_decoded": "解码后内容为空",
     "bad_pem": "不是有效的PEM格式（缺少 -----BEGIN 头）",
+    "bad_cipher": "不是有效的加密格式或主密钥不匹配（请先用 --encrypt-password 升级该文件）",
 }
 
 
@@ -191,7 +215,7 @@ def validate_csv_credentials(csv_infos: List[List[str]], config: SSHFleetConfig,
         if password:
             # 有密码路径：解析并验证文件
             password_path = resolve_credential_path(password, config.account.secret_dir)
-            password_errs = _check_credential_file(password_path, "base64_nonempty")
+            password_errs = _check_credential_file(password_path, "base64_nonempty", level=config.account.password_security)
             if password_errs:
                 errors.extend(
                     f"行 {idx} (IP: {row[0]}): 密码文件{_credential_msg(code, password_path, detail)}"
@@ -222,7 +246,7 @@ def validate_csv_credentials(csv_infos: List[List[str]], config: SSHFleetConfig,
             passphrase_raw = row[5].strip() if len(row) > 5 else ""
             if passphrase_raw:
                 pp_path = resolve_credential_path(passphrase_raw, config.account.secret_dir)
-                pp_errs = _check_credential_file(pp_path, "base64")
+                pp_errs = _check_credential_file(pp_path, "base64", level=config.account.password_security)
                 errors.extend(
                     f"行 {idx} (IP: {row[0]}): 私钥口令文件{_credential_msg(code, pp_path, detail)}"
                     for code, detail in pp_errs
@@ -235,14 +259,14 @@ def validate_csv_credentials(csv_infos: List[List[str]], config: SSHFleetConfig,
         else:
             errors.extend(
                 f"默认密码文件{_credential_msg(code, config.account.password, detail)}"
-                for code, detail in _check_credential_file(config.account.password, "base64_nonempty")
+                for code, detail in _check_credential_file(config.account.password, "base64_nonempty", level=config.account.password_security)
             )
 
     # 如果有节点使用密钥且配置了passphrase，验证passphrase文件（仅状态2）
     if key_mode == "default" and any_node_uses_key and config.account.key_passphrase and config.account.key_passphrase != "":
         errors.extend(
             f"密钥passphrase文件{_credential_msg(code, config.account.key_passphrase, detail)}"
-            for code, detail in _check_credential_file(config.account.key_passphrase, "base64_nonempty")
+            for code, detail in _check_credential_file(config.account.key_passphrase, "base64_nonempty", level=config.account.password_security)
         )
 
     if errors:
@@ -280,7 +304,7 @@ def read_nodes_infos(csv_path: str, config: SSHFleetConfig, args, is_inline: boo
     # 3. 读取全局passphrase（仅状态2，一次读取所有节点共用）
     key_passphrase = ""
     if key_mode == "default" and config.account.key_passphrase and config.account.key_passphrase != "":
-        key_passphrase = _read_credential(config.account.key_passphrase)
+        key_passphrase = _read_credential(config.account.key_passphrase, level=config.account.password_security)
 
     # 4. 状态3：统一私钥——循环前读取一次，口令直接问用户（空/回车=无口令，真不真交给 Go）
     universal_key_content = ""
@@ -429,7 +453,7 @@ def _parse_node(row, idx, key_mode, config, args, mem, key_passphrase, universal
         passphrase_raw = row[5].strip() if len(row) > 5 else ""
         if passphrase_raw:
             pp_path = resolve_credential_path(passphrase_raw, config.account.secret_dir)
-            node_key_passphrase = _read_credential(pp_path)
+            node_key_passphrase = _read_credential(pp_path, level=config.account.password_security)
         elif key_passphrase:
             # 全局配置（已在文件开头解码）
             node_key_passphrase = key_passphrase
@@ -529,10 +553,10 @@ def _resolve_password(password_raw, config, has_key, mem, idx, total_nodes, ip, 
     password = password_raw.strip() if password_raw else ""
     if password:  # CSV中有值，最高优先级
         password_path = resolve_credential_path(password, config.account.secret_dir)
-        return _read_credential(password_path)
+        return _read_credential(password_path, level=config.account.password_security)
     if config.account.password and config.account.password != "None":  # 使用配置的默认值
-        # 读取密码文件内容并解码base64（预检查已验证文件有效性）
-        return _read_credential(config.account.password)
+        # 读取密码文件内容并按安全等级还原（预检查已验证文件有效性）
+        return _read_credential(config.account.password, level=config.account.password_security)
     if has_key:  # 仅使用密钥认证，无需密码
         return ""
     if mem.password_use_input:  # 使用之前用户输入的值
