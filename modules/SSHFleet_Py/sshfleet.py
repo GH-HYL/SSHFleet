@@ -64,7 +64,7 @@ from src.gotogo.go_to_go import go_to_go
 from src.common.loader import load_config, load_yaml_file
 from src.common.error_handler import print_error_information_and_exit
 from src.security.master_key import handle_gen_key
-from src.security.upgrade import handle_encrypt_password
+from src.security.upgrade import handle_convert_password
 import src.common.constants as color
 
 
@@ -121,10 +121,10 @@ def main():
         handle_gen_key()
         sys.exit(0)
 
-    # 凭据升级模式：加密旧格式凭据文件后直接退出，不走批量执行流程
-    if getattr(args, "encrypt_password", False):
-        tlog.info("进入凭据升级模式（--encrypt-password）")
-        handle_encrypt_password(args.encrypt_password, config.account.secret_dir)
+    # 凭据转换模式：按密码安全等级转换凭据文件后直接退出，不走批量执行流程
+    if getattr(args, "convert_password", False):
+        tlog.info("进入凭据转换模式（--convert-password）")
+        handle_convert_password(args.convert_password, config.account.secret_dir, config.account.password_security)
         sys.exit(0)
 
     # 参数合规性检查

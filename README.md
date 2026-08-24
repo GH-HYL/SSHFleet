@@ -126,7 +126,7 @@ python3 sshfleet.py -f nodes.csv -c "df -h" --disinteractive
 ### 参数说明
 
 ```
-python3 sshfleet.py  ( -c | -s | -u | -d )  ( -f ) ( -p ) [可选参数]
+python3 sshfleet.py  ( -c | -s | -u | -d | --gen-key | --convert-password )  ( -f ) ( -p ) [可选参数]
 ```
 
 > 白话解释：每次只能选一种「模式」（`-c`/`-s`/`-u`/`-d` 四选一，`|` 表示「或」）；选了 `-c`/`-s`/`-u`/`-d` 时必须再带 `-f`（节点清单），上传/下载还要带 `-p`；其余都是可加可不加的选项。
@@ -161,6 +161,8 @@ python3 sshfleet.py  ( -c | -s | -u | -d )  ( -f ) ( -p ) [可选参数]
 | `--nobash` | 命令模式专用：不套一层 bash 环境，直接执行原始命令 |
 | `--disinteractive` | 跳过所有确认提示直接执行（批量跑脚本时常用） |
 | `-k [KEY_PATH]` | 密钥登录开关（三态，详见下方「密钥登录与 `-k` 选项」）：不指定=纯密码；仅 `-k`=用 CSV/配置默认密钥；`-k 路径`=所有节点统一私钥 |
+| `--gen-key` | 生成随机主密钥并持久化到系统环境变量 `SSHFLEET_KEY`（high 密码等级加密凭据用；Windows 写注册表、Linux 写 ~/.bashrc） |
+| `--convert-password 文件路径` | 按配置的密码安全等级转换凭据文件：medium=把明文密码转码为 base64；high=把明文/base64 密码加密为密文（需先 `--gen-key`）。已处于目标格式会提示跳过；路径支持相对 secret_dir |
 
 ### CSV 文件格式
 
@@ -288,7 +290,8 @@ account:
   port: 22                      # 默认 SSH 端口，CSV 里不写端口时用这个
   user: root                    # 默认登录用户名
   secret_dir: ~/.MyPW           # 凭据目录：CSV 里写的相对路径（密码/私钥/口令文件）都拼到这里
-  password: ~/.MyPW/pw.txt      # 默认密码文件：内容是 Base64 编码后的密码（见 CSV 第 1 步）
+  password_security: medium     # 密码安全等级：medium=base64 编码（默认）；high=加密存储（需 --gen-key + --convert-password）
+  password: ~/.MyPW/pw.txt      # 默认密码文件：内容格式由 password_security 决定（medium=Base64；high=加密）
 ```
 
 主要配置项：
@@ -296,6 +299,7 @@ account:
 | 配置段 | 关键参数 | 解读 |
 | --- | --- | --- |
 | `account` | port, user, secret\_dir, password, key | CSV 里没填端口/用户名/密码/私钥时用的默认值；`password`/`key` 是「文件路径」，文件内容才是真正的密码/私钥 |
+| `account` | password\_security | 密码安全等级：medium=base64 编码（默认）；high=加密存储（配合 `--gen-key` 生成主密钥、`--convert-password` 转换文件）；low 未开发 |
 | `account` | key\_passphrase | 默认私钥口令文件（仅当用「加密过的密钥」登录才需要）；内容是该口令的 Base64，可被 CSV 第 6 列按节点覆盖 |
 | `execution` | mode, timeout\_\* | 执行权限（direct/sudo）、各种超时时间 |
 | `enable` | output\_to\_xlsx, results\_to\_xlsx | 是否把结果导出成 Excel |
