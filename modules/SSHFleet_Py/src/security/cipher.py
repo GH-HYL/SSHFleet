@@ -92,11 +92,10 @@ def decrypt_password(token: str, master_key: str) -> str:
     nonce = raw[1:1 + NONCE_SIZE]
     mac = raw[-MAC_SIZE:]
     ciphertext = raw[1 + NONCE_SIZE:-MAC_SIZE]
-    _, mac_key = _derive_keys(master_key)
+    enc_key, mac_key = _derive_keys(master_key)
     expected = hmac.new(mac_key, VERSION + nonce + ciphertext, hashlib.sha256).digest()
     if not hmac.compare_digest(mac, expected):
         raise CipherError("完整性校验失败：主密钥不匹配或文件已损坏")
-    enc_key, _ = _derive_keys(master_key)
     return _keystream_xor(enc_key, nonce, ciphertext).decode("utf-8")
 
 
