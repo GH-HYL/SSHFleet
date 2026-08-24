@@ -80,7 +80,7 @@ def parse_args(config: SSHFleetConfig) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="SSHFleet - 基于 Go 后端的批量 SSH 执行命令和传输文件工具",
         formatter_class=argparse.RawTextHelpFormatter,
-        usage="\npython3 sshfleet.py  ( -c | -s | -u | -d | --gen-key | --encrypt-password )  ( -f ) ( -p ) [其他可选参数]\n",
+        usage="\npython3 sshfleet.py  ( -c | -s | -u | -d | --gen-key | --convert-password )  ( -f ) ( -p ) [其他可选参数]\n",
         epilog=(
             "\n示例:\n"
             '  命令模式: python3 sshfleet.py -f nodes.csv -c "ls -l"\n'
@@ -109,7 +109,7 @@ def parse_args(config: SSHFleetConfig) -> argparse.Namespace:
         ('--disinteractive', None, None, '跳过所有确认提示直接执行 (批量跑脚本时常用)'),
         ('-k', 'KEY_PATH', '(密钥登录)', '不指定=纯密码; 仅 -k=用CSV/配置默认密钥; -k 路径=所有节点统一私钥', '?'),
         ('--gen-key', None, '(密钥管理)', '生成随机主密钥并持久化到系统环境变量 SSHFLEET_KEY（凭据加密用）'),
-        ('--encrypt-password', 'CRED_FILE', '(密钥管理)', '把旧格式凭据文件（明文/base64）就地加密升级，路径支持相对 secret_dir'),
+        ('--convert-password', 'CRED_FILE', '(密钥管理)', '按密码等级转换凭据文件：medium 把明文转码为 base64、high 把明文/base64 加密；路径支持相对 secret_dir'),
     ]
 
     def display_width(s):
