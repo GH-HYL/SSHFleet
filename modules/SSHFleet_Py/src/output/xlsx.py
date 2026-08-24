@@ -2,7 +2,6 @@
 # SSHFleet Excel输出模块
 
 import os
-import re
 import sys
 from typing import Dict, List, Any
 from posixpath import join as posix_join

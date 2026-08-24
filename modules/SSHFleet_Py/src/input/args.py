@@ -2,7 +2,6 @@
 # SSHFleet 参数解析模块
 
 import argparse
-import base64
 import os
 import sys
 
@@ -10,62 +9,6 @@ from src.common.error_handler import error_and_exit_handling_decorator, print_er
 from src.common.text_utils import args_normalize_path
 from src.common.loader import SSHFleetConfig
 
-
-def validate_password_file(file_path: str) -> None:
-    """
-    验证密码文件的有效性
-
-    Args:
-        file_path: 密码文件路径
-
-    Raises:
-        SystemExit: 验证失败时退出程序
-    """
-
-    # 1. 检查文件是否存在
-    if not os.path.exists(file_path):
-        print_error_information_and_exit(
-            "validate_password_file",
-            f"密码文件不存在：{file_path}"
-        )
-
-    # 2. 检查文件是否可读
-    try:
-        with open(file_path, "r", encoding="utf-8") as f:
-            content = f.read().strip()
-    except PermissionError:
-        print_error_information_and_exit(
-            "validate_password_file",
-            f"密码文件无法读取：{file_path}"
-        )
-    except Exception as e:
-        print_error_information_and_exit(
-            "validate_password_file",
-            f"读取密码文件失败：{file_path}\n异常信息：{e}"
-        )
-
-    # 3. 检查文件内容是否为空
-    if not content:
-        print_error_information_and_exit(
-            "validate_password_file",
-            f"密码文件内容为空：{file_path}"
-        )
-
-    # 4. 检查是否为有效的 Base64 编码
-    try:
-        decoded = base64.b64decode(content)
-    except Exception as e:
-        print_error_information_and_exit(
-            "validate_password_file",
-            f"密码文件内容不是有效的 Base64 编码：{file_path}\n异常信息：{e}"
-        )
-
-    # 5. 检查解码后是否为空
-    if not decoded:
-        print_error_information_and_exit(
-            "validate_password_file",
-            f"密码文件解码后内容为空：{file_path}"
-        )
 
 @error_and_exit_handling_decorator("parse_args", "参数解析失败")
 def parse_args(config: SSHFleetConfig) -> argparse.Namespace:

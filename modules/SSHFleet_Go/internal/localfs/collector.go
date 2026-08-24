@@ -10,7 +10,6 @@ import (
 // FileItem 单个文件信息
 type FileItem struct {
 	LocalPath string // 绝对路径
-	RelPath   string // 相对于 file_path 的相对路径
 	FileName  string // 文件名
 	FileSize  int64
 }
@@ -32,7 +31,7 @@ func CollectFiles(filePath string) ([]FileItem, error) {
 		if fi.Mode()&os.ModeSymlink != 0 {
 			return nil, fmt.Errorf("file_path 是软链接: %s", filePath)
 		}
-		item, err := newFileItem(filePath, filePath, fi)
+		item, err := newFileItem(filePath, fi)
 		if err != nil {
 			return nil, err
 		}
@@ -83,7 +82,7 @@ func CollectFiles(filePath string) ([]FileItem, error) {
 		}
 		f.Close()
 
-		item, err := newFileItem(filePath, path, info)
+		item, err := newFileItem(path, info)
 		if err != nil {
 			return err
 		}
@@ -102,15 +101,9 @@ func CollectFiles(filePath string) ([]FileItem, error) {
 	return items, nil
 }
 
-func newFileItem(basePath, fullPath string, fi os.FileInfo) (FileItem, error) {
-	relPath, err := filepath.Rel(basePath, fullPath)
-	if err != nil {
-		return FileItem{}, fmt.Errorf("计算相对路径失败: %w", err)
-	}
-
+func newFileItem(fullPath string, fi os.FileInfo) (FileItem, error) {
 	return FileItem{
 		LocalPath: fullPath,
-		RelPath:   filepath.ToSlash(relPath),
 		FileName:  fi.Name(),
 		FileSize:  fi.Size(),
 	}, nil
