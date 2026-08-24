@@ -34,12 +34,16 @@
 #     │   └── interaction.py            # 用户交互确认
 #     ├── log/                          # 日志模块
 #     │   └── logger.py                 # 日志初始化与管理
-#     └── output/                       # 输出处理模块
-#         ├── terminal.py               # 终端格式化输出
-#         ├── report.py                 # 执行报告生成
-#         ├── xlsx.py                   # Excel 文件生成
-#         ├── statistics.py             # 结果统计计算
-#         └── archive.py                # 资源文件备份与打包
+#     ├── output/                       # 输出处理模块
+#     │   ├── terminal.py               # 终端格式化输出
+#     │   ├── report.py                 # 执行报告生成
+#     │   ├── xlsx.py                   # Excel 文件生成
+#     │   ├── statistics.py             # 结果统计计算
+#     │   └── archive.py                # 资源文件备份与打包
+#     └── security/                     # 凭据安全模块
+#         ├── cipher.py                 # 加密引擎（加密/解密/格式识别）
+#         ├── master_key.py             # 主密钥管理（--gen-key）
+#         └── upgrade.py                # 凭据转换（--convert-password）
 
 
 # 系统或第三方模块

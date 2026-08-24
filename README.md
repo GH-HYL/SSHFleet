@@ -183,7 +183,19 @@ CSV 就是一份"服务器清单"：**纯文本文件，每行一台服务器，
 
 #### 第 1 步：准备"密码文件"（第 4 列要用）
 
-密码文件 = 一个普通文本文件，内容是你服务器密码的 **Base64 编码**（不是密码原文）。下面给出各系统「一行命令」生成法；如果你更习惯 Python，安装说明里也有对应的 Python 写法。
+密码文件 = 一个普通文本文件，**内容格式由配置的密码安全等级 `account.password_security` 决定**：
+
+- **medium（默认）**：内容是服务器密码的 **Base64 编码**；
+- **high**：内容是加密后的密文（需先用 `--gen-key` 生成主密钥）。
+
+**推荐做法**：把明文密码写进文件，再用 `--convert-password` 一键转换成当前等级对应的格式（medium 转成 base64、high 加密）：
+
+```bash
+echo -n '你的服务器密码' > ~/.MyPW/pw.txt
+python sshfleet.py --convert-password ~/.MyPW/pw.txt
+```
+
+如果不想用转换命令，也可以手动生成 base64（仅 medium 等级适用）：
 
 - **Linux / macOS** 终端：
 
@@ -199,7 +211,7 @@ CSV 就是一份"服务器清单"：**纯文本文件，每行一台服务器，
 
   （`~` 指你的用户目录，Windows 下即 `C:\Users\你的用户名`）
 
-然后 CSV 第 4 列就写这个文件的路径，例如 `~/.MyPW/pw.txt`。程序会读取该文件、Base64 解码后得到真正的密码去登录。
+然后 CSV 第 4 列就写这个文件的路径，例如 `~/.MyPW/pw.txt`。程序会按当前等级读取该文件（medium 解码 / high 解密）得到真正的密码去登录。
 
 #### 第 2 步：写 CSV（挑适合你的场景抄）
 
@@ -425,12 +437,16 @@ src/
 │   └── interaction.py          # 用户交互确认
 ├── log/                        # 日志模块
 │   └── logger.py               # 日志初始化与管理
-└── output/                     # 输出处理模块
-    ├── terminal.py             # 终端格式化输出
-    ├── report.py               # 执行报告生成
-    ├── xlsx.py                 # Excel 文件生成
-    ├── statistics.py           # 结果统计计算
-    └── archive.py              # 资源文件备份与打包
+├── output/                     # 输出处理模块
+│   ├── terminal.py             # 终端格式化输出
+│   ├── report.py               # 执行报告生成
+│   ├── xlsx.py                 # Excel 文件生成
+│   ├── statistics.py           # 结果统计计算
+│   └── archive.py              # 资源文件备份与打包
+└── security/                   # 凭据安全模块
+    ├── cipher.py               # 加密引擎（加密/解密/格式识别）
+    ├── master_key.py           # 主密钥管理（--gen-key）
+    └── upgrade.py              # 凭据转换（--convert-password）
 ```
 
 ### 执行流程
