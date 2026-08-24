@@ -52,7 +52,6 @@ class SseSession:
     results: List = field(default_factory=list)
     output_file: Any = None
     # UI 引用（传输模式才有 total_progress/total_task/node_bars/speed_tracker）
-    progress_table: Any = None
     node_progress: Any = None
     node_task: Any = None
     total_progress: Any = None
@@ -504,7 +503,6 @@ def go_to_go(
     # SSE 会话上下文（进度状态 + UI 引用 + 结果集；传输模式才注入 total/node_bars/speed_tracker）
     session = SseSession(
         output_file=output_file,
-        progress_table=progress_table,
         node_progress=node_progress,
         node_task=node_task,
         total_progress=total_progress if (args.u or args.d) else None,
