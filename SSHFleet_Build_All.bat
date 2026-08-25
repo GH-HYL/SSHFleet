@@ -259,8 +259,8 @@ exit /b 0
 
 REM ============================================================
 REM 子过程: 清理 Python 运行缓存 (由 Clean_Py_Cache.bat 整合)
-REM 删除 %SCRIPT_DIR%modules 下的 __pycache__/.pytest_cache 文件夹
-REM 与 *.pyc/*.pyo 编译缓存文件
+REM 删除 %SCRIPT_DIR%modules 下的 __pycache__/.pytest_cache 文件夹、
+REM *.pyc/*.pyo 编译缓存文件, 以及 SSHFleet_py\historys 命令历史目录
 REM ============================================================
 :clean_pycache
 set "TARGET=%SCRIPT_DIR%modules"
@@ -285,6 +285,14 @@ for /f "delims=" %%f in ('dir /b /s /a-d "%TARGET%\*.pyc" 2^>nul') do (
 for /f "delims=" %%f in ('dir /b /s /a-d "%TARGET%\*.pyo" 2^>nul') do (
     del /f /q "%%f" 2>nul
     if exist "%%f" ( echo   [失败] 无法删除文件: %%f ) else ( set /a DEL_FILE+=1 )
+)
+REM 删除命令历史记录目录 historys (整个目录直接删)
+set "HISTORY_DIR=%TARGET%\SSHFleet_py\historys"
+if exist "%HISTORY_DIR%" (
+    rd /s /q "%HISTORY_DIR%" 2>nul
+    if exist "%HISTORY_DIR%" ( echo   [失败] 无法删除目录: %HISTORY_DIR% ) else ( echo   已删除目录: %HISTORY_DIR% & set /a DEL_DIR+=1 )
+) else (
+    echo   [跳过] 目录不存在: %HISTORY_DIR%
 )
 echo        清理完成: 删除文件夹 %DEL_DIR% 个, 删除文件 %DEL_FILE% 个
 goto :eof

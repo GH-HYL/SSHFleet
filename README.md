@@ -45,7 +45,7 @@ SSHFleet —— 基于 Python + Go 混合开发的 SSH 批量运维工具，专�
 ### 前置要求
 
 - Python 3.10+
-- Go 引擎需自行编译：源码在 `modules/SSHFleet_Go/`，用 `go build` 编译后，把生成的 `SSHFleet_Go`（Linux）/ `SSHFleet_Go.exe`（Windows）放进 `src/go/` 目录（仓库不含预编译二进制）。如果你不会编译 Go，可临时从作者处获取对应二进制放入该目录
+- Go 引擎需自行编译：源码在 `modules/SSHFleet_Go/`，用 `go build` 编译后，把生成的 `SSHFleet_Go`（Linux）/ `SSHFleet_Go.exe`（Windows）放进 `src/go/` 目录（仓库不含预编译二进制）。如果你不会编译 Go，可临时从作者处获取对应二进制执行文件放入该目录
 - 支持的操作系统：Windows / Linux
 
 ### 安装步骤
@@ -74,7 +74,7 @@ pip install loguru pydantic pyyaml rich openpyxl requests
 account:
 port: 22
 user: root
-password: '/path/to/password_file'  # 密码文件路径，文件内容为base64编码的密码
+password: '/path/to/password_file'  # 密码文件路径，文件内容需根据密码安全等级转化，详见密码等级描述
 ```
 
 ### 密码 base64 编码方法
@@ -162,7 +162,7 @@ python3 sshfleet.py  ( -c | -s | -u | -d | --gen-key | --convert-password )  ( -
 | `--disinteractive` | 跳过所有确认提示直接执行（批量跑脚本时常用） |
 | `-k [KEY_PATH]` | 密钥登录开关（三态，详见下方「密钥登录与 `-k` 选项」）：不指定=纯密码；仅 `-k`=用 CSV/配置默认密钥；`-k 路径`=所有节点统一私钥 |
 | `--gen-key` | 生成随机主密钥并持久化到系统环境变量 `SSHFLEET_KEY`（high 密码等级加密凭据用；Windows 写注册表、Linux 写 ~/.bashrc） |
-| `--convert-password 文件路径` | 按配置的密码安全等级转换凭据文件：medium=把明文密码转码为 base64；high=把明文/base64 密码加密为密文（需先 `--gen-key`）。已处于目标格式会提示跳过；路径支持相对 secret_dir |
+| `--convert-password 文件路径` | 按配置的密码安全等级转换凭据文件：medium=把明文密码转码为 base64；high=把明文/base64 密码加密为密文（需先 `--gen-key`）。已处于目标格式会提示跳过；路径支持相对 secret\_dir |
 
 ### CSV 文件格式
 
@@ -183,7 +183,7 @@ CSV 就是一份"服务器清单"：**纯文本文件，每行一台服务器，
 
 #### 第 1 步：准备"密码文件"（第 4 列要用）
 
-密码文件 = 一个普通文本文件，**内容格式由配置的密码安全等级 `account.password_security` 决定**：
+密码文件 = 一个普通文本文件，**内容格式由配置的密码安全等级 **`account.password_security`** 决定**：
 
 - **medium（默认）**：内容是服务器密码的 **Base64 编码**；
 - **high**：内容是加密后的密文（需先用 `--gen-key` 生成主密钥）。
