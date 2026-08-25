@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 # SSHFleet 凭据转换处理
 # 职责：--convert-password 入口，按密码安全等级把凭据文件就地转换为对应格式
-#   medium 等级：明文 → base64 转码
-#   high 等级：明文/base64 → 加密（需主密钥）
+#   2 等级：明文 → base64 转码
+#   3 等级：明文/base64 → 加密（需主密钥）
+#   1 等级：明文即目标格式，仅提示无需转换
 # 决策背景见 docs/adr/0007-homemade-cipher-env-key.md
 
 import base64
@@ -53,19 +54,24 @@ def handle_convert_password(raw_path: str, secret_dir: str, level: str) -> None:
     参数：
         raw_path: 用户输入的凭据文件路径
         secret_dir: 配置的凭据目录（相对路径回退拼接用）
-        level: 密码安全等级（medium=base64 转码；high=加密），来自配置 account.password_security
+        level: 密码安全等级（2=base64 转码；3=加密；1=无需转换），来自配置 account.password_security
     """
     path = _resolve_cred_path(raw_path, secret_dir)
     content = _read_cred_content(path)
 
-    if level == "high":
+    if level == "3":
         _convert_to_encrypted(path, content)
-    elif level == "medium":
+    elif level == "2":
         _convert_to_base64(path, content)
+    elif level == "1":
+        print(
+            f"密码安全等级为 1（明文）：凭据文件内容即密码原文，无需转换：{path}\n"
+            f"（如该文件原本是 base64 或加密格式，等级 1 下会按原文直接当作密码使用，请先手动还原为明文）"
+        )
     else:
         print_error_information_and_exit(
             "handle_convert_password",
-            f"不支持的密码安全等级：{level}（仅支持 medium / high）",
+            f"不支持的密码安全等级：{level}（仅支持 1/2/3：1=明文，2=base64，3=加密）",
         )
 
 
@@ -86,12 +92,12 @@ def _read_cred_content(path: str) -> str:
 
 
 def _convert_to_base64(path: str, content: str) -> None:
-    """medium 分支：明文 → base64 转码；已转码/已是加密格式时提示并跳过"""
+    """2 等级分支：明文 → base64 转码；已转码/已是加密格式时提示并跳过"""
     if looks_encrypted(content):
         print_error_information_and_exit(
             "handle_convert_password",
-            f"文件已是加密格式，与当前 medium 密码等级不匹配，不做降级转换：{path}\n"
-            f"如需处理该文件，请先将配置 account.password_security 改为 high 再操作",
+            f"文件已是加密格式，与当前 2（base64）密码等级不匹配，不做降级转换：{path}\n"
+            f"如需处理该文件，请先将配置 account.password_security 改为 3 再操作",
         )
     if is_probably_base64_text(content):
         print(f"该文件已是 base64 编码，无需转码：{path}")
@@ -101,7 +107,7 @@ def _convert_to_base64(path: str, content: str) -> None:
 
 
 def _convert_to_encrypted(path: str, content: str) -> None:
-    """high 分支：明文/base64 → 加密；已加密时提示并跳过（先判已加密，无需主密钥）"""
+    """3 等级分支：明文/base64 → 加密；已加密时提示并跳过（先判已加密，无需主密钥）"""
     if looks_encrypted(content):
         print(f"原文件已经是加密文件，无需重复加密：{path}")
         return

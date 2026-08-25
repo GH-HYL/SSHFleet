@@ -6,7 +6,10 @@ account:
   port: 10022                 # CSV文件默认IP端口 10022
   user: "jx_zyc"              # CSV文件默认用户名
   secret_dir: "~/.MyPW"       # 凭据目录：密码 / 私钥 / 私钥口令文件的相对路径都拼到这里
-  password_security: medium   # 密码安全等级：medium=base64编码（默认）；high=加密存储（需先 --gen-key 配置主密钥，再用 --convert-password 转换密码文件）；low=明文（待开发）
+  password_security: 2          # 密码安全等级，数字越大越安全
+                                #   1=明文：文件内容即密码原文，安全性最低
+                                #   2=base64：文件内容为密码的base64编码（默认）
+                                #   3=加密：文件内容为密文，需 --gen-key 配主密钥后转换
   password: "SSHFleet_pw"     # 默认密码文件路径：内容需 --convert-password 将密码文件明文内容转换成对应的密码文件，具体转换内容格式自动根据密码安全等级变化，无则留空；支持绝对路径或相对 secret_dir 的路径
   key: ""                     # 默认私钥文件路径：内容为 PEM 私钥；支持绝对路径或相对 secret_dir 的路径
   key_passphrase: ""          # 默认私钥口令文件路径：内容需 --convert-password 将密码文件明文内容转换成对应的密码文件，具体转换内容格式自动根据密码安全等级变化，无则留空；支持绝对路径或相对 secret_dir 的路径
