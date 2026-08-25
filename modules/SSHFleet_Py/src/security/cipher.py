@@ -122,6 +122,18 @@ def is_probably_base64_text(text: str) -> bool:
     return base64.b64encode(raw).decode("ascii") == compact
 
 
+def classify_credential(text: str) -> str:
+    """凭据内容预分类（无需密钥，仅凭结构识别）：
+    encrypted=本工具等级3（加密）格式；base64=等级2（base64）格式；plain=等级1（明文）形态。
+    判定顺序关键：加密 token 本身是合法 base64，必须优先判 encrypted。
+    """
+    if looks_encrypted(text):
+        return "encrypted"
+    if is_probably_base64_text(text):
+        return "base64"
+    return "plain"
+
+
 def generate_master_key() -> str:
     """生成随机主密钥（约48字符 URL 安全文本）"""
     return secrets.token_urlsafe(36)
