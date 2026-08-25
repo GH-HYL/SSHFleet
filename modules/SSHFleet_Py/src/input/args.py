@@ -54,7 +54,7 @@ def parse_args(config: SSHFleetConfig) -> argparse.Namespace:
         ('--disinteractive', None, None, '跳过所有确认提示直接执行 (批量跑脚本时常用)'),
         ('-k', 'KEY_PATH', '(密钥登录)', '不指定=纯密码; 仅 -k=用CSV/配置默认密钥; -k 路径=所有节点统一私钥', '?'),
         ('--gen-key', None, '(密钥管理)', '生成随机主密钥并持久化到系统环境变量 SSHFLEET_KEY（凭据加密用）'),
-        ('--convert-password', 'CRED_FILE', '(密钥管理)', '按密码等级转换凭据文件：2 等级把明文转码为 base64，3 等级把明文/base64 加密为密文，1 等级提示无需转换；路径支持相对 secret_dir'),
+        ('--convert-password', '', '(密钥管理)', '转换凭据文件（后面跟目标文件路径）：自动识别明文/base64/加密格式并按配置等级转换，支持升降级；加密/解密需已配置主密钥；路径支持相对 secret_dir'),
     ]
 
     def display_width(s):
@@ -83,7 +83,7 @@ def parse_args(config: SSHFleetConfig) -> argparse.Namespace:
             help_str = f'{pad_to_width(col2, col2_width)}  {desc}'
             if nargs == '?':
                 parser.add_argument(opt, metavar=metavar, nargs='?', const='no_value', default='', help=help_str)
-            elif metavar:
+            elif metavar is not None:  # metavar 可为空字符串（隐藏参数占位），仅 None 表示无参数选项
                 parser.add_argument(opt, metavar=metavar, help=help_str)
             else:
                 parser.add_argument(opt, action='store_true', help=help_str)
