@@ -132,8 +132,12 @@ def _persist_key(key: str) -> None:
     print("提示：执行 source ~/.bashrc 或重新打开终端后生效")
 
 
-def handle_gen_key() -> None:
-    """--gen-key 入口：生成随机主密钥并持久化，已有密钥时先确认覆盖"""
+def handle_gen_key(disinteractive: bool = False) -> None:
+    """--gen-key 入口：生成随机主密钥并持久化，已有密钥时先确认覆盖
+
+    参数：
+        disinteractive: 非交互模式；已有密钥时拒绝自动覆盖（覆盖后旧加密文件无法解密，与 forbidden 危险命令同级兜底）
+    """
     new_key = generate_master_key()
     env_key = os.environ.get(ENV_NAME, "").strip()
     persisted_key = _read_persisted_key()
@@ -145,6 +149,13 @@ def handle_gen_key() -> None:
         if persisted_key:
             shown = persisted_key if persisted_key != "unknown" else "（无法解析内容）"
             print(f"  - 持久化位置: {shown[:12]}...")
+        if disinteractive:
+            print_error_information_and_exit(
+                "handle_gen_key",
+                f"检测到已存在主密钥，--disinteractive 非交互模式下不自动覆盖"
+                f"（覆盖后旧加密文件将无法解密）。\n"
+                f"如需覆盖请去掉 --disinteractive 后重新执行 --gen-key 并确认",
+            )
         if not _confirm_overwrite("是否覆盖原密钥？覆盖后旧加密文件将无法解密"):
             print("已保留原密钥，未做任何修改")
             return

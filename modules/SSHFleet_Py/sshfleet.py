@@ -115,7 +115,7 @@ def main():
     # 密钥管理模式：生成主密钥后直接退出，不走批量执行流程
     if getattr(args, "gen_key", False):
         tlog.info("进入密钥管理模式（--gen-key）")
-        handle_gen_key()
+        handle_gen_key(getattr(args, "disinteractive", False))
         sys.exit(0)
 
     # 凭据转换模式：按密码安全等级转换凭据文件后直接退出，不走批量执行流程
