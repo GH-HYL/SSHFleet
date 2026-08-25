@@ -76,7 +76,7 @@ def handle_convert_password(raw_path: str, secret_dir: str, level: str) -> None:
 
 
 def _read_cred_content(path: str) -> str:
-    """读取凭据文件内容并判空，空文件直接报错退出"""
+    """读取凭据文件内容并判空，空文件直接报错退出；附带文本/单行防御校验"""
     try:
         with open(path, "r", encoding="utf-8") as f:
             content = f.read().strip()
@@ -88,6 +88,19 @@ def _read_cred_content(path: str) -> str:
         print_error_information_and_exit(
             "handle_convert_password", f"凭据文件内容为空：{path}"
         )
+    # 防御：含 NUL 字节视为二进制文件，明确提示而非当作文本处理
+    if "\x00" in content:
+        print_error_information_and_exit(
+            "handle_convert_password",
+            f"凭据文件不是文本文件（内容含二进制数据）：{path}",
+        )
+    # 防御：明文凭据应为单行；多行 base64 / 加密格式（去空白后合法存储形态）放行
+    if "\n" in content or "\r" in content:
+        if not (is_probably_base64_text(content) or looks_encrypted(content)):
+            print_error_information_and_exit(
+                "handle_convert_password",
+                f"凭据文件内容含换行（应为单行明文），请检查是否误粘贴了多行内容：{path}",
+            )
     return content
 
 
