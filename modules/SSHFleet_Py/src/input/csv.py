@@ -15,7 +15,7 @@ import src.common.constants as color
 from src.common.error_handler import error_and_exit_handling_decorator, print_error_information_and_exit
 from src.common.loader import SSHFleetConfig
 from src.input.interaction import get_user_confirmation
-from src.security.cipher import CipherError, decrypt_password, is_probably_base64_text, looks_encrypted
+from src.security.cipher import CipherError, classify_credential, decrypt_password
 from src.security.master_key import get_master_key_or_exit
 
 
@@ -75,9 +75,32 @@ def _get_key_mode(args) -> str:
 
 
 def _read_credential(path: str, decode_base64: bool = True, level: str = "2") -> str:
-    """读取凭据文件并按密码安全等级还原明文：1=原样返回（明文）；2=Base64 解码；3=主密钥解密；decode_base64=False=原样（PEM 专用）"""
+    """读取凭据文件并按密码安全等级还原明文：1=原样返回（明文）；2=Base64 解码；3=主密钥解密；decode_base64=False=原样（PEM 专用）
+
+    兜底：凭据类（decode_base64=True）先做内容预分类，与当前等级不匹配时给出明确提示退出，避免把
+    加密密文/base64/明文互相误解产生晦涩的 traceback。
+    """
     with open(path, "r", encoding="utf-8") as f:
         content = f.read().strip()
+    if decode_base64:
+        fmt = classify_credential(content)
+        if fmt == "encrypted" and level != "3":
+            print_error_information_and_exit(
+                "_read_credential",
+                f"凭据文件是本工具等级3（加密）格式，与当前密码安全等级 {level}（1=明文 2=base64 3=加密）不匹配：{path}\n"
+                f"请将配置 account.password_security 改为 3，或先用 --convert-password 处理该文件",
+            )
+        if fmt == "base64" and level == "1":
+            print_error_information_and_exit(
+                "_read_credential",
+                f"凭据文件是等级2（base64）格式，与当前密码安全等级 1（明文）不匹配：{path}\n"
+                f"请先将该文件内容还原为明文，或将配置改为 2",
+            )
+        if fmt == "plain" and level in ("2", "3"):
+            print_error_information_and_exit(
+                "_read_credential",
+                f"凭据文件不是等级{level}格式（内容疑似明文），请先 --convert-password 转换：{path}",
+            )
     if level == "1":
         return content
     if level == "3" and decode_base64:
@@ -117,21 +140,21 @@ def _check_credential_file(path: str, kind: str = "base64", level: str = "2") ->
     if not content:
         return [("empty", None)]
     if kind in ("base64", "base64_nonempty"):
+        # 内容预分类：先识别文件内容属于哪个等级形态，再与当前等级匹配，不匹配时给出明确提示
+        fmt = classify_credential(content)
+        if fmt == "encrypted" and level != "3":
+            return [("mismatch_encrypted", f"当前等级 {level}（1=明文 2=base64 3=加密），文件为本工具等级3（加密）格式")]
+        if fmt == "base64" and level == "1":
+            return [("mismatch_base64", "当前等级 1（明文），文件为等级2（base64）格式，请先还原为明文或切换等级")]
+        if fmt == "base64" and level == "3":
+            return [("bad_cipher", "文件为等级2（base64）格式而非加密格式，请先 --convert-password 转换")]
+        if fmt == "plain" and level == "2":
+            return [("bad_base64", "内容疑似明文（等级1形态），请先 --convert-password 转换")]
+        if fmt == "plain" and level == "3":
+            return [("bad_cipher", "内容疑似明文（等级1形态），请先 --convert-password 转换")]
         if level == "1":
-            # 明文等级：文件内容即密码原文，只要求非空（上面已判）；疑似 base64/加密格式时告警但不阻断
-            if path not in _warned_format_paths and (
-                is_probably_base64_text(content) or looks_encrypted(content)
-            ):
-                _warned_format_paths.add(path)
-                print(
-                    f"[WARNING] 密码安全等级为 1（明文），但凭据文件内容疑似 base64/加密格式，"
-                    f"将按原文直接当作密码使用：{path}\n"
-                    f"（若这是从高等级切回 1 的旧文件，请先将其内容还原为明文）"
-                )
             return []
         if level == "3":
-            if not looks_encrypted(content):
-                return [("bad_cipher", None)]
             master_key = get_master_key_or_exit("_check_credential_file")
             try:
                 decoded = decrypt_password(content, master_key)
@@ -160,6 +183,8 @@ _CREDENTIAL_MSG = {
     "empty_decoded": "解码后内容为空",
     "bad_pem": "不是有效的PEM格式（缺少 -----BEGIN 头）",
     "bad_cipher": "不是有效的加密格式或主密钥不匹配（请先用 --convert-password 转换该文件）",
+    "mismatch_encrypted": "文件是本工具等级3（加密）格式，与当前密码安全等级不匹配",
+    "mismatch_base64": "文件是等级2（base64）格式，与当前密码安全等级不匹配",
 }
 
 

@@ -11,6 +11,7 @@ import os
 
 from src.common.error_handler import print_error_information_and_exit
 from src.security.cipher import (
+    classify_credential,
     encrypt_password,
     is_probably_base64_text,
     looks_encrypted,
@@ -64,10 +65,20 @@ def handle_convert_password(raw_path: str, secret_dir: str, level: str) -> None:
     elif level == "2":
         _convert_to_base64(path, content)
     elif level == "1":
-        print(
-            f"密码安全等级为 1（明文）：凭据文件内容即密码原文，无需转换：{path}\n"
-            f"（如该文件原本是 base64 或加密格式，等级 1 下会按原文直接当作密码使用，请先手动还原为明文）"
-        )
+        fmt = classify_credential(content)
+        if fmt == "encrypted":
+            print_error_information_and_exit(
+                "handle_convert_password",
+                f"该文件是本工具等级3（加密）格式，与当前等级 1（明文）不匹配，等级1 无需转换也无法按明文使用：{path}\n"
+                f"请将配置 account.password_security 改为 3，或先将该文件内容还原为明文",
+            )
+        if fmt == "base64":
+            print_error_information_and_exit(
+                "handle_convert_password",
+                f"该文件是等级2（base64）格式，与当前等级 1（明文）不匹配，等级1 无需转换也无法按明文使用：{path}\n"
+                f"请将配置改为 2，或先将该文件内容还原为明文",
+            )
+        print(f"密码安全等级为 1（明文）：凭据文件内容即密码原文，无需转换：{path}")
     else:
         print_error_information_and_exit(
             "handle_convert_password",
