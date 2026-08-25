@@ -52,7 +52,7 @@ def parse_args(config: SSHFleetConfig) -> argparse.Namespace:
         ('--disinteractive', None, None, '跳过所有确认提示直接执行 (批量跑脚本时常用)'),
         ('-k', 'KEY_PATH', '(密钥登录)', '不指定=纯密码; 仅 -k=用CSV/配置默认密钥; -k 路径=所有节点统一私钥', '?'),
         ('--gen-key', None, '(密钥管理)', '生成随机主密钥并持久化到系统环境变量 SSHFLEET_KEY（凭据加密用）'),
-        ('--convert-password', 'CRED_FILE', '(密钥管理)', '按密码等级转换凭据文件：medium 把明文转码为 base64、high 把明文/base64 加密；路径支持相对 secret_dir'),
+        ('--convert-password', 'CRED_FILE', '(密钥管理)', '按密码等级转换凭据文件：medium 明文内存进行 Base64 转码，high 加密明文或Base64密码内容 ；路径支持相对 secret_dir'),
     ]
 
     def display_width(s):
