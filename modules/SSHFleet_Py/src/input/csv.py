@@ -15,7 +15,7 @@ import src.common.constants as color
 from src.common.error_handler import error_and_exit_handling_decorator, print_error_information_and_exit
 from src.common.loader import SSHFleetConfig
 from src.input.interaction import get_user_confirmation
-from src.security.cipher import CipherError, decrypt_password, looks_encrypted
+from src.security.cipher import CipherError, decrypt_password, is_probably_base64_text, looks_encrypted
 from src.security.master_key import get_master_key_or_exit
 
 
@@ -74,11 +74,13 @@ def _get_key_mode(args) -> str:
     return "universal"
 
 
-def _read_credential(path: str, decode_base64: bool = True, level: str = "medium") -> str:
-    """读取凭据文件并按密码安全等级还原明文：high=主密钥解密；medium=Base64 解码；decode_base64=False=原样（PEM 专用）"""
+def _read_credential(path: str, decode_base64: bool = True, level: str = "2") -> str:
+    """读取凭据文件并按密码安全等级还原明文：1=原样返回（明文）；2=Base64 解码；3=主密钥解密；decode_base64=False=原样（PEM 专用）"""
     with open(path, "r", encoding="utf-8") as f:
         content = f.read().strip()
-    if level == "high" and decode_base64:
+    if level == "1":
+        return content
+    if level == "3" and decode_base64:
         master_key = get_master_key_or_exit("_read_credential")
         try:
             return decrypt_password(content, master_key)
@@ -92,13 +94,17 @@ def _read_credential(path: str, decode_base64: bool = True, level: str = "medium
     return content
 
 
-def _check_credential_file(path: str, kind: str = "base64", level: str = "medium") -> List[Tuple[str, Optional[str]]]:
+# 已对 1（明文）等级提示过"疑似 base64/加密格式"告警的凭据文件路径，避免多节点重复刷屏
+_warned_format_paths = set()
+
+
+def _check_credential_file(path: str, kind: str = "base64", level: str = "2") -> List[Tuple[str, Optional[str]]]:
     """校验凭据文件，返回 [(错误码, 细节)] 列表，空列表=通过
 
     kind: "base64"=内容可解码（与原实现的口令校验一致，不判空）；
          "base64_nonempty"=内容可解码且非空（密码类校验）；
          "pem"=内容以 -----BEGIN 开头
-    level: 密码安全等级；high 时 base64 类检查替换为加密格式+可解密性检查
+    level: 密码安全等级；1（明文）只要求非空、疑似格式仅告警不阻断；3（加密）时 base64 类检查替换为加密格式+可解密性检查
     错误码: missing / read_error / empty / bad_base64 / empty_decoded / bad_pem / bad_cipher
     """
     if not os.path.exists(path):
@@ -111,7 +117,19 @@ def _check_credential_file(path: str, kind: str = "base64", level: str = "medium
     if not content:
         return [("empty", None)]
     if kind in ("base64", "base64_nonempty"):
-        if level == "high":
+        if level == "1":
+            # 明文等级：文件内容即密码原文，只要求非空（上面已判）；疑似 base64/加密格式时告警但不阻断
+            if path not in _warned_format_paths and (
+                is_probably_base64_text(content) or looks_encrypted(content)
+            ):
+                _warned_format_paths.add(path)
+                print(
+                    f"[WARNING] 密码安全等级为 1（明文），但凭据文件内容疑似 base64/加密格式，"
+                    f"将按原文直接当作密码使用：{path}\n"
+                    f"（若这是从高等级切回 1 的旧文件，请先将其内容还原为明文）"
+                )
+            return []
+        if level == "3":
             if not looks_encrypted(content):
                 return [("bad_cipher", None)]
             master_key = get_master_key_or_exit("_check_credential_file")

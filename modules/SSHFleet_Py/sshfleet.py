@@ -85,13 +85,6 @@ def main():
         )
         sys.exit(1)
 
-    # 密码安全等级 low（明文存储）尚未开发，启动即拦截
-    if config.account.password_security == "low":
-        print_error_information_and_exit(
-            "main",
-            "密码安全等级 low（明文存储）暂未开发，请将配置 account.password_security 改为 medium 或 high",
-        )
-
     # 初始化工具日志
     try:
         init_tool_logger(config.paths.logs.historys, config)
