@@ -109,12 +109,13 @@ def load_config(config_path: str) -> SSHFleetConfig:
         secret_dir = os.path.expanduser(secret_dir)
         config_dict["account"]["secret_dir"] = secret_dir
 
-    # 校验密码安全等级取值（非法值直接报错，避免静默回退到默认）
-    security_level = config_dict["account"].get("password_security", "2")
+    # 校验密码安全等级取值（非法值直接报错，避免静默回退到默认；统一转 str，兼容 yaml 写 2 或 "2"）
+    security_level = str(config_dict["account"].get("password_security", "2"))
     if security_level not in ("1", "2", "3"):
         raise ValueError(
             f"account.password_security 取值非法：'{security_level}'（仅支持 1/2/3：1=明文，2=base64，3=加密）"
         )
+    config_dict["account"]["password_security"] = security_level
 
     # 读取默认密码文件路径（不验证，相对路径与 secret_dir 拼接）
     password_path = config_dict["account"]["password"]

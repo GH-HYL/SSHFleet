@@ -21,9 +21,11 @@ def parse_args(config: SSHFleetConfig) -> argparse.Namespace:
     """
 
     parser = argparse.ArgumentParser(
-        description="SSHFleet - 基于 Go 后端的批量 SSH 执行命令和传输文件工具",
+        description="SSHFleet - 基于 Go 引擎的批量 SSH 运维工具（命令/脚本执行、文件上传下载）",
         formatter_class=argparse.RawTextHelpFormatter,
-        usage="\npython3 sshfleet.py  ( -c | -s | -u | -d | --gen-key | --convert-password )  ( -f ) ( -p ) [其他可选参数]\n",
+        usage="\n"
+        "python3 sshfleet.py  ( -c | -s | -u | -d )  ( -f ) ( -p ) [其他可选参数]   批量执行（四种模式四选一）\n"
+        "python3 sshfleet.py  --gen-key | --convert-password 文件路径               工具选项（单独使用）\n",
         epilog=(
             "\n示例:\n"
             '  命令模式: python3 sshfleet.py -f nodes.csv -c "ls -l"\n'
