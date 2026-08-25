@@ -3,34 +3,34 @@
 
 # 账号信息
 account:
-  port: 10022                 # CSV文件默认IP端口 10022
-  user: "jx_zyc"              # CSV文件默认用户名
-  secret_dir: "~/.MyPW"       # 凭据目录：密码 / 私钥 / 私钥口令文件的相对路径都拼到这里
-  password_security: 2          # 密码安全等级，数字越大越安全
-                                #   1=明文：文件内容即密码原文，安全性最低
-                                #   2=base64：文件内容为密码的base64编码（默认）
-                                #   3=加密：文件内容为密文，需 --gen-key 配主密钥后转换
-  password: "SSHFleet_pw"     # 默认密码文件路径：内容需 --convert-password 将密码文件明文内容转换成对应的密码文件，具体转换内容格式自动根据密码安全等级变化，无则留空；支持绝对路径或相对 secret_dir 的路径
-  key: ""                     # 默认私钥文件路径：内容为 PEM 私钥；支持绝对路径或相对 secret_dir 的路径
-  key_passphrase: ""          # 默认私钥口令文件路径：内容需 --convert-password 将密码文件明文内容转换成对应的密码文件，具体转换内容格式自动根据密码安全等级变化，无则留空；支持绝对路径或相对 secret_dir 的路径
+  port: 10022                 # 默认 SSH 端口（CSV 第 2 列留空时用）
+  user: "jx_zyc"              # 默认用户名（CSV 第 3 列留空时用）
+  secret_dir: "~/.MyPW"       # 凭据目录：密码/私钥/私钥口令文件的相对路径都拼到这里
+  password_security: 2        # 密码安全等级，数字越大越安全
+                              #   1=明文：文件内容即密码原文，安全性最低
+                              #   2=base64：文件内容为密码的base64编码（默认）
+                              #   3=加密：文件内容为密文，需 --gen-key 配主密钥后转换
+  password: "SSHFleet_pw"     # 默认密码文件路径（内容格式随 password_security 变化，用 --convert-password 转换；无则留空）
+  key: ""                     # 默认私钥文件路径（内容为 PEM 私钥原文）
+  key_passphrase: ""          # 默认私钥口令文件路径（内容格式同密码文件，随等级变化；无则留空）
 
 # 执行参数
 execution:
-  mode: "sudo"           # 执行身份：direct=用登录用户身份执行，sudo=用 root 身份执行（默认 direct）
-  timeout_connect: 10    # 连接超时，连接远程主机的超时，默认值 50秒
-  timeout_execute: 60    # 执行超时，执行命令或脚本的超时，默认值 60秒
-  timeout_transfer: 300  # 传输超时，上传或下载文件的超时，默认值 300秒
+  mode: "sudo"           # 执行身份：direct=用登录用户身份执行，sudo=用 root 身份执行（默认 sudo）
+  timeout_connect: 10    # 连接超时（秒），连接远程主机的超时
+  timeout_execute: 60    # 执行超时（秒），执行命令或脚本的超时
+  timeout_transfer: 300  # 传输超时（秒），上传或下载文件的超时
 
 # 功能开关
 enable:
-  output_to_xlsx: true   # true：终端内容输出到xlsx文件；false：只输出到txt文件
-  results_to_xlsx: true  # true：结果固化到xlsx格式的文件；false：不输出到本地文件
+  output_to_xlsx: true   # 终端输出同时导出 xlsx；false=仅输出到 txt
+  results_to_xlsx: true  # 结果固化到 xlsx 文件；false=不输出到本地文件
 
 # 关键词文件路径
 paths:
   keywords:
-    error_keywords: "./src/config/error_keywords.yaml"          # 错误分类关键词YAML文件路径（支持 # 注释，整类或单个关键词均可注释）
-    dangerous_keywords: "./src/config/dangerous_keywords.yaml"  # 危险命令分类正则关键字YAML文件路径（支持 # 注释，整条规则前加 # 即可禁用）
+    error_keywords: "./src/config/error_keywords.yaml"          # 错误分类关键词 YAML 文件（支持 # 注释）
+    dangerous_keywords: "./src/config/dangerous_keywords.yaml"  # 危险命令正则关键字 YAML 文件（整条规则前加 # 即禁用）
 
   # 程序路径
   exe:
@@ -53,7 +53,7 @@ paths:
 
 # 上传文件参数
 upload:
-  concurrency_thresholds:   # 单位 “字节 B” 
-    small_file: 2097152     # 2MB ；文件大小小于 small_file 全量并发
-    large_file: 20971520    # 20MB ；大于 large_file 串行上传
-    medium_concurrency: 10  # 并发数量 10 ；介于之间，使用 medium_concurrency 作为并发数
+  concurrency_thresholds:   # 单位"字节 B"，按文件大小决定并发策略
+    small_file: 2097152     # 2MB；小于此值全量并发
+    large_file: 20971520    # 20MB；大于此值串行上传
+    medium_concurrency: 10  # 介于两者之间时的并发数
