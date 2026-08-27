@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 # SSHFleet CSV节点信息读取模块
 
-import base64
 import csv
 import ipaddress
 import io
@@ -15,8 +14,7 @@ import src.common.constants as color
 from src.common.error_handler import error_and_exit_handling_decorator, print_error_information_and_exit
 from src.common.loader import SSHFleetConfig
 from src.input.interaction import get_user_confirmation
-from src.security.cipher import CipherError, classify_credential, decrypt_password
-from src.security.master_key import get_master_key_or_exit
+from src.security.credential import read_credential, read_credential_pem
 
 
 @dataclass
@@ -74,105 +72,65 @@ def _get_key_mode(args) -> str:
     return "universal"
 
 
+def _credential_read_error(code: str, level: str, path: str, detail: Optional[str]) -> str:
+    """凭据读取错误码 → 完整错误文案（_read_credential 退出用，保留历史详细指引）"""
+    if code == "missing":
+        return f"凭据文件不存在：{path}"
+    if code == "read_error":
+        return f"凭据文件无法读取：{path} ({detail})"
+    if code == "empty":
+        return f"凭据文件内容为空：{path}"
+    if code == "mismatch_encrypted":
+        return (
+            f"凭据文件是本工具等级3（加密）格式，与当前密码安全等级 {level}（1=明文 2=base64 3=加密）不匹配：{path}\n"
+            f"请将配置 account.password_security 改为 3，或先用 --convert-password 处理该文件"
+        )
+    if code == "mismatch_base64":
+        return (
+            f"凭据文件是等级2（base64）格式，与当前密码安全等级 1（明文）不匹配：{path}\n"
+            f"请先将该文件内容还原为明文，或将配置改为 2"
+        )
+    if code == "bad_cipher":
+        if detail:  # 解密失败（密钥不匹配/文件损坏）
+            return (
+                f"凭据文件解密失败（文件可能尚未用 --convert-password 转换，或主密钥不匹配）：{path}\n{detail}"
+            )
+        return f"凭据文件不是等级{level}（加密）格式，请先 --convert-password 转换：{path}"
+    # bad_base64
+    return f"凭据文件不是等级{level}（base64）格式（内容疑似明文），请先 --convert-password 转换：{path}"
+
+
 def _read_credential(path: str, decode_base64: bool = True, level: str = "2") -> str:
     """读取凭据文件并按密码安全等级还原明文：1=原样返回（明文）；2=Base64 解码；3=主密钥解密；decode_base64=False=原样（PEM 专用）
 
-    兜底：凭据类（decode_base64=True）先做内容预分类，与当前等级不匹配时给出明确提示退出，避免把
-    加密密文/base64/明文互相误解产生晦涩的 traceback。
+    判定逻辑与 _check_credential_file 统一走凭据深模块（src/security/credential.py），
+    消除历史重复错配矩阵；等级3结果按 (path, level) 缓存，逐节点解析不再重复读盘/取主密钥。
     """
-    with open(path, "r", encoding="utf-8") as f:
-        content = f.read().strip()
-    if decode_base64:
-        fmt = classify_credential(content)
-        if fmt == "encrypted" and level != "3":
-            print_error_information_and_exit(
-                "_read_credential",
-                f"凭据文件是本工具等级3（加密）格式，与当前密码安全等级 {level}（1=明文 2=base64 3=加密）不匹配：{path}\n"
-                f"请将配置 account.password_security 改为 3，或先用 --convert-password 处理该文件",
-            )
-        if fmt == "base64" and level == "1":
-            print_error_information_and_exit(
-                "_read_credential",
-                f"凭据文件是等级2（base64）格式，与当前密码安全等级 1（明文）不匹配：{path}\n"
-                f"请先将该文件内容还原为明文，或将配置改为 2",
-            )
-        if fmt == "plain" and level in ("2", "3"):
-            print_error_information_and_exit(
-                "_read_credential",
-                f"凭据文件不是等级{level}格式（内容疑似明文），请先 --convert-password 转换：{path}",
-            )
-    if level == "1":
-        return content
-    if level == "3" and decode_base64:
-        master_key = get_master_key_or_exit("_read_credential")
-        try:
-            return decrypt_password(content, master_key)
-        except CipherError as e:
-            print_error_information_and_exit(
-                "_read_credential",
-                f"凭据文件解密失败（文件可能尚未用 --convert-password 转换，或主密钥不匹配）：{path}\n{e}",
-            )
-    if decode_base64:
-        return base64.b64decode(content).decode("utf-8")
-    return content
-
-
-# 已对 1（明文）等级提示过"疑似 base64/加密格式"告警的凭据文件路径，避免多节点重复刷屏
-_warned_format_paths = set()
+    if not decode_base64:
+        # PEM 专用：原样读取返回（不参与格式/等级矩阵）
+        with open(path, "r", encoding="utf-8") as f:
+            return f.read().strip()
+    plain, errs = read_credential(path, level)
+    if errs:
+        code, detail = errs[0]
+        print_error_information_and_exit(
+            "_read_credential", _credential_read_error(code, level, path, detail)
+        )
+    return plain
 
 
 def _check_credential_file(path: str, kind: str = "base64", level: str = "2") -> List[Tuple[str, Optional[str]]]:
-    """校验凭据文件，返回 [(错误码, 细节)] 列表，空列表=通过
+    """校验凭据文件，返回 [(错误码, 细节)] 列表，空列表=通过（薄封装：判定逻辑走凭据深模块）
 
     kind: "base64"=内容可解码（与原实现的口令校验一致，不判空）；
          "base64_nonempty"=内容可解码且非空（密码类校验）；
          "pem"=内容以 -----BEGIN 开头
     level: 密码安全等级；1（明文）只要求非空、疑似格式仅告警不阻断；3（加密）时 base64 类检查替换为加密格式+可解密性检查
-    错误码: missing / read_error / empty / bad_base64 / empty_decoded / bad_pem / bad_cipher
+    错误码: missing / read_error / empty / bad_base64 / empty_decoded / bad_pem / bad_cipher / mismatch_encrypted / mismatch_base64
     """
-    if not os.path.exists(path):
-        return [("missing", None)]
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            content = f.read().strip()
-    except Exception as e:
-        return [("read_error", str(e))]
-    if not content:
-        return [("empty", None)]
-    if kind in ("base64", "base64_nonempty"):
-        # 内容预分类：先识别文件内容属于哪个等级形态，再与当前等级匹配，不匹配时给出明确提示
-        fmt = classify_credential(content)
-        if fmt == "encrypted" and level != "3":
-            return [("mismatch_encrypted", f"当前等级 {level}（1=明文 2=base64 3=加密），文件为本工具等级3（加密）格式")]
-        if fmt == "base64" and level == "1":
-            return [("mismatch_base64", "当前等级 1（明文），文件为等级2（base64）格式，请先还原为明文或切换等级")]
-        if fmt == "base64" and level == "3":
-            return [("bad_cipher", "文件为等级2（base64）格式而非加密格式，请先 --convert-password 转换")]
-        if fmt == "plain" and level == "2":
-            return [("bad_base64", "内容疑似明文（等级1形态），请先 --convert-password 转换")]
-        if fmt == "plain" and level == "3":
-            return [("bad_cipher", "内容疑似明文（等级1形态），请先 --convert-password 转换")]
-        if level == "1":
-            return []
-        if level == "3":
-            master_key = get_master_key_or_exit("_check_credential_file")
-            try:
-                decoded = decrypt_password(content, master_key)
-            except CipherError as e:
-                return [("bad_cipher", str(e))]
-            if kind == "base64_nonempty" and not decoded:
-                return [("empty_decoded", None)]
-            return []
-        try:
-            decoded = base64.b64decode(content)
-        except Exception:
-            return [("bad_base64", None)]
-        if kind == "base64_nonempty" and not decoded:
-            return [("empty_decoded", None)]
-    elif kind == "pem":
-        if not content.startswith("-----BEGIN"):
-            return [("bad_pem", None)]
-    return []
+    if kind == "pem":
+        return read_credential_pem(path)[1]
+    return read_credential(path, level, require_nonempty=(kind == "base64_nonempty"))[1]
 
 
 _CREDENTIAL_MSG = {
