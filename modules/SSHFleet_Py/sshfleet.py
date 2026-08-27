@@ -104,18 +104,13 @@ def main():
     tlog.info(f"日志目录：{config.paths.logs.historys}，工具日志文件名：{config.paths.logs.tool}")
     tlog.debug(f"{ '-' * 20}SSHFleet工具 - 准备阶段{ '-' * 20}")
 
-    # 检查配置文件是否都存在
-    check_files_exist(config)
-    tlog.success("检查配置文件存在性成功")
-
-    # 获取危险命令分类正则关键字
-    dangerous_keywords = load_yaml_file(config.paths.keywords.dangerous_keywords)
-
     # 参数解析
     args = parse_args(config)
     tlog.success(f"参数解析成功,解析结果: {args}")
 
-    # 密钥管理模式：生成主密钥后直接退出，不走批量执行流程
+    # 工具模式分流：--gen-key / --convert-password 是独立工具，与批量执行解耦，
+    # 在文件存在性检查（关键词文件仅批量执行需要）之前直接退出，
+    # 避免关键词规则文件缺失/损坏时用户连主密钥都生成不了
     if getattr(args, "gen_key", False):
         tlog.info("进入密钥管理模式（--gen-key）")
         handle_gen_key(getattr(args, "disinteractive", False))
@@ -126,6 +121,13 @@ def main():
         tlog.info("进入凭据转换模式（--convert-password）")
         handle_convert_password(args.convert_password, config.account.secret_dir, config.account.password_security)
         sys.exit(0)
+
+    # 检查配置文件是否都存在（仅批量执行模式到达此处，关键词文件为执行必需）
+    check_files_exist(config)
+    tlog.success("检查配置文件存在性成功")
+
+    # 获取危险命令分类正则关键字（紧邻使用点：仅批量执行路径需要）
+    dangerous_keywords = load_yaml_file(config.paths.keywords.dangerous_keywords)
 
     # 参数合规性检查
     check_arguments(args)
