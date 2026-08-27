@@ -127,7 +127,7 @@ func (c *SSHClient) connectSSH() connectResult {
 // ExecuteCommand 执行命令（带上下文中断支持）
 func (c *SSHClient) ExecuteCommand(command string, ctx context.Context, ip string) (*ExecResult, error) {
 	result := &ExecResult{
-		Type: "result",
+		Type: MsgTypeResult,
 		IP:   c.config.IP,
 		Port: c.config.Port,
 		User: c.config.User,

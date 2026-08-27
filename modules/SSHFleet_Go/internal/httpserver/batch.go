@@ -131,7 +131,7 @@ func runBatch[TReq batchRequest, TTask any, TResult batchResult](op batchOperati
 
 		log.Zlog.Info("连接统计", zap.Int("total", total), zap.Int("connSuccess", connSuccess), zap.Int("connFailed", connFailed))
 
-		done := ssh.DoneResponse{Type: "done", Total: total}
+		done := ssh.DoneResponse{Type: ssh.MsgTypeDone, Total: total}
 		// 与 result 一致走会话统一写入入口；写失败记录日志后仍继续等待关闭信号
 		if err := session.Write(done); err != nil {
 			log.Zlog.Error("SSE done 写入失败", zap.Error(err))
@@ -239,7 +239,7 @@ var uploadOp = batchOperation[jsonproc.UploadRequest, core.UploadTask, ssh.Uploa
 
 		// init 消息
 		initMsg := map[string]interface{}{
-			"type":                 "init",
+			"type":                 ssh.MsgTypeInit,
 			"total_nodes":          len(req.Nodes),
 			"total_bytes_per_node": totalBytesPerNode,
 		}
