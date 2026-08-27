@@ -14,9 +14,8 @@ from src.security.cipher import (
     classify_credential,
     decrypt_password,
     encrypt_password,
-    is_probably_base64_text,
-    looks_encrypted,
 )
+from src.security.credential import read_cred_file_content
 from src.security.master_key import get_master_key_or_exit
 
 
@@ -132,32 +131,8 @@ def handle_convert_password(raw_path: str, secret_dir: str, level: str) -> None:
 
 
 def _read_cred_content(path: str) -> str:
-    """读取凭据文件内容并判空，空文件直接报错退出；附带文本/单行防御校验"""
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            content = f.read().strip()
-    except Exception as e:
-        print_error_information_and_exit(
-            "handle_convert_password", f"读取凭据文件失败：{path}\n原因：{e}"
-        )
-    if not content:
-        print_error_information_and_exit(
-            "handle_convert_password", f"凭据文件是空的，请先填入密码再转换：{path}"
-        )
-    # 防御：含 NUL 字节视为二进制文件，明确提示而非当作文本处理
-    if "\x00" in content:
-        print_error_information_and_exit(
-            "handle_convert_password",
-            f"凭据文件含二进制数据，不是文本格式，无法转换：{path}",
-        )
-    # 防御：明文凭据应为单行；多行 base64 / 加密格式（去空白后合法存储形态）放行
-    if "\n" in content or "\r" in content:
-        if not (is_probably_base64_text(content) or looks_encrypted(content)):
-            print_error_information_and_exit(
-                "handle_convert_password",
-                f"凭据文件有多行内容，但密码应为单行，请检查是否误粘贴：{path}",
-            )
-    return content
+    """读取凭据文件内容并判空，空文件直接报错退出；附带文本/单行防御校验（复用凭据深模块）"""
+    return read_cred_file_content(path)
 
 
 def _write_and_echo(
