@@ -58,7 +58,11 @@ def format_output_to_xlsx(
         ws: Worksheet = wb.active
         ws.title = "执行日志"
     except Exception as e:
-        print(f"创建工作簿失败: {e}", file=sys.stderr)
+        print(
+            f"{color.COLOR_RED}[ERROR]{color.COLOR_RESET} 创建 Excel 工作簿失败：{e}"
+            f"（本次跳过 output.xlsx 生成，不影响执行结果）",
+            file=sys.stderr,
+        )
         return
 
     # 设置样式
@@ -182,7 +186,7 @@ def format_dict_list_to_xlsx(
         print(
             f"{color.COLOR_YELLOW}结果字典列表为空，未生成{config.paths.files.results_xlsx}{color.COLOR_RESET}"
         )
-        tlog.error(f"结果字典列表为空，未生成{config.paths.files.results_xlsx}")
+        tlog.warning(f"结果字典列表为空，未生成{config.paths.files.results_xlsx}")
         return
 
     # clean_for_excel 清理字典列表中的ANSI转义序列和非法XML字符
@@ -259,13 +263,13 @@ def format_dict_list_to_xlsx(
     except PermissionError as e:
         print(
             f"{getattr(color, 'COLOR_RED', '')}[ERROR]{getattr(color, 'COLOR_RESET', '')} "
-            f"无法写入文件，请检查权限: {dict_path}\n异常类型：\n{type(e)}\n异常信息：\n{e}",
+            f"无法写入文件：{e}\n目标路径：{dict_path}\n请检查文件是否被占用（如已在 Excel 中打开）、目录是否有写权限",
             file=sys.stderr,
         )
     except Exception as e:
         print(
             f"{getattr(color, 'COLOR_RED', '')}[ERROR]{getattr(color, 'COLOR_RESET', '')} "
-            f"输出xlsx文件时出错\n异常类型：\n{type(e)}\n异常信息：\n{e}",
+            f"输出 xlsx 文件时出错：{e}\n请检查文件是否被占用、目录是否有写权限",
             file=sys.stderr,
         )
     finally:

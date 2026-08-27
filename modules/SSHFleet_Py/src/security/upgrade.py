@@ -51,7 +51,7 @@ def handle_convert_password(raw_path: str, secret_dir: str, level: str) -> None:
     """
     功能：
         --convert-password 入口：识别文件内容格式（明文/base64/加密），统一还原为明文后，
-        按目标等级（配置 account.password_security）重新编码写回，完成后从磁盘回读内容输出确认。
+        按目标等级（配置 account.password_security）重新编码写回，完成后从磁盘回读校验并输出转换摘要。
 
     参数：
         raw_path: 用户输入的凭据文件路径
@@ -138,7 +138,8 @@ def _read_cred_content(path: str) -> str:
 def _write_and_echo(
     path: str, new_content: str, source_format: str, target_format: str, level: str
 ) -> None:
-    """就地覆盖写入，再从磁盘回读输出（而非打印内存变量），让用户以文件内容为准确认转换成功"""
+    """就地覆盖写入，再从磁盘回读校验（而非打印内存变量）；为避免凭据明文泄露到终端，
+    只输出转换摘要与内容长度，不回显文件内容本体"""
     try:
         with open(path, "w", encoding="utf-8") as f:
             f.write(new_content)
@@ -155,7 +156,4 @@ def _write_and_echo(
         )
 
     print(f"转换成功：{source_format} → {target_format}（等级 {level}）：{path}")
-    print()
-    print("---------- 转换后文件内容 ----------")
-    print(on_disk)
-    print("----------------------------------")
+    print(f"内容长度：{len(on_disk)} 字符，请用编辑器打开该文件确认结果")

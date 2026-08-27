@@ -12,6 +12,7 @@ from typing import Dict, Generator, Optional
 
 import requests
 
+import src.common.constants as color
 from src.common.loader import SSHFleetConfig
 from src.log import tlog
 
@@ -139,11 +140,9 @@ def call_go(
                 err_code = ""
             error_detail = f"[{err_code}] {err_msg}" if err_code else err_msg
             tlog.error(f"Go 返回错误: {error_detail}")
-            print(f"\033[91m[ERROR]\033[0m Go 返回错误: {error_detail}")
-            raise RuntimeError(error_detail)
+            raise RuntimeError(f"Go 返回错误: {error_detail}")
     except requests.RequestException as e:
         tlog.error(f"HTTP 连接失败: {e}")
-        print(f"\033[91m[ERROR]\033[0m HTTP 连接失败: {e}")
         raise RuntimeError(f"HTTP 连接失败: {e}")
 
     last_recv_time = time.time()
@@ -153,7 +152,7 @@ def call_go(
         if time.time() - last_recv_time > timeout:
             msg = f"接收数据超时（{timeout}秒无新数据），已收到的结果将正常处理"
             tlog.error(msg)
-            print(f"\n[red]警告: {msg}[/red]")
+            print(f"\n{color.COLOR_YELLOW}警告: {msg}{color.COLOR_RESET}")
             break
 
         if not line:

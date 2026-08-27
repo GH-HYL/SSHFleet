@@ -461,7 +461,11 @@ def go_to_go(
         process.kill()
         process.wait()
         tlog.error(f"Go 服务启动超时，stderr: {stderr}")
-        raise RuntimeError(f"Go 服务启动超时，stderr: {stderr}")
+        err_detail = f"，stderr: {stderr}" if stderr else ""
+        raise RuntimeError(
+            f"Go 服务启动超时（10 秒未就绪）{err_detail}"
+            f"，请检查 {exe_path} 是否存在、可执行，或查看日志目录下的错误输出"
+        )
 
     # 5. 启动健康检查线程
     health_stop = threading.Event()

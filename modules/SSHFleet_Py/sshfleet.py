@@ -81,7 +81,8 @@ def main():
         config = load_config(config_path)
     except Exception as e:
         print(
-            f"{color.COLOR_RED}[ERROR]{color.COLOR_RESET}{color.COLOR_YELLOW} [function:load_config]{color.COLOR_RESET} 加载配置文件失败\n异常类型：\n{type(e)}\n异常信息：\n{e}"
+            f"{color.COLOR_RED}[ERROR]{color.COLOR_RESET} 加载配置文件失败：{config_path}\n原因：{e}\n请检查该文件是否存在、YAML 格式是否正确后重试",
+            file=sys.stderr,
         )
         sys.exit(1)
 
@@ -92,8 +93,10 @@ def main():
         tlog.success("初始化工具日志成功")
     except Exception as e:
         print(
-            f"{color.COLOR_RED}[ERROR]{color.COLOR_RESET}{color.COLOR_YELLOW} [function:init_tool_logger]{color.COLOR_RESET} 初始化工具日志失败\n异常类型：\n{type(e)}\n异常信息：\n{e}"
+            f"{color.COLOR_RED}[ERROR]{color.COLOR_RESET} 初始化工具日志失败：{e}\n请检查配置 paths.logs.historys 指向的日志目录是否存在且可写，然后重试",
+            file=sys.stderr,
         )
+        sys.exit(1)
 
     tlog.info(f"SSHFleet工具开始执行，时间：{datetime.now()}")
     tlog.info(f"工作路径：{os.getcwd()}")
@@ -173,7 +176,8 @@ def main():
         f"全局结束时间: {global_stop_time}，全局执行时间: {round((global_stop_time - global_start_time).total_seconds(), 3)}秒"
     )
 
-    print(f"{'═' * 60}")
+    print("\n" + "═" * 60)
+    print("  SSHFleet 执行阶段结束，正在整理结果")
     tlog.debug(f"{'-' * 30}SSHFleet工具 - 执行结束{'-' * 30}\n")
     tlog.debug(f"{'-' * 20}SSHFleet工具 - 整理阶段{'-' * 20}")
 
@@ -221,7 +225,7 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print("用户手动中断执行")
+        print("已收到中断信号，SSHFleet 停止执行（已完成节点的结果已写入日志/输出文件）")
     except Exception as e:
         print(
             f"{color.COLOR_RED}[FATAL]{color.COLOR_RESET} 未捕获异常: {e}",

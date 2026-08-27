@@ -137,7 +137,10 @@ def _show_upload_content(u_path) -> None:
                     print(f"{prefix} {item.name}")
     except Exception as e:
         print(
-            f"{color.COLOR_YELLOW}[警告] 无法解析路径内容: {e}{color.COLOR_RESET}"
+            f"{color.COLOR_YELLOW}[警告] 无法解析上传路径内容：{e}{color.COLOR_RESET}"
+        )
+        print(
+            f"{color.COLOR_YELLOW}请检查 -u 指定的路径是否存在且可访问{color.COLOR_RESET}"
         )
         sys.exit(1)
 

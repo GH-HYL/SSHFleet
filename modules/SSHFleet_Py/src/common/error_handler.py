@@ -17,7 +17,7 @@ def print_error_information_and_exit(
     参数：
         func_name: 函数名
         error_str: 错误信息
-        exit: 是否退出程序（默认退出）
+        isexit: 是否退出程序（默认退出）
 
     返回：
         None
@@ -57,12 +57,10 @@ def error_and_exit_handling_decorator(
                 # 顶层 import tlog 会形成 loader -> error_handler -> log -> loader 循环依赖
                 from src.log import tlog
 
-                tlog.error(
-                    f"{func_name}，{error_str}\n异常类型：\n{type(e)}\n异常信息：\n{e}"
-                )
+                tlog.error(f"{func_name}，{error_str}，原因：{e}")
                 print_error_information_and_exit(
                     f"{func_name}",
-                    f"{error_str}\n异常类型：{type(e)}\n异常信息：\n{e}",
+                    f"{error_str}\n原因：{e}",
                     isexit,
                 )
 
