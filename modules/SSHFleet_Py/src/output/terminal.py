@@ -63,23 +63,23 @@ def format_statistic_results_to_terminal(results_statistic: dict) -> None:
     """
 
     print("═" * 60)
-    print(f"  总耗时： {results_statistic['global_cost_time']}  秒")
+    print(f"  总耗时：{results_statistic['global_cost_time']} 秒")
     if results_statistic["verify"] == "通过":
         print(
-            f"  {color.COLOR_CYAN}节点总数:{color.COLOR_RESET} {results_statistic['nodeinofs_total']}  {color.COLOR_CYAN}完成总数：{color.COLOR_RESET}{results_statistic['results_total']}"
+            f"  {color.COLOR_CYAN}节点总数：{color.COLOR_RESET} {results_statistic['nodeinofs_total']}  {color.COLOR_CYAN}完成总数：{color.COLOR_RESET}{results_statistic['results_total']}"
         )
     else:
         print(
-            f"  {color.COLOR_CYAN}节点总数:{color.COLOR_RESET} {results_statistic['nodeinofs_total']}  {color.COLOR_CYAN}完成总数：{color.COLOR_RESET}{results_statistic['results_total']}  {color.COLOR_CYAN}总数校验：{color.COLOR_RESET}{color.COLOR_RED}{results_statistic['verify']}{color.COLOR_RESET}"
+            f"  {color.COLOR_CYAN}节点总数：{color.COLOR_RESET} {results_statistic['nodeinofs_total']}  {color.COLOR_CYAN}完成总数：{color.COLOR_RESET}{results_statistic['results_total']}  {color.COLOR_CYAN}总数校验：{color.COLOR_RESET}{color.COLOR_RED}{results_statistic['verify']}{color.COLOR_RESET}"
         )
 
     if results_statistic["fail_counts"] > 0:
         print(
-            f"  {color.COLOR_GREEN}成功:{color.COLOR_RESET} {results_statistic['success_counts']}   {color.COLOR_RED}失败:{color.COLOR_RESET} {results_statistic['fail_counts']}"
+            f"  {color.COLOR_GREEN}成功：{color.COLOR_RESET} {results_statistic['success_counts']}   {color.COLOR_RED}失败：{color.COLOR_RESET} {results_statistic['fail_counts']}"
         )
     else:
         print(
-            f"  {color.COLOR_GREEN}成功:{color.COLOR_RESET} {results_statistic['success_counts']}"
+            f"  {color.COLOR_GREEN}成功：{color.COLOR_RESET} {results_statistic['success_counts']}"
         )
 
     if results_statistic["sorted_fail_categories"]:
