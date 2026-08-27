@@ -52,13 +52,17 @@ def results_statistics(
     # 分类统计
     category_counts = Counter(d.get("result_category") for d in results)
 
-    # 根据模式移除成功分类
-    if get_mode(args) in ("upload", "download"):
+    # 成功分类名按模式单点确定（get_mode 仅返回 execute/upload/download，无其他取值；
+    # 若未来出现未知模式，显式告警而非静默兜底）
+    mode = get_mode(args)
+    if mode in ("upload", "download"):
         success_category = SUCCESS_CATEGORY_TRANSPORT
-        category_counts.pop(success_category, None)
-    else:
+    elif mode == "execute":
         success_category = SUCCESS_CATEGORY_EXECUTE
-        category_counts.pop(success_category, None)
+    else:
+        tlog.warning(f"未知执行模式 {mode!r}，按 execute 模式统计")
+        success_category = SUCCESS_CATEGORY_EXECUTE
+    category_counts.pop(success_category, None)
 
     # 按数量正（倒）序排序（reverse逆转）失败分类
     sorted_fail_categories = sorted(
@@ -75,9 +79,6 @@ def results_statistics(
         category_ip_map[category].append(ip)
 
     # 分离成功分类IP
-    if "success_category" not in locals():
-        tlog.error("success_category 未定义，未知执行模式")
-        success_category = "未知"
     success_ips = category_ip_map.pop(success_category, [])
 
     # 对每个分类的IP进行数字排序
@@ -95,9 +96,7 @@ def results_statistics(
         "success_counts": success_counts,
         "fail_counts": fail_counts,
         "sorted_fail_categories": sorted_fail_categories,
-        "success_category": (
-            success_category if "success_category" in locals() else None
-        ),
+        "success_category": success_category,
         "success_ips_count": len(success_ips),
         "sorted_success_ips": sorted_success_ips,
         "category_ip_map": category_ip_map,

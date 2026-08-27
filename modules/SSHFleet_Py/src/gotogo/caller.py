@@ -60,7 +60,8 @@ def start_go_process(exe_path: str, port: int, log_path: str) -> tuple:
     env["SSH_FLEET_PORT"] = str(port)
     env["SSH_FLEET_LOG_PATH"] = log_path
 
-    tlog.info(f"环境变量: SSH_FLEET_KEY={process_key}, SSH_FLEET_PORT={port}, SSH_FLEET_LOG_PATH={log_path}")
+    # 进程 key 仅用于本地认证，日志掩码，避免明文落盘
+    tlog.info(f"环境变量: SSH_FLEET_KEY=***, SSH_FLEET_PORT={port}, SSH_FLEET_LOG_PATH={log_path}")
 
     process = subprocess.Popen(
         [exe_path],
