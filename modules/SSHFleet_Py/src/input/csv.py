@@ -13,7 +13,7 @@ from typing import Dict, List, Optional, Tuple, Union
 import src.common.constants as color
 from src.common.error_handler import error_and_exit_handling_decorator, print_error_information_and_exit
 from src.common.loader import SSHFleetConfig
-from src.input.interaction import get_user_confirmation
+from src.input.interaction import get_user_confirmation, prompt_text
 from src.security.credential import read_credential, read_credential_pem
 
 
@@ -490,29 +490,22 @@ def _resolve_port(port_raw, default_port, mem, idx, total_nodes, ip, disinteract
             errors.append("配置文件中的默认端口格式错误")
     elif mem.port_use_input:  # 使用之前用户输入的值
         port = mem.port_input_value
-    else:  # 请求用户输入新值
-        while True:
-            try:
-                input_port = input(
-                    f"行 {idx} (IP: {ip if ip else '空值'}): 端口为空，请输入端口号: "
-                )
-                if input_port.isdigit() and 1 <= int(input_port) <= 65535:
-                    port = input_port
-                    # 询问是否将此端口号应用于所有后续端口为空的节点
-                    if not mem.port_use_input and idx < total_nodes:
-                        if get_user_confirmation(
-                            f"\n{color.COLOR_YELLOW}是否将此端口号应用于所有后续端口为空的节点？{color.COLOR_RESET}",
-                            yorn=True,
-                            disinteractive=disinteractive,
-                        ):
-                            mem.port_use_input = True
-                            mem.port_input_value = int(port)
-                    break
-                else:
-                    print(f"端口必须是1-65535之间的整数，当前输入：{input_port}")
-            except (KeyboardInterrupt, EOFError):  # EOFError：管道/重定向输入结束时同样优雅退出
-                print("\n用户取消输入")
-                sys.exit(1)
+    else:  # 请求用户输入新值（统一走集中交互模块，取消处理与提示一致）
+        port = prompt_text(
+            f"行 {idx} (IP: {ip if ip else '空值'}): 端口为空，请输入端口号: ",
+            validator=lambda raw: (raw, "")
+            if raw.isdigit() and 1 <= int(raw) <= 65535
+            else (raw, f"端口必须是1-65535之间的整数，当前输入：{raw}"),
+        )
+        # 询问是否将此端口号应用于所有后续端口为空的节点
+        if not mem.port_use_input and idx < total_nodes:
+            if get_user_confirmation(
+                f"\n{color.COLOR_YELLOW}是否将此端口号应用于所有后续端口为空的节点？{color.COLOR_RESET}",
+                yorn=True,
+                disinteractive=disinteractive,
+            ):
+                mem.port_use_input = True
+                mem.port_input_value = int(port)
     return port, errors
 
 
@@ -525,29 +518,23 @@ def _resolve_user(user_raw, default_user, mem, idx, total_nodes, ip, disinteract
         return default_user
     if mem.user_use_input:  # 使用之前用户输入的值
         return mem.user_input_value
-    # 请求用户输入新值
-    while True:
-        try:
-            input_user = input(
-                f"行 {idx} (IP: {ip if ip else '空值'}): 用户名为空，请输入用户名: "
-            )
-            if input_user.strip():
-                user = input_user.strip()
-                # 询问是否将此用户名应用于所有后续用户为空的节点
-                if not mem.user_use_input and idx < total_nodes:
-                    if get_user_confirmation(
-                        f"\n{color.COLOR_YELLOW}是否将此用户名应用于所有后续用户为空的节点？{color.COLOR_RESET}",
-                        yorn=True,
-                        disinteractive=disinteractive,
-                    ):
-                        mem.user_use_input = True
-                        mem.user_input_value = user
-                return user
-            else:
-                print("用户名不能为空")
-        except (KeyboardInterrupt, EOFError):  # EOFError：管道/重定向输入结束时同样优雅退出
-            print("\n用户取消输入")
-            sys.exit(1)
+    # 请求用户输入新值（统一走集中交互模块，取消处理与提示一致）
+    user = prompt_text(
+        f"行 {idx} (IP: {ip if ip else '空值'}): 用户名为空，请输入用户名: ",
+        validator=lambda raw: (raw.strip(), "")
+        if raw.strip()
+        else (raw, "用户名不能为空"),
+    )
+    # 询问是否将此用户名应用于所有后续用户为空的节点
+    if not mem.user_use_input and idx < total_nodes:
+        if get_user_confirmation(
+            f"\n{color.COLOR_YELLOW}是否将此用户名应用于所有后续用户为空的节点？{color.COLOR_RESET}",
+            yorn=True,
+            disinteractive=disinteractive,
+        ):
+            mem.user_use_input = True
+            mem.user_input_value = user
+    return user
 
 
 def _resolve_password(password_raw, config, has_key, mem, idx, total_nodes, ip, disinteractive) -> str:
@@ -563,27 +550,19 @@ def _resolve_password(password_raw, config, has_key, mem, idx, total_nodes, ip, 
         return ""
     if mem.password_use_input:  # 使用之前用户输入的值
         return mem.password_input_value
-    # 请求用户输入新值（输出信息时才导入getpass模块，优化不必要的模块导入）
-    import getpass
-    while True:
-        try:
-            input_password = getpass.getpass(
-                f"行 {idx} (IP: {ip if ip else '空值'}): 密码为空，请输入密码: "
-            )
-            if input_password:
-                password = input_password
-                # 询问是否将此密码应用于所有后续密码为空的节点
-                if not mem.password_use_input and idx < total_nodes:
-                    if get_user_confirmation(
-                        f"\n{color.COLOR_YELLOW}是否将此密码应用于所有后续密码为空的节点？{color.COLOR_RESET}",
-                        yorn=True,
-                        disinteractive=disinteractive,
-                    ):
-                        mem.password_use_input = True
-                        mem.password_input_value = password
-                return password
-            else:
-                print("密码不能为空，请重新输入")
-        except (KeyboardInterrupt, EOFError):  # EOFError：管道/重定向输入结束时同样优雅退出
-            print("\n用户取消输入")
-            sys.exit(1)
+    # 请求用户输入新值（统一走集中交互模块；敏感输入不回显，取消处理与提示一致）
+    password = prompt_text(
+        f"行 {idx} (IP: {ip if ip else '空值'}): 密码为空，请输入密码: ",
+        validator=lambda raw: (raw, "") if raw else (raw, "密码不能为空，请重新输入"),
+        sensitive=True,
+    )
+    # 询问是否将此密码应用于所有后续密码为空的节点
+    if not mem.password_use_input and idx < total_nodes:
+        if get_user_confirmation(
+            f"\n{color.COLOR_YELLOW}是否将此密码应用于所有后续密码为空的节点？{color.COLOR_RESET}",
+            yorn=True,
+            disinteractive=disinteractive,
+        ):
+            mem.password_use_input = True
+            mem.password_input_value = password
+    return password
