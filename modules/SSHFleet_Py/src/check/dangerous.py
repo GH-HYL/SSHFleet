@@ -158,8 +158,11 @@ def check_dangerous_dict(dangerous_patterns: List):
     # 4. 校验危险模式规则是否被篡改（预留接口，暂未启用）
 
 
-def check_dangerous_patterns(args, dangerous_keywords: List, disinteractive=False):
+def check_dangerous_patterns(args, dangerous_keywords: List):
     """检查命令或脚本内容是否包含危险模式"""
+
+    # 与确认模块同一约定：从 args 统一读取非交互标记（ADR/确认链唯一来源）
+    disinteractive = getattr(args, "disinteractive", False)
 
     is_script = bool(args.s)
     script_path = args.s or ""
