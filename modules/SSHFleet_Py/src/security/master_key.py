@@ -13,20 +13,11 @@ from src.security.cipher import generate_master_key
 
 ENV_NAME = "SSHFLEET_KEY"
 
-# 缺少主密钥时的通用教程文案
-TUTORIAL_TEXT = (
-    f"配置方法（二选一）：\n"
-    f"  方式一（推荐）：在本工程目录执行  python sshfleet.py --gen-key  ，自动生成并持久化密钥\n"
-    f"  方式二（手动）：\n"
-    f"    Linux  : 在 ~/.bashrc 追加  export {ENV_NAME}='你的随机密钥'  ，然后执行 source ~/.bashrc\n"
-    f"    Windows: 执行  setx {ENV_NAME} 你的随机密钥  ，然后重新打开终端生效"
-)
-
 
 def get_master_key_or_exit(func_name: str) -> str:
     """
     功能：
-        从环境变量读取主密钥；缺失时报错退出并附教程
+        从环境变量读取主密钥；缺失时报错退出并提示生成方式
 
     参数：
         func_name: 调用方函数名（用于错误信息定位）
@@ -38,7 +29,8 @@ def get_master_key_or_exit(func_name: str) -> str:
     if not key:
         print_error_information_and_exit(
             func_name,
-            f"未检测到环境变量 {ENV_NAME}，无法解密凭据文件\n{TUTORIAL_TEXT}",
+            f"缺少主密钥，无法解密/加密凭据文件\n"
+            f"请先生成主密钥：python sshfleet.py --gen-key",
         )
     return key
 
@@ -79,29 +71,32 @@ def _read_persisted_key() -> str:
     return ""
 
 
-def _persist_key(key: str) -> None:
+def _persist_key(key: str, regenerated: bool = False) -> None:
     """
     功能：
-        把主密钥持久化到系统（Windows: setx 写注册表；Linux: 追加 ~/.bashrc）
+        把主密钥持久化到系统（Windows: setx 写注册表；Linux: 追加 ~/.bashrc），
+        成功后提示保存位置与生效方式
 
     参数：
         key: 随机主密钥
+        regenerated: 是否为覆盖重生成场景（影响提示措辞）
 
     Raises:
         SystemExit: 持久化失败
     """
+    action_desc = "重新生成" if regenerated else "生成"
     if sys.platform.startswith("win"):
         try:
-            result = subprocess.run(
+            subprocess.run(
                 ["setx", ENV_NAME, key],
                 capture_output=True, text=True, check=True,
             )
-            print("已写入用户注册表（HKCU\\Environment）")
-            print("注意：当前终端读不到新密钥，请重新打开终端后使用")
+            print(f"主密钥已{action_desc}，并自动保存到本机")
+            print("请重新打开终端后再使用（当前终端读不到新密钥）")
         except Exception as e:
             print_error_information_and_exit(
                 "_persist_key",
-                f"写入注册表失败：{e}\n可手动执行：setx {ENV_NAME} 你的随机密钥",
+                f"主密钥自动保存失败：{e}\n可手动保存：执行 setx {ENV_NAME} 你的随机密钥",
             )
         return
     bashrc = os.path.join(os.path.expanduser("~"), ".bashrc")
@@ -126,10 +121,10 @@ def _persist_key(key: str) -> None:
     except Exception as e:
         print_error_information_and_exit(
             "_persist_key",
-            f"写入 {bashrc} 失败：{e}\n可手动在 ~/.bashrc 追加：export {ENV_NAME}='你的随机密钥'",
+            f"主密钥自动保存失败：{e}\n可手动保存：在 ~/.bashrc 追加 export {ENV_NAME}='你的随机密钥'",
         )
-    print(f"已写入 {bashrc}")
-    print("提示：执行 source ~/.bashrc 或重新打开终端后生效")
+    print(f"主密钥已{action_desc}，并自动保存到 {bashrc}")
+    print("请执行 source ~/.bashrc 或重新打开终端后生效")
 
 
 def handle_gen_key(disinteractive: bool = False) -> None:
@@ -142,24 +137,21 @@ def handle_gen_key(disinteractive: bool = False) -> None:
     env_key = os.environ.get(ENV_NAME, "").strip()
     persisted_key = _read_persisted_key()
 
+    overwritten = False
     if env_key or persisted_key:
-        print(f"检测到已存在主密钥：")
-        if env_key:
-            print(f"  - 当前进程环境变量 {ENV_NAME}: 已设置")
-        if persisted_key:
-            shown = persisted_key if persisted_key != "unknown" else "（无法解析内容）"
-            print(f"  - 持久化位置: {shown[:12]}...")
+        print("检测到已存在主密钥，当前未做任何修改")
+        print("注意：如果覆盖，用旧密钥加密的凭据文件将永久无法解密")
         if disinteractive:
             print_error_information_and_exit(
                 "handle_gen_key",
-                f"检测到已存在主密钥，--disinteractive 非交互模式下不自动覆盖"
-                f"（覆盖后旧加密文件将无法解密）。\n"
-                f"如需覆盖请去掉 --disinteractive 后重新执行 --gen-key 并确认",
+                f"检测到已存在主密钥，非交互模式不自动覆盖"
+                f"（覆盖后旧密钥加密的凭据文件将无法解密）。\n"
+                f"如需覆盖：去掉 --disinteractive 后重新执行 --gen-key",
             )
-        if not _confirm_overwrite("是否覆盖原密钥？覆盖后旧加密文件将无法解密"):
-            print("已保留原密钥，未做任何修改")
+        if not _confirm_overwrite("是否确认覆盖？"):
+            print("已保留原密钥，未做修改")
             return
-        print("已确认覆盖，正在重新生成...")
+        overwritten = True
+        print("已确认覆盖，正在重新生成主密钥...")
 
-    _persist_key(new_key)
-    print(f"新主密钥已生成并持久化到环境变量 {ENV_NAME}")
+    _persist_key(new_key, regenerated=overwritten)
