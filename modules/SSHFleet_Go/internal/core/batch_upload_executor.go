@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"errors"
 
 	"SSHFleet/internal/localfs"
 	"SSHFleet/internal/log"
@@ -51,7 +52,7 @@ func (e *BatchUploadExecutor) Run(tasks []*UploadTask) <-chan *ssh.UploadResult 
 
 			client := ssh.NewSSHClient(task.Config)
 			result, err := client.UploadFiles(task.FileItems, task.RemotePath, task.UseSudo, e.ctx, task.Seq, task.Config.IP, onProgress)
-			if err != nil && err.Error() != "context canceled" {
+			if err != nil && !errors.Is(err, context.Canceled) {
 				log.Zlog.Error("上传worker - 异常", zap.String("ip", task.Config.IP), zap.Error(err))
 			}
 
