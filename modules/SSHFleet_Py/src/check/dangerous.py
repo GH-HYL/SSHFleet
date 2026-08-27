@@ -3,6 +3,7 @@
 
 import re
 import sys
+import unicodedata
 from typing import List
 
 import src.common.constants as color
@@ -257,8 +258,19 @@ def check_dangerous_patterns(args, dangerous_keywords: List):
             sys.exit(1)
 
 
+def _display_width(text: str) -> int:
+    """按终端显示宽度计算字符串宽度（中文/全角/emoji 按 2 字符宽计）"""
+    return sum(
+        2 if unicodedata.east_asian_width(ch) in "WF" else 1
+        for ch in text
+    )
+
+
 def print_danger_warning(matches, is_forbidden=False):
-    """打印危险命令警告信息（合并函数）"""
+    """打印危险命令警告信息（合并函数）
+
+    框内对齐按显示宽度计算（中文占 2 宽），避免中文内容导致边框错位。
+    """
 
     if not matches:
         return
@@ -270,42 +282,58 @@ def print_danger_warning(matches, is_forbidden=False):
         title = "⚠️  发现危险命令 ⚠️"
         footer = "是否继续执行？这可能会带来安全风险！"
 
+    # 框内宽度（不含两侧 ║），与顶部 ╔══...╗ 的 ═ 数量一致
+    inner_width = 56
+    bar = "═" * inner_width
+
+    def pad(text: str) -> str:
+        """按显示宽度右补空格到 inner_width"""
+        return text + " " * max(0, inner_width - _display_width(text))
+
+    def center(text: str) -> str:
+        """按显示宽度居中到 inner_width"""
+        remain = max(0, inner_width - _display_width(text))
+        left = remain // 2
+        return " " * left + text + " " * (remain - left)
+
+    # 统一按最高风险级别着色（调用方传入的就是最高风险匹配项）
+    risk_order = {"forbidden": 0, "high": 1, "medium": 2, "low": 3}
+    risk_level = min(
+        (m["pattern"]["risk_level"] for m in matches),
+        key=lambda x: risk_order.get(x, 99),
+    )
+    risk_color = (
+        color.COLOR_RED
+        if risk_level in ("forbidden", "high")
+        else color.COLOR_YELLOW
+        if risk_level == "medium"
+        else color.COLOR_WHITE
+    )
+
+    warning_msg = [
+        f"{risk_color}\n╔{bar}╗",
+        f"{risk_color}║{center(title)}║",
+        f"{risk_color}╠{bar}╣",
+    ]
     for match in matches:
         source_info = (
             f"来源: {'脚本: ' + match['script_path'] if match['is_script'] else '命令'}"
         )
-
-        # 根据风险级别选择颜色
-        risk_level = match["pattern"]["risk_level"]
-        if risk_level == "forbidden":
-            risk_color = color.COLOR_RED
-        elif risk_level == "high":
-            risk_color = color.COLOR_RED
-        elif risk_level == "medium":
-            risk_color = color.COLOR_YELLOW
-        else:
-            risk_color = color.COLOR_WHITE
-
-        warning_msg = [
-            f"{risk_color}\n╔════════════════════════════════════════════════════════════╗",
-            f"{risk_color}║                  {title.center(15)}                   ",
-            f"{risk_color}╠════════════════════════════════════════════════════════════╣",
-        ]
         warning_msg.extend(
             [
-                f"{risk_color}║    {risk_color}{source_info.ljust(55)}{risk_color}",
-                f"{risk_color}║    {risk_color}行号: {match['line']}{' '*(53-len(str(match['line'])))}",
-                f"{risk_color}║    内容:{color.COLOR_RED} {match['content'][:46]}{' '*(50-len(match['content'][:46]))}",
-                f"{risk_color}║    {risk_color}分类: {match['pattern']['name'][:46]}{' '*(50-len(match['pattern']['name'][:46]))}",
-                f"{risk_color}║    {risk_color}级别: {risk_level.upper()}{' '*(50-len(risk_level))}",
-                f"{risk_color}╠════════════════════════════════════════════════════════════╢",
+                f"{risk_color}║{pad('    ' + source_info)}║",
+                f"{risk_color}║{pad('    行号: ' + str(match['line']))}║",
+                f"{risk_color}║{pad('    内容: ' + match['content'][:46])}║",
+                f"{risk_color}║{pad('    分类: ' + match['pattern']['name'][:46])}║",
+                f"{risk_color}║{pad('    级别: ' + risk_level.upper())}║",
+                f"{risk_color}╠{bar}╢",
             ]
         )
 
     warning_msg.extend(
         [
-            f"{risk_color}║ {risk_color}{footer.center(40)}",
-            f"{risk_color}╚════════════════════════════════════════════════════════════╝",
+            f"{risk_color}║{center(footer)}║",
+            f"{risk_color}╚{bar}╝",
         ]
     )
 

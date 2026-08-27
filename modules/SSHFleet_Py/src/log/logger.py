@@ -108,7 +108,9 @@ def create_latest_log_symlink(config: SSHFleetConfig):
             return
 
         if not os.path.isdir(config.paths.logs.historys):
-            print("错误: 历史记录目录 (historys) 不存在")
+            print(
+                f"{color.COLOR_RED}[ERROR]{color.COLOR_RESET} 历史记录目录不存在：{config.paths.logs.historys}\n请检查配置 paths.logs.historys，或手动创建该目录"
+            )
             tlog.error("历史记录目录 (historys) 不存在")
             return
 
@@ -135,22 +137,22 @@ def create_latest_log_symlink(config: SSHFleetConfig):
         if os.path.islink(latest_link):
             os.remove(latest_link)
         elif os.path.exists(latest_link):
-            print(f"警告: 已存在同名文件 {latest_link}，无法创建符号链接")
+            print(
+                f"警告: 当前目录已存在同名文件 {latest_link}，跳过符号链接创建"
+                f"（不影响执行结果；如需最新日志快捷入口，删除该文件后重跑）"
+            )
             tlog.warning(f"已存在同名文件 {latest_link}，无法创建符号链接")
             return
         os.symlink(latest_log_dir, latest_link)
         tlog.success(f"创建最新日志符号链接函数执行成功，指向路径: {latest_log_dir}")
     except OSError as e:
-        print(f"创建符号链接失败: {str(e)}")
         tlog.error(
             f"创建最新日志符号链接函数执行失败\n异常类型：\n{type(e)}\n异常信息：\n{e}"
         )
-        if e.errno == 1:
-            print("提示: 请尝试使用管理员/root权限运行")
-            tlog.error("创建最新日志符号链接函数执行失败，权限不足")
+        hint = "；请尝试使用管理员/root 权限运行" if e.errno == 1 else ""
         print_error_information_and_exit(
             "create_latest_log_symlink",
-            f"创建最新日志符号链接函数执行失败\n异常类型：{type(e)}\n异常信息：\n{e}",
+            f"创建符号链接失败：{e}{hint}",
             True,
         )
     except Exception as e:

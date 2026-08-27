@@ -271,9 +271,10 @@ def validate_csv_credentials(csv_infos: List[List[str]], config: SSHFleetConfig,
         )
 
     if errors:
-        print(f"{color.COLOR_RED}[ERROR]{color.COLOR_RESET} CSV凭据预检查失败：")
+        print(f"{color.COLOR_RED}[ERROR]{color.COLOR_RESET} CSV凭据预检查失败，共 {len(errors)} 处错误：")
         for error in errors:
             print(f"  {error}")
+        print("请修复上述问题后重新执行")
     return errors, need_default_password, any_node_uses_key
 
 @error_and_exit_handling_decorator("read_nodes_infos", "读取节点信息失败")
@@ -391,7 +392,7 @@ def _read_csv_rows(csv_path: str, is_inline: bool) -> List[List[str]]:
     except ValueError:  # 如果不是合法IP，则移除表头
         csv_infos.pop(0)
         print(
-            f"{color.COLOR_RED}[INFO]{color.COLOR_RESET}{color.COLOR_YELLOW} [function:read_nodes_infos]{color.COLOR_RESET} 第一行不是IP格式，已移除表头行"
+            f"{color.COLOR_CYAN}[INFO]{color.COLOR_RESET}{color.COLOR_YELLOW} [function:read_nodes_infos]{color.COLOR_RESET} 第一行不是IP格式，已移除表头行"
         )
         # 移除表头后仍无有效行（如文件只有表头一行）→ 提示退出
         if not csv_infos:
@@ -508,7 +509,7 @@ def _resolve_port(port_raw, default_port, mem, idx, total_nodes, ip, disinteract
                             mem.port_input_value = int(port)
                     break
                 else:
-                    print("端口必须是1-65535之间的整数")
+                    print(f"端口必须是1-65535之间的整数，当前输入：{input_port}")
             except (KeyboardInterrupt, EOFError):  # EOFError：管道/重定向输入结束时同样优雅退出
                 print("\n用户取消输入")
                 sys.exit(1)
