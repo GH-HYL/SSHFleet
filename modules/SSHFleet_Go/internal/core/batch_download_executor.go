@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"errors"
 
 	"SSHFleet/internal/log"
 	"SSHFleet/internal/ssh"
@@ -50,7 +51,7 @@ func (e *BatchDownloadExecutor) Run(tasks []*DownloadTask) <-chan *ssh.DownloadR
 
 			client := ssh.NewSSHClient(task.Config)
 			result, err := client.DownloadFiles(task.RemotePath, task.LocalPath, task.UseSudo, e.ctx, task.Seq, task.Config.IP, onProgress)
-			if err != nil && err.Error() != "context canceled" {
+			if err != nil && !errors.Is(err, context.Canceled) {
 				log.Zlog.Error("下载worker - 异常", zap.String("ip", task.Config.IP), zap.Error(err))
 			}
 

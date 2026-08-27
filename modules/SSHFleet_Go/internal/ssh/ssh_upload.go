@@ -29,7 +29,7 @@ func (c *SSHClient) UploadFiles(
 	onProgress func(ProgressMsg),
 ) (*UploadResult, error) {
 	result := &UploadResult{
-		Type: "result",
+		Type: MsgTypeResult,
 		IP:   c.config.IP,
 		Port: c.config.Port,
 		User: c.config.User,
@@ -73,7 +73,7 @@ func (c *SSHClient) UploadFiles(
 	}
 	if onProgress != nil {
 		onProgress(ProgressMsg{
-			Type:       "progress",
+			Type:       MsgTypeProgress,
 			Seq:        seq,
 			IP:         ip,
 			TotalBytes: totalBytes,
@@ -143,7 +143,7 @@ func (c *SSHClient) UploadFiles(
 			// 文件完成：发送进度更新
 			if onProgress != nil {
 				onProgress(ProgressMsg{
-					Type:         "progress",
+					Type:         MsgTypeProgress,
 					Seq:          seq,
 					IP:           ip,
 					SuccessFiles: successFiles,
@@ -164,7 +164,7 @@ func (c *SSHClient) UploadFiles(
 			// 文件完成：发送进度更新
 			if onProgress != nil {
 				onProgress(ProgressMsg{
-					Type:         "progress",
+					Type:         MsgTypeProgress,
 					Seq:          seq,
 					IP:           ip,
 					SuccessFiles: successFiles,
@@ -208,7 +208,7 @@ func (c *SSHClient) UploadFiles(
 			// 文件完成：发送进度更新
 			if onProgress != nil {
 				onProgress(ProgressMsg{
-					Type:         "progress",
+					Type:         MsgTypeProgress,
 					Seq:          seq,
 					IP:           ip,
 					SuccessFiles: successFiles,
@@ -225,7 +225,7 @@ func (c *SSHClient) UploadFiles(
 		// 文件完成：发送进度更新
 		if onProgress != nil {
 			msg := ProgressMsg{
-				Type:          "progress",
+				Type:          MsgTypeProgress,
 				Seq:           seq,
 				IP:            ip,
 				UploadedBytes: uploadedBytes,

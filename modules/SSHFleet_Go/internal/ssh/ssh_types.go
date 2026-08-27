@@ -15,6 +15,14 @@ const (
 	progressThrottle = 500 * time.Millisecond
 )
 
+// SSE 消息类型（Python 前端按此分派 handler，协议唯一权威定义，见 ADR-0002）
+const (
+	MsgTypeInit     = "init"
+	MsgTypeProgress = "progress"
+	MsgTypeResult   = "result"
+	MsgTypeDone     = "done"
+)
+
 // SSHClient 封装SSH客户端连接
 type SSHClient struct {
 	client *ssh.Client
@@ -76,7 +84,7 @@ func (pw *progressWriter) Write(p []byte) (int, error) {
 	if time.Since(pw.lastCallback) >= progressThrottle {
 		pw.lastCallback = time.Now()
 		pw.callback(ProgressMsg{
-			Type:          "progress",
+			Type:          MsgTypeProgress,
 			Seq:           pw.seq,
 			IP:            pw.ip,
 			UploadedBytes: pw.uploaded,
@@ -112,7 +120,7 @@ func (pr *progressReader) Read(p []byte) (int, error) {
 	if shouldCallback && pr.callback != nil {
 		pr.lastCallback = time.Now()
 		pr.callback(ProgressMsg{
-			Type:            "progress",
+			Type:            MsgTypeProgress,
 			Seq:             pr.seq,
 			IP:              pr.ip,
 			DownloadedBytes: pr.downloaded,

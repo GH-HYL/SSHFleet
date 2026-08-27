@@ -28,7 +28,7 @@ func (c *SSHClient) DownloadFiles(
 	onProgress func(ProgressMsg),
 ) (*DownloadResult, error) {
 	result := &DownloadResult{
-		Type: "result",
+		Type: MsgTypeResult,
 		IP:   c.config.IP,
 		Port: c.config.Port,
 		User: c.config.User,
@@ -315,7 +315,7 @@ func (c *SSHClient) sftpRunCommand(command string) (string, error) {
 // buildDownloadProgress 组装下载进度消息（三处调用共用）
 func buildDownloadProgress(seq int, ip string, downloadedBytes, totalBytes int64, totalFiles, successFiles, failedFiles int) ProgressMsg {
 	return ProgressMsg{
-		Type:            "progress",
+		Type:            MsgTypeProgress,
 		Seq:             seq,
 		IP:              ip,
 		DownloadedBytes: downloadedBytes,

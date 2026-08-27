@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"errors"
 
 	"SSHFleet/internal/log"
 	"SSHFleet/internal/ssh"
@@ -46,7 +47,7 @@ func (e *BatchExecutor) Run(tasks []*SSHTask) <-chan *ssh.ExecResult {
 
 			client := ssh.NewSSHClient(task.Config)
 			workResult, err := client.ExecuteCommand(task.Command, e.ctx, task.Config.IP)
-			if err != nil {
+			if err != nil && !errors.Is(err, context.Canceled) {
 				log.Zlog.Error("协程worker - 出现异常", zap.String("ip", task.Config.IP), zap.Int("workerId", id), zap.Error(err))
 			}
 
