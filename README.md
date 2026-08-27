@@ -1,552 +1,541 @@
 # SSHFleet
 
-SSHFleet —— 基于 Python + Go 混合开发的 SSH 批量运维工具，专为大规模服务器集群设计。它通过Go的高并发引擎和Python的丰富生态，实现了对数千节点的命令/脚本批量执行、文件批量上传下载。具备危险命令防护、密钥与密码双认证、执行日志归档等企业级特性，让多机管理化繁为简
+SSHFleet 是一个 **SSH 批量运维工具**：一次命令输入，派出一支"舰队"（fleet）——批量 ssh 连接每一台目标服务器，批量执行命令、运行脚本、上传/下载文件，结果自动归档。
 
 ---
 
 ## 目录
 
-- [功能概览](#功能概览)
-- [安装说明](#安装说明)
-- [快速开始](#快速开始)
-- [使用指南](#使用指南)
-  - [参数说明](#参数说明)
-  - [CSV 文件格式](#csv-文件格式)
-  - [配置文件](#配置文件)
-- [详细使用示例](#详细使用示例)
-- [技术架构](#技术架构)
-  - [项目结构](#项目结构)
-  - [执行流程](#执行流程)
-  - [历史记录结构](#历史记录结构)
-- [常见问题 (FAQ)](#常见问题-faq)
-- [依赖](#依赖)
-- [仓库](#仓库)
-- [许可证](#许可证)
+- [① 这是什么，能干什么](#①-这是什么能干什么)
+- [② 安装](#②-安装)
+- [③ 快速上手](#③-快速上手)
+- [④ 核心概念](#④-核心概念)
+- [⑤ 四种模式与参数](#⑤-四种模式与参数)
+- [⑥ 进阶用法](#⑥-进阶用法)
+- [⑦ 结果与历史记录](#⑦-结果与历史记录)
+- [⑧ 技术架构](#⑧-技术架构)
+- [⑨ 常见问题（FAQ）](#⑨-常见问题faq)
+- [附录：依赖 / 仓库](#附录依赖--仓库)
 
 ---
 
-## 功能概览
+## ① 这是什么，能干什么
 
-| 能力 | 说明 |
-| --- | --- |
-| 命令执行 | 通过 Go 协程引擎多协程并发，支持数千节点，实时进度条显示 |
-| 脚本执行 | 远程执行本地 shell/python 脚本，base64 编码传输 |
-| 文件上传 | Go 引擎 SFTP 上传，大文件流式传输 |
-| 文件下载 | Go 引擎 SFTP 下载，支持远程文件/目录批量下载到本地 |
-| 安全防护 | 危险命令正则规则，风险等级提示，交互式确认 |
-| 密钥登录 | 支持 PEM 私钥认证，密钥优先、密码兜底 |
-| 错误分类 | SSH/网络错误自动归类 |
-| 日志归档 | 每次执行独立目录，含终端输出(txt/xlsx)、执行日志、汇总报告、资源备份 |
+### 定位
+
+把「SSH 登录 → 执行 → 退出」这套逐台操作，变成「**一条命令操作清单里的所有服务器**」。你准备一份服务器清单，告诉工具要做什么，剩下的并发、收集、归档都交给工具。
+
+### 能力
+
+| 能力         | 说明                                   |
+| ---------- | ------------------------------------ |
+| 批量执行命令     | 一条命令跑遍清单里的所有服务器，实时看进度                |
+| 批量执行脚本     | 把本地 `.sh` / `.py` 脚本发到每台服务器执行        |
+| 批量上传文件     | 本地文件/目录分发到每台服务器的指定位置                 |
+| 批量下载文件     | 收集每台服务器的文件/目录，按 IP 分目录存到本地           |
+| 危险命令防护     | 自动识别 `rm -rf /` 等危险命令，执行前要求确认        |
+| 密码 / 密钥双认证 | 支持密码登录与密钥登录（密钥优先、密码兜底）               |
+| 结果自动归档     | 每次执行生成独立目录：终端输出（txt/excel）、汇总报告、资源备份 |
 
 ---
 
-## 安装说明
+## ② 安装
 
 ### 前置要求
 
-- Python 3.10+
-- Go 引擎需自行编译：源码在 `modules/SSHFleet_Go/`，用 `go build` 编译后，把生成的 `SSHFleet_Go`（Linux）/ `SSHFleet_Go.exe`（Windows）放进 `src/go/` 目录（仓库不含预编译二进制）。如果你不会编译 Go，可临时从作者处获取对应二进制执行文件放入该目录
-- 支持的操作系统：Windows / Linux
+| 项      | 要求                         |
+| ------ | -------------------------- |
+| 操作系统   | Windows / Linux            |
+| Python | 3.10+（安装时勾选 "Add to PATH"） |
+| Go 引擎  | 一个可执行文件（见下）                |
 
 ### 安装步骤
 
-1. **安装 Python 依赖**
+安装 Python 依赖（在项目目录执行）：
 
 ```bash
-# 建议使用虚拟环境
-python -m venv venv
-
-# 激活虚拟环境
 # Windows:
-venv\Scripts\activate
+python -m pip install loguru pydantic pyyaml rich openpyxl requests
+
 # Linux:
-source venv/bin/activate
-
-# 安装依赖
-pip install loguru pydantic pyyaml rich openpyxl requests
+python3 -m pip install loguru pydantic pyyaml rich openpyxl requests
 ```
 
-1. **配置默认参数（可选）**
+准备 Go 引擎：
 
-编辑 `src/config/SSHFleet.yaml`，配置默认端口、用户名、密码等参数：
+> [!NOTE] 📖 深入：Go 引擎
 
-```yaml
-account:
-port: 22
-user: root
-password: '/path/to/password_file'  # 密码文件路径，文件内容需根据密码安全等级转化，详见密码等级描述
-```
+> SSHFleet 的并发批量执行能力由一个 Go 小程序（执行引擎）提供。仓库**不含**编译好的引擎，需要自行放入：
 
-### 密码 base64 编码方法
+> - **方式一（推荐）**：找作者/发布包要现成的 `SSHFleet_Go.exe`（Windows）或 `SSHFleet_Go`（Linux），放到 `src/go/` 目录
+> - **方式二**：源码在 `modules/SSHFleet_Go/`，装好 Go 环境后 `go build`，产物放入 `src/go/`
 
-```python
-import base64
-password = "你的密码"
-encoded = base64.b64encode(password.encode('utf-8')).decode('utf-8')
-# 将 encoded 写入文件，文件路径填入配置文件的 password 字段
-with open('/path/to/password_file', 'w') as f:
-    f.write(encoded)
-```
+> 引擎缺失或放错位置时工具会启动报错。
 
 ---
 
-## 快速开始
+## ③ 快速上手
 
-> 💡 运行前先准备好两样东西（不知道怎么弄？看下面的「CSV 文件格式」一节，手把手教你）：
+这一章讲**整体怎么用**：从最快到最标准，先跑通一条命令。过程中涉及的概念（CSV 清单、凭据文件、参数）在后续章节详解，这里先用最小例子跑起来。
 
-> 1. 一份节点清单 `nodes.csv`（每行一台服务器）
-> 2. 一份「密码文件」（里面是经 Base64 编码的密码，**不是密码原文**）
+### 3.1 最快路径：内联清单（不需要建任何文件）
 
-> 下面是最常用的几条命令，挑你需要的用：
-
-```bash
-# 命令模式
-python3 sshfleet.py -f nodes.csv -c "ls -l"
-
-# 脚本模式
-python3 sshfleet.py -f nodes.csv -s script.sh
-
-# 上传模式
-python3 sshfleet.py -f nodes.csv -u /local/path -p /remote/path/
-
-# 下载模式
-python3 sshfleet.py -f nodes.csv -d /opt/logs/app.log -p ./downloads
-
-# 内联CSV（单个节点，无需编辑CSV文件）
-python3 sshfleet.py -f "192.168.1.10,22,root,~/.MyPW/pw.txt" -c "ls"
-
-# 非交互模式（跳过所有确认提示）
-python3 sshfleet.py -f nodes.csv -c "df -h" --disinteractive
-```
-
----
-
-## 使用指南
-
-### 参数说明
-
-```
-python3 sshfleet.py  ( -c | -s | -u | -d | --gen-key | --convert-password )  ( -f ) ( -p ) [可选参数]
-```
-
-> 白话解释：每次只能选一种「模式」（`-c`/`-s`/`-u`/`-d` 四选一，`|` 表示「或」）；选了 `-c`/`-s`/`-u`/`-d` 时必须再带 `-f`（节点清单），上传/下载还要带 `-p`；其余都是可加可不加的选项。
-
-#### 必填参数（四种模式，每次只能选一种）
-
-| 参数 | 说明 |
-| --- | --- |
-| `-c command` | 命令模式：在多台服务器上执行一条命令 |
-| `-s script` | 脚本模式：在多台服务器上执行一个本地脚本（.sh/.py） |
-| `-u upload` | 上传模式：把本地文件或目录传到服务器 |
-| `-d download` | 下载模式：从服务器下载文件或目录到本地 |
-
-> 选 `-c`/`-s`/`-u`/`-d` 时，必须再带上 `-f`（节点清单）。
-
-#### 条件必填参数
-
-| 参数 | 说明 |
-| --- | --- |
-| `-f csv_file` | 节点清单：CSV 文件路径，或直接在命令行写一行节点信息（-c/-s/-u/-d 时必须带） |
-| `-p path` | 目标路径：上传到服务器的目录 / 从服务器下载到的本地目录（-u/-d 时必须带） |
-
-#### 可选参数
-
-| 参数 | 说明 |
-| --- | --- |
-| `-m mode` | 执行身份：`direct`=用登录用户身份，`sudo`=用 root 身份执行（默认 direct） |
-| `-t timeout` | 单台执行或传输的超时时间（秒） |
-| `-T timeout` | 连接每台服务器的超时时间（秒） |
-| `-n number` | 并发数：同时操作几台服务器；不填则全部并行（默认同时跑全部节点） |
-| `-r remark` | 给这次任务起个名字，会作为历史记录文件夹的后缀（不填自动生成） |
-| `--nobash` | 命令模式专用：不套一层 bash 环境，直接执行原始命令 |
-| `--disinteractive` | 跳过所有确认提示直接执行（批量跑脚本时常用） |
-| `-k [KEY_PATH]` | 密钥登录开关（三态，详见下方「密钥登录与 `-k` 选项」）：不指定=纯密码；仅 `-k`=用 CSV/配置默认密钥；`-k 路径`=所有节点统一私钥 |
-| `--gen-key` | 生成随机主密钥并持久化到系统环境变量 `SSHFLEET_KEY`（high 密码等级加密凭据用；Windows 写注册表、Linux 写 ~/.bashrc） |
-| `--convert-password 文件路径` | 按配置的密码安全等级转换凭据文件：medium=把明文密码转码为 base64；high=把明文/base64 密码加密为密文（需先 `--gen-key`）。已处于目标格式会提示跳过；路径支持相对 secret\_dir |
-
-### CSV 文件格式
-
-CSV 就是一份"服务器清单"：**纯文本文件，每行一台服务器，列之间用英文逗号 **`,`** 分隔**。第一行直接写服务器 IP 就行，不用写标题行；以 `#` 开头的行是注释、会被忽略。你可以用记事本 / VSCode 直接编辑。
-
-固定 **6 列，按顺序排列**（后面的列可以空着不写；某列空着时程序会自动找默认值，规则见下方「某一列留空会怎样」）：
-
-| 列 | 字段 | 必填 | 这一列填什么 |
-| --- | --- | --- | --- |
-| 1 | IP | 是 | 服务器 IP，如 `192.168.1.10` |
-| 2 | 端口 | 否 | SSH 端口（默认 22），留空用配置 |
-| 3 | 用户名 | 否 | 登录用户名，如 `root`，留空用配置 |
-| 4 | 密码文件路径 | 否 | **不是密码本身**，而是"放密码的文件"的路径（见下方第 1 步） |
-| 5 | 密钥文件路径 | 否 | PEM 私钥文件路径（用密钥登录时填） |
-| 6 | 私钥口令文件路径 | 否 | 仅当第 5 列的私钥本身加密了才需要 |
-
-> ⚠️ 最容易踩的坑：**密码和私钥口令都不要直接写进 CSV**，而是写一个"文件的路径"，那个文件里才是真正的内容（且密码/口令要做 Base64 编码）。这样能避免敏感信息以明文暴露在清单里。
-
-#### 第 1 步：准备"密码文件"（第 4 列要用）
-
-密码文件 = 一个普通文本文件，**内容格式由配置的密码安全等级 **`account.password_security`** 决定**：
-
-- **medium（默认）**：内容是服务器密码的 **Base64 编码**；
-- **high**：内容是加密后的密文（需先用 `--gen-key` 生成主密钥）。
-
-**推荐做法**：把明文密码写进文件，再用 `--convert-password` 一键转换成当前等级对应的格式（medium 转成 base64、high 加密）：
+`-f` 可以直接接一段服务器信息（内联清单），最小写法只写 IP：
 
 ```bash
+python sshfleet.py -f "192.168.1.10" -c "uptime"
+```
+
+回车后工具交互询问密码（输入不显示属正常），即可连接该服务器执行命令。
+
+> [!NOTE] 📖 深入：内联清单（-f 的第二种用法）
+
+> `-f` 既能接文件路径（`-f nodes.csv`），也能直接接一段服务器信息。内联清单用英文逗号分隔，最多 6 段，与 CSV 6 列一一对应：
+
+> -f "IP, 端口, 用户名, 密码文件路径, 密钥文件路径, 私钥口令文件路径"
+
+> **只写 IP 时**其余全用默认值：端口/用户名用配置默认，密码由工具交互询问。临时测一台机器时，内联清单比建 CSV 快得多。各段省略时依次回退「配置默认 → 交互输入」（详细规则见 4.1）。
+
+### 3.2 标准流程：清单 + 密码文件 + 模式
+
+准备一台以上服务器、一个账号密码，然后照这个流程走：
+
+```bash
+# 第 1 步：准备密码文件（把明文密码写进文件，再用转换命令按当前等级转换，详见 4.2）
 echo -n '你的服务器密码' > ~/.MyPW/pw.txt
 python sshfleet.py --convert-password ~/.MyPW/pw.txt
-```
 
-如果不想用转换命令，也可以手动生成 base64（仅 medium 等级适用）：
+# 第 2 步：写清单（所有服务器的端口、账号、密码等配置一样且已经配置默认配置时，只写 IP 即可）
+#    nodes.csv:
+#    192.168.1.10
+#    192.168.1.11
+#    192.168.1.12
 
-- **Linux / macOS** 终端：
-
-```bash
-  echo -n '你的服务器密码' | base64 > ~/.MyPW/pw.txt
-```
-
-- **Windows** PowerShell：
-
-```powershell
-  [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes('你的服务器密码')) | Out-File -NoNewline ~/.MyPW/pw.txt
-```
-
-  （`~` 指你的用户目录，Windows 下即 `C:\Users\你的用户名`）
-
-然后 CSV 第 4 列就写这个文件的路径，例如 `~/.MyPW/pw.txt`。程序会按当前等级读取该文件（medium 解码 / high 解密）得到真正的密码去登录。
-
-#### 第 2 步：写 CSV（挑适合你的场景抄）
-
-**场景 A：所有服务器端口 / 用户名 / 密码都一样（最常见）** 只要按第 1 步准备好一个密码文件，CSV 可以极简——每行只写 IP，其余全留空（自动用配置默认值）：
-
-```csv
-192.168.1.10
-192.168.1.11
-192.168.1.12
-```
-
-**场景 B：每台服务器密码不同** 每台准备各自的密码文件，第 4 列分别指向：
-
-```csv
-192.168.1.10,22,root,/opt/keys/node10_pw.txt
-192.168.1.11,22,root,/opt/keys/node11_pw.txt
-```
-
-**场景 C：用密钥登录（不用密码）** 第 4 列留空，第 5 列写你的 PEM 私钥文件路径（如 `~/.ssh/id_ed25519`）：
-
-```csv
-192.168.1.10,22,root,,~/.ssh/id_ed25519
-```
-
-私钥文件就是 SSH 标准的 `-----BEGIN ... PRIVATE KEY-----` 文本，**原样放进文件即可，不需要 Base64**。
-
-**场景 D：密钥本身加密了（有 passphrase）** 再加第 6 列，指向"口令文件"（内容是该口令的 Base64，生成方式与第 1 步相同）：
-
-```csv
-192.168.1.10,22,root,,~/.ssh/id_ed25519,~/.MyPW/key_pp.txt
-```
-
-完整 6 列示范：
-
-```csv
-# IP,端口,用户名,密码文件路径,密钥文件路径,私钥口令文件路径
-192.168.1.10,10022,root,~/.MyPW/pw.txt,~/.ssh/id_ed25519,~/.MyPW/key_pp.txt
-```
-
-#### 路径怎么写（三种写法都支持）
-
-- `~/.MyPW/pw.txt` — `~` 自动展开成你的用户目录
-- `/home/user/pw.txt` — 绝对路径
-- `./pw.txt` — 相对路径，会拼接配置里的 `account.secret_dir`（密码 / 私钥 / 私钥口令文件都在此目录）
-
-#### 某一列留空会怎样（找不到值时的顺序）
-
-1. 先看 CSV 这一列填了没；
-2. 没填 → 用配置文件 `src/config/SSHFleet.yaml` 里的默认值（端口 / 用户名 / 密码 / 私钥 / 口令都有默认项）；
-3. 配置也没有 → 运行时让你交互输入（加 `--disinteractive` 非交互模式则会直接报错退出）。
-
-#### 一台服务器到底用哪种方式登录（认证判定）
-
-- 第 4、5 列都填：**优先用密钥**；若密钥解析失败且还有可用密码，自动回退到密码
-- 只填第 5 列：纯密钥登录，不需要密码
-- 只填第 4 列，或都空：使用密码（CSV 值 → 配置默认密码 → 交互输入）
-
-> 第 6 列（私钥口令）可在 CSV 里**按每台服务器单独设置**；留空时回退到全局配置 `account.key_passphrase`。
-> 第 5 列（私钥）同理，**留空时回退到全局配置 **`account.key`（所有节点共用同一个私钥时，只在此配一次即可）。
-
-#### 密钥登录与 `-k` 选项
-
-为安全起见，工具**不会**因为 CSV 里配了密钥就自动用密钥登录；是否用密钥必须显式通过 `-k` 选项开启。该选项有三种用法（三态）：
-
-- **不写 **`-k`：纯密码登录。工具会**完全忽略**所有密钥相关配置（CSV 第 5/6 列、`account.key`、`account.key_passphrase`），也不做任何密钥文件预检查；密码逻辑不受影响。
-- **仅写 **`-k`**（不带路径）**：使用密钥登录，密钥来源按「CSV 第 5 列 > 配置默认 `account.key`」逐节点解析；口令按「CSV 第 6 列 > 配置默认 `account.key_passphrase`」解析。这与旧版「配了密钥就默认用」的行为一致，只是现在需要你主动加 `-k`。
-- `-k /path/to/key`：把指定私钥作为**所有节点的统一私钥**，覆盖每个节点自带的密钥/口令配置。私钥路径走终端当前工作目录（`~` 会展开，相对路径不拼接 `secret_dir`）。若私钥本身加密（有 passphrase），运行时会**交互提示你输入口令**，直接回车表示无口令；个别节点想用自己的密钥就别带路径、改用「仅 `-k`」。
-
-示例：
-
-```bash
-# 所有节点用统一私钥 /opt/keys/id_rsa 登录（加密则交互输口令）
-python3 sshfleet.py -f nodes.csv -c "df -h" -k /opt/keys/id_rsa
-
-# 每个节点按 CSV/配置默认用各自的密钥
-python3 sshfleet.py -f nodes.csv -c "df -h" -k
-
-# 纯密码（忽略一切密钥配置）
-python3 sshfleet.py -f nodes.csv -c "df -h"
-```
-
-### 配置文件
-
-配置文件路径：`src/config/SSHFleet.yaml`。下面是一份**最小可用配置**（把尖括号里换成你自己的）：
-
-```yaml
-account:
-  port: 22                      # 默认 SSH 端口，CSV 里不写端口时用这个
-  user: root                    # 默认登录用户名
-  secret_dir: ~/.MyPW           # 凭据目录：CSV 里写的相对路径（密码/私钥/口令文件）都拼到这里
-  password_security: medium     # 密码安全等级：medium=base64 编码（默认）；high=加密存储（需 --gen-key + --convert-password）
-  password: ~/.MyPW/pw.txt      # 默认密码文件：内容格式由 password_security 决定（medium=Base64；high=加密）
-```
-
-主要配置项：
-
-| 配置段 | 关键参数 | 解读 |
-| --- | --- | --- |
-| `account` | port, user, secret\_dir, password, key | CSV 里没填端口/用户名/密码/私钥时用的默认值；`password`/`key` 是「文件路径」，文件内容才是真正的密码/私钥 |
-| `account` | password\_security | 密码安全等级：medium=base64 编码（默认）；high=加密存储（配合 `--gen-key` 生成主密钥、`--convert-password` 转换文件）；low 未开发 |
-| `account` | key\_passphrase | 默认私钥口令文件（仅当用「加密过的密钥」登录才需要）；内容是该口令的 Base64，可被 CSV 第 6 列按节点覆盖 |
-| `execution` | mode, timeout\_\* | 执行权限（direct/sudo）、各种超时时间 |
-| `enable` | output\_to\_xlsx, results\_to\_xlsx | 是否把结果导出成 Excel |
-| `paths` | logs, files, exe, jsons | 日志、文件、历史记录等存放位置（一般不用改） |
-
----
-
-## 详细使用示例
-
-### 示例 1：批量执行命令
-
-创建 `nodes.csv` 文件：
-
-```csv
-192.168.1.10
-192.168.1.11
-192.168.1.12
-```
-
-执行命令：
-
-```bash
+# 第 3 步：执行
 python sshfleet.py -f nodes.csv -c "uptime"
 ```
 
-### 示例 2：批量执行脚本
-
-创建 `deploy.sh` 脚本：
+### 3.3 常用场景示例
 
 ```bash
-#!/bin/bash
-echo "开始部署"
-mkdir -p /opt/app
-echo "部署完成"
-```
+# 批量执行命令（看磁盘）
+python sshfleet.py -f nodes.csv -c "df -h"
 
-执行脚本：
-
-```bash
+# 批量跑部署脚本（sudo 权限）
 python sshfleet.py -f nodes.csv -s deploy.sh -m sudo
-```
 
-### 示例 3：批量上传文件
-
-```bash
+# 分发文件到所有服务器
 python sshfleet.py -f nodes.csv -u ./app.tar.gz -p /opt/
-```
 
-### 示例 4：批量下载文件
-
-```bash
-# 下载单个文件
+# 收集所有服务器的日志（按 IP 分目录）
 python sshfleet.py -f nodes.csv -d /opt/logs/app.log -p ./downloads
 
-# 下载整个目录
-python sshfleet.py -f nodes.csv -d /opt/logs/ -p ./downloads
-```
+# 密钥登录（统一私钥，详见 6.1）
+python sshfleet.py -f nodes.csv -c "uptime" -k ~/.ssh/id_rsa
 
-下载结果按 IP 建子目录存放：
-
-```
-./downloads/
-├── 10.0.0.1/
-│   └── app.log
-├── 10.0.0.2/
-│   └── app.log
-└── 10.0.0.3/
-    └── app.log
-```
-
-### 示例 5：非交互模式
-
-```bash
-python sshfleet.py -f nodes.csv -c "df -h" --disinteractive
-```
-
-### 示例 6：内联CSV（单个节点）
-
-无需创建CSV文件，直接在命令行指定节点信息：
-
-```bash
-python sshfleet.py -f "192.168.1.10,22,root,~/.MyPW/pw.txt" -c "uptime"
+# 非交互批量（跳过所有确认）
+python sshfleet.py -f nodes.csv -s deploy.sh --disinteractive
 ```
 
 ---
 
-## 技术架构
+## ④ 核心概念
 
-Python 负责参数解析、安全检查、日志整理、结果输出；Go 负责高并发 SSH 执行引擎（命令执行、文件上传、文件下载）。两者通过 HTTP SSE（Server-Sent Events）通信：Python 启动 Go 子进程，Go 启动 HTTP 服务器，Python 发送 HTTP 请求并接收 SSE 流式结果。
+批量操作时，你会接触到三个概念：**节点清单 CSV**、**凭据文件**（用于存放密码内容）、**配置默认值**。这一章讲清它们，⑤ 再讲四种模式怎么选。
 
-### 项目结构
+### 4.1 节点清单 CSV
 
-```
-sshfleet.py                     # 入口：参数解析、流程编排
-src/
-├── check/                      # 校验模块
-│   ├── arguments.py            # 参数合规性检查
-│   ├── dangerous.py            # 危险命令检测
-│   └── files.py                # 文件存在性检查
-├── command/                    # 命令构建模块
-│   └── builder.py              # 最终执行命令构建
-├── common/                     # 共享层（跨模块公共工具）
-│   ├── constants.py            # 公共常量（成功分类名、颜色常量）
-│   ├── format_utils.py         # 结果呈现公共函数（模式/状态行/IP排序）
-│   ├── error_handler.py        # 错误打印/退出约定/异常装饰器
-│   ├── loader.py               # 配置文件加载（Pydantic 模型校验）
-│   └── text_utils.py           # 文本清洗、大小格式化、路径规范化
-├── config/                     # 配置文件夹
-│   ├── SSHFleet.yaml           # 工具配置（账号、超时、路径等）
-│   ├── dangerous_keywords.yaml # 危险命令检测规则
-│   └── error_keywords.yaml     # 错误分类关键词
-├── gotogo/                     # Go 执行器模块
-│   ├── go_to_go.py             # 主执行函数：启动 Go 进程 + HTTP SSE 接收 + Rich 进度条
-│   ├── caller.py               # Go 进程调用与 HTTP SSE 通信
-│   ├── builder.py              # 请求体构建（命令/上传/下载/密钥登录）
-│   ├── parser.py               # SSE 响应解析、base64 解码
-│   └── classifier.py           # 错误分类
-├── go/                         # Go 引擎二进制目录（放入 SSHFleet-Go 可执行文件，仓库不含预编译）
-├── input/                      # 输入交互模块
-│   ├── args.py                 # 命令行参数解析
-│   ├── csv.py                  # CSV 节点文件读取
-│   ├── confirm.py              # 参数信息交互确认
-│   └── interaction.py          # 用户交互确认
-├── log/                        # 日志模块
-│   └── logger.py               # 日志初始化与管理
-├── output/                     # 输出处理模块
-│   ├── terminal.py             # 终端格式化输出
-│   ├── report.py               # 执行报告生成
-│   ├── xlsx.py                 # Excel 文件生成
-│   ├── statistics.py           # 结果统计计算
-│   └── archive.py              # 资源文件备份与打包
-└── security/                   # 凭据安全模块
-    ├── cipher.py               # 加密引擎（加密/解密/格式识别）
-    ├── master_key.py           # 主密钥管理（--gen-key）
-    └── upgrade.py              # 凭据转换（--convert-password）
-```
-
-### 执行流程
-
-```
-参数解析(input) → 校验(check) → 用户确认(input)
-  ↓
-┌─ 命令/脚本模式 ─→ gotogo 模块启动 Go 子进程，通过 HTTP SSE 实时接收结果（Rich 进度条显示）
-├─ 上传模式 ─→ gotogo 模块启动 Go 子进程，通过 HTTP SSE 实时接收结果（Rich 进度条显示）
-└─ 下载模式 ─→ gotogo 模块启动 Go 子进程，通过 HTTP SSE 实时接收结果（Rich 进度条显示）
-  ↓
-结果统计(output) → 终端输出(output) → 生成报告(output) → 资源备份(output) → 创建 latest_history 链接
-```
-
-### 历史记录结构
-
-```
-historys/
-├── SSHFleetTools.log                              # 工具运行日志
-└── YYYY-MM-DD_HH-MM-SS_模式_备注/                 # 每次执行独立目录
-    ├── SSHFleet_Go.log                            # 执行日志（Go 引擎）
-    ├── output.txt                                 # 终端输出（txt，命令/上传模式均写入）
-    ├── output.xlsx                                # 终端输出（xlsx，由 output.txt 转换）
-    ├── report.txt                                 # 汇总报告
-    ├── results.xlsx                               # 结果字典（xlsx）
-    └── assets/                                    # 资源备份（按模式条件生成）
-        ├── <csv_file>                             # 节点 CSV 文件（始终备份）
-        ├── <script_file>                          # 执行脚本（仅脚本模式）
-        └── <upload_file>                          # 上传文件（仅上传模式）
-```
-
----
-
-## 常见问题 (FAQ)
-
-### Q1: 连接超时怎么办？
-
-A: 可以通过 `-T` 参数增加连接超时时间：
-
-```bash
-python sshfleet.py -f nodes.csv -c "uptime" -T 30
-```
-
-### Q2: 如何批量处理多个端口的服务器？
-
-A: 在 CSV 文件中为每台服务器单独指定端口（第 4 列是「密码文件路径」，不是密码本身，详见「CSV 文件格式」第 1 步）：
+CSV 是一份"服务器清单"：纯文本，每行一台服务器，英文逗号分隔，允许使用#号注释单行，可以用记事本 / VSCode 编辑。
 
 ```csv
-192.168.1.10,22,root,~/.MyPW/pw.txt
-192.168.1.11,10022,root,~/.MyPW/pw.txt
-192.168.1.12,20022,root,~/.MyPW/pw.txt
+192.168.1.10
+192.168.1.11
+192.168.1.12
 ```
 
-### Q3: 遇到高危命令提示怎么办？
+上面的清单表示 3 台服务器，其余信息（端口/用户名/密码）按 4.3 的规则取默认值。
 
-A: 工具会检测危险命令并提示确认。如果确认要执行，输入 `y` 继续；或者使用 `--disinteractive` 参数跳过确认（谨慎使用）。
+> [!NOTE] 📖 深入：CSV 文件格式（6 列详解）
 
-### Q4: 如何查看历史执行记录？
+> 每行固定 **6 列**，按顺序排列，后面的列可留空：
 
-A: 历史记录保存在 `historys/` 目录下，每次执行创建一个独立目录。
+> | 列 | 字段 | 必填 | 说明 |
 
-### Q5: Windows 下执行报错？
+> | --- | --- | --- | --- |
 
-A: 确保 Go 可执行文件 `SSHFleet_Go.exe` 存在，且未被杀毒软件拦截。
+> | 1 | IP | 是 | 服务器 IP |
 
-### Q6: 第 4 列到底填什么？为什么不能直接写密码？
+> | 2 | 端口 | 否 | SSH 端口（默认使用配置文件配置端口） |
 
-A: 第 4 列填的是「密码文件路径」，不是密码本身。因为直接把密码写进 CSV 会以明文暴露，所以约定：把密码做 Base64 编码后存进一个文件，CSV 里只写这个文件的路径。生成方法见「CSV 文件格式」第 1 步。如果你嫌麻烦，也可以不填第 4 列，改在配置文件 `account.password` 里设好默认密码文件，或者运行时让程序交互式问你密码。
+> | 3 | 用户名 | 否 | 登录用户名（如 `root`，默认使用配置文件配置用户名） |
 
-### Q7: 怎么用密钥登录（不开密码）？
+> | 4 | 密码文件路径 | 否 | **密码文件的路径，不是密码本身**（见 4.2），默认使用配置文件配置密码路径 |
 
-A: 密钥登录现在需要显式加 `-k` 选项才会启用（不写 `-k` 工具会当成纯密码）。在第 5 列填你的 PEM 私钥文件路径（如 `~/.ssh/id_ed25519`）、第 4 列留空，并加上 `-k` 即可，详见「CSV 文件格式 - 场景 C」。如果私钥本身加密了（有 passphrase），再把口令文件路径填到第 6 列（或用 `-k /path` 统一私钥，运行时会交互问你口令），详见场景 D 与「密钥登录与 `-k` 选项」。
+> | 5 | 密钥文件路径 | 否 | PEM 私钥路径（密钥登录时填），在使用 -k 选项后，默认使用配置文件配置密钥路径 |
+
+> | 6 | 私钥口令文件路径 | 否 | 仅当第 5 列私钥本身加密时填，在使用 -k 选项后，默认使用配置文件配置私钥口令路径 |
+
+> **常见写法（从简到全，照着抄）：**
+
+> ```csv
+> # ① 单个 IP（最简单）——其余全用配置默认值
+> 192.168.1.10
+>
+> # ② 常用配置：IP + 端口 + 用户名 + 密码文件路径
+> 192.168.1.10,22,root,~/.MyPW/pw.txt
+>
+> # ③ 多台服务器共用一个密码文件（端口/用户名留空用默认）
+> 192.168.1.10,22,root,~/.MyPW/pw.txt
+> 192.168.1.11,,user,~/.MyPW/pw.txt
+> 192.168.1.12,,,~/.MyPW/pw.txt
+>
+> # ④ 每台密码不同——第 4 列各自指向不同的密码文件
+> 192.168.1.10,,,/opt/keys/node10_pw.txt
+> 192.168.1.11,,,/opt/keys/node11_pw.txt
+>
+> # ⑤ 密钥登录（不用密码）——第 4 列留空，第 5 列写私钥路径
+> 192.168.1.10,,,,~/.ssh/id_ed25519
+>
+> # ⑥ 私钥本身需要口令（有 passphrase）——再加第 6 列口令文件
+> 192.168.1.10,22,root,,~/.ssh/id_ed25519,~/.MyPW/key_pp.txt
+>
+> # ⑦ 全满配置：6 列全填（IP,端口,用户名,密码文件,密钥文件,私钥口令文件）
+> 192.168.1.10,10022,deploy,~/.MyPW/pw.txt,~/.ssh/id_ed25519,~/.MyPW/key_pp.txt
+> ```
+
+> **列留空时的取值顺序**：配置文件默认值优先使用，若没有配置默认值，需运行时交互输入（交互输入在 `--disinteractive` 选项下的非交互模式下则报错）。
+
+> 登录**认证判定**逻辑（一台服务器用哪种方式登录）：
+
+> - 第 4、5 列都填 → **密钥优先**；密钥解析失败且有可用密码时自动回退密码
+> - 只填第 5 列 → 纯密钥登录
+> - 只填第 4 列 / 都空 → 用密码登录
+
+> [!WARNING] 密码不要直接写进 CSV：CSV 作为清单文件易被复制/分享，明文密码等于裸奔。密码放独立"凭据文件"，CSV 只写路径（见 4.2）。
+
+### 4.2 凭据文件
+
+**密码/私钥口令不直接写进 CSV，而是放在一个"凭据文件"里，CSV 只引用文件路径。** 密码文件的内容格式由配置的「密码安全等级」决定，共三档：
+
+| 等级            | 文件里的内容        | 安全度 | 建议适合场景     | 需要做什么                    |
+| ------------- | ------------- | --- | ---------- | ------------------------ |
+| **1（明文）**     | 密码原文          | 最低  | 本机 / 临时演示  | 密码直接写入文件                 |
+| **2（base64）** | 密码的 base64 编码 | 中等  | 简单的工作环境    | 写明文后转换一次，转换后可后续复用，无须再次转换 |
+| **3（加密）**     | 加密密文          | 最高  | 多环境 / 敏感场景 | 先生成主密钥，再转换，复用逻辑同base64   |
+
+> [!NOTE] 📖 深入：密码与凭据文件
+
+> **为什么不能把密码直接写进 CSV？** 清单文件经常被复制、分享、留存、审计或进版本库，密码写进去等于跟着清单到处跑。约定：密码单独放文件，CSV 只写"文件在哪"。
+
+> **凭据文件的内容**由配置 `account.password_security` 决定：
+
+> - 等级 1（明文）：文件内容就是密码原文
+> - 等级 2（base64）：文件内容是密码的 base64 编码
+> - 等级 3（加密）：文件内容是密文，解密需要主密钥（由 --gen-key 选项生成存放于系统环境变量的密钥进行加解密 ）
+
+> **正确用法：用转换命令按等级转换**（`--convert-password` 自动识别文件内容格式——明文 / base64 / 加密，再转成配置等级对应的格式）：
+
+> ```bash
+> python sshfleet.py --convert-password ~/.MyPW/pw.txt
+> ```
+
+> 转换命令读的是**文件里的明文内容**，所以先把明文密码写进一个文件（记事本新建或命令行都行）：
+
+> ```bash
+> echo -n '你的服务器密码' > ~/.MyPW/pw.txt
+> ```
+
+> 然后运行转换命令，文件内容被就地转为配置等级对应的格式。转换后 CSV 第 4 列（或配置 `account.password`）指向该文件，工具运行时会按等级自动还原密码。**转换是自适应的**：文件已是目标格式会提示跳过；从高等级降到低等级（如加密→base64、加密→明文）会自动用主密钥解密转换，无需先改配置。
+>
+> 转换命令自带防呆校验：文件为空 / 含二进制数据（非文本文件）会直接报错；明文内容含换行（误粘贴多行）会报错提示；需要解密（降级或加密格式转换）但未配置主密钥、或主密钥不匹配时，会明确提示并附配置教程。
+
+> **等级怎么选？** 默认 **2（base64）** 足够；安全性要求高再切 **3（加密）**（先 `--gen-key` 生成主密钥，密钥存于系统环境变量、与凭据文件分离）；完全信任本机环境才用 **1（明文）**。
+
+> **手动生成**转换凭据文件（仅等级 2 适用，等级 3 无法手算）：
+
+> ```bash
+> # Linux / macOS:
+> echo -n '你的服务器密码' | base64 > ~/.MyPW/pw.txt
+>
+> # Windows PowerShell:
+> [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes('你的服务器密码')) | Out-File -NoNewline ~/.MyPW/pw.txt
+> ```
+
+### 4.3 配置默认值与相对路径
+
+配置文件位于 `src/config/SSHFleet.yaml`，提供 CSV 留空字段的默认值：
+
+```yaml
+account:
+  port: 22                  # 默认端口：CSV 第 2 列留空时用
+  user: root                # 默认用户名：CSV 第 3 列留空时用
+  password: ~/.MyPW/pw.txt  # 默认密码文件：CSV 第 4 列留空时用
+```
+
+> [!NOTE] 📖 深入：相对路径的拼接规则（secret_dir）
+
+> 配置 `account.secret_dir` 是"凭据目录"。CSV/配置里写**相对路径**（如 `pw.txt`）时，会拼接为 `secret_dir/pw.txt`。
+
+> 三种路径写法：
+
+> | 写法 | 含义 |
+
+> | --- | --- |
+
+> | `~/.MyPW/pw.txt` | `~` 展开为用户目录 |
+
+> | `/home/user/pw.txt` | 绝对路径，原样使用 |
+
+> | `pw.txt` | 相对路径，拼接 `secret_dir` |
+
+> 只需在配置里写一次 `secret_dir`，CSV 里写短文件名即可，密码文件集中管理。
 
 ---
 
-## 依赖
+## ⑤ 四种模式与参数
 
-Python 3.10+，主要依赖：
+四种操作模式，**每次只能选一种**：
 
-- `loguru` - 日志记录
-- `pydantic` - 数据模型验证
-- `pyyaml` - 配置文件解析
-- `rich` - 终端美化和进度条
-- `openpyxl` - Excel 文件生成
-- `requests` - HTTP 通信（与 Go 进程 SSE 交互）
+| 模式 | 参数                | 作用          | 示例                                    |
+| -- | ----------------- | ----------- | ------------------------------------- |
+| 命令 | `-c "命令"`         | 每台服务器执行一条命令 | `-c "df -h"`                          |
+| 脚本 | `-s 脚本文件`         | 上传本地脚本并执行   | `-s deploy.sh`                        |
+| 上传 | `-u 本地路径 -p 远端目录` | 分发文件/目录到服务器 | `-u ./app.tar.gz -p /opt/`            |
+| 下载 | `-d 远端路径 -p 本地目录` | 收集服务器文件/目录  | `-d /opt/logs/app.log -p ./downloads` |
+
+```bash
+python sshfleet.py -f nodes.csv -c "df -h"
+python sshfleet.py -f nodes.csv -s deploy.sh
+python sshfleet.py -f nodes.csv -u ./app.tar.gz -p /opt/
+python sshfleet.py -f nodes.csv -d /opt/logs/app.log -p ./downloads
+```
+
+> [!NOTE] 📖 深入：-p 参数的方向
+
+> `-p` 在上传/下载模式下的含义相反：
+
+> - 上传 `-u 本地 -p 远端`：`-p` 是**服务器上的目录**（文件发到哪）
+> - 下载 `-d 远端 -p 本地`：`-p` 是**本地的目录**（文件收到哪）
+
+> 一句话记：`-p` 永远是"目标位置"——上传的目标在服务器，下载的目标在本地。
+
+### 参数总表
+
+批量执行（四种模式**四选一**）：
+
+```text
+python sshfleet.py  ( -c | -s | -u | -d )  ( -f ) ( -p ) [可选参数]
+```
+
+工具选项（**单独使用**，不与批量执行模式搭配）：
+
+```text
+python sshfleet.py --gen-key
+python sshfleet.py --convert-password 文件路径
+```
+
+**① 模式参数（四选一）**
+
+| 参数        | 说明                          |
+| --------- | --------------------------- |
+| `-c "命令"` | 命令模式：在每台服务器执行一条命令           |
+| `-s 脚本文件` | 脚本模式：上传本地脚本并执行              |
+| `-u 本地路径` | 上传模式：把本地文件/目录传到服务器（需 `-p`）  |
+| `-d 远端路径` | 下载模式：从服务器下载文件/目录到本地（需 `-p`） |
+
+**② 工具选项（单独使用）**
+
+| 参数                      | 说明                               |
+| ----------------------- | -------------------------------- |
+| `--gen-key`             | 生成主密钥并写入系统环境变量（等级 3 加密凭据用，见 4.2） |
+| `--convert-password 文件` | 转换凭据文件：自动识别格式（明文/base64/加密）并按配置等级转换，支持升降级（见 4.2） |
+
+**③ 其他参数**
+
+| 参数                 | 说明                                                                  |
+| ------------------ | ------------------------------------------------------------------- |
+| `-f csv_file`      | 节点清单：CSV 文件路径，或内联的一段服务器信息（`-c`/`-s`/`-u`/`-d` 时必须带，见 3.1）           |
+| `-p path`          | 目标位置（上传/下载必带，方向见上）                                                  |
+| `-m mode`          | 执行身份：`direct`=登录用户身份，`sudo`=root 身份（默认取配置 `execution.mode`，默认 sudo） |
+| `-t timeout`       | 单台执行/传输超时（秒）；默认命令/脚本 60s、上传/下载 300s                                 |
+| `-T timeout`       | 连接每台服务器的超时（秒）；默认 10s                                                |
+| `-n number`        | 并发数；不填默认全部并行                                                        |
+| `-r remark`        | 任务备注，作为历史记录文件夹后缀                                                    |
+| `--nobash`         | 命令模式专用：不套 bash，直接执行原始命令                                             |
+| `--disinteractive` | 跳过所有确认/询问直接执行                                                       |
+| `-k [路径]`          | 密钥登录开关（三态，见 6.1）                                                    |
 
 ---
 
-## 仓库
+## ⑥ 进阶用法
 
-- GitHub: [github.com/GH-HYL/SSHFleet](https://github.com/GH-HYL/SSHFleet.git)
-- Gitee: [gitee.com/huang-fugui-123/sshfleet](https://gitee.com/huang-fugui-123/sshfleet)
-- 邮箱: <465317918@qq.com>
+### 6.1 密钥登录与 -k 三态
+
+工具**不会**因为 CSV 配了密钥就自动用密钥，必须显式加 `-k` 才启用密钥登录。
+
+> [!NOTE] 📖 深入：-k 的三种用法（三态）
+
+> **① 不写 `-k` = 纯密码登录**  
+> 忽略所有密钥配置（CSV 第 5/6 列、配置密钥项），只走密码逻辑。
+
+> **② 仅写 `-k`（不带路径）= 逐节点用自己的密钥**  
+> 密钥按「CSV 第 5 列 → 配置默认密钥」解析；私钥口令按「CSV 第 6 列 → 配置默认口令」解析。适合每台密钥不同。
+
+> **③ `-k /path/to/key` = 所有节点统一用这把私钥**  
+> 覆盖节点自带的密钥/口令。路径相对终端工作目录（`~` 展开）。私钥加密时运行时交互询问口令，直接回车=无口令。
+
+> ```bash
+> # 统一私钥登录（加密私钥会交互问口令）
+> python sshfleet.py -f nodes.csv -c "df -h" -k /opt/keys/id_rsa
+>
+> # 每台用各自的密钥（CSV/配置里配好）
+> python sshfleet.py -f nodes.csv -c "df -h" -k
+>
+> # 纯密码（忽略一切密钥配置）
+> python sshfleet.py -f nodes.csv -c "df -h"
+> ```
+
+### 6.2 sudo / 并发 / 超时 / 非交互
+
+**sudo 执行**（命令需要 root 权限时，可通过配置文件配置默认执行权限）：
+
+```bash
+python sshfleet.py -f nodes.csv -c "systemctl restart nginx" -m sudo
+```
+
+**限制并发**（默认全部并行，服务器扛不住时限流）：
+
+```bash
+python sshfleet.py -f nodes.csv -c "uptime" -n 10
+```
+
+**超时控制**：`-T` 连接超时、`-t` 执行/传输超时：
+
+```bash
+python sshfleet.py -f nodes.csv -c "uptime" -T 15 -t 60
+```
+
+**非交互模式**：跳过所有确认和询问（密码/口令需交互的部分会直接报错，需提前在 CSV/配置里备好）：
+
+```bash
+python sshfleet.py -f nodes.csv -s deploy.sh --disinteractive
+```
+
+### 6.3 配置文件全解
+
+> [!NOTE] 📖 深入：配置文件配置项详解（全字典）
+
+> 以下为完整配置（与 `src/config/SSHFleet.yaml` 一致），注释即说明：
+>
+> ```yaml
+> account:                    # 账号信息（CSV 留空时的默认值）
+>   port: 10022               # 默认 SSH 端口（CSV 第 2 列留空时用）
+>   user: "jx_zyc"            # 默认用户名（CSV 第 3 列留空时用）
+>   secret_dir: "~/.MyPW"     # 凭据目录：密码/私钥/私钥口令文件的相对路径都拼到这里
+>   password_security: 2      # 密码安全等级，数字越大越安全：1=明文 / 2=base64（默认） / 3=加密
+>   password: "SSHFleet_pw"   # 默认密码文件路径（内容格式随 password_security，用 --convert-password 转换）
+>   key: ""                   # 默认私钥文件路径（内容为 PEM 私钥原文）
+>   key_passphrase: ""        # 默认私钥口令文件路径（内容格式同密码文件，随等级变化）
+>
+> execution:                  # 执行参数
+>   mode: "sudo"              # 执行身份：direct=登录用户 / sudo=root（默认 sudo）
+>   timeout_connect: 10       # 连接超时（秒）
+>   timeout_execute: 60       # 执行超时（秒）
+>   timeout_transfer: 300     # 传输超时（秒）
+>
+> enable:                     # 功能开关
+>   output_to_xlsx: true      # 终端输出同时导出 xlsx；false=仅输出到 txt
+>   results_to_xlsx: true     # 结果固化到 xlsx 文件；false=不输出到本地文件
+>
+> paths:                      # 各类路径（一般不用改）
+>   keywords:
+>     error_keywords: "./src/config/error_keywords.yaml"          # 错误分类关键词文件
+>     dangerous_keywords: "./src/config/dangerous_keywords.yaml"  # 危险命令正则关键字文件
+>   exe:
+>     batch_tool_windows: "./src/go/SSHFleet_Go.exe"  # Windows 批量执行引擎
+>     batch_tool_linux: "./src/go/SSHFleet_Go"        # Linux 批量执行引擎
+>   logs:
+>     historys: "historys"       # 历史记录目录名
+>     tool: "SSHFleetTools.log"  # 工具日志文件名
+>     exec: "SSHFleet_Go.log"    # 执行日志文件名
+>   files:
+>     asset: "assets"               # 资源备份目录名
+>     output: "output.txt"          # 终端输出（txt）
+>     output_xlsx: "output.xlsx"    # 终端输出（xlsx）
+>     report: "report.txt"          # 汇总报告
+>     results_xlsx: "results.xlsx"  # 结果明细（xlsx）
+>
+> upload:                     # 上传并发策略（按文件大小，单位字节）
+>   concurrency_thresholds:
+>     small_file: 2097152     # < 2MB：全量并发
+>     large_file: 20971520    # > 20MB：串行上传
+>     medium_concurrency: 10  # 中间文件：10 并发
+> ```
+>
+> 取值原则：**CSV 没填 → 看配置；配置没有 → 交互询问**。大部分配置保持默认即可，通常只需根据环境调整 `account` 段的默认账号密码。
 
 ---
 
-## 许可证
+## ⑦ 结果与历史记录
 
-本项目仅供学习和内部使用。
+每次执行自动归档到 `historys/` 下独立目录：
+
+```text
+historys/
+├── SSHFleetTools.log                    # SSHFleet 工具运行日志
+└── 2026-08-25_14-30-00_command_备注/     # 每次执行一个目录：时间+英文模式+备注（模式为 command/script/upload/download）
+    ├── SSHFleet_Go.log                  # Go 引擎执行日志
+    ├── output.txt                       # 终端输出（txt）
+    ├── output.xlsx                      # 终端输出（Excel，可开关控制）
+    ├── report.txt                       # 汇总报告
+    ├── results.xlsx                     # 结果明细（Excel，可开关控制）
+    └── assets/                          # 资源备份（CSV/脚本/上传文件）
+```
+
+`-r 备注` 可让目录名更好认（如 `-r 发布v2`）。回看历史：进 `historys/` 找对应时间目录。
 
 ---
 
-> **警告：** 该工具可能存在 BUG，请在测试环境验证后再投入使用。数据无价，操作前请再三思量。
+## ⑧ 技术架构
+
+- **Python（编排层）**：参数解析、危险命令检查、日志整理、结果输出与报告生成
+- **Go（执行引擎）**：高并发 SSH 连接，命令执行、文件上传下载
+- **通信**：Python 启动 Go 子进程，Go 起本地 HTTP 服务，Python 通过 SSE 实时接收每台服务器的进度与结果
+
+```text
+你的命令 → Python 解析/校验 → 启动 Go 引擎 → Go 并发连接所有服务器
+     → 结果通过 SSE 实时回流 → Python 统计/输出/归档
+```
+
+---
+
+## ⑨ 常见问题（FAQ）
+
+**Q1：提示找不到 Go 引擎 / 引擎相关报错？** A：Go 引擎缺失或没放对位置。把 `SSHFleet_Go.exe`（Windows）/ `SSHFleet_Go`（Linux）放进项目 `src/go/`，见「② 安装」。
+
+**Q2：连接超时？** A：网络不通或服务器响应慢。用 `-T 30` 加大连接超时；批量前先 `-c "uptime"` 单节点验证连通性。
+
+**Q3：密码文件打不开 / 解码失败？** A：现在工具会自动识别文件内容格式（明文/base64/加密）并提示与配置等级是否匹配；若提示"与当前等级不匹配"，按提示将配置 `account.password_security` 改为文件实际等级，或用 `--convert-password` 直接转换（会自动识别并转换到目标等级），见「4.2 凭据文件」。
+
+**Q4：遇到危险命令提示怎么办？** A：工具检测到危险命令会要求确认，输入 `y` 继续（危险有等级，最高风险直接退出工具，不允许执行，可通过 \`./src/config/dangerous_keywords.yaml\` 配置）；定时任务等场景可加 `--disinteractive` 跳过确认（因会跳过大部分确认信息，请谨慎使用）。
+
+**Q5：密钥登录不生效？** A：必须显式加 `-k`（不带路径=逐节点密钥，带路径=全部目标节点统一密钥），只改 CSV 不会启用。见「6.1 密钥登录与 -k 三态」。
+
+**Q6：历史记录在哪看？** A：`historys/` 目录，每次执行一个时间目录，若在 Linux 环境下，工具会在工作区自动创建软链接 \`latest_history\`, 自动指向最新的历史目录，历史目录拓扑详见「⑦ 结果与历史记录」。
+
+---
+
+## 附录：依赖 / 仓库
+
+**Python 依赖**：loguru（日志）、pydantic（配置校验）、pyyaml（配置解析）、rich（终端美化/进度条）、openpyxl（Excel）、requests（与 Go 引擎通信）。
+
+**Go 依赖**：Go 引擎（源码在 `modules/SSHFleet_Go/`）的编译依赖：需要 **Go 1.25+**；核心依赖 `golang.org/x/crypto`（SSH 协议）、`go.uber.org/zap`（日志）、`github.com/pkg/sftp`（SFTP 传输）。直接使用现成二进制则无需安装 Go 与这些依赖；自行编译时在 `modules/SSHFleet_Go/` 下执行 `go build` 即可。
+
+**仓库**：
+
+- GitHub: <https://github.com/GH-HYL/SSHFleet>
+- Gitee: <https://gitee.com/huang-fugui-123/sshfleet>
+
+**许可**说明：本项目仅供学习和内部使用。
+
+> [!WARNING] 该工具可能存在 BUG，请在测试环境验证后再投入使用。数据无价，操作前请再三思量。
