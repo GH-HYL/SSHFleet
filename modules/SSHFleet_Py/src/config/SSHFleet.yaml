@@ -5,7 +5,7 @@
 account:
   port: 10022                 # 默认 SSH 端口（CSV 第 2 列留空时用）
   user: "jx_zyc"              # 默认用户名（CSV 第 3 列留空时用）
-  password_security: 2        # 密码安全等级，数字越大越安全
+  password_security: 3        # 密码安全等级，数字越大越安全
                               #   1=明文：文件内容即密码原文，安全性最低
                               #   2=base64：文件内容为密码的base64编码（默认）
                               #   3=加密：文件内容为密文，需 --gen-key 配主密钥后转换
