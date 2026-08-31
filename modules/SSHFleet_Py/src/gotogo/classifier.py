@@ -80,10 +80,40 @@ def classify(
 
 
 def _match(text: str, error_keywords: dict) -> str:
-    """关键词匹配，返回第一个命中的分类"""
+    """关键词匹配，返回第一个命中的分类（按分类定义顺序，自上而下）"""
     text_lower = text.lower()
     for category, keywords in error_keywords.items():
         for kw in keywords:
-            if kw.lower() in text_lower:
+            if _keyword_hit(kw.lower(), text_lower):
                 return category
     return UNCLASSIFIED
+
+
+def _keyword_hit(keyword: str, text: str) -> bool:
+    """
+    单条关键词的命中判定（通配符语义见 error_keywords.yaml 文件头部）
+
+    支持的通配符只有星号 *，含义是"任意长度的内容（可以为空）"。
+    判定规则：把关键词按 * 切成片段，要求片段在文本中按顺序出现即可，
+    不要求从头开始、到尾结束，片段之间也不要求相邻。
+    不含 * 时退化为普通子串包含匹配。
+
+    Args:
+        keyword: 已转小写的关键词
+        text: 已转小写的待匹配文本
+
+    Returns:
+        bool: 是否命中
+    """
+    if "*" not in keyword:
+        return keyword in text
+
+    pos = 0
+    for part in keyword.split("*"):
+        if not part:
+            continue
+        idx = text.find(part, pos)
+        if idx < 0:
+            return False
+        pos = idx + len(part)
+    return True
