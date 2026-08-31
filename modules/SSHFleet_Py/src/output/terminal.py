@@ -73,13 +73,14 @@ def _format_exit_code_hints(sorted_fail_categories) -> str:
     "格式化统计结果信息输出到终端失败",
     isexit=True,
 )
-def format_statistic_results_to_terminal(results_statistic: dict) -> None:
+def format_statistic_results_to_terminal(results_statistic: dict, error_keywords: dict) -> None:
     """
     功能：
         格式化统计结果信息输出到终端
 
     参数：
         results_statistic: 结果统计信息字典
+        error_keywords: 错误分类关键词映射（用于区分"已分类"与"兜底原文"）
 
     返回值：
         None
@@ -106,9 +107,30 @@ def format_statistic_results_to_terminal(results_statistic: dict) -> None:
         )
 
     if results_statistic["sorted_fail_categories"]:
-        print(
-            f'  {color.COLOR_RED}失败分类统计{color.COLOR_RESET} >>>  {"  ".join(f"{color.COLOR_YELLOW}{k}：{color.COLOR_RESET}{v}" for k, v in results_statistic["sorted_fail_categories"])}'
-        )
+        # 延迟导入：terminal 被 go_to_go 引用，而 gotogo 包顶层会再回引 terminal，
+        # 顶层 import 会形成循环依赖（与 error_handler 的延迟导入同理）
+        from src.gotogo.classifier import is_fallback_category
+
+        # 已分类的（关键词命中/动态退出码等）内容简短，合并一行展示；
+        # 兜底原文（关键词未命中时把报错原文当分类）一般较长，每个独占一行
+        known_parts = []
+        fallback_parts = []
+        for category, count in results_statistic["sorted_fail_categories"]:
+            item = f"{color.COLOR_YELLOW}{category}：{color.COLOR_RESET}{count}"
+            if is_fallback_category(category, error_keywords):
+                fallback_parts.append(item)
+            else:
+                known_parts.append(item)
+
+        if known_parts:
+            print(
+                f'  {color.COLOR_RED}失败分类统计{color.COLOR_RESET} >>>  {"  ".join(known_parts)}'
+            )
+        else:
+            print(f"  {color.COLOR_RED}失败分类统计{color.COLOR_RESET} >>>")
+        for item in fallback_parts:
+            print(f"    {item}")
+
         hints = _format_exit_code_hints(results_statistic["sorted_fail_categories"])
         if hints:
             print(f"  {color.COLOR_YELLOW}{hints}{color.COLOR_RESET}")

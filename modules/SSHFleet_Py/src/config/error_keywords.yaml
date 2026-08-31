@@ -23,7 +23,7 @@
 #       必须写成 'ssh: could not start shell'
 #     - 以星号 * 开头：如 *failed 会被当成"引用别名"，引用不存在的锚点直接报错
 #     - 以 # [ { ! 开头、包含 " #"（行内注释）等结构，同理建议加引号
-#   省心原则：关键词里只要出现 : * # ' 等符号，就一律用单引号包住；
+#   省心原则：关键词里只要出现 : * # ' [ 等符号，就一律用单引号包住；
 #   纯字母/空格/数字组成的关键词可以裸写，不需要引号。
 # ============================================================
 
@@ -41,19 +41,18 @@
 握手超时:
   - 握手超时
 
-# --- 秘钥不匹配---
-秘钥不匹配:
-  - none publickey
+# --- 密钥不匹配---
+# 原文形如 "ssh: handshake failed: ssh: unable to authenticate, attempted methods [none publickey], ..."
+# 关键词带右括号精确匹配：只有"没配置密码、仅尝试公钥就被拒"时才命中本类；
+# 若配置了密码（原文变成 attempted methods [none publickey password]，不含 [none publickey]），
+# 自然落回下方的「身份验证失败」，不会掩盖"密码也被拒"的事实。
+密钥不匹配:
+  - '[none publickey]'
 
-# --- 端口不可达---
-端口不可达:
-  - unable to connect to port
-  - 端口不可达
-
-# --- 目标不可达---
-目标不可达:
-  - connect call failed
-  - 目标不可达
+# --- 密钥解析失败---
+# Go 侧解析私钥失败（私钥格式错误、口令错误等），报错形如"解析密钥失败 - ..."
+密钥解析失败:
+  - 解析密钥失败
 
 # --- 密码过期---
 密码过期:
@@ -70,9 +69,19 @@
   - authentication timeout
   - i/o timeout
 
+# --- 资源耗尽---
+# 连接层资源类错误（本地文件描述符耗尽等），故障/过载节点常见
+资源耗尽:
+  - too many open files
+
 # --- 执行超时---
 执行超时:
   - 命令执行超时
+
+# --- 任务已取消---
+# 用户中断（Ctrl+C / 取消）时 Go 返回 context canceled，命令未执行完成
+任务已取消:
+  - context canceled
 
 # --- 连接中断---
 连接中断:
@@ -123,6 +132,11 @@
   - 'ssh: command * failed'
   - 'ssh: could not start shell'
 
+# --- 会话创建失败---
+# Go 侧创建 SSH 会话通道失败（如服务端达到 MaxSessions 限制），报错形如"创建会话失败 - ..."
+会话创建失败:
+  - 创建会话失败
+
 # --- 会话中断未返回退出码---
 # 命令已下发，但通道在执行过程中意外关闭，远端没有回退出状态，命令执行情况未知
 会话中断未返回退出码:
@@ -144,56 +158,6 @@ DNS解析失败:
   - 域名解析失败
   - 无法解析主机名
 
-# --- 端口被占用---
-端口被占用:
-  - address already in use
-  - port already in use
-  - 端口被占用
-  - 地址已使用
-
-# --- 防火墙阻止---
-防火墙阻止:
-  - firewall blocked
-  - connection filtered
-  - 防火墙阻止
-  - 连接被过滤
-  - blocked by firewall
-  - filtered
-
-# --- 证书错误---
-证书错误:
-  - certificate error
-  - SSL error
-  - TLS handshake failed
-  - 证书错误
-  - SSL握手失败
-  - cert verify failed
-
-# --- 协议不支持---
-协议不支持:
-  - protocol not supported
-  - unsupported protocol
-  - 协议不支持
-
-# --- 主机名验证失败---
-主机名验证失败:
-  - hostname verification failed
-  - hostname mismatch
-  - 主机名验证失败
-
-# --- 连接数限制---
-连接数限制:
-  - too many connections
-  - connection limit exceeded
-  - 连接数过多
-  - 达到连接限制
-
-# --- 网络配置错误---
-网络配置错误:
-  - network configuration error
-  - invalid network config
-  - 网络配置错误
-
 # --- SSH协议错误---
 SSH协议错误:
   - ssh protocol error
@@ -202,14 +166,6 @@ SSH协议错误:
   - 'ssh: handshake failed: eof'
   - protocol mismatch
   - 协议错误
-
-# --- 本地客户端配置错误---
-本地客户端配置错误:
-  - match does not allow
-
-# --- 传输大小与预期不符---
-传输大小与预期不符:
-  - size mismatch in put
 
 # --- 远程路径不存在---
 远程路径不存在:
@@ -227,6 +183,8 @@ SFTP失败:
   - 写入远程文件失败
   - 写入临时文件失败
   - 创建临时目录失败
+  - 创建临时文件失败
+  - 打开远程文件失败
   - SFTP 客户端创建失败
 
 # --- sudo失败---
@@ -238,6 +196,9 @@ sudo失败:
 本地文件错误:
   - 打开本地文件失败
   - 读取本地文件权限失败
+  - 本地文件不存在或不可读
+  - 创建本地文件失败
+  - 写入本地文件失败
 
 # --- 上传超时---
 上传超时:
