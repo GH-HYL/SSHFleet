@@ -151,6 +151,7 @@ func (c *SSHClient) DownloadFiles(
 	// 7. 逐文件下载
 	successFiles := 0
 	failedFiles := 0
+	skippedFiles := 0
 	var downloadedBytes int64
 	var outputLines []string
 	totalCostTime := 0.0
@@ -174,6 +175,14 @@ func (c *SSHClient) DownloadFiles(
 		} else {
 			remoteFilePath = remotePath
 			localFilePath = filepath.Join(ipDir, filepath.Base(remotePath))
+		}
+
+		// 符号链接：信息非错误，不下载、不重试、不计失败，仅记明细后跳过
+		if lfi, lerr := sftpClient.Lstat(remoteFilePath); lerr == nil && lfi.Mode()&os.ModeSymlink != 0 {
+			skippedFiles++
+			totalBytes -= file.size // 跳过的文件不再计入进度总量，保证最终进度到 100%
+			outputLines = append(outputLines, fmt.Sprintf("%s: 已跳过（符号链接）", file.relativePath))
+			continue
 		}
 
 		// 确保本地子目录存在
@@ -236,19 +245,24 @@ func (c *SSHClient) DownloadFiles(
 	}
 
 	// 8. 构建 output（base64 编码）
-	header := fmt.Sprintf("total_files=%d, success_files=%d, failed_files=%d", totalFiles, successFiles, failedFiles)
+	header := fmt.Sprintf("total_files=%d, success_files=%d, failed_files=%d", totalFiles-skippedFiles, successFiles, failedFiles)
 	outputText := header + "\n" + strings.Join(outputLines, "\n")
 	result.Output = base64.StdEncoding.EncodeToString([]byte(outputText))
 	// 退出码语义（ADR-0003）：exit_code 只描述命令执行结果。
 	// 传输阶段（SFTP 读写）不是命令执行，失败时不设置退出码（保持 nil），
-	// 失败信息由 result.Error 与 output 明细承载；仅全部成功时置 0。
-	if failedFiles == 0 {
+	// 失败信息由 result.Error 与 output 明细承载。
+	// 全传输成功 = 至少成功 1 个文件且 0 失败；一个都没传成功（含全跳过）算失败。
+	if successFiles > 0 && failedFiles == 0 {
 		code := 0
 		result.ExitCode = &code
+	} else if successFiles == 0 && failedFiles == 0 && skippedFiles > 0 {
+		errMsg := "没有下载到任何文件（全部为符号链接）"
+		result.Error = &errMsg
 	}
 	result.ExecCostTime = totalCostTime
 	result.TotalBytes = downloadedBytes
-	result.TotalFiles = totalFiles
+	// 跳过（符号链接）不计入总数：TotalFiles 只统计实际处理的文件（成功+失败）
+	result.TotalFiles = totalFiles - skippedFiles
 	result.SuccessFiles = successFiles
 	result.FailedFiles = failedFiles
 
@@ -257,12 +271,8 @@ func (c *SSHClient) DownloadFiles(
 }
 
 // sftpDownloadFile 通过 SFTP 下载单个文件，返回实际下载的字节数
+// （符号链接检查已上移到调用方循环，这里只负责真实文件下载）
 func (c *SSHClient) sftpDownloadFile(sftpClient *sftp.Client, remoteFilePath, localFilePath string, seq int, ip string, totalBytes int64, totalFiles int, onProgress func(ProgressMsg)) (int64, error) {
-	// 检查远程是否为符号链接（跳过符号链接）
-	if fi, err := sftpClient.Lstat(remoteFilePath); err == nil && fi.Mode()&os.ModeSymlink != 0 {
-		return 0, fmt.Errorf("跳过符号链接: %s", remoteFilePath)
-	}
-
 	srcFile, err := sftpClient.Open(remoteFilePath)
 	if err != nil {
 		return 0, fmt.Errorf("打开远程文件失败: %w", err)
