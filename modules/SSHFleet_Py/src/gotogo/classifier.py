@@ -24,6 +24,9 @@ from src.common.constants import (
 # 而是返回报错原文（见 classify 中 error/output 分支）
 UNCLASSIFIED = "错误未分类"
 
+# 兜底原文作为分类时的最大长度，超出部分截断，避免长报文撑爆统计/报表展示
+FALLBACK_MAX_LEN = 200
+
 
 def classify(
     exit_code: int | None,
@@ -74,9 +77,16 @@ def classify(
         result = _match(output, error_keywords)
         if result != UNCLASSIFIED:
             return result
-        return output.strip() or UNCLASSIFIED
+        return _truncate(output.strip()) or UNCLASSIFIED
 
     return UNCLASSIFIED
+
+
+def _truncate(text: str) -> str:
+    """超长兜底原文截断，保留语义开头，避免长文本撑爆统计/报表展示"""
+    if len(text) <= FALLBACK_MAX_LEN:
+        return text
+    return text[:FALLBACK_MAX_LEN] + "…"
 
 
 def _match(text: str, error_keywords: dict) -> str:
@@ -116,4 +126,34 @@ def _keyword_hit(keyword: str, text: str) -> bool:
         if idx < 0:
             return False
         pos = idx + len(part)
+    return True
+
+
+def is_fallback_category(category: str, error_keywords: dict) -> bool:
+    """
+    判断分类名是否为"关键词未命中时的兜底原文"（区别于规范分类名）
+
+    兜底原文 = classify 中 error/output 分支关键词未命中时返回的原始报文，
+    内容不定且一般较长，终端展示时需要特殊处理（独占一行）。
+
+    规范分类名包含：关键词表分类、动态生成类（执行失败(退出码N)）、
+    结构性分类（部分成功）、成功分类与完全无信息的兜底（错误未分类）。
+
+    Args:
+        category: 分类名
+        error_keywords: 分类关键词映射
+
+    Returns:
+        bool: 是兜底原文返回 True
+    """
+    if not category or category == UNCLASSIFIED:
+        return False
+    if category in error_keywords:
+        return False
+    if category in (SUCCESS_CATEGORY_EXECUTE, SUCCESS_CATEGORY_TRANSPORT):
+        return False
+    if category == PARTIAL_SUCCESS_CATEGORY:
+        return False
+    if category.startswith("执行失败(退出码"):
+        return False
     return True
