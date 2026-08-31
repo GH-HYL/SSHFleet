@@ -199,22 +199,10 @@ func (c *SSHClient) DownloadFiles(
 			break
 		}
 
-		// 下载文件
+		// 下载文件（失败即失败，不重试：批量场景下整批重跑成本更低）
 		var downloadErr error
 		var fileWritten int64
-		for attempt := 0; attempt <= maxFileRetries; attempt++ {
-			fileWritten, downloadErr = c.sftpDownloadFile(sftpClient, remoteFilePath, localFilePath, seq, ip, totalBytes, totalFiles, onProgress)
-			if downloadErr == nil {
-				break
-			}
-			if attempt < maxFileRetries {
-				log.Zlog.Warn("[下载] 文件下载失败，准备重试",
-					zap.String("ip", ip), zap.String("remoteFilePath", remoteFilePath),
-					zap.Int("attempt", attempt+1), zap.Int("maxRetries", maxFileRetries),
-					zap.Error(downloadErr))
-				time.Sleep(retryInterval)
-			}
-		}
+		fileWritten, downloadErr = c.sftpDownloadFile(sftpClient, remoteFilePath, localFilePath, seq, ip, totalBytes, totalFiles, onProgress)
 
 		costTime := time.Since(fileStart).Seconds()
 		totalCostTime += costTime

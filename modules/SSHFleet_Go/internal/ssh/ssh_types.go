@@ -10,8 +10,6 @@ import (
 )
 
 const (
-	maxFileRetries   = 2
-	retryInterval    = 2 * time.Second
 	progressThrottle = 500 * time.Millisecond
 )
 
