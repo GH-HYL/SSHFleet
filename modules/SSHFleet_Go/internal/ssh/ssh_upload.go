@@ -175,25 +175,13 @@ func (c *SSHClient) UploadFiles(
 		}
 		localMode := localInfo.Mode().Perm()
 
-		// 8c. 执行上传（含重试）
+		// 8c. 执行上传（失败即失败，不重试：批量场景下整批重跑成本更低）
 		var uploadErr error
 		var fileWritten int64
-		for attempt := 0; attempt <= maxFileRetries; attempt++ {
-			if !effectiveSudo {
-				fileWritten, uploadErr = c.sftpUploadFile(sftpClient, item.LocalPath, remoteFilePath, localMode, seq, ip, totalBytes, totalFiles, onProgress)
-			} else {
-				fileWritten, uploadErr = c.sftpUploadWithSudo(sftpClient, item.LocalPath, item.FileName, remotePath, localMode, seq, ip, totalBytes, totalFiles, onProgress)
-			}
-			if uploadErr == nil {
-				break
-			}
-			if attempt < maxFileRetries {
-				log.Zlog.Warn("[上传] 文件上传失败，准备重试",
-					zap.String("ip", ip), zap.String("fileName", item.FileName),
-					zap.Int("attempt", attempt+1), zap.Int("maxRetries", maxFileRetries),
-					zap.Error(uploadErr))
-				time.Sleep(retryInterval)
-			}
+		if !effectiveSudo {
+			fileWritten, uploadErr = c.sftpUploadFile(sftpClient, item.LocalPath, remoteFilePath, localMode, seq, ip, totalBytes, totalFiles, onProgress)
+		} else {
+			fileWritten, uploadErr = c.sftpUploadWithSudo(sftpClient, item.LocalPath, item.FileName, remotePath, localMode, seq, ip, totalBytes, totalFiles, onProgress)
 		}
 
 		costTime := time.Since(fileStart).Seconds()
