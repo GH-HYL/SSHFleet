@@ -171,7 +171,10 @@ def call_go(
             continue
         if data.get("type") == "done":
             tlog.info(f"SSE 完成标记: total={data['total']}")
-            # break 退出循环，让循环尾部的 response.close() 执行（return 会跳过关闭）
+            # done 是会话终止信号，但归属调用方处理（go_to_go._handle_done 做 total
+            # 一致性校验）：先 yield 让上层收尾，再结束循环以执行尾部的 response.close()
+            # （return 会跳过关闭）
+            yield data
             break
 
         yield data
