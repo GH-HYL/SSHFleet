@@ -4,6 +4,7 @@
 
 # 系统或第三方模块
 import os
+from typing import Optional
 
 import yaml
 from pydantic import BaseModel, ConfigDict
@@ -88,6 +89,20 @@ class SSHFleetConfig(StrictModel):
     upload: Upload
 
 
+def resolve_secret_path(raw: str, secret_dir: str) -> Optional[str]:
+    """凭据路径梯子（全工具单一事实来源）：~ 展开 → 绝对直用 → 相对拼 secret_dir。
+
+    secret_dir 为空或字面量 None/none 时视为未配置。
+    返回 None 表示「相对路径但 secret_dir 未配置」——报错策略由调用方决定（各场景文案不同）。
+    """
+    expanded = os.path.expanduser((raw or "").strip())
+    if os.path.isabs(expanded):
+        return expanded
+    if not secret_dir or str(secret_dir).strip().lower() == "none":
+        return None
+    return os.path.join(secret_dir, expanded)
+
+
 def load_config(config_path: str) -> SSHFleetConfig:
     """
     功能：
@@ -104,7 +119,12 @@ def load_config(config_path: str) -> SSHFleetConfig:
         config_dict = yaml.safe_load(f)
 
     # 读取凭据目录路径（不验证）：密码 / 私钥 / 私钥口令的相对路径都拼到这里
+    # 字面量 "None"（yaml 里 None 不加引号即该字符串）历史上 csv 侧视为未配置、
+    # 本侧却当真实目录名拼接，属分叉 bug；统一视为未配置（与空值同态）
     secret_dir = config_dict["account"].get("secret_dir", "")
+    if isinstance(secret_dir, str) and secret_dir.strip().lower() == "none":
+        secret_dir = ""
+        config_dict["account"]["secret_dir"] = secret_dir
     if secret_dir:
         secret_dir = os.path.expanduser(secret_dir)
         config_dict["account"]["secret_dir"] = secret_dir
@@ -120,44 +140,35 @@ def load_config(config_path: str) -> SSHFleetConfig:
     # 读取默认密码文件路径（不验证，相对路径与 secret_dir 拼接）
     password_path = config_dict["account"]["password"]
     if password_path:
-        password_path = os.path.expanduser(password_path)
-        if not os.path.isabs(password_path):
-            if secret_dir:
-                password_path = os.path.join(secret_dir, password_path)
-            else:
-                raise ValueError(
-                    f"account.password 为相对路径 '{password_path}'，"
-                    f"但 account.secret_dir 未配置，无法拼接密码文件路径"
-                )
-        config_dict["account"]["password"] = password_path
+        resolved = resolve_secret_path(password_path, secret_dir)
+        if resolved is None:
+            raise ValueError(
+                f"account.password 为相对路径 '{password_path.strip()}'，"
+                f"但 account.secret_dir 未配置，无法拼接密码文件路径"
+            )
+        config_dict["account"]["password"] = resolved
 
     # 读取默认私钥文件路径（不验证，相对路径与 secret_dir 拼接）
     key_path = config_dict["account"].get("key", "")
     if key_path:
-        key_path = os.path.expanduser(key_path)
-        if not os.path.isabs(key_path):
-            if secret_dir:
-                key_path = os.path.join(secret_dir, key_path)
-            else:
-                raise ValueError(
-                    f"account.key 为相对路径 '{key_path}'，"
-                    f"但 account.secret_dir 未配置，无法拼接私钥文件路径"
-                )
-        config_dict["account"]["key"] = key_path
+        resolved = resolve_secret_path(key_path, secret_dir)
+        if resolved is None:
+            raise ValueError(
+                f"account.key 为相对路径 '{key_path.strip()}'，"
+                f"但 account.secret_dir 未配置，无法拼接私钥文件路径"
+            )
+        config_dict["account"]["key"] = resolved
 
     # 读取默认私钥口令文件路径（不验证，相对路径与 secret_dir 拼接）
     key_passphrase_path = config_dict["account"].get("key_passphrase", "")
     if key_passphrase_path:
-        key_passphrase_path = os.path.expanduser(key_passphrase_path)
-        if not os.path.isabs(key_passphrase_path):
-            if secret_dir:
-                key_passphrase_path = os.path.join(secret_dir, key_passphrase_path)
-            else:
-                raise ValueError(
-                    f"account.key_passphrase 为相对路径 '{key_passphrase_path}'，"
-                    f"但 account.secret_dir 未配置，无法拼接路径"
-                )
-        config_dict["account"]["key_passphrase"] = key_passphrase_path
+        resolved = resolve_secret_path(key_passphrase_path, secret_dir)
+        if resolved is None:
+            raise ValueError(
+                f"account.key_passphrase 为相对路径 '{key_passphrase_path.strip()}'，"
+                f"但 account.secret_dir 未配置，无法拼接路径"
+            )
+        config_dict["account"]["key_passphrase"] = resolved
 
     return SSHFleetConfig(**config_dict)
 
