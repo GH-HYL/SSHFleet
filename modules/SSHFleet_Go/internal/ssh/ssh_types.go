@@ -130,6 +130,21 @@ func (pr *progressReader) Read(p []byte) (int, error) {
 	return n, err
 }
 
+// progressPacer 循环级逐文件进度的节流器（与字节级 progressWriter/progressReader 同口径）。
+// 零值可用：首次 allow 恒为 true，首个文件的进度立即发出。
+type progressPacer struct {
+	last time.Time
+}
+
+func (p *progressPacer) allow() bool {
+	now := time.Now()
+	if now.Sub(p.last) >= progressThrottle {
+		p.last = now
+		return true
+	}
+	return false
+}
+
 // ProgressMsg SSE 进度消息
 type ProgressMsg struct {
 	Type            string `json:"type"`

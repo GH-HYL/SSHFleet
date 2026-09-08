@@ -72,13 +72,7 @@ func (c *SSHClient) UploadFiles(
 		totalBytes += item.FileSize
 	}
 	if onProgress != nil {
-		onProgress(ProgressMsg{
-			Type:       MsgTypeProgress,
-			Seq:        seq,
-			IP:         ip,
-			TotalBytes: totalBytes,
-			TotalFiles: len(fileItems),
-		})
+		onProgress(buildUploadProgress(seq, ip, 0, totalBytes, len(fileItems), 0, 0))
 	}
 
 	// 5. 检查远程目标路径
@@ -120,6 +114,9 @@ func (c *SSHClient) UploadFiles(
 	var uploadedBytes int64 // 累计已上传字节数
 	var outputLines []string
 	totalCostTime := 0.0
+	// 循环级逐文件进度节流（与字节级 progressWriter 同口径）：
+	// 大目录场景防止逐文件消息洪峰塞满进度通道、worker 阻塞降速到 SSE 消费节奏
+	pacer := &progressPacer{}
 
 	for _, item := range fileItems {
 		select {
@@ -140,15 +137,9 @@ func (c *SSHClient) UploadFiles(
 			outputLines = append(outputLines, errMsg)
 			result.Error = &errMsg
 			log.Zlog.Warn("[上传] 文件已存在，终止传输", zap.String("ip", ip), zap.String("remoteFilePath", remoteFilePath))
-			// 文件完成：发送进度更新
+			// 失败收尾：立即发送进度更新（字节/总数传零值，omitempty 下不出现，报文字段与历史一致）
 			if onProgress != nil {
-				onProgress(ProgressMsg{
-					Type:         MsgTypeProgress,
-					Seq:          seq,
-					IP:           ip,
-					SuccessFiles: successFiles,
-					FailedFiles:  failedFiles,
-				})
+				onProgress(buildUploadProgress(seq, ip, 0, 0, 0, successFiles, failedFiles))
 			}
 			break
 		}
@@ -161,15 +152,9 @@ func (c *SSHClient) UploadFiles(
 			outputLines = append(outputLines, errMsg)
 			result.Error = &errMsg
 			log.Zlog.Error("[上传] 读取本地文件权限失败，终止传输", zap.String("ip", ip), zap.String("fileName", item.FileName), zap.Error(err))
-			// 文件完成：发送进度更新
+			// 失败收尾：立即发送进度更新（字节/总数传零值，omitempty 下不出现，报文字段与历史一致）
 			if onProgress != nil {
-				onProgress(ProgressMsg{
-					Type:         MsgTypeProgress,
-					Seq:          seq,
-					IP:           ip,
-					SuccessFiles: successFiles,
-					FailedFiles:  failedFiles,
-				})
+				onProgress(buildUploadProgress(seq, ip, 0, 0, 0, successFiles, failedFiles))
 			}
 			break
 		}
@@ -193,15 +178,9 @@ func (c *SSHClient) UploadFiles(
 			outputLines = append(outputLines, errMsg)
 			result.Error = &errMsg
 			log.Zlog.Error("[上传] 文件上传失败，终止传输", zap.String("ip", ip), zap.String("fileName", item.FileName), zap.Error(uploadErr))
-			// 文件完成：发送进度更新
+			// 失败收尾：立即发送进度更新（字节/总数传零值，omitempty 下不出现，报文字段与历史一致）
 			if onProgress != nil {
-				onProgress(ProgressMsg{
-					Type:         MsgTypeProgress,
-					Seq:          seq,
-					IP:           ip,
-					SuccessFiles: successFiles,
-					FailedFiles:  failedFiles,
-				})
+				onProgress(buildUploadProgress(seq, ip, 0, 0, 0, successFiles, failedFiles))
 			}
 			break
 		} else {
@@ -210,19 +189,9 @@ func (c *SSHClient) UploadFiles(
 			outputLines = append(outputLines, fmt.Sprintf("%s: 上传成功 (%.3fs)", item.FileName, costTime))
 		}
 
-		// 文件完成：发送进度更新
-		if onProgress != nil {
-			msg := ProgressMsg{
-				Type:          MsgTypeProgress,
-				Seq:           seq,
-				IP:            ip,
-				UploadedBytes: uploadedBytes,
-				TotalBytes:    totalBytes,
-				TotalFiles:    totalFiles,
-				SuccessFiles:  successFiles,
-				FailedFiles:   failedFiles,
-			}
-			onProgress(msg)
+		// 文件完成：发送进度更新（循环级节流；被吞的中间进度由 result 消息收尾，与字节级口径一致）
+		if onProgress != nil && pacer.allow() {
+			onProgress(buildUploadProgress(seq, ip, uploadedBytes, totalBytes, totalFiles, successFiles, failedFiles))
 		}
 	}
 
@@ -368,4 +337,18 @@ func randomHex() string {
 	b := make([]byte, 4)
 	rand.Read(b)
 	return fmt.Sprintf("%x", b)
+}
+
+// buildUploadProgress 组装上传进度消息（各发射点共用，镜像 buildDownloadProgress）
+func buildUploadProgress(seq int, ip string, uploadedBytes, totalBytes int64, totalFiles, successFiles, failedFiles int) ProgressMsg {
+	return ProgressMsg{
+		Type:          MsgTypeProgress,
+		Seq:           seq,
+		IP:            ip,
+		UploadedBytes: uploadedBytes,
+		TotalBytes:    totalBytes,
+		TotalFiles:    totalFiles,
+		SuccessFiles:  successFiles,
+		FailedFiles:   failedFiles,
+	}
 }

@@ -155,6 +155,8 @@ func (c *SSHClient) DownloadFiles(
 	var downloadedBytes int64
 	var outputLines []string
 	totalCostTime := 0.0
+	// 循环级逐文件进度节流（与字节级 progressReader 同口径）：大目录场景防止消息洪峰塞满进度通道
+	pacer := &progressPacer{}
 
 	for _, file := range files {
 		select {
@@ -225,10 +227,9 @@ func (c *SSHClient) DownloadFiles(
 			outputLines = append(outputLines, fmt.Sprintf("%s: 下载成功 (%.3fs)", file.relativePath, costTime))
 		}
 
-		// 发送进度更新
-		if onProgress != nil {
-			msg := buildDownloadProgress(seq, ip, downloadedBytes, totalBytes, totalFiles, successFiles, failedFiles)
-			onProgress(msg)
+		// 发送进度更新（循环级节流；被吞的中间进度由 result 消息收尾，与字节级口径一致）
+		if onProgress != nil && pacer.allow() {
+			onProgress(buildDownloadProgress(seq, ip, downloadedBytes, totalBytes, totalFiles, successFiles, failedFiles))
 		}
 	}
 
