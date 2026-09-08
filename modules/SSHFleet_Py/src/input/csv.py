@@ -12,7 +12,7 @@ from typing import Dict, List, Optional, Tuple, Union
 
 import src.common.constants as color
 from src.common.error_handler import error_and_exit_handling_decorator, print_error_information_and_exit
-from src.common.loader import SSHFleetConfig
+from src.common.loader import SSHFleetConfig, resolve_secret_path
 from src.input.interaction import get_user_confirmation, prompt_text
 from src.security.credential import credential_error_detail, credential_error_label, read_credential, read_credential_pem
 
@@ -33,6 +33,8 @@ def resolve_credential_path(raw_value: str, secret_dir: str) -> str:
     """
     将 CSV 凭据列原始值解析为绝对路径（密码 / 私钥 / 私钥口令 通用）
 
+    路径梯子走 loader.resolve_secret_path 单点；本函数只保留 CSV 场景的报错策略。
+
     Args:
         raw_value: CSV 凭据列原始值
         secret_dir: 配置的凭据目录
@@ -43,24 +45,14 @@ def resolve_credential_path(raw_value: str, secret_dir: str) -> str:
     Raises:
         SystemExit: 路径解析失败
     """
-    raw = raw_value.strip()
-
-    # ~ 开头：展开 HOME
-    if raw.startswith("~"):
-        return os.path.expanduser(raw)
-
-    # 绝对路径：直接使用
-    if os.path.isabs(raw):
-        return raw
-
-    # 相对路径：与 secret_dir 拼接
-    if not secret_dir or secret_dir == "None":
+    resolved = resolve_secret_path(raw_value, secret_dir)
+    if resolved is None:
         print_error_information_and_exit(
             "resolve_credential_path",
             "凭据列包含相对路径，但 secret_dir 未配置"
         )
 
-    return os.path.join(secret_dir, raw)
+    return resolved
 
 
 def _get_key_mode(args) -> str:
