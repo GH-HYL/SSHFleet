@@ -67,6 +67,24 @@ def clean_for_excel(original_text, replace_tabs=False):
     return text
 
 
+def display_width(text: str) -> int:
+    """
+    功能：
+        按终端显示宽度计算字符串宽度：中文/全角字符（East Asian F/W，含全角标点）占 2 列，其余占 1 列。
+        全工具单一实现——此前 args/dangerous/confirm 三份并存，confirm 份只认 CJK 汉字区间、
+        全角标点按 1 列计导致确认表格标签错位。
+
+    参数：
+        text: 待计算宽度的字符串
+
+    返回：
+        显示宽度（列数）
+    """
+    import unicodedata
+
+    return sum(2 if unicodedata.east_asian_width(ch) in ("F", "W") else 1 for ch in text)
+
+
 def format_size(size_bytes: int) -> str:
     """自适应文件大小单位（B/KB/MB/GB/TB/PB），保留2位小数"""
     units = ["B", "KB", "MB", "GB", "TB", "PB"]

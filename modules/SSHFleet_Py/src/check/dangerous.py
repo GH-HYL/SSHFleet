@@ -3,12 +3,12 @@
 
 import re
 import sys
-import unicodedata
 from typing import List
 
 import src.common.constants as color
 
 from src.common.error_handler import error_and_exit_handling_decorator, print_error_information_and_exit
+from src.common.text_utils import display_width
 from src.input.interaction import get_user_confirmation
 
 # 命令分隔符（&&/|| 双字符在前，避免 | 或 & 单字符先拆导致组合符被拆坏）
@@ -258,14 +258,6 @@ def check_dangerous_patterns(args, dangerous_keywords: List):
             sys.exit(1)
 
 
-def _display_width(text: str) -> int:
-    """按终端显示宽度计算字符串宽度（中文/全角/emoji 按 2 字符宽计）"""
-    return sum(
-        2 if unicodedata.east_asian_width(ch) in "WF" else 1
-        for ch in text
-    )
-
-
 def print_danger_warning(matches, is_forbidden=False):
     """打印危险命令警告信息（合并函数）
 
@@ -288,11 +280,11 @@ def print_danger_warning(matches, is_forbidden=False):
 
     def pad(text: str) -> str:
         """按显示宽度右补空格到 inner_width"""
-        return text + " " * max(0, inner_width - _display_width(text))
+        return text + " " * max(0, inner_width - display_width(text))
 
     def center(text: str) -> str:
         """按显示宽度居中到 inner_width"""
-        remain = max(0, inner_width - _display_width(text))
+        remain = max(0, inner_width - display_width(text))
         left = remain // 2
         return " " * left + text + " " * (remain - left)
 

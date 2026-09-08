@@ -6,7 +6,7 @@ import os
 import sys
 
 from src.common.error_handler import error_and_exit_handling_decorator, print_error_information_and_exit
-from src.common.text_utils import args_normalize_path
+from src.common.text_utils import args_normalize_path, display_width
 from src.common.loader import SSHFleetConfig
 
 
@@ -56,17 +56,6 @@ def parse_args(config: SSHFleetConfig) -> argparse.Namespace:
         ('--gen-key', None, '(密钥管理)', '生成随机主密钥并持久化到系统环境变量 SSHFLEET_KEY（凭据加密用）'),
         ('--convert-password', '', '(密钥管理)', '转换凭据文件（后面跟目标文件路径）：自动识别明文/base64/加密格式并按配置等级转换，支持升降级；加密/解密需已配置主密钥；路径支持相对 secret_dir'),
     ]
-
-    def display_width(s):
-        """计算字符串显示宽度（中文字符占2列）"""
-        import unicodedata
-        w = 0
-        for c in s:
-            if unicodedata.east_asian_width(c) in ('F', 'W'):
-                w += 2
-            else:
-                w += 1
-        return w
 
     def pad_to_width(s, target_width):
         """按显示宽度填充空格"""

@@ -7,7 +7,7 @@ from pathlib import Path
 
 import src.common.constants as color
 from src.common.error_handler import error_and_exit_handling_decorator
-from src.common.text_utils import format_size
+from src.common.text_utils import display_width, format_size
 from src.input.interaction import get_user_confirmation
 from src.log import tlog
 
@@ -102,10 +102,8 @@ def _print_info_table(info_table) -> None:
         if not label and not value:
             print()
         else:
-            # 动态计算中英文混合的实际显示宽度差
-            chinese_count = sum(1 for c in label if "\u4e00" <= c <= "\u9fff")
-            english_count = len(label) - chinese_count
-            real_width = english_count + chinese_count * 2
+            # 动态计算中英文混合的实际显示宽度差（display_width：全角标点同样按 2 列计）
+            real_width = display_width(label)
 
             # 计算需要补偿的空格数（关键调整：减去基础len已包含的1单位宽度）
             padding = max_label_len - len(label) + (real_width - len(label)) - 1
