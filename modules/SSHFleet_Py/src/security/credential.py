@@ -113,6 +113,65 @@ def read_credential_pem(path: str) -> Tuple[Optional[str], List[Tuple[str, Optio
     return content, []
 
 
+# ---- 错误码 → 用户文案（单一事实来源，校验汇总 / 退出指引两条路径共用） ----
+# 本表贴着错误码的产生地（上方读取函数）放置。收敛前 csv.py 内 if 链与字典两张文案表
+# 已措辞漂移（mismatch_encrypted），且互相缺码：if 链缺 empty_decoded/bad_pem
+# （静默落 bad_base64 文案），字典无兜底（未知码直接 KeyError）。
+
+_CREDENTIAL_LABELS = {
+    "missing": "不存在",
+    "read_error": "无法读取",
+    "empty": "内容为空",
+    "bad_base64": "不是有效的Base64编码",
+    "empty_decoded": "解码后内容为空",
+    "bad_pem": "不是有效的PEM格式（缺少 -----BEGIN 头）",
+    "bad_cipher": "不是有效的加密格式或主密钥不匹配（请先用 --convert-password 转换该文件）",
+    "mismatch_encrypted": "文件是本工具等级3（加密）格式，与当前密码安全等级不匹配",
+    "mismatch_base64": "文件是等级2（base64）格式，与当前密码安全等级不匹配",
+}
+
+
+def credential_error_label(code: str, path: str, detail: Optional[str] = None) -> str:
+    """凭据错误码 → 汇总短文案（CSV 校验汇总路径用）。未知码兜底，不再 KeyError。"""
+    label = _CREDENTIAL_LABELS.get(code, f"未知凭据错误({code})")
+    if detail:
+        return f"{label} → {path} ({detail})"
+    return f"{label} → {path}"
+
+
+def credential_error_detail(code: str, level: str, path: str, detail: Optional[str]) -> str:
+    """凭据错误码 → 退出前完整指引文案（读取失败即退路径用）。未知码兜底，不再误标为 bad_base64。"""
+    if code == "missing":
+        return f"凭据文件不存在：{path}"
+    if code == "read_error":
+        return f"凭据文件无法读取：{path} ({detail})"
+    if code == "empty":
+        return f"凭据文件内容为空：{path}"
+    if code == "mismatch_encrypted":
+        return (
+            f"凭据文件是本工具等级3（加密）格式，与当前密码安全等级 {level}（1=明文 2=base64 3=加密）不匹配：{path}\n"
+            f"请将配置 account.password_security 改为 3，或先用 --convert-password 处理该文件"
+        )
+    if code == "mismatch_base64":
+        return (
+            f"凭据文件是等级2（base64）格式，与当前密码安全等级 1（明文）不匹配：{path}\n"
+            f"请先将该文件内容还原为明文，或将配置改为 2"
+        )
+    if code == "bad_cipher":
+        if detail:  # 解密失败（密钥不匹配/文件损坏）
+            return (
+                f"凭据文件解密失败（文件可能尚未用 --convert-password 转换，或主密钥不匹配）：{path}\n{detail}"
+            )
+        return f"凭据文件不是等级{level}（加密）格式，请先 --convert-password 转换：{path}"
+    if code == "bad_base64":
+        return f"凭据文件不是等级{level}（base64）格式（内容疑似明文），请先 --convert-password 转换：{path}"
+    if code == "empty_decoded":
+        return f"凭据文件内容解码后为空，请检查文件是否填入了有效密码：{path}"
+    if code == "bad_pem":
+        return f"凭据文件不是有效的PEM格式（缺少 -----BEGIN 头）：{path}"
+    return f"凭据文件校验失败（{code}）：{path}"
+
+
 def read_cred_file_content(path: str) -> str:
     """凭据文件内容读取（--convert-password 转换场景）：读盘 + 判空 + 文本/单行防御。
 

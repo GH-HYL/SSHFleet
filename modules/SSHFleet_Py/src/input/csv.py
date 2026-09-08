@@ -14,7 +14,7 @@ import src.common.constants as color
 from src.common.error_handler import error_and_exit_handling_decorator, print_error_information_and_exit
 from src.common.loader import SSHFleetConfig
 from src.input.interaction import get_user_confirmation, prompt_text
-from src.security.credential import read_credential, read_credential_pem
+from src.security.credential import credential_error_detail, credential_error_label, read_credential, read_credential_pem
 
 
 @dataclass
@@ -72,34 +72,6 @@ def _get_key_mode(args) -> str:
     return "universal"
 
 
-def _credential_read_error(code: str, level: str, path: str, detail: Optional[str]) -> str:
-    """凭据读取错误码 → 完整错误文案（_read_credential 退出用，保留历史详细指引）"""
-    if code == "missing":
-        return f"凭据文件不存在：{path}"
-    if code == "read_error":
-        return f"凭据文件无法读取：{path} ({detail})"
-    if code == "empty":
-        return f"凭据文件内容为空：{path}"
-    if code == "mismatch_encrypted":
-        return (
-            f"凭据文件是本工具等级3（加密）格式，与当前密码安全等级 {level}（1=明文 2=base64 3=加密）不匹配：{path}\n"
-            f"请将配置 account.password_security 改为 3，或先用 --convert-password 处理该文件"
-        )
-    if code == "mismatch_base64":
-        return (
-            f"凭据文件是等级2（base64）格式，与当前密码安全等级 1（明文）不匹配：{path}\n"
-            f"请先将该文件内容还原为明文，或将配置改为 2"
-        )
-    if code == "bad_cipher":
-        if detail:  # 解密失败（密钥不匹配/文件损坏）
-            return (
-                f"凭据文件解密失败（文件可能尚未用 --convert-password 转换，或主密钥不匹配）：{path}\n{detail}"
-            )
-        return f"凭据文件不是等级{level}（加密）格式，请先 --convert-password 转换：{path}"
-    # bad_base64
-    return f"凭据文件不是等级{level}（base64）格式（内容疑似明文），请先 --convert-password 转换：{path}"
-
-
 def _read_credential(path: str, decode_base64: bool = True, level: str = "2") -> str:
     """读取凭据文件并按密码安全等级还原明文：1=原样返回（明文）；2=Base64 解码；3=主密钥解密；decode_base64=False=原样（PEM 专用）
 
@@ -114,7 +86,7 @@ def _read_credential(path: str, decode_base64: bool = True, level: str = "2") ->
     if errs:
         code, detail = errs[0]
         print_error_information_and_exit(
-            "_read_credential", _credential_read_error(code, level, path, detail)
+            "_read_credential", credential_error_detail(code, level, path, detail)
         )
     return plain
 
@@ -131,26 +103,6 @@ def _check_credential_file(path: str, kind: str = "base64", level: str = "2") ->
     if kind == "pem":
         return read_credential_pem(path)[1]
     return read_credential(path, level, require_nonempty=(kind == "base64_nonempty"))[1]
-
-
-_CREDENTIAL_MSG = {
-    "missing": "不存在",
-    "read_error": "无法读取",
-    "empty": "内容为空",
-    "bad_base64": "不是有效的Base64编码",
-    "empty_decoded": "解码后内容为空",
-    "bad_pem": "不是有效的PEM格式（缺少 -----BEGIN 头）",
-    "bad_cipher": "不是有效的加密格式或主密钥不匹配（请先用 --convert-password 转换该文件）",
-    "mismatch_encrypted": "文件是本工具等级3（加密）格式，与当前密码安全等级不匹配",
-    "mismatch_base64": "文件是等级2（base64）格式，与当前密码安全等级不匹配",
-}
-
-
-def _credential_msg(code: str, path: str, detail: Optional[str] = None) -> str:
-    """凭据校验错误码 → 完整错误文案（不含行号/IP 前缀）"""
-    if code == "read_error":
-        return f"{_CREDENTIAL_MSG[code]} → {path} ({detail})"
-    return f"{_CREDENTIAL_MSG[code]} → {path}"
 
 
 def validate_csv_credentials(csv_infos: List[List[str]], config: SSHFleetConfig, args) -> Tuple[List[str], bool, bool]:
@@ -219,7 +171,7 @@ def validate_csv_credentials(csv_infos: List[List[str]], config: SSHFleetConfig,
             password_errs = _check_credential_file(password_path, "base64_nonempty", level=config.account.password_security)
             if password_errs:
                 errors.extend(
-                    f"行 {idx} (IP: {row[0]}): 密码文件{_credential_msg(code, password_path, detail)}"
+                    f"行 {idx} (IP: {row[0]}): 密码文件{credential_error_label(code,password_path, detail)}"
                     for code, detail in password_errs
                 )
                 continue
@@ -236,7 +188,7 @@ def validate_csv_credentials(csv_infos: List[List[str]], config: SSHFleetConfig,
             key_errs = _check_credential_file(key_path, "pem")
             if key_errs:
                 errors.extend(
-                    f"行 {idx} (IP: {row[0]}): 密钥文件{_credential_msg(code, key_path, detail)}"
+                    f"行 {idx} (IP: {row[0]}): 密钥文件{credential_error_label(code,key_path, detail)}"
                     for code, detail in key_errs
                 )
                 continue
@@ -249,7 +201,7 @@ def validate_csv_credentials(csv_infos: List[List[str]], config: SSHFleetConfig,
                 pp_path = resolve_credential_path(passphrase_raw, config.account.secret_dir)
                 pp_errs = _check_credential_file(pp_path, "base64", level=config.account.password_security)
                 errors.extend(
-                    f"行 {idx} (IP: {row[0]}): 私钥口令文件{_credential_msg(code, pp_path, detail)}"
+                    f"行 {idx} (IP: {row[0]}): 私钥口令文件{credential_error_label(code,pp_path, detail)}"
                     for code, detail in pp_errs
                 )
 
@@ -259,14 +211,14 @@ def validate_csv_credentials(csv_infos: List[List[str]], config: SSHFleetConfig,
             errors.append("密码列有空值，但 config 未配置默认密码(account.password)")
         else:
             errors.extend(
-                f"默认密码文件{_credential_msg(code, config.account.password, detail)}"
+                f"默认密码文件{credential_error_label(code,config.account.password, detail)}"
                 for code, detail in _check_credential_file(config.account.password, "base64_nonempty", level=config.account.password_security)
             )
 
     # 如果有节点使用密钥且配置了passphrase，验证passphrase文件（仅状态2）
     if key_mode == "default" and any_node_uses_key and config.account.key_passphrase and config.account.key_passphrase != "":
         errors.extend(
-            f"密钥passphrase文件{_credential_msg(code, config.account.key_passphrase, detail)}"
+            f"密钥passphrase文件{credential_error_label(code,config.account.key_passphrase, detail)}"
             for code, detail in _check_credential_file(config.account.key_passphrase, "base64_nonempty", level=config.account.password_security)
         )
 
