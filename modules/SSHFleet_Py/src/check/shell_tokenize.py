@@ -8,7 +8,7 @@
 #        → 间接执行内部命令提取（递归）
 
 import re
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 # 环境变量赋值形式：NAME=value
 _ASSIGN_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
@@ -19,6 +19,23 @@ _REDIR_RE = re.compile(r"^(?:\d*)(?:>>?|<<?)$|^&>>?$|^(?:\d*)>&(?:\d+|-)$")
 # 单个 token 内的替换占位符（避免内部内容干扰外层判定）
 _SUBST_PLACEHOLDER = "$(...)"
 _BACKTICK_PLACEHOLDER = "`...`"
+
+# 默认语法清单（shell 机制，与用户规则无关，故内置在代码里）
+#   wrappers        命令前可叠加的包装命令（剥除后命令词才是真实命令）
+#   wrapper_options 上述命令中「带值」的选项（剥除时连选项值一起跳过）
+#   shell_commands  带 -c 参数且参数是命令字符串的 shell（内部命令递归分析）
+#   eval_commands   参数即命令字符串
+#   remote_commands 远端执行：主机名之后的参数是远端命令字符串（单层递归）
+DEFAULT_SYNTAX = {
+    "wrappers": ["sudo", "time", "nohup", "setsid", "stdbuf", "xargs", "env", "command"],
+    "wrapper_options": {
+        "sudo": ["-u", "-g", "-p", "-C", "--user", "--group", "--prompt"],
+        "xargs": ["-I", "-n", "-P", "-s", "-a", "-d", "--delimiter", "--max-args", "--max-chars"],
+    },
+    "shell_commands": ["bash", "sh", "zsh", "dash", "ksh"],
+    "eval_commands": ["eval"],
+    "remote_commands": ["ssh"],
+}
 
 
 def _capture_paren(text: str, i: int) -> Tuple[str, int]:
@@ -314,19 +331,20 @@ def _extract_inner_commands(tokens: List[str], syntax: Dict) -> List[str]:
 
 
 def parse_line(
-    line: str, syntax: Dict, max_depth: int = 5, _depth: int = 0
+    line: str, syntax: Optional[Dict] = None, max_depth: int = 5, _depth: int = 0
 ) -> List[Tuple[List[str], str]]:
     """解析一行命令，返回待判定的命令段。
 
     参数：
         line: 一行命令文本
-        syntax: 语法清单（wrappers / shell_commands / eval_commands / remote_commands 等）
+        syntax: 语法清单；省略则用内置 DEFAULT_SYNTAX
         max_depth: 间接执行递归深度上限
 
     返回：
         [(tokens, text)]：tokens 为真实命令词起的 token 列表，text 为对应文本
         （命令词已归一为不含目录的形式，便于规则匹配）
     """
+    syntax = syntax or DEFAULT_SYNTAX
     segments, extracted = _split_and_extract(line)
     result: List[Tuple[List[str], str]] = []
 

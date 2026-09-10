@@ -450,7 +450,7 @@ python sshfleet.py -f nodes.csv -s deploy.sh --disinteractive
 > paths:                      # 各类路径（一般不用改）
 >   keywords:
 >     error_keywords: "./src/config/error_keywords.yaml"          # 错误分类关键词文件
->     dangerous_keywords: "./src/config/dangerous_keywords.yaml"  # 危险命令规则文件（结构化）
+>     dangerous_keywords: "./src/config/dangerous_keywords.yaml"  # 危险命令规则文件（平级正则）
 >   exe:
 >     batch_tool_windows: "./src/go/SSHFleet_Go.exe"  # Windows 批量执行引擎
 >     batch_tool_linux: "./src/go/SSHFleet_Go"        # Linux 批量执行引擎

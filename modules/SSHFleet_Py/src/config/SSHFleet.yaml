@@ -30,7 +30,7 @@ enable:
 paths:
   keywords:
     error_keywords: "./src/config/error_keywords.yaml"          # 错误分类关键词 YAML 文件（支持 # 注释）
-    dangerous_keywords: "./src/config/dangerous_keywords.yaml"  # 危险命令规则 YAML 文件（结构化，单条规则设 enabled: false 即禁用）
+    dangerous_keywords: "./src/config/dangerous_keywords.yaml"  # 危险命令规则 YAML 文件（平级正则，单条设 enabled: false 或整条加 # 即禁用）
 
   # 程序路径
   exe:

@@ -2,7 +2,11 @@
 # SSHFleet 危险命令检查模块
 #
 # 职责：把待下发的命令内容分类成「风险等级 + 命中规则」，用于提醒使用者（ADR-0011）。
-# 解析链在 src/check/shell_tokenize.py，本模块只做判定与交互。
+#
+# 规则文件是平级正则列表（name / example / regex / risk_level）：
+#   正则对该命令的任意位置匹配（不限定开头），命中多条取最高风险。
+# 解析链在 src/check/shell_tokenize.py：切分命令段、剥除包装命令、拍平 rm 旗标，
+# 使「一条正则」能同时覆盖 -rf / -r -f / -R / --recursive 等写法。
 
 import re
 import sys
@@ -18,14 +22,11 @@ from src.input.interaction import get_user_confirmation
 # 风险级别排序：forbidden 最高
 _RISK_ORDER = {"forbidden": 0, "high": 1, "medium": 2, "low": 3}
 
-# rm 旗标条件取值
-_VALID_REQUIRES = ("recursive", "force", "no_preserve_root")
-
-# rm 目标条件取值
-_VALID_TARGETS = ("root", "system_dir")
-
 # 规则数量下限（防整份文件被误删/清空）
 _MIN_RULES = 10
+
+# rm 旗标归一顺序与写法（归一化后固定成这个次序，正则才能写短）
+_FLAG_ORDER = (("recursive", "-r"), ("force", "-f"), ("no_preserve_root", "--no-preserve-root"))
 
 
 def _rule_enabled(rule: Dict) -> bool:
@@ -62,95 +63,41 @@ def _exit_with(label: str, message: str):
     raise SystemExit(1)
 
 
-def check_dangerous_dict(config: Dict):
-    """校验规则文件结构合法性（启动即校验，改错了立刻指名报错）
+def check_dangerous_dict(config: List):
+    """校验规则文件合法性（启动即校验，改错了立刻指名报错）
 
     参数：
-        config: 规则文件解析结果（mapping）
+        config: 规则文件解析结果（规则列表）
     """
     if not config:
         _exit_with("check_dangerous_dict", "危险命令检测规则为空，程序退出！")
 
-    if not isinstance(config, dict):
+    if not isinstance(config, list):
         _exit_with(
             "check_dangerous_dict",
-            "危险命令检测规则结构非法（应为 mapping，含 rm_rules / commands），程序退出！",
+            "危险命令检测规则结构非法（应为规则列表），程序退出！",
         )
 
-    rm_rules = config.get("rm_rules") or []
-    cmd_rules = config.get("commands") or []
-
-    if not isinstance(rm_rules, list) or not isinstance(cmd_rules, list):
-        _exit_with(
-            "check_dangerous_dict", "rm_rules / commands 必须为列表，程序退出！"
-        )
-
-    total = len(rm_rules) + len(cmd_rules)
-    if total < _MIN_RULES:
+    if len(config) < _MIN_RULES:
         _exit_with(
             "check_dangerous_dict",
-            f"危险命令检测规则不足（当前{total}条，需要至少{_MIN_RULES}条），程序退出！",
+            f"危险命令检测规则不足（当前{len(config)}条，需要至少{_MIN_RULES}条），程序退出！",
         )
 
-    system_dirs = (config.get("path_classes") or {}).get("system_dir")
-    if not system_dirs:
-        _exit_with(
-            "check_dangerous_dict",
-            "路径分级清单 path_classes.system_dir 为空，程序退出！",
-        )
-
-    # rm 决策表校验
-    for idx, rule in enumerate(rm_rules, 1):
+    for idx, rule in enumerate(config, 1):
         if not isinstance(rule, dict):
-            _exit_with("check_dangerous_dict", f"rm_rules 第{idx}条结构非法，程序退出！")
-        label = rule.get("name") or f"第{idx}条"
-        for field in ("name", "example", "risk_level"):
-            if not rule.get(field):
-                _exit_with(
-                    "check_dangerous_dict",
-                    f"rm_rules {label} 缺少字段或字段为空：'{field}'，程序退出！",
-                )
-        if rule["risk_level"] not in _RISK_ORDER:
-            _exit_with(
-                "check_dangerous_dict",
-                f"rm_rules {label} 的 risk_level 非法：'{rule['risk_level']}'"
-                f"（仅支持 {'/'.join(_RISK_ORDER)}），程序退出！",
-            )
-        for req in rule.get("requires") or []:
-            if req not in _VALID_REQUIRES:
-                _exit_with(
-                    "check_dangerous_dict",
-                    f"rm_rules {label} 的 requires 取值非法：'{req}'"
-                    f"（仅支持 {'/'.join(_VALID_REQUIRES)}），程序退出！",
-                )
-        if rule.get("targets") and rule["targets"] not in _VALID_TARGETS:
-            _exit_with(
-                "check_dangerous_dict",
-                f"rm_rules {label} 的 targets 取值非法：'{rule['targets']}'"
-                f"（仅支持 {'/'.join(_VALID_TARGETS)}），程序退出！",
-            )
-        for field in ("targets_prefix", "targets_suffix"):
-            if rule.get(field) and not isinstance(rule[field], list):
-                _exit_with(
-                    "check_dangerous_dict",
-                    f"rm_rules {label} 的 {field} 必须为列表，程序退出！",
-                )
-
-    # 其他命令规则校验
-    for idx, rule in enumerate(cmd_rules, 1):
-        if not isinstance(rule, dict):
-            _exit_with("check_dangerous_dict", f"commands 第{idx}条结构非法，程序退出！")
+            _exit_with("check_dangerous_dict", f"rules 第{idx}条结构非法，程序退出！")
         label = rule.get("name") or f"第{idx}条"
         for field in ("name", "example", "risk_level", "regex"):
             if not rule.get(field):
                 _exit_with(
                     "check_dangerous_dict",
-                    f"commands {label} 缺少字段或字段为空：'{field}'，程序退出！",
+                    f"rules {label} 缺少字段或字段为空：'{field}'，程序退出！",
                 )
         if rule["risk_level"] not in _RISK_ORDER:
             _exit_with(
                 "check_dangerous_dict",
-                f"commands {label} 的 risk_level 非法：'{rule['risk_level']}'"
+                f"rules {label} 的 risk_level 非法：'{rule['risk_level']}'"
                 f"（仅支持 {'/'.join(_RISK_ORDER)}），程序退出！",
             )
         try:
@@ -158,14 +105,8 @@ def check_dangerous_dict(config: Dict):
         except re.error as e:
             _exit_with(
                 "check_dangerous_dict",
-                f"commands {label} 的正则无法编译：{e}，程序退出！",
+                f"rules {label} 的正则无法编译：{e}，程序退出！",
             )
-
-
-def _top_segment(path: str) -> str:
-    """取绝对路径的首段目录名：/etc/nginx → etc"""
-    trimmed = path.strip().strip("/")
-    return trimmed.split("/")[0] if trimmed else ""
 
 
 def _normalize_path(raw: str) -> str:
@@ -184,25 +125,6 @@ def _normalize_path(raw: str) -> str:
             continue
         parts.append(seg)
     return "/" + "/".join(parts) if parts else "/"
-
-
-def _classify_target(raw: str, system_dirs: set) -> Tuple[str, str]:
-    """目标路径分类。
-
-    返回：
-        (kind, normalized)：kind ∈ root / system / business / relative / dynamic
-        dynamic = 含变量或命令替换，静态不可判定（只提醒不拦）
-    """
-    if "$" in raw or "`" in raw:
-        return "dynamic", raw
-
-    norm = _normalize_path(raw)
-    if not norm.startswith("/"):
-        return "relative", norm
-    if norm in ("/", "/*"):
-        return "root", norm
-
-    return ("system" if _top_segment(norm) in system_dirs else "business"), norm
 
 
 def _parse_flags(token: str) -> set:
@@ -229,92 +151,50 @@ def _parse_flags(token: str) -> set:
     return flags
 
 
-def _parse_rm_args(args: List[str]) -> Tuple[set, List[str]]:
-    """拆分 rm 的参数为 (旗标集合, 目标列表)，支持 -- 之后全为目标"""
+def _normalize_for_match(tokens: List[str]) -> str:
+    """把命令段的 token 归一成用于正则匹配的字符串。
+
+    - rm：旗标拍平为固定次序（-r / -f / --no-preserve-root），目标路径归一化
+    - 其他命令：token 原样以单空格连接
+    - 末尾补一个空格：让「\\s」能作为最后一个 token 的边界
+    """
+    if not tokens:
+        return ""
+
+    if tokens[0] != "rm":
+        return " ".join(tokens) + " "
+
     flags: set = set()
     targets: List[str] = []
     end_of_flags = False
 
-    for tok in args:
+    for tok in tokens[1:]:
         if not end_of_flags and tok == "--":
             end_of_flags = True
             continue
         if not end_of_flags and tok.startswith("-") and len(tok) > 1:
             flags |= _parse_flags(tok)
             continue
-        targets.append(tok)
+        targets.append(_normalize_path(tok))
 
-    return flags, targets
-
-
-def _rm_rule_matches(rule: Dict, flags: set, classified: List[Tuple[str, str]]) -> bool:
-    """判断单条 rm 规则是否命中当前命令"""
-    requires = rule.get("requires") or []
-    if any(req not in flags for req in requires):
-        return False
-
-    kinds = {kind for kind, _ in classified}
-    target_type = rule.get("targets")
-    prefixes = rule.get("targets_prefix") or []
-    suffixes = rule.get("targets_suffix") or []
-
-    # 无任何条件的规则会命中所有 rm，视为配置失误，不参与匹配
-    if not requires and not target_type and not prefixes and not suffixes:
-        return False
-
-    if target_type == "root" and "root" not in kinds:
-        return False
-    if target_type == "system_dir" and "system" not in kinds:
-        return False
-
-    if prefixes and not any(
-        norm == p.rstrip("/") or norm.startswith(p)
-        for _, norm in classified
-        for p in prefixes
-    ):
-        return False
-    if suffixes and not any(
-        norm.endswith(s) for _, norm in classified for s in suffixes
-    ):
-        return False
-
-    return True
-
-
-def _judge_rm(args: List[str], rules: List[Dict], system_dirs: set) -> Optional[Dict]:
-    """判定 rm 命令，返回命中的最高风险规则（无命中返回 None）"""
-    flags, targets = _parse_rm_args(args)
-    if not flags and not targets:
-        return None
-
-    classified = [_classify_target(t, system_dirs) for t in targets]
-
-    best: Optional[Dict] = None
-    for rule in rules:
-        if not _rm_rule_matches(rule, flags, classified):
-            continue
-        if best is None or _RISK_ORDER[rule["risk_level"]] < _RISK_ORDER[best["risk_level"]]:
-            best = rule
-    return best
+    parts = ["rm"]
+    for name, text in _FLAG_ORDER:
+        if name in flags:
+            parts.append(text)
+    parts.extend(targets)
+    return " ".join(parts) + " "
 
 
 def _judge_segment(
-    tokens: List[str],
-    text: str,
-    rm_rules: List[Dict],
-    cmd_rules: List[Tuple[Dict, "re.Pattern"]],
-    system_dirs: set,
+    normalized: str, rules: List[Tuple[Dict, "re.Pattern"]]
 ) -> Optional[Dict]:
-    """判定单个命令段，返回命中的最高风险规则"""
-    if not tokens:
+    """判定单个命令段，返回命中的最高风险规则（无命中返回 None）"""
+    if not normalized:
         return None
 
-    if tokens[0] == "rm":
-        return _judge_rm(tokens[1:], rm_rules, system_dirs)
-
     best: Optional[Dict] = None
-    for rule, pattern in cmd_rules:
-        if not pattern.search(text):
+    for rule, pattern in rules:
+        if not pattern.search(normalized):
             continue
         if best is None or _RISK_ORDER[rule["risk_level"]] < _RISK_ORDER[best["risk_level"]]:
             best = rule
@@ -322,24 +202,18 @@ def _judge_segment(
 
 
 def analyze_lines(
-    lines: List[str], config: Dict, is_script: bool = False, script_path: str = ""
+    lines: List[str], config: List, is_script: bool = False, script_path: str = ""
 ) -> List[Dict]:
     """分析若干行命令，返回全部命中项（纯函数，无交互、无退出）
 
     返回：
         [{line, content, pattern, is_script, script_path}]
     """
-    syntax = config.get("syntax") or {}
-    rm_rules = [r for r in (config.get("rm_rules") or []) if _rule_enabled(r)]
-    cmd_rules = [
+    rules = [
         (r, re.compile(r["regex"], re.IGNORECASE))
-        for r in (config.get("commands") or [])
-        if _rule_enabled(r)
+        for r in (config or [])
+        if isinstance(r, dict) and _rule_enabled(r)
     ]
-    system_dirs = {
-        _top_segment(p)
-        for p in ((config.get("path_classes") or {}).get("system_dir") or [])
-    }
 
     matches: List[Dict] = []
     for line_num, line in enumerate(lines, 1):
@@ -349,8 +223,8 @@ def analyze_lines(
         if not stripped or stripped.startswith("#"):
             continue
 
-        for tokens, text in parse_line(stripped, syntax):
-            rule = _judge_segment(tokens, text, rm_rules, cmd_rules, system_dirs)
+        for tokens, text in parse_line(stripped):
+            rule = _judge_segment(_normalize_for_match(tokens), rules)
             if not rule:
                 continue
             matches.append(
@@ -366,7 +240,7 @@ def analyze_lines(
     return matches
 
 
-def check_dangerous_patterns(args, dangerous_keywords: Dict):
+def check_dangerous_patterns(args, dangerous_keywords: List):
     """检查命令或脚本内容的危险模式（交互与退出策略保持原有行为）"""
 
     # 与确认模块同一约定：从 args 统一读取非交互标记（ADR/确认链唯一来源）
