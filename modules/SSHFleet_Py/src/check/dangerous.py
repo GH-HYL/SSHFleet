@@ -1,94 +1,36 @@
 # -*- coding: utf-8 -*-
 # SSHFleet 危险命令检查模块
+#
+# 职责：把待下发的命令内容分类成「风险等级 + 命中规则」，用于提醒使用者（ADR-0011）。
+# 解析链在 src/check/shell_tokenize.py，本模块只做判定与交互。
 
 import re
 import sys
-from typing import List
+from typing import Dict, List, Optional, Tuple
 
 import src.common.constants as color
 
+from src.check.shell_tokenize import parse_line
 from src.common.error_handler import error_and_exit_handling_decorator, print_error_information_and_exit
 from src.common.text_utils import display_width
 from src.input.interaction import get_user_confirmation
 
-# 命令分隔符（&&/|| 双字符在前，避免 | 或 & 单字符先拆导致组合符被拆坏）
-_SEPARATORS_RE = re.compile(r"&&|\|\||[;&|]")
+# 风险级别排序：forbidden 最高
+_RISK_ORDER = {"forbidden": 0, "high": 1, "medium": 2, "low": 3}
+
+# rm 旗标条件取值
+_VALID_REQUIRES = ("recursive", "force", "no_preserve_root")
+
+# rm 目标条件取值
+_VALID_TARGETS = ("root", "system_dir")
+
+# 规则数量下限（防整份文件被误删/清空）
+_MIN_RULES = 10
 
 
-def _split_by_separators(line: str) -> List[str]:
-    """
-    按命令分隔符切分一行命令，支持一行内多种分隔符嵌套。
-
-    示例：
-        "echo a; rm -rf / && chmod 777 x"
-        -> ["echo a", "rm -rf /", "chmod 777 x"]
-    """
-    parts = _SEPARATORS_RE.split(line)
-    return [p.strip() for p in parts if p.strip()]
-
-
-def _strip_command_prefixes(cmd: str) -> str:
-    """
-    去除命令开头的常见前缀（支持多前缀叠加，如 "sudo nohup chmod ..."）。
-
-    示例：
-        "sudo nohup chmod 777 /x" -> "chmod 777 /x"
-    """
-    prefixes = ["sudo", "time", "nohup", "setsid", "stdbuf"]
-    changed = True
-    while changed:
-        changed = False
-        for prefix in prefixes:
-            if cmd.startswith(prefix + " "):
-                cmd = cmd[len(prefix):].strip()
-                changed = True
-                break  # 去除一个前缀后重新扫描，支持叠加
-    return cmd
-
-
-def remove_command_first_last_same_symbol(cmd_str):
-    """
-    功能：
-        去除命令字符串首尾相同的特殊符号（引号等包裹符号），循环剥除多层嵌套
-
-    说明：
-        危险检测的锚定规则（^ 开头）对带引号包裹的命令会漏检，
-        如 'rm -rf /' 需先剥壳为 rm -rf / 才能命中锚定规则；
-        shell 只剥除最外层引号，内层包裹符号会原样进入命令字符串，由这里处理。
-
-        循环剥壳覆盖多层嵌套（如 "'rm -rf /'"、`'rm -rf /'`）与
-        符号-空格-符号 嵌套（如 ' "rm -rf /" '）；
-        $()/${} 等命令替换语法由危险规则自行匹配，不在本函数处理范围。
-
-    参数：
-        cmd_str: 命令字符串
-
-    返回：
-        removed_symbol: 最后被移除的包裹符号（无则 None）
-        cmd_str: 处理后的命令字符串
-    """
-
-    # 特殊符号黑名单，以下符号不移除
-    forbidden_chars = r"^$*+?.()[]{}|\/"
-
-    removed_symbol = None
-    while True:
-        # 剥壳前后清理空白，支持 符号-空格-符号 嵌套包裹
-        cmd_str = cmd_str.strip()
-
-        # 命令大于一个字符、首尾相同、首尾不是字母或数字、首尾不在特殊符号黑名单中
-        if (
-            len(cmd_str) > 1
-            and cmd_str[0] == cmd_str[-1]
-            and not cmd_str[0].isalnum()
-            and cmd_str[0] not in forbidden_chars
-        ):
-            removed_symbol = cmd_str[0]  # 记录被移除的符号
-            cmd_str = cmd_str[1:-1]  # 实际移除操作
-        else:
-            break
-
-    return removed_symbol, cmd_str
+def _rule_enabled(rule: Dict) -> bool:
+    """规则是否启用（缺省启用；enabled: false 即禁用）"""
+    return rule.get("enabled", True) is not False
 
 
 @error_and_exit_handling_decorator(
@@ -114,53 +56,318 @@ def check_dangerous_content(args, dangerous_keywords: List):
         )
 
 
-def check_dangerous_dict(dangerous_patterns: List):
-    """
-    功能：
-        检查命令或脚本内容是否包含危险模式
-        包含规则完整性检查和防篡改验证
+def _exit_with(label: str, message: str):
+    """规则校验收尾：打印并退出"""
+    print_error_information_and_exit(label, message)
+    raise SystemExit(1)
+
+
+def check_dangerous_dict(config: Dict):
+    """校验规则文件结构合法性（启动即校验，改错了立刻指名报错）
 
     参数：
-        dangerous_patterns: 危险命令检测规则列表
-        validation_code: 验证码（可选）
+        config: 规则文件解析结果（mapping）
+    """
+    if not config:
+        _exit_with("check_dangerous_dict", "危险命令检测规则为空，程序退出！")
+
+    if not isinstance(config, dict):
+        _exit_with(
+            "check_dangerous_dict",
+            "危险命令检测规则结构非法（应为 mapping，含 rm_rules / commands），程序退出！",
+        )
+
+    rm_rules = config.get("rm_rules") or []
+    cmd_rules = config.get("commands") or []
+
+    if not isinstance(rm_rules, list) or not isinstance(cmd_rules, list):
+        _exit_with(
+            "check_dangerous_dict", "rm_rules / commands 必须为列表，程序退出！"
+        )
+
+    total = len(rm_rules) + len(cmd_rules)
+    if total < _MIN_RULES:
+        _exit_with(
+            "check_dangerous_dict",
+            f"危险命令检测规则不足（当前{total}条，需要至少{_MIN_RULES}条），程序退出！",
+        )
+
+    system_dirs = (config.get("path_classes") or {}).get("system_dir")
+    if not system_dirs:
+        _exit_with(
+            "check_dangerous_dict",
+            "路径分级清单 path_classes.system_dir 为空，程序退出！",
+        )
+
+    # rm 决策表校验
+    for idx, rule in enumerate(rm_rules, 1):
+        if not isinstance(rule, dict):
+            _exit_with("check_dangerous_dict", f"rm_rules 第{idx}条结构非法，程序退出！")
+        label = rule.get("name") or f"第{idx}条"
+        for field in ("name", "example", "risk_level"):
+            if not rule.get(field):
+                _exit_with(
+                    "check_dangerous_dict",
+                    f"rm_rules {label} 缺少字段或字段为空：'{field}'，程序退出！",
+                )
+        if rule["risk_level"] not in _RISK_ORDER:
+            _exit_with(
+                "check_dangerous_dict",
+                f"rm_rules {label} 的 risk_level 非法：'{rule['risk_level']}'"
+                f"（仅支持 {'/'.join(_RISK_ORDER)}），程序退出！",
+            )
+        for req in rule.get("requires") or []:
+            if req not in _VALID_REQUIRES:
+                _exit_with(
+                    "check_dangerous_dict",
+                    f"rm_rules {label} 的 requires 取值非法：'{req}'"
+                    f"（仅支持 {'/'.join(_VALID_REQUIRES)}），程序退出！",
+                )
+        if rule.get("targets") and rule["targets"] not in _VALID_TARGETS:
+            _exit_with(
+                "check_dangerous_dict",
+                f"rm_rules {label} 的 targets 取值非法：'{rule['targets']}'"
+                f"（仅支持 {'/'.join(_VALID_TARGETS)}），程序退出！",
+            )
+        for field in ("targets_prefix", "targets_suffix"):
+            if rule.get(field) and not isinstance(rule[field], list):
+                _exit_with(
+                    "check_dangerous_dict",
+                    f"rm_rules {label} 的 {field} 必须为列表，程序退出！",
+                )
+
+    # 其他命令规则校验
+    for idx, rule in enumerate(cmd_rules, 1):
+        if not isinstance(rule, dict):
+            _exit_with("check_dangerous_dict", f"commands 第{idx}条结构非法，程序退出！")
+        label = rule.get("name") or f"第{idx}条"
+        for field in ("name", "example", "risk_level", "regex"):
+            if not rule.get(field):
+                _exit_with(
+                    "check_dangerous_dict",
+                    f"commands {label} 缺少字段或字段为空：'{field}'，程序退出！",
+                )
+        if rule["risk_level"] not in _RISK_ORDER:
+            _exit_with(
+                "check_dangerous_dict",
+                f"commands {label} 的 risk_level 非法：'{rule['risk_level']}'"
+                f"（仅支持 {'/'.join(_RISK_ORDER)}），程序退出！",
+            )
+        try:
+            re.compile(rule["regex"])
+        except re.error as e:
+            _exit_with(
+                "check_dangerous_dict",
+                f"commands {label} 的正则无法编译：{e}，程序退出！",
+            )
+
+
+def _top_segment(path: str) -> str:
+    """取绝对路径的首段目录名：/etc/nginx → etc"""
+    trimmed = path.strip().strip("/")
+    return trimmed.split("/")[0] if trimmed else ""
+
+
+def _normalize_path(raw: str) -> str:
+    """路径归一化：合并重复斜杠、去尾斜杠、词法解析 . 与 ..（相对路径原样返回）"""
+    path = re.sub(r"/{2,}", "/", raw)
+    if not path.startswith("/"):
+        return path
+
+    parts: List[str] = []
+    for seg in path.split("/"):
+        if seg in ("", "."):
+            continue
+        if seg == "..":
+            if parts:
+                parts.pop()
+            continue
+        parts.append(seg)
+    return "/" + "/".join(parts) if parts else "/"
+
+
+def _classify_target(raw: str, system_dirs: set) -> Tuple[str, str]:
+    """目标路径分类。
 
     返回：
-        None
+        (kind, normalized)：kind ∈ root / system / business / relative / dynamic
+        dynamic = 含变量或命令替换，静态不可判定（只提醒不拦）
     """
+    if "$" in raw or "`" in raw:
+        return "dynamic", raw
 
-    # 1. 检查规则是否为空
-    if not dangerous_patterns:
-        print_error_information_and_exit(
-            "check_dangerous_dict", "危险命令检测规则为空，程序退出！"
-        )
+    norm = _normalize_path(raw)
+    if not norm.startswith("/"):
+        return "relative", norm
+    if norm in ("/", "/*"):
+        return "root", norm
 
-    # 2. 检查规则数量是否足够（至少10行）
-    if len(dangerous_patterns) < 10:
-        print_error_information_and_exit(
-            "check_dangerous_dict",
-            f"危险命令检测规则不足（当前{len(dangerous_patterns)}条，需要至少10条），程序退出！",
-        )
-
-    # 3. 检查规则完整性（每个规则必须包含必要的字段）
-    required_fields = ["name", "example", "regex", "risk_level"]
-    for i, pattern in enumerate(dangerous_patterns):
-        for field in required_fields:
-            if field not in pattern:
-                print_error_information_and_exit(
-                    "check_dangerous_dict",
-                    f"危险命令检测规则不完整（第{i+1}条缺少字段'{field}'），程序退出！",
-                )
-            if not pattern[field]:
-                print_error_information_and_exit(
-                    "check_dangerous_dict",
-                    f"危险命令检测规则不完整（第{i+1}条字段'{field}'为空），程序退出！",
-                )
-
-    # 4. 校验危险模式规则是否被篡改（预留接口，暂未启用）
+    return ("system" if _top_segment(norm) in system_dirs else "business"), norm
 
 
-def check_dangerous_patterns(args, dangerous_keywords: List):
-    """检查命令或脚本内容是否包含危险模式"""
+def _parse_flags(token: str) -> set:
+    """解析单个 rm 旗标 token，归一为 recursive / force / no_preserve_root"""
+    flags = set()
+
+    if token == "--no-preserve-root":
+        flags.add("no_preserve_root")
+        return flags
+
+    if token.startswith("--"):
+        name = token[2:]
+        if name == "recursive":
+            flags.add("recursive")
+        elif name == "force":
+            flags.add("force")
+        return flags
+
+    for ch in token[1:]:
+        if ch in ("r", "R"):
+            flags.add("recursive")
+        elif ch == "f":
+            flags.add("force")
+    return flags
+
+
+def _parse_rm_args(args: List[str]) -> Tuple[set, List[str]]:
+    """拆分 rm 的参数为 (旗标集合, 目标列表)，支持 -- 之后全为目标"""
+    flags: set = set()
+    targets: List[str] = []
+    end_of_flags = False
+
+    for tok in args:
+        if not end_of_flags and tok == "--":
+            end_of_flags = True
+            continue
+        if not end_of_flags and tok.startswith("-") and len(tok) > 1:
+            flags |= _parse_flags(tok)
+            continue
+        targets.append(tok)
+
+    return flags, targets
+
+
+def _rm_rule_matches(rule: Dict, flags: set, classified: List[Tuple[str, str]]) -> bool:
+    """判断单条 rm 规则是否命中当前命令"""
+    requires = rule.get("requires") or []
+    if any(req not in flags for req in requires):
+        return False
+
+    kinds = {kind for kind, _ in classified}
+    target_type = rule.get("targets")
+    prefixes = rule.get("targets_prefix") or []
+    suffixes = rule.get("targets_suffix") or []
+
+    # 无任何条件的规则会命中所有 rm，视为配置失误，不参与匹配
+    if not requires and not target_type and not prefixes and not suffixes:
+        return False
+
+    if target_type == "root" and "root" not in kinds:
+        return False
+    if target_type == "system_dir" and "system" not in kinds:
+        return False
+
+    if prefixes and not any(
+        norm == p.rstrip("/") or norm.startswith(p)
+        for _, norm in classified
+        for p in prefixes
+    ):
+        return False
+    if suffixes and not any(
+        norm.endswith(s) for _, norm in classified for s in suffixes
+    ):
+        return False
+
+    return True
+
+
+def _judge_rm(args: List[str], rules: List[Dict], system_dirs: set) -> Optional[Dict]:
+    """判定 rm 命令，返回命中的最高风险规则（无命中返回 None）"""
+    flags, targets = _parse_rm_args(args)
+    if not flags and not targets:
+        return None
+
+    classified = [_classify_target(t, system_dirs) for t in targets]
+
+    best: Optional[Dict] = None
+    for rule in rules:
+        if not _rm_rule_matches(rule, flags, classified):
+            continue
+        if best is None or _RISK_ORDER[rule["risk_level"]] < _RISK_ORDER[best["risk_level"]]:
+            best = rule
+    return best
+
+
+def _judge_segment(
+    tokens: List[str],
+    text: str,
+    rm_rules: List[Dict],
+    cmd_rules: List[Tuple[Dict, "re.Pattern"]],
+    system_dirs: set,
+) -> Optional[Dict]:
+    """判定单个命令段，返回命中的最高风险规则"""
+    if not tokens:
+        return None
+
+    if tokens[0] == "rm":
+        return _judge_rm(tokens[1:], rm_rules, system_dirs)
+
+    best: Optional[Dict] = None
+    for rule, pattern in cmd_rules:
+        if not pattern.search(text):
+            continue
+        if best is None or _RISK_ORDER[rule["risk_level"]] < _RISK_ORDER[best["risk_level"]]:
+            best = rule
+    return best
+
+
+def analyze_lines(
+    lines: List[str], config: Dict, is_script: bool = False, script_path: str = ""
+) -> List[Dict]:
+    """分析若干行命令，返回全部命中项（纯函数，无交互、无退出）
+
+    返回：
+        [{line, content, pattern, is_script, script_path}]
+    """
+    syntax = config.get("syntax") or {}
+    rm_rules = [r for r in (config.get("rm_rules") or []) if _rule_enabled(r)]
+    cmd_rules = [
+        (r, re.compile(r["regex"], re.IGNORECASE))
+        for r in (config.get("commands") or [])
+        if _rule_enabled(r)
+    ]
+    system_dirs = {
+        _top_segment(p)
+        for p in ((config.get("path_classes") or {}).get("system_dir") or [])
+    }
+
+    matches: List[Dict] = []
+    for line_num, line in enumerate(lines, 1):
+        stripped = line.strip()
+
+        # 跳过注释行和空行
+        if not stripped or stripped.startswith("#"):
+            continue
+
+        for tokens, text in parse_line(stripped, syntax):
+            rule = _judge_segment(tokens, text, rm_rules, cmd_rules, system_dirs)
+            if not rule:
+                continue
+            matches.append(
+                {
+                    "line": line_num,
+                    "content": text,
+                    "pattern": rule,
+                    "is_script": is_script,
+                    "script_path": script_path if is_script else None,
+                }
+            )
+
+    return matches
+
+
+def check_dangerous_patterns(args, dangerous_keywords: Dict):
+    """检查命令或脚本内容的危险模式（交互与退出策略保持原有行为）"""
 
     # 与确认模块同一约定：从 args 统一读取非交互标记（ADR/确认链唯一来源）
     disinteractive = getattr(args, "disinteractive", False)
@@ -181,64 +388,15 @@ def check_dangerous_patterns(args, dangerous_keywords: List):
     else:
         lines = [args.c]
 
-    # 预处理所有行：分割命令和处理前缀
-    processed_lines = []
-    for line_num, line_content in enumerate(lines, 1):
-        stripped_line = line_content.strip()
-
-        # 跳过注释行和空行
-        if not stripped_line or stripped_line.startswith("#"):
-            continue
-
-        # 第零步：剥除首尾相同的包裹符号（引号等），防止引号包裹绕过锚定规则
-        stripped_line = remove_command_first_last_same_symbol(stripped_line)[1]
-
-        # 第一步：按命令分隔符分割（支持一行内多种分隔符嵌套）
-        # 用正则一次性切分 ; && || | &（&&/|| 优先于单个 &/|，避免拆错）
-        commands = _split_by_separators(stripped_line)
-
-        # 第二步：处理每条命令的前缀（如 sudo，支持多前缀叠加）
-        final_commands = []
-        for cmd in commands:
-            cmd = _strip_command_prefixes(cmd)
-
-            if cmd:  # 如果去除前缀后还有内容
-                final_commands.append(cmd)
-
-        # 将处理后的命令添加到最终行列表
-        processed_lines.extend([(line_num, cmd) for cmd in final_commands])
-
-    all_matches = []
-
-    # 检查处理后的命令
-    for line_info in processed_lines:
-        line_num, command = line_info
-
-        # 检查每个危险模式
-        for pattern in dangerous_keywords:
-            # 跳过注释掉的正则规则
-            if pattern["regex"].strip().startswith("#"):
-                continue
-
-            # 使用正则表达式在命令中搜索匹配模式
-            if re.search(pattern["regex"], command, re.IGNORECASE):
-                match_info = {
-                    "line": line_num,
-                    "content": command,
-                    "pattern": pattern,
-                    "is_script": is_script,
-                    "script_path": script_path if is_script else None,
-                }
-                all_matches.append(match_info)
+    all_matches = analyze_lines(lines, dangerous_keywords, is_script, script_path)
 
     # 如果没有匹配，直接返回
     if not all_matches:
         return
 
-    # 按风险级别排序：forbidden > high > medium > low
-    risk_order = {"forbidden": 0, "high": 1, "medium": 2, "low": 3}
+    # 取最高风险匹配项
     highest_risk_match = min(
-        all_matches, key=lambda x: risk_order.get(x["pattern"]["risk_level"], 99)
+        all_matches, key=lambda x: _RISK_ORDER.get(x["pattern"]["risk_level"], 99)
     )
 
     # 根据最高风险级别处理
@@ -289,10 +447,9 @@ def print_danger_warning(matches, is_forbidden=False):
         return " " * left + text + " " * (remain - left)
 
     # 统一按最高风险级别着色（调用方传入的就是最高风险匹配项）
-    risk_order = {"forbidden": 0, "high": 1, "medium": 2, "low": 3}
     risk_level = min(
         (m["pattern"]["risk_level"] for m in matches),
-        key=lambda x: risk_order.get(x, 99),
+        key=lambda x: _RISK_ORDER.get(x, 99),
     )
     risk_color = (
         color.COLOR_RED

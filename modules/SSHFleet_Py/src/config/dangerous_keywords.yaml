@@ -1,232 +1,262 @@
 # ============================================================
-# 危险命令检测规则
-# 格式: name / example / regex(单引号) / risk_level
-# 用法: 整条规则前加 # 即禁用该条；regex 行以 '#' 开头也会被跳过
+# 危险命令检测规则 v2（结构化）
+# ------------------------------------------------------------
+# 定位：操作助手——把命令内容正确分类，提醒使用者风险等级（ADR-0011）
+#
+# 结构：
+#   syntax        语法清单：包装命令、间接执行命令（解析用，可自行扩展）
+#   path_classes  路径分级清单（rm 判定用，增删目录只改这里）
+#   rm_rules      rm 决策表：自上而下评估，首条命中的规则即定级
+#   commands      其他命令规则：锚定正则（^ 开头），作用于「命令词 + 参数」
+#
+# 每条规则字段：name / example / risk_level，可选 enabled: false
+# 禁用方式：设 enabled: false，或整条规则前加 # 注释
+# risk_level 取值：forbidden（最强提醒，打印后直接退出）/ high / medium / low
 # ============================================================
 
-# ===== forbidden（绝对禁止） =====
+syntax:
+  # 命令前可叠加的包装命令（检测时剥除，剥除后命令词才是真实命令）
+  wrappers: [sudo, time, nohup, setsid, stdbuf, xargs, env, command]
 
-- name:       递归强制删除根目录
-  example:    rm -rf /
-  regex:      '\brm\s+(-[rf]+|--no-preserve-root|-(?:r\s+f|f\s+r))\s*/\s*'
-  risk_level: forbidden
+  # 上述包装命令中「带值」的选项：剥除时连选项值一起跳过
+  wrapper_options:
+    sudo: ["-u", "-g", "-p", "-C", "--user", "--group", "--prompt"]
+    xargs: ["-I", "-n", "-P", "-s", "-a", "-d", "--delimiter", "--max-args", "--max-chars"]
 
-- name:       递归强制删除系统目录
-  example:    rm -rf /etc
-  regex:      '\brm\s+(-[rf]+|-(?:r\s+f|f\s+r))\s*/(?:etc|usr|var|lib|bin|sbin)(?:/.*)?\s*'
-  risk_level: forbidden
+  # 带 -c 参数、参数内容是命令字符串的 shell（内部命令递归分析）
+  shell_commands: [bash, sh, zsh, dash, ksh]
 
-- name:       格式化根磁盘
-  example:    mkfs /dev/sda
-  regex:      '\bmkfs\s+/(dev/)?(sd|hd|vd)[a-z]+\s*'
-  risk_level: forbidden
+  # 参数即命令字符串
+  eval_commands: [eval]
 
-- name:       销毁系统数据
-  example:    dd if=/dev/zero of=/dev/sda
-  regex:      '\bdd\s+if=/dev/(?:zero|random)\s+of=/dev/(sd|hd|vd)[a-z]+\s*'
-  risk_level: forbidden
-
-- name:       立即关闭系统
-  example:    shutdown -h now
-  regex:      \bshutdown\s+-h\s+now\b
-  risk_level: forbidden
-
-- name:       系统重启
-  example:    reboot
-  regex:      \breboot\b
-  risk_level: forbidden
-
-- name:       系统关机
-  example:    shutdown -h now
-  regex:      \bshutdown\b
-  risk_level: forbidden
-
-- name:       运行级别0
-  example:    init 0
-  regex:      '\b(?:init|telinit)\s+0\b'
-  risk_level: forbidden
-
-- name:       运行级别6
-  example:    init 6
-  regex:      '\b(?:init|telinit)\s+6\b'
-  risk_level: forbidden
-
-- name:       杀死所有进程
-  example:    kill -9 -1
-  regex:      \bkill\s+-9\s+-1\b
-  risk_level: forbidden
-
-- name:       屏蔽关键服务
-  example:    systemctl mask sshd
-  regex:      '\bsystemctl\s+mask\s+(?:sshd?|network|firewalld)\b'
-  risk_level: forbidden
+  # 远端执行：主机名之后的参数是远端命令字符串（单层，递归分析）
+  remote_commands: [ssh]
 
 
-# ===== high（高风险） =====
-
-- name:       递归强制删除
-  example:    'rm -rf /tmp/*'
-  regex:      '\brm\s+(-[rf]+|--no-preserve-root|-(?:r\s+f|f\s+r))\b'
-  risk_level: high
-
-- name:       强制删除文件
-  example:    rm -f /var/log/messages
-  regex:      '\brm\s+-f\s+.*\.(log|conf|cfg)\s*'
-  risk_level: high
-
-- name:       格式化文件系统
-  example:    mkfs.ext4 /dev/sdb1
-  regex:      \bmkfs\b
-  risk_level: high
-
-- name:       数据覆盖操作
-  example:    dd if=file.img of=/dev/sdb1
-  regex:      '\bdd\s+of=/dev/(sd|hd|vd)[a-z]+\s*'
-  risk_level: high
-
-- name:       强制停止服务
-  example:    systemctl stop nginx
-  regex:      '\bsystemctl\s+stop\s+(?:mysql|nginx|apache)\b'
-  risk_level: high
-
-- name:       清空防火墙规则
-  example:    iptables -F
-  regex:      \biptables\s+-F\b
-  risk_level: high
-
-- name:       删除用户账户
-  example:    userdel testuser
-  regex:      \buserdel\b
-  risk_level: high
-
-- name:       强制软件包删除
-  example:    rpm -e --nodeps package-name
-  regex:      \brpm\s+-e\s+--nodeps\b
-  risk_level: high
+path_classes:
+  # 删了不可逆的顶层目录：递归删除命中此处 → forbidden
+  # /proc /sys /dev /run 等重启可恢复的目录不在此列，落 high 提醒
+  system_dir:
+    - /etc
+    - /usr
+    - /var
+    - /lib
+    - /bin
+    - /sbin
+    - /boot
+    - /root
 
 
-# ===== medium（中风险） =====
+rm_rules:
+  # —— 根目录（/、/*、//、/. 归一化后等价根）——
+  - name:       递归强制删除根目录
+    example:    rm -rf /
+    risk_level: forbidden
+    requires:   [recursive]
+    targets:    root
 
-- name:       递归删除
-  example:    rm -r directory
-  regex:      \brm\s+-r\b
-  risk_level: medium
+  # —— 系统目录及其子路径 ——
+  - name:       递归强制删除系统目录
+    example:    rm -rf /etc
+    risk_level: forbidden
+    requires:   [recursive]
+    targets:    system_dir
 
-- name:       强制删除
-  example:    rm -f file.txt
-  regex:      \brm\s+-f\b
-  risk_level: medium
+  # —— 业务目录：递归 + 强制，只提醒不拦 ——
+  - name:       递归强制删除
+    example:    rm -rf /opt/app/data
+    risk_level: high
+    requires:   [recursive, force]
 
-- name:       权限修改
-  example:    chmod 777 file.sh
-  regex:      '\bchmod\s+[0-7]?[0-7][0-7]7\b'
-  risk_level: medium
+  - name:       使用 --no-preserve-root 危险旗标
+    example:    rm --no-preserve-root -rf /
+    risk_level: high
+    requires:   [no_preserve_root]
 
-- name:       设置SUID权限
-  example:    chmod u+s /usr/bin/script
-  regex:      \bchmod\s+u\+s\b
-  risk_level: medium
+  # —— 非递归：按目标路径细分 ——
+  - name:       删除日志文件
+    example:    rm -f /var/log/messages
+    risk_level: medium
+    requires:   [force]
+    targets_prefix: [/var/log/]
 
-- name:       设置SGID权限2
-  example:    chmod g+s /usr/bin/script
-  regex:      \bchmod\s+g\+s\b
-  risk_level: medium
+  - name:       删除系统文件
+    example:    rm -f /etc/hosts
+    risk_level: medium
+    requires:   [force]
+    targets_prefix: [/etc/]
 
-- name:       修改文件所有者
-  example:    'chown root:root /etc/passwd'
-  regex:      '\bchown\s+(?:root|:root)\b'
-  risk_level: medium
+  - name:       强制删除配置或日志文件
+    example:    rm -f app.conf
+    risk_level: high
+    requires:   [force]
+    targets_suffix: [.log, .conf, .cfg]
 
-- name:       禁用系统服务
-  example:    systemctl disable service-name
-  regex:      \bsystemctl\s+disable\b
-  risk_level: medium
+  - name:       递归删除
+    example:    rm -r directory
+    risk_level: medium
+    requires:   [recursive]
 
-- name:       修改内核参数
-  example:    sysctl -w kernel.parameter=value
-  regex:      \bsysctl\s+-w\b
-  risk_level: medium
-
-- name:       锁定用户账户
-  example:    passwd -l username
-  regex:      \bpasswd\s+-l\b
-  risk_level: medium
-
-- name:       删除用户组
-  example:    groupdel groupname
-  regex:      \bgroupdel\b
-  risk_level: medium
-
-- name:       清空系统日志
-  example:    truncate -s 0 /var/log/messages
-  regex:      \btruncate\s+-s\s+0\s+/var/log/
-  risk_level: medium
-
-- name:       删除日志文件
-  example:    rm -f /var/log/secure
-  regex:      '\brm\s+-f\s+/var/log/.*\b'
-  risk_level: medium
-
-- name:       删除系统文件
-  example:    rm -f /etc/hosts
-  regex:      '\brm\s+-f\s+/etc/.*\b'
-  risk_level: medium
+  - name:       强制删除
+    example:    rm -f file.txt
+    risk_level: medium
+    requires:   [force]
 
 
-# ===== low（低风险） =====
+commands:
 
-- name:       软件包更新
-  example:    yum update
-  regex:      \byum\s+update\b
-  risk_level: low
+  # ===== forbidden（最强提醒） =====
 
-- name:       软件包删除
-  example:    yum remove package-name
-  regex:      \byum\s+remove\b
-  risk_level: low
+  - name:       格式化系统盘
+    example:    mkfs /dev/sda
+    risk_level: forbidden
+    regex:      '^mkfs(?:\.[a-z0-9]+)?\s+/dev/(?:sd|hd|vd)[a-z]+\s*$'
 
-- name:       强制安装软件包
-  example:    rpm -i --force package.rpm
-  regex:      \brpm\s+-i\s+--force\b
-  risk_level: low
+  - name:       销毁系统数据
+    example:    dd if=/dev/zero of=/dev/sda
+    risk_level: forbidden
+    regex:      '^dd\b[^;&|]*\bif=/dev/(?:zero|random)\b[^;&|]*\bof=/dev/(?:sd|hd|vd)[a-z]+'
 
-- name:       环境变量设置
-  example:    'export PATH=/new/path:$PATH'
-  regex:      '\bexport\s+[A-Z_]+='
-  risk_level: low
+  - name:       系统关机
+    example:    shutdown -h now
+    risk_level: forbidden
+    regex:      '^shutdown\b'
 
-- name:       命令别名设置
-  example:    alias ll="ls -l"
-  regex:      \balias\s+\w+=
-  risk_level: low
+  - name:       系统重启
+    example:    reboot
+    risk_level: forbidden
+    regex:      '^reboot\b'
 
-- name:       清空命令历史
-  example:    history -c
-  regex:      \bhistory\s+-c\b
-  risk_level: low
+  - name:       运行级别0
+    example:    init 0
+    risk_level: forbidden
+    regex:      '^(?:init|telinit)\s+0\b'
 
-- name:       重启Shell
-  example:    exec $SHELL
-  regex:      \bexec\s+\$SHELL\b
-  risk_level: low
+  - name:       运行级别6
+    example:    init 6
+    risk_level: forbidden
+    regex:      '^(?:init|telinit)\s+6\b'
 
-- name:       修改文件描述符限制
-  example:    ulimit -n 65535
-  regex:      \bulimit\s+-n\s+65535\b
-  risk_level: low
+  - name:       杀死所有进程
+    example:    kill -9 -1
+    risk_level: forbidden
+    regex:      '^kill\s+-9\s+-1\b'
 
-- name:       修改内存限制
-  example:    ulimit -v unlimited
-  regex:      \bulimit\s+-v\s+unlimited\b
-  risk_level: low
+  - name:       屏蔽关键服务
+    example:    systemctl mask sshd
+    risk_level: forbidden
+    regex:      '^systemctl\s+mask\s+(?:sshd?|network|firewalld)\b'
 
-- name:       运行级别切换
-  example:    init 3
-  regex:      '\b(?:init|telinit)\s+[1-5]\b'
-  risk_level: low
 
-- name:       普通服务重启
-  example:    systemctl restart nginx
-  regex:      \bsystemctl\s+restart\s+\w+\b
-  risk_level: low
+  # ===== high（高风险） =====
 
+  - name:       格式化文件系统
+    example:    mkfs.ext4 /dev/sdb1
+    risk_level: high
+    regex:      '^mkfs(?:\.[a-z0-9]+)?\b'
+
+  - name:       数据覆盖操作
+    example:    dd if=file.img of=/dev/sdb1
+    risk_level: high
+    regex:      '^dd\b[^;&|]*\bof=/dev/(?:sd|hd|vd)[a-z]+'
+
+  - name:       强制停止服务
+    example:    systemctl stop nginx
+    risk_level: high
+    regex:      '^systemctl\s+stop\s+(?:mysql|nginx|apache)\b'
+
+  - name:       清空防火墙规则
+    example:    iptables -F
+    risk_level: high
+    regex:      '^iptables\s+-F\b'
+
+  - name:       删除用户账户
+    example:    userdel testuser
+    risk_level: high
+    regex:      '^userdel\b'
+
+  - name:       强制软件包删除
+    example:    rpm -e --nodeps package-name
+    risk_level: high
+    regex:      '^rpm\s+-e\s+--nodeps\b'
+
+
+  # ===== medium（中风险） =====
+
+  - name:       权限修改
+    example:    chmod 777 file.sh
+    risk_level: medium
+    regex:      '^chmod\s+[0-7]?[0-7][0-7]7\b'
+
+  - name:       设置SUID权限
+    example:    chmod u+s /usr/bin/script
+    risk_level: medium
+    regex:      '^chmod\s+u\+s\b'
+
+  - name:       设置SGID权限
+    example:    chmod g+s /usr/bin/script
+    risk_level: medium
+    regex:      '^chmod\s+g\+s\b'
+
+  - name:       修改文件所有者
+    example:    'chown root:root /etc/passwd'
+    risk_level: medium
+    regex:      '^chown\s+(?:root|:root)\b'
+
+  - name:       禁用系统服务
+    example:    systemctl disable service-name
+    risk_level: medium
+    regex:      '^systemctl\s+disable\b'
+
+  - name:       修改内核参数
+    example:    sysctl -w kernel.parameter=value
+    risk_level: medium
+    regex:      '^sysctl\s+-w\b'
+
+  - name:       锁定用户账户
+    example:    passwd -l username
+    risk_level: medium
+    regex:      '^passwd\s+-l\b'
+
+  - name:       删除用户组
+    example:    groupdel groupname
+    risk_level: medium
+    regex:      '^groupdel\b'
+
+  - name:       清空系统日志
+    example:    truncate -s 0 /var/log/messages
+    risk_level: medium
+    regex:      '^truncate\s+-s\s+0\s+/var/log/'
+
+
+  # ===== low（低风险） =====
+
+  - name:       软件包更新
+    example:    yum update
+    risk_level: low
+    regex:      '^yum\s+update\b'
+
+  - name:       软件包删除
+    example:    yum remove package-name
+    risk_level: low
+    regex:      '^yum\s+remove\b'
+
+  - name:       强制安装软件包
+    example:    rpm -i --force package.rpm
+    risk_level: low
+    regex:      '^rpm\s+-i\s+--force\b'
+
+  - name:       清空命令历史
+    example:    history -c
+    risk_level: low
+    regex:      '^history\s+-c\b'
+
+  - name:       运行级别切换
+    example:    init 3
+    risk_level: low
+    regex:      '^(?:init|telinit)\s+[1-5]\b'
+
+  - name:       普通服务重启
+    example:    systemctl restart nginx
+    risk_level: low
+    regex:      '^systemctl\s+restart\s+\w+\b'
