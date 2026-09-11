@@ -42,6 +42,8 @@ Status: needs-info
 | D25 | 危险检测解析层引 `mvdan.cc/sh/v3/syntax` | 旧：368 行手写 shell 词法器。**判定层（平级正则 + 旗标归一化 + 等级排序）仍自己实现** |
 | D26 | CLI 用 `spf13/pflag`（**不引 cobra**） | 其余：终端 UI 只引 `lipgloss`、进度条自写；日志 `zap`；SFTP `pkg/sftp`；xlsx `excelize/v2`；SSH `golang.org/x/crypto/ssh` |
 | D28 | 配置位置：基准**当前工作目录**，`./config/SSHFleet.conf`（TOML 格式、`.conf` 后缀） | 旧：硬编码 `src/config/SSHFleet.yaml` 相对 cwd |
+| D29 | 脚本换行符：**不再改写本地文件**，改为上传时在内存内转换为 LF | 旧：校验阶段发现 `\r\n` 直接覆盖写回（名为 check，实际有写副作用） |
+| D30 | 主密钥持久化：**检测登录 shell**，zsh 写 `~/.zshrc`、bash 写 `~/.bashrc` | 旧：硬编码写 `~/.bashrc`——zsh 用户会看到"生成成功"但下条命令仍报缺密钥 |
 
 ---
 
