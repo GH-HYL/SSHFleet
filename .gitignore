@@ -1,32 +1,17 @@
-# 忽略所有
-*
+# SSHFleet 工作区忽略规则
+#
+# 采用「黑名单」写法，只忽略该忽略的。
+# 不用「忽略所有 + 白名单」——旧仓库正是那种写法，导致 test/ 与 tools/ 从未进入
+# 版本控制，清理时只能依赖手工备份恢复。别在新仓库重蹈。
 
-# Git 配置
-!.gitignore
-# 更新日志
-!CHANGELOG.md 
-!README.md
-# 个人使用的批处理
-!SSHFleet_*.bat
-# 文档（ADR 决策记录入 git 追踪）
-!docs/
-!docs/adr/
-!docs/adr/**
+# 旧工程参考副本（只读，不入新仓库）
+modules/SSHFleet_bak/
 
-# 只跟踪源代码模块
-!modules/
-!modules/**
+# 构建中间产物与最终产物（见 个人开发规范.md §一）
+build/
+release/
 
-# 过滤 Go 模块 离线包
-modules/SSHFleet_Go/vendor/
-modules/SSHFleet_Go/vendor/**
-
-# 过滤 Python 模块 编译文件
-modules/SSHFleet_Py/__pycache__/
-modules/SSHFleet_Py/**/__pycache__/
-*.pyc
-# 过滤 Python 模块 历史记录
-modules/SSHFleet_Py/historys/
-# 过滤 go 的编译文件
-modules/SSHFleet_Py/src/go/
-
+# Go 编译产物
+*.exe
+*.test
+*.out
