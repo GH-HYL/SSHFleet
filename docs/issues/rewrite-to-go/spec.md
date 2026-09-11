@@ -4,7 +4,9 @@ Status: needs-info
 
 > **只记录与旧实现不同的决策，以及重要架构决策。**
 > 与旧代码一致的行为不在此记录——重构时以旧代码为准（见 D20）。
-> 旧工程位于 `modules/SSHFleet_bak/`，只读参考。
+> 旧工程位于工作区内的 `modules/SSHFleet_bak/`，只读参考。
+>
+> **编号说明**：D10 已并入 D15；D16–D19 已并入 D26。其余编号连续。
 
 ---
 
@@ -21,16 +23,16 @@ Status: needs-info
 | # | 决策 | 与旧实现的差异 |
 | --- | --- | --- |
 | D1 | 单可执行文件 | 旧：Python 入口进程 + 独立 Go 引擎进程 |
-| D2 | **不保留事件流模型** | 旧：`init` / `progress` / `result` / `done` 四类 SSE 消息。新：进度与统计由进程内**聚合器**承载 |
-| D3 | 双进程设施全部消亡 | 子进程管理、端口探测、健康检查线程、关闭信号、`X-SSH-Fleet-Key` 认证、`ALREADY_USED` 单次限制、无请求自杀、`/api/v1/*` 全部端点、`SSH_FLEET_KEY` / `SSH_FLEET_PORT` / `SSH_FLEET_LOG_PATH` 环境变量 |
+| D2 | **不保留事件流模型** | 旧：`init` / `progress` / `result` / `done` 四类 SSE 消息。新：进度与统计由进程内的**聚合器**承载（聚合器归属见「待定」） |
+| D3 | 双进程设施全部消亡 | 子进程管理、端口探测、健康检查线程、关闭信号、`X-SSH-Fleet-Key` 认证、`ALREADY_USED` 单次限制、无请求自杀、`/api/v1/*` 全部端点、以及旧引擎的环境变量 `SSH_FLEET_KEY` / `SSH_FLEET_PORT` / `SSH_FLEET_LOG_PATH`。<br>⚠️ **注意**：`SSH_FLEET_KEY`（本行，消亡）与 D15 的 `SSHFLEET_KEY`（保留）**只差一个下划线**，别混 |
 | D4 | 旧术语作废 | "编排层 / 执行引擎 / SSE 消息 / SSE 会话"不再出现 |
-| D12 | 骨架：`main.go` 主干十步 + `internal/` 11 个目录 + 工程根 `config/` | 见第五节 |
+| D12 | 骨架：`main.go` 主干十步 + `internal/` **12** 个目录 + 工程根 `config/` | 见第六节 |
 | D21 | 框架冻结 | 骨架定稿即硬边界，此后所有改动都在框架内调整 |
 | D22 | 内聚优先 | 逻辑上属一体的保持整体，不为拆而拆；允许函数调用链加深 |
 
 ---
 
-## 三、技术选型（与旧实现不同）
+## 三、技术选型与依赖
 
 | # | 决策 | 与旧实现的差异 |
 | --- | --- | --- |
@@ -40,31 +42,62 @@ Status: needs-info
 | D15 | 主密钥环境变量统一为 **`SSHFLEET_KEY`** | 旧：Py 侧 `SSHFLEET_KEY`、Go 侧 `SSH_FLEET_KEY` 两个名字并存 |
 | D24 | 命令行**保持平级选项**，不引子命令；模式互斥**手写校验**、提示文案自撰 | 旧同为平级选项——此处是**刻意维持**：比较过子命令方案，最终选择不动使用习惯（手写互斥的提示比框架原生报错可读） |
 | D25 | 危险检测解析层引 `mvdan.cc/sh/v3/syntax` | 旧：368 行手写 shell 词法器。**判定层（平级正则 + 旗标归一化 + 等级排序）仍自己实现** |
-| D26 | CLI 用 `spf13/pflag`（**不引 cobra**） | 其余：终端 UI 只引 `lipgloss`、进度条自写；日志 `zap`；SFTP `pkg/sftp`；xlsx `excelize/v2`；SSH `golang.org/x/crypto/ssh` |
+| D26 | CLI 框架用 `spf13/pflag`（**不引 cobra**） | 见下方依赖清单 |
 | D28 | 配置位置：基准**当前工作目录**，`./config/SSHFleet.conf`（TOML 格式、`.conf` 后缀） | 旧：硬编码 `src/config/SSHFleet.yaml` 相对 cwd |
 | D29 | 脚本换行符：**不再改写本地文件**，改为上传时在内存内转换为 LF | 旧：校验阶段发现 `\r\n` 直接覆盖写回（名为 check，实际有写副作用） |
 | D30 | 主密钥持久化：**检测登录 shell**，zsh 写 `~/.zshrc`、bash 写 `~/.bashrc` | 旧：硬编码写 `~/.bashrc`——zsh 用户会看到"生成成功"但下条命令仍报缺密钥 |
-| D31 | 路径解析收敛为**一条规则**：**写在文件里的凭据相对路径拼 `secret_dir`；其余一律看当前工作目录** | 旧：三套规则并存（字符串梯子 / `~` 展开原样 / 先找再拼）。新规则与旧行为的差异见下 |
+| D31 | 路径解析收敛为**一条规则**：**写在文件里的凭据相对路径拼 `secret_dir`；其余一律看当前工作目录** | 旧：三套规则并存（字符串梯子 / `~` 展开原样 / 先找再拼）。差异见下 |
+| D11 | 危险规则 / 错误关键词两份文件的**语义与正则一字不动**，仅格式随配置转为 TOML | 旧：YAML。TOML 字面量字符串 `'...'` 与 YAML 单引号同为不转义写法，可逐字节平移 |
+
+### 依赖清单
+
+| 用途 | 依赖 | 备注 |
+| --- | --- | --- |
+| SSH | `golang.org/x/crypto/ssh` | 无标准库，事实标准 |
+| SFTP | `github.com/pkg/sftp` | 无标准库 |
+| TOML 解析 | `github.com/BurntSushi/toml` | 配置与规则文件共用；用 `md.Undecoded()` 实现"未知字段零容忍" |
+| CLI | `spf13/pflag` | 长短名并存 + `NoOptDefVal`（落 `-k` 三态）；**不引 cobra** |
+| 日志 | `go.uber.org/zap` | 含自定义 SUCCESS 级别 |
+| 终端样式 | `charmbracelet/lipgloss` | **进度条自写，不引 bubbletea**（TUI 框架会接管终端事件循环，与"禁止子模块反向驱动主流程"冲突） |
+| xlsx | `github.com/xuri/excelize/v2` | 对位旧版 openpyxl |
 
 ### D31 展开：路径解析规则
 
-| 路径 | 来源 | 解析 | 基准 |
+| 路径 | 来源 | 相对路径的基准 | 校验 |
 | --- | --- | --- | --- |
-| 清单第 4/5/6 列（密码 / 私钥 / 私钥口令） | 清单内 | ✅ | `secret_dir` |
-| 配置 `account.password` / `key` / `key_passphrase` | 配置内 | ✅ | `secret_dir` |
-| `-f` 清单 · `-s` 脚本 · `-u` 上传源 · `-k` 私钥 · `--convert-password` 目标 · `-p`（下载模式的本地目录） | 命令行 | ✅ | 当前工作目录 |
-| `-p`（上传模式的**远端**目录）· `-d`（**远端**路径） | 命令行 | ❌ 不参与本地解析 | — |
+| 清单第 4/5/6 列（密码 / 私钥 / 私钥口令） | 清单内 | `secret_dir` | 拼后须存在 |
+| 配置 `account.password` / `key` / `key_passphrase` | 配置内 | `secret_dir` | 拼后须存在 |
+| `-f` 清单 · `-s` 脚本 · `-u` 上传源 · `-k` 私钥 · `--convert-password` 目标 · `-p`（下载模式的本地目录） | 命令行 | 当前工作目录 | 按各自规则 |
+| `-p`（上传模式的**远端**目录）· `-d`（**远端**路径） | 命令行 | —（不参与本地解析） | **仍要校验**：必须是绝对路径；上传的 `-p` 还要以 `/` 结尾（ADR-0002） |
 
 - **`secret_dir` 的定位**：只服务凭据文件。配置里那三个字段是**清单列的默认值**，与清单列同性质，故走同一规则
 - **统一解析顺序**（两类共用一个函数，只差基准）：`去首尾空白 → ~ 展开 → 绝对则原样 → 相对则拼基准`
 - **取消** `secret_dir` 字面量 `none` 的宽容：那是 YAML 裸写 `None` 的产物；TOML 里 `""` 即未配置，`"none"` 就是名为 none 的目录名
-- **删除**旧版 `--convert-password` 的"先按原样找、找不到再拼 `secret_dir`"：该规则让解析结果取决于"当前目录碰巧有没有同名文件"
+- **删除**旧版 `--convert-password` 的"先按原样找、找不到再拼 `secret_dir`"
 - **`secret_dir` 未配置时**：凭据类相对路径无解 → 明确报错，给出两条出路（写绝对路径 / 配置 `secret_dir`）
-- **唯一行为变化**：`--convert-password pw.txt` 若 `pw.txt` 在当前目录且未配 `secret_dir`，旧版命中、新版报错。README 既有用法写的是 `~/.MyPW/pw.txt`（受 `~` 展开，两版一致），实际影响面极小
+
+**行为变化（两处，均在 `--convert-password`）**：
+
+1. 未配 `secret_dir` 且 `pw.txt` 在当前目录：旧版命中、新版报错（无基准可拼）
+2. **已配 `secret_dir`** 且当前目录也存在同名文件：旧版先命中当前目录、新版一律去 `secret_dir` 找
+
+README 既有用法写的是 `~/.MyPW/pw.txt`（受 `~` 展开，两版一致），实际影响面小。
 
 ---
 
-## 三补 · 危险检测的行为差异决策（M4）
+## 四、行为差异决策（M3 / M4 / M5）
+
+### M3 执行层
+
+| # | 决策 | 与旧实现的差异 |
+| --- | --- | --- |
+| — | `output` **去掉 base64 编码** | 旧：命令输出 base64 后进 JSON。单进程后 JSON 都没了，base64 失去唯一理由 |
+| — | 超时改 `context.WithTimeout` + `defer cancel()` | 旧：`select` 里用 `time.After`，每次调用建一个不会被取消的 timer |
+| — | 进度消息常量 `init`/`progress`/`result`/`done` 随 SSE 消亡 | 事件形状由聚合器定义 |
+| — | `progressWriter` 补齐 `callback != nil` 判空 | 旧：`progressWriter.Write` 未判空、`progressReader.Read` 判了，两者不一致（前者 callback 为 nil 会 panic） |
+| — | worker pool / 连接 / 认证回退 / 退出码提取 | **直接沿用**（本来就是 Go） |
+
+### M4 判定层
 
 | # | 决策 | 与旧实现的差异 |
 | --- | --- | --- |
@@ -74,26 +107,28 @@ Status: needs-info
 
 > 风险面结论（已解除）：`dangerous_keywords.yaml` 全部 **38 条**正则在 RE2 中可用——无反向引用 / 前瞻 / 后顾 / 命名组 / 原子组 / 条件组。**规则文件无需为兼容性改动。**（38 条 = forbidden 10 / high 9 / medium 13 / low 6）
 
----
-
-## 三补二 · 输出与归档决策（M5）
+### M5 输出层
 
 | # | 决策 | 与旧实现的差异 |
 | --- | --- | --- |
 | D36 | 归档目录中的两个日志文件**按用途命名**（`tool` / `exec`） | 旧：`SSHFleet_Go.log`——新架构已无"Go 引擎"概念，名字失去所指 |
 | D37 | `report.txt` **补齐下载模式**的执行参数段 | 旧：`report.py` 中完全没有下载模式分支，**执行模式 / 远程路径 / 本地路径 / 传输超时四项全缺**（缺陷） |
 | D38 | `assets/` **只备份清单与脚本**，不备份上传文件；README 相应修正 | 旧：README 称备份"CSV / 脚本 / 上传文件"，但实现从未备份上传文件。选择改文档——上传可能是数百 MB 的包，往历史目录再拷一份纯属浪费 |
+| — | `parser.decode_output` 的 base64 解码整段消亡 | 随 M3 去掉输出的 base64 编码 |
+| — | 终端进度条的 `MAX_VISIBLE_NODES = 20` 排队机制、`_handle_progress` 的"近似值补偿" **整段删除** | 那是 `rich` 多进度条的限制逼出来的，自写实现不受此约束 |
 
-**实现层直接定案：**
+### 实现层差异（简记）
 
-- 报告中记录的"执行命令"按**实际调用形式**生成（旧：硬编码 `python3 sshfleet.py <参数>`）
-- `parser.decode_output` 的 base64 解码整段消亡（随 M3 去掉输出的 base64 编码）
-- 终端进度条的 `MAX_VISIBLE_NODES = 20` 排队机制、以及 `_handle_progress` 的"近似值补偿"**整段删除**——那是 `rich` 多进度条的限制逼出来的，自写实现不受此约束
-- `latest_history` 软链**照旧仅 POSIX**，不为 Windows 另造等价物
+| 事项 | 结论 |
+| --- | --- |
+| 凭据解码缓存 | **删除**。旧版缓存为"校验 / 使用两阶段读盘"而生；新版把两阶段合并为一次"读 → 校验 → 直接用" |
+| `--disinteractive` 下 `get_user_confirmation` 的语义 | 改为**显式**表达（非交互即返回"确认"），不再借用 `yorn` 参数值 |
+| 表头识别 | "首列解析失败**且**该行含逗号 → 判为表头；否则报错"，落实 D13 |
+| 错误出口 | 全链路返回 `error`，`main.go` 独占退出权；保留"致命 / 警告后继续"的区分 |
 
 ---
 
-## 四、工作方式与编码取向
+## 五、工作方式与编码取向
 
 | # | 决策 |
 | --- | --- |
@@ -128,9 +163,11 @@ Status: needs-info
 
 > 按此判据，全工具的"对象"是**可枚举的**：SSH 客户端、进度聚合器、进度读写器、交互器，加上配置 / 节点信息 / 结果记录三个纯数据载体。**其余全部是函数**——主干十步是十个函数，每个 `internal/<功能>` 目录是一组函数。
 
+> **补充（回答"方法能不能跨文件"）**：Go 只要求类型与方法**同属一个 package**，不要求同文件。包内「函数」与「方法」在文件组织上完全等价，都可按功能边界拆到多个文件。
+
 ---
 
-## 五、骨架与硬性约束
+## 六、骨架与硬性约束
 
 依据 `个人开发规范.md`（原文为硬性约束）：
 
@@ -141,6 +178,14 @@ Status: needs-info
 - 工程根另置 `config/`（与 `main.go` 同级）存放模板配置
 - 按功能分目录；单文件过大按**功能边界**拆分，不按行数机械切割
 - 提交信息中文，格式 `类型(作用域): 简短描述`；`CHANGELOG.md` 只记用户能直接体验到的变化
+
+### 工程结构与工作区
+
+| # | 决策 | 说明 |
+| --- | --- | --- |
+| D7 | 工作区 `D:\Desktop\Code\SSHFleet` | 新工程 `modules/SSHFleet_Go/`；旧工程位于 `modules/SSHFleet_bak/`（只读、无 `.git`，历史由 GitHub / Gitee 远程保存） |
+| D27 | 工作区根 `.gitignore` 采用**白名单** | 默认全忽略，只列出 `docs/`、`modules/`、`CONTEXT.md`、`AGENTS.md`、`README.md`、`CHANGELOG.md`。个人文件（`个人开发规范.md`）、`tools/`、`test/` 刻意不纳入——本仓库将对外推送，只保留「代码 + 决策文档」 |
+| D9 | 文档基线 | 旧 `CONTEXT.md` 与 ADR-0001–0013 全部作废，新仓库重写；`CHANGELOG.md` 版本号从 **5.0.0** 起（不兼容重写） |
 
 ### 主干十步与承载目录
 
@@ -158,13 +203,15 @@ Status: needs-info
 | 10 | 呈现 / 报告 / 归档 | `internal/output` |
 | — | 跨功能共用的**无状态**小工具 | `internal/common` |
 
+（12 个目录：config · log · cli · credential · dangercheck · nodelist · confirm · ssh · batch · result · output · common）
+
 **`internal/common` 准入标准**：「被 ≥2 个功能目录调用，且自身不持有状态、不承载生命周期、不做跨模块状态中转」。达不到就放回使用它的目录。
 
 > 反面教材：旧 Go 的 `httpserver.Start()` 是典型的子模块接管主流程（内部起服务、等请求、等关闭信号，`main` 调完即止）。
 
 ---
 
-## 六、里程碑（按骨架推进）
+## 七、里程碑（按骨架推进）
 
 | 里程碑 | 内容 |
 | --- | --- |
@@ -177,7 +224,7 @@ Status: needs-info
 
 ---
 
-## 七、迁移影响（对使用者）
+## 八、迁移影响（对使用者）
 
 | 项 | 影响 |
 | --- | --- |
@@ -191,7 +238,7 @@ Status: needs-info
 
 ---
 
-## 八、参考资料位置
+## 九、参考资料位置
 
 | 用途 | 位置 |
 | --- | --- |
@@ -199,4 +246,11 @@ Status: needs-info
 | 旧决策记录 | `modules/SSHFleet_bak/docs/adr/`、`CONTEXT.md`、`CHANGELOG.md`、`README.md` |
 | 危险检测测量工具与基线 | `modules/SSHFleet_bak/.scratch/danger-rm-structured/`（`measure_recognition.py`、`verify_old_rules.py`、`old_dk_baseline.yaml`、`v1_baseline.yaml`） |
 | 危险检测 / 错误分类语料 | `modules/SSHFleet_bak/test/` |
-| 完整备份（安全网） | `D:\Desktop\Code\Old-Code_Bak\SSHFleet_old` |
+| 完整备份（安全网） | 工作区外的 `Old-Code_Bak/SSHFleet_old`（1252 文件） |
+
+---
+
+## 十、待定
+
+- **进度聚合器的归属**：住在 `internal/batch` 还是 `internal/result`？（D2 与 D32 都引用了它，但骨架里没有落点）
+- M6 的打包方式与产物命名（交叉编译目标、`release/` 目录结构）
