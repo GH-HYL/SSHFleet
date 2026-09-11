@@ -68,7 +68,7 @@ Status: needs-info
 | SSH | `golang.org/x/crypto/ssh` | 无标准库，事实标准 |
 | SFTP | `github.com/pkg/sftp` | 无标准库 |
 | TOML 解析 | `github.com/BurntSushi/toml` | 配置与规则文件共用；用未识别键集合实现"未知字段零容忍" |
-| CLI | `spf13/pflag` | 长短名并存 + `NoOptDefVal`（落 `-k` 三态）；不引 cobra |
+| CLI | `spf13/pflag` | 长短名并存；`-k` 三态：pflag 的 `NoOptDefVal` 会吞掉 `-k <路径>` 空格形式（恒优先于消费下一参数，与 argparse `nargs='?'` 不一致），故改在解析前把裸 `-k` 预处理为哨兵值，哨兵只在 `KeyMode()` 一处解读；不引 cobra |
 | 日志 | `go.uber.org/zap` | 含自定义 SUCCESS 级别 |
 | 终端样式 | `charmbracelet/lipgloss` | 进度条自写，不引 bubbletea（TUI 框架会接管终端事件循环，与"禁止子模块反向驱动主流程"冲突） |
 | xlsx | `github.com/xuri/excelize/v2` | 对位旧版 openpyxl |
@@ -137,7 +137,13 @@ README 既有用法写的是 `~/.MyPW/pw.txt`（受 `~` 展开，两版一致）
 
 ---
 
-## 四、行为差异决策（M3 / M4 / M5）
+## 四、行为差异决策（M1 / M3 / M4 / M5）
+
+### M1 框架层
+
+| # | 决策 | 与旧实现的差异 |
+| --- | --- | --- |
+| D40 | `-k` 文件存在性校验按密钥三态分流：仅 universal 态（带路径）校验，default 态（裸 `-k`）跳过、交给 M2 凭据预检 | 旧：`check_arguments` 对裸 `-k` 的 `'no_value'` 值做 `isfile` 校验，必报「秘钥文件不存在」退出——default 态实际不可用，`csv.py` 的三态 default 分支永远走不到（缺陷）。用户已裁定：修复，要求三态语义准确 |
 
 ### M3 执行层
 
@@ -253,7 +259,7 @@ README 既有用法写的是 `~/.MyPW/pw.txt`（受 `~` 展开，两版一致）
 | # | 决策 | 说明 |
 | --- | --- | --- |
 | D7 | 工作区 `D:\Desktop\Code\SSHFleet` | 新工程 `modules/SSHFleet_Go/`；旧工程位于 `modules/SSHFleet_bak/`（只读、无 `.git`，历史由 GitHub / Gitee 远程保存） |
-| D27 | 工作区根 `.gitignore` 采用白名单 | 默认全忽略，只列出 `docs/`、`modules/`、`tools/build-*`、`CONTEXT.md`、`AGENTS.md`、`README.md`、`CHANGELOG.md`。个人文件（`个人开发规范.md`）、`tools/` 下除构建脚本外的内容、`test/` 刻意不纳入——本仓库将对外推送，只保留「代码 + 决策文档 + 构建脚本」 |
+| D27 | 工作区根 `.gitignore` 采用白名单 | 默认全忽略，只列出 `docs/`、`modules/`、根目录 `build-windows.bat` / `build-linux.sh`、`CONTEXT.md`、`AGENTS.md`、`README.md`、`CHANGELOG.md`。个人文件（`个人开发规范.md`）、`tools/` 全部内容、`test/` 刻意不纳入——本仓库将对外推送，只保留「代码 + 决策文档 + 构建脚本」 |
 | D9 | 文档基线 | 旧 `CONTEXT.md` 与 ADR-0001–0013 全部作废，新仓库重写；`CHANGELOG.md` 版本号从 **5.0.0** 起（不兼容重写） |
 
 ### 主干十步与承载目录
@@ -299,13 +305,13 @@ README 既有用法写的是 `~/.MyPW/pw.txt`（受 `~` 展开，两版一致）
 | 编译产物名 | `SSHFleet`（Windows 为 `SSHFleet.exe`） |
 | 编译输出 | 工作区根 `build/`（构建中间产物） |
 | 发布目录 | 工作区根 `release/SSHFleet_<版本>_<平台>/`，内含可执行文件 + `config/SSHFleet.conf` 模板 + `README.md`，并打包为压缩包 |
-| 构建脚本 | 工作区根 `tools/build-windows.bat`（双击即可跑）+ `tools/build-linux.sh`（供 Linux / 自动化使用） |
+| 构建脚本 | 工作区根 `build-windows.bat`（双击即可跑，UTF-8 带 BOM + CRLF，`chcp 65001`）+ `build-linux.sh`（供 Linux / 自动化使用）。**置于工作区根、不放 tools/**（用户 2026-09-11 指定） |
 
 > **目录层级提醒**：`tools/` / `build/` / `release/` 都是**工作区级**目录（工作区根下），**不在工程内**。工程只有 `modules/SSHFleet_Go/` 下的 `main.go` + `internal/` + `config/`。见 `个人开发规范.md` §一。
 | 「打包」环节 | **不存在**——Go 只有编译（不像 PyInstaller 还要捆绑运行时）。脚本三步：编译 → 组发布目录 → 压缩 |
 | 版本号来源 | 从 `CHANGELOG.md` 取首个非「待定」的版本号；取不到则用日期 |
 
-**需同步调整 D27**：构建脚本是项目资产（他人 clone 后要能自行构建），故白名单**放行 `tools/build-*`**；`tools/` 下的其余内容仍不追踪。
+**需同步调整 D27**：构建脚本是项目资产（他人 clone 后要能自行构建），故白名单**放行根目录 `build-windows.bat` / `build-linux.sh`**；`tools/` 全部不追踪。
 
 > **落笔时机**：构建脚本建议在 **M1 收尾时**就写——那时已有可编译的骨架，能立刻验证双平台交叉编译是否通。不要拖到 M6 才发现交叉编译有问题。
 
