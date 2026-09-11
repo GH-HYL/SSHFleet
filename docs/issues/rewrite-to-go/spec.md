@@ -297,9 +297,11 @@ README 既有用法写的是 `~/.MyPW/pw.txt`（受 `~` 展开，两版一致）
 | --- | --- |
 | 目标平台 | **双平台**：`windows/amd64` + `linux/amd64` |
 | 编译产物名 | `SSHFleet`（Windows 为 `SSHFleet.exe`） |
-| 编译输出 | `build/`（构建中间产物，规范 §一） |
-| 发布目录 | `release/SSHFleet_<版本>_<平台>/`，内含可执行文件 + `config/SSHFleet.conf` 模板 + `README.md`，并打包为压缩包 |
-| 构建脚本 | `tools/build-windows.bat`（双击即可跑）+ `tools/build-linux.sh`（供 Linux / 自动化使用） |
+| 编译输出 | 工作区根 `build/`（构建中间产物） |
+| 发布目录 | 工作区根 `release/SSHFleet_<版本>_<平台>/`，内含可执行文件 + `config/SSHFleet.conf` 模板 + `README.md`，并打包为压缩包 |
+| 构建脚本 | 工作区根 `tools/build-windows.bat`（双击即可跑）+ `tools/build-linux.sh`（供 Linux / 自动化使用） |
+
+> **目录层级提醒**：`tools/` / `build/` / `release/` 都是**工作区级**目录（工作区根下），**不在工程内**。工程只有 `modules/SSHFleet_Go/` 下的 `main.go` + `internal/` + `config/`。见 `个人开发规范.md` §一。
 | 「打包」环节 | **不存在**——Go 只有编译（不像 PyInstaller 还要捆绑运行时）。脚本三步：编译 → 组发布目录 → 压缩 |
 | 版本号来源 | 从 `CHANGELOG.md` 取首个非「待定」的版本号；取不到则用日期 |
 
