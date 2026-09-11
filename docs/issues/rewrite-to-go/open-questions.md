@@ -10,9 +10,9 @@ Status: needs-info
 
 ## 前沿：已清空
 
-路径解析规则已裁定（配置里的 `password` / `key` / `key_passphrase` 是**清单列的默认值**，与清单列同性质，同走 `secret_dir`）→ 决策见 `spec.md` 的 **D31**。
+M4（危险检测 / 错误分类）三题已裁定 → `spec.md` 的 **D33 / D34 / D35**。
 
-下一轮前沿 = M3 执行层（SSH / SFTP / 并发 / 进度 / 超时 / 中断），待事实调研完成后提出。
+下一轮前沿 = **M5 输出与归档**（终端呈现 / 报告 / xlsx / 历史目录结构 / assets 备份 / `latest_history` 软链），待事实调研完成后提出。
 
 ---
 
