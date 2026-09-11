@@ -253,7 +253,7 @@ README 既有用法写的是 `~/.MyPW/pw.txt`（受 `~` 展开，两版一致）
 | # | 决策 | 说明 |
 | --- | --- | --- |
 | D7 | 工作区 `D:\Desktop\Code\SSHFleet` | 新工程 `modules/SSHFleet_Go/`；旧工程位于 `modules/SSHFleet_bak/`（只读、无 `.git`，历史由 GitHub / Gitee 远程保存） |
-| D27 | 工作区根 `.gitignore` 采用白名单 | 默认全忽略，只列出 `docs/`、`modules/`、`CONTEXT.md`、`AGENTS.md`、`README.md`、`CHANGELOG.md`。个人文件（`个人开发规范.md`）、`tools/`、`test/` 刻意不纳入——本仓库将对外推送，只保留「代码 + 决策文档」 |
+| D27 | 工作区根 `.gitignore` 采用白名单 | 默认全忽略，只列出 `docs/`、`modules/`、`tools/build-*`、`CONTEXT.md`、`AGENTS.md`、`README.md`、`CHANGELOG.md`。个人文件（`个人开发规范.md`）、`tools/` 下除构建脚本外的内容、`test/` 刻意不纳入——本仓库将对外推送，只保留「代码 + 决策文档 + 构建脚本」 |
 | D9 | 文档基线 | 旧 `CONTEXT.md` 与 ADR-0001–0013 全部作废，新仓库重写；`CHANGELOG.md` 版本号从 **5.0.0** 起（不兼容重写） |
 
 ### 主干十步与承载目录
@@ -291,6 +291,22 @@ README 既有用法写的是 `~/.MyPW/pw.txt`（受 `~` 展开，两版一致）
 | M5 输出层 | `output`（终端 + 报告 + xlsx + 归档） |
 | M6 收尾 | 交叉编译打包 + 文档重写 + 配置迁移说明 → 5.0.0 |
 
+### M6 展开：构建与发布
+
+| 项 | 结论 |
+| --- | --- |
+| 目标平台 | **双平台**：`windows/amd64` + `linux/amd64` |
+| 编译产物名 | `SSHFleet`（Windows 为 `SSHFleet.exe`） |
+| 编译输出 | `build/`（构建中间产物，规范 §一） |
+| 发布目录 | `release/SSHFleet_<版本>_<平台>/`，内含可执行文件 + `config/SSHFleet.conf` 模板 + `README.md`，并打包为压缩包 |
+| 构建脚本 | `tools/build-windows.bat`（双击即可跑）+ `tools/build-linux.sh`（供 Linux / 自动化使用） |
+| 「打包」环节 | **不存在**——Go 只有编译（不像 PyInstaller 还要捆绑运行时）。脚本三步：编译 → 组发布目录 → 压缩 |
+| 版本号来源 | 从 `CHANGELOG.md` 取首个非「待定」的版本号；取不到则用日期 |
+
+**需同步调整 D27**：构建脚本是项目资产（他人 clone 后要能自行构建），故白名单**放行 `tools/build-*`**；`tools/` 下的其余内容仍不追踪。
+
+> **落笔时机**：构建脚本建议在 **M1 收尾时**就写——那时已有可编译的骨架，能立刻验证双平台交叉编译是否通。不要拖到 M6 才发现交叉编译有问题。
+
 ---
 
 ## 八、迁移影响（对使用者）
@@ -321,4 +337,4 @@ README 既有用法写的是 `~/.MyPW/pw.txt`（受 `~` 展开，两版一致）
 
 ## 十、待定
 
-- M6 的打包方式与产物命名（交叉编译目标、`release/` 目录结构）
+无。六期（M1–M6）决策点已全部裁定。
