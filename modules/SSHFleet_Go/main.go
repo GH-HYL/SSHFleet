@@ -13,6 +13,7 @@ import (
 
 	"sshfleet/internal/batch"
 	"sshfleet/internal/cli"
+	"sshfleet/internal/common"
 	"sshfleet/internal/config"
 	"sshfleet/internal/confirm"
 	"sshfleet/internal/credential"
@@ -27,7 +28,11 @@ import (
 const configPath = "./config/SSHFleet.conf"
 
 // fatal 打印致命错误并退出（退出码 1）。main 独占退出权的唯一出口。
+// 交互取消（ErrCancelled）的文案已由交互器打印，此处只退出不再附加前缀。
 func fatal(where string, err error) {
+	if errors.Is(err, common.ErrCancelled) {
+		os.Exit(1)
+	}
 	fmt.Fprintf(os.Stderr, "[ERROR] [function:%s] %s\n", where, err)
 	os.Exit(1)
 }
@@ -59,11 +64,14 @@ func main() {
 	}
 	logger.Success(fmt.Sprintf("参数解析成功，解析结果：%+v", args))
 
+	// 交互器：全工具唯一的用户交互入口（In/Out 注入 + 非交互标志）
+	in := common.NewInteractor(args.Disinteractive)
+
 	// ---- 步骤 4：工具模式分流（keygen / convert-password）-------------
 	// 独立工具与批量执行解耦，处理完直接退出，不进入后续步骤。
 	if args.GenKey {
 		logger.Info("进入密钥管理模式（--gen-key）")
-		if err := credential.GenKey(args.Disinteractive); err != nil {
+		if err := credential.GenKey(in); err != nil {
 			fatal("credential", err)
 		}
 		return
@@ -90,14 +98,14 @@ func main() {
 	logger.Success("危险关键词内容检查成功")
 
 	// ---- 步骤 6：读取清单 + 字段补全 + 输入记忆 ------------------------
-	nodes, err := nodelist.Read(args, cfg)
+	nodes, err := nodelist.Read(args, cfg, in)
 	if err != nil {
 		fatal("nodelist", err)
 	}
 	logger.Success("读取节点信息成功")
 
 	// ---- 步骤 7：参数确认（交互） --------------------------------------
-	if err := confirm.Confirm(args, nodes, cfg); err != nil {
+	if err := confirm.Confirm(args, nodes, cfg, logger, in); err != nil {
 		fatal("confirm", err)
 	}
 
