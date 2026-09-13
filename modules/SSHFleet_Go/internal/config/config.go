@@ -3,7 +3,7 @@
 // 字段基准 = 旧 YAML 配置；与旧实现不同的部分见 spec D6 / D28 / D31：
 //   - 删 paths.exe 段；keywords/logs/files 三段两层并入单段 [paths]
 //   - password_security 为 int，仅允许 1/2/3
-//   - 超时值与开关类给默认值（10/60/300/true），账号类（port/user/secret_dir/password）必填
+//   - **所有字段必填、全工具不写死任何默认值**（用户 2026-09-14 裁定）：缺字段与非法取值都在此报错
 //   - 未知字段零容忍：解码后取未识别键，报错列出具体键名
 //   - 路径解析一条规则：去首尾空白 → ~ 展开 → 绝对则原样 → 相对则拼 secret_dir
 package config
@@ -15,14 +15,6 @@ import (
 	"strings"
 
 	"github.com/BurntSushi/toml"
-)
-
-// 超时与开关的默认值（spec D6）。其余字段一律必填，缺一即报错。
-const (
-	defaultTimeoutConnect   = 10
-	defaultTimeoutExecute   = 60
-	defaultTimeoutTransfer  = 300
-	defaultPasswordSecurity = 2
 )
 
 type Account struct {
@@ -100,7 +92,6 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("配置包含未识别字段：%s", strings.Join(keys, ", "))
 	}
 
-	applyDefaults(&cfg, md)
 	if err := validate(&cfg, md); err != nil {
 		return nil, err
 	}
@@ -110,29 +101,9 @@ func Load(path string) (*Config, error) {
 	return &cfg, nil
 }
 
-// applyDefaults 按已定义性补默认值；未被 md 覆盖的字段视为未写。
-func applyDefaults(cfg *Config, md toml.MetaData) {
-	if !md.IsDefined("execution", "timeout_connect") {
-		cfg.Execution.TimeoutConnect = defaultTimeoutConnect
-	}
-	if !md.IsDefined("execution", "timeout_execute") {
-		cfg.Execution.TimeoutExecute = defaultTimeoutExecute
-	}
-	if !md.IsDefined("execution", "timeout_transfer") {
-		cfg.Execution.TimeoutTransfer = defaultTimeoutTransfer
-	}
-	if !md.IsDefined("enable", "output_to_xlsx") {
-		cfg.Enable.OutputToXlsx = true
-	}
-	if !md.IsDefined("enable", "results_to_xlsx") {
-		cfg.Enable.ResultsToXlsx = true
-	}
-	if !md.IsDefined("account", "password_security") {
-		cfg.Account.PasswordSecurity = defaultPasswordSecurity
-	}
-}
-
-// validate 必填性检查与取值校验。缺项一次列全，不让用户逐轮试错。
+// validate 配置预检查：必填性（所有字段） + 取值合规性。
+// 用户 2026-09-14 裁定：全工具不写死任何默认值——预检查通过即代表配置自足，
+// 运行期一律取配置里的值。缺项一次列全，取值逐项校验并指出非法值。
 func validate(cfg *Config, md toml.MetaData) error {
 	required := []struct {
 		key string
@@ -140,9 +111,17 @@ func validate(cfg *Config, md toml.MetaData) error {
 	}{
 		{"account.port", definedInt(md, "account", "port")},
 		{"account.user", definedStr(md, "account", "user")},
+		{"account.password_security", definedInt(md, "account", "password_security")},
 		{"account.secret_dir", definedStr(md, "account", "secret_dir")},
 		{"account.password", definedStr(md, "account", "password")},
+		{"account.key", definedStr(md, "account", "key")},
+		{"account.key_passphrase", definedStr(md, "account", "key_passphrase")},
 		{"execution.mode", definedStr(md, "execution", "mode")},
+		{"execution.timeout_connect", definedInt(md, "execution", "timeout_connect")},
+		{"execution.timeout_execute", definedInt(md, "execution", "timeout_execute")},
+		{"execution.timeout_transfer", definedInt(md, "execution", "timeout_transfer")},
+		{"enable.output_to_xlsx", definedStr(md, "enable", "output_to_xlsx")},
+		{"enable.results_to_xlsx", definedStr(md, "enable", "results_to_xlsx")},
 		{"paths.error_keywords", definedStr(md, "paths", "error_keywords")},
 		{"paths.dangerous_keywords", definedStr(md, "paths", "dangerous_keywords")},
 		{"paths.historys", definedStr(md, "paths", "historys")},
@@ -167,8 +146,37 @@ func validate(cfg *Config, md toml.MetaData) error {
 		return fmt.Errorf("配置缺少必填字段：%s", strings.Join(missing, ", "))
 	}
 
+	// 取值合规性（预检查通过即配置自足，运行期不再兜底）
+	if cfg.Account.Port < 1 || cfg.Account.Port > 65535 {
+		return fmt.Errorf("account.port 取值非法：%d（须为 1-65535）", cfg.Account.Port)
+	}
 	if cfg.Account.PasswordSecurity != 1 && cfg.Account.PasswordSecurity != 2 && cfg.Account.PasswordSecurity != 3 {
 		return fmt.Errorf("account.password_security 取值非法：%d（仅支持 1/2/3：1=明文，2=base64，3=加密）", cfg.Account.PasswordSecurity)
+	}
+	if cfg.Execution.Mode != "direct" && cfg.Execution.Mode != "sudo" {
+		return fmt.Errorf("execution.mode 取值非法：%s（仅支持 direct=登录用户 / sudo=root）", cfg.Execution.Mode)
+	}
+	for name, v := range map[string]int{
+		"execution.timeout_connect":  cfg.Execution.TimeoutConnect,
+		"execution.timeout_execute":  cfg.Execution.TimeoutExecute,
+		"execution.timeout_transfer": cfg.Execution.TimeoutTransfer,
+	} {
+		if v < 1 {
+			return fmt.Errorf("%s 取值非法：%d（须为正整数，单位秒）", name, v)
+		}
+	}
+	th := cfg.Upload.ConcurrencyThresholds
+	if th.SmallFile < 1 {
+		return fmt.Errorf("upload.concurrency_thresholds.small_file 取值非法：%d（须为正整数，单位字节）", th.SmallFile)
+	}
+	if th.LargeFile < 1 {
+		return fmt.Errorf("upload.concurrency_thresholds.large_file 取值非法：%d（须为正整数，单位字节）", th.LargeFile)
+	}
+	if th.LargeFile < th.SmallFile {
+		return fmt.Errorf("upload.concurrency_thresholds 取值非法：large_file(%d) 不能小于 small_file(%d)", th.LargeFile, th.SmallFile)
+	}
+	if th.MediumConcurrency < 1 {
+		return fmt.Errorf("upload.concurrency_thresholds.medium_concurrency 取值非法：%d（须为正整数）", th.MediumConcurrency)
 	}
 	return nil
 }
