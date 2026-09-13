@@ -46,6 +46,7 @@ func (c *Client) RunCommand(ctx context.Context, command, stdin string, seq int)
 		result.ConnectCostTime = time.Since(start).Seconds()
 		result.ConnectSuccess = false
 		result.Error = strPtr(err.Error())
+		result.AuthFailure = c.classifyAuthFailure(err)
 		return result
 	}
 	defer func() { _ = c.Close() }()

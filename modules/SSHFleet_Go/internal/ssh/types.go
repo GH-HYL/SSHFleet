@@ -31,6 +31,10 @@ type Result struct {
 	ExecCostTime    float64
 	Error           *string
 
+	// AuthFailure 认证失败分类：仅当「私钥与密码都配置且都尝试、且都失败」时置位
+	//（文案「密钥与密码均失败」）。单一凭据失败或非认证类错误保持 nil，按原文报错。
+	AuthFailure *string
+
 	// 传输类字段（命令模式下为零值）
 	TotalBytes   int64
 	TotalFiles   int

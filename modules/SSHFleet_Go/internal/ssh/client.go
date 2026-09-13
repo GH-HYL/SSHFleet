@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strings"
 	"time"
 
 	"golang.org/x/crypto/ssh"
@@ -19,6 +20,10 @@ const handshakeGrace = 2 * time.Second
 type Client struct {
 	cfg  *Config
 	conn *ssh.Client
+
+	// publicKeyOffered 本次连接是否真的把公钥认证挂进了认证列表
+	//（私钥解析失败会回退密码，此时不算「两种都试过」）
+	publicKeyOffered bool
 }
 
 func NewClient(cfg *Config) *Client { return &Client{cfg: cfg} }
@@ -93,9 +98,10 @@ func (c *Client) buildAuthMethods() ([]ssh.AuthMethod, error) {
 			if c.cfg.Password == "" {
 				return nil, fmt.Errorf("解析密钥失败 - %w", err)
 			}
-			// 密钥解析失败但配了密码：回退密码认证（旧行为）
+			// 密钥解析失败但配了密码：回退密码认证（旧行为，不算「两种都试过」）
 		} else {
 			methods = append(methods, ssh.PublicKeys(signer))
+			c.publicKeyOffered = true
 		}
 	}
 
@@ -107,6 +113,20 @@ func (c *Client) buildAuthMethods() ([]ssh.AuthMethod, error) {
 		return nil, fmt.Errorf("未提供有效的认证方式（密码或密钥至少提供一种）")
 	}
 	return methods, nil
+}
+
+// classifyAuthFailure 认证失败分类：私钥与密码都试过且都失败时返回分类文案，其余返回 nil。
+// 说明：x/crypto/ssh 客户端在认证全失败时只给字符串
+// `ssh: unable to authenticate, attempted methods [...]`（*ssh.ServerAuthError 是服务端类型），
+// 故只能按该特征串判定。
+func (c *Client) classifyAuthFailure(err error) *string {
+	if err == nil || !c.publicKeyOffered || c.cfg.Password == "" {
+		return nil
+	}
+	if strings.Contains(err.Error(), "unable to authenticate") {
+		return strPtr("密钥与密码均失败")
+	}
+	return nil
 }
 
 // authMethodDesc 认证方式描述（日志口径与旧一致）。
