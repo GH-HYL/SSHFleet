@@ -6,10 +6,13 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
 
 	"sshfleet/internal/batch"
 	"sshfleet/internal/cli"
@@ -49,6 +52,7 @@ func main() {
 	if err != nil {
 		fatal("log", fmt.Errorf("初始化工具日志失败：%v\n请检查配置 paths.historys 指向的日志目录是否存在且可写，然后重试", err))
 	}
+	defer func() { _ = logger.Close() }()
 	logger.Info("SSHFleet工具开始执行")
 	logger.Info(fmt.Sprintf("工作路径：%s", func() string { wd, _ := os.Getwd(); return wd }()))
 	logger.Info(fmt.Sprintf("原始命令行参数：%v", os.Args))
@@ -110,9 +114,17 @@ func main() {
 	}
 
 	// ---- 步骤 8：并发执行 SSH / SFTP + 进度聚合 ------------------------
-	execResults, err := batch.Run(args, cfg, nodes, logger)
+	// 中断：信号 → 取消 context → worker 停止启动新任务；已完成的节点结果照常进入后续整理
+	execCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	execResults, err := batch.Run(execCtx, args, cfg, nodes, logger, output.ProgressRenderer(os.Stdout))
 	if err != nil {
 		fatal("batch", err)
+	}
+	if execCtx.Err() != nil {
+		fmt.Println("已收到中断信号，SSHFleet 停止执行（已完成节点的结果已写入日志/输出文件）")
+		logger.Warn("收到中断信号，执行已停止")
 	}
 	// ---- 步骤 9：结果统计 + 错误分类 -----------------------------------
 	stats, err := result.Statistics(execResults, nodes, args)
