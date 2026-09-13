@@ -114,10 +114,8 @@ func resolvePort(raw string, defaultPort int, mem *FieldMemory, idx, total int, 
 		}
 		return v, nil
 	}
+	// 配置预检查已保证 account.port ∈ [1,65535]（D43：无写死默认值，取值在启动时报错）
 	if defaultPort != 0 {
-		if defaultPort < 1 || defaultPort > 65535 {
-			return 0, []string{"配置文件中的默认端口格式错误"}
-		}
 		return defaultPort, nil
 	}
 	if mem.portUseInput {
@@ -197,17 +195,18 @@ func resolveUser(raw, defaultUser string, mem *FieldMemory, idx, total int, ip s
 	return val
 }
 
-// resolvePassword 密码字段补全：CSV > config > 密钥认证 > 输入记忆 > 交互输入。
+// resolvePassword 密码字段补全：清单密码列 > 密钥认证（有私钥则空）> 配置默认密码 > 输入记忆 > 交互输入。
 // 解码值取自预检结果（读→校验→直接用，不再读盘）。
+// 注：私钥节点密码恒为空，不受其他节点是否使用默认密码影响（避免混合清单里的状态泄漏）。
 func resolvePassword(pre *precheckResult, cfg *config.Config, mem *FieldMemory, idx, total int, ip string, disinteractive bool, in *common.Interactor) string {
 	if pre.rows[idx-1].passwordPlain != "" {
 		return pre.rows[idx-1].passwordPlain
 	}
-	if pre.defaultPasswordPlain != "" {
-		return pre.defaultPasswordPlain
-	}
 	if pre.rows[idx-1].hasKey {
 		return ""
+	}
+	if pre.defaultPasswordPlain != "" {
+		return pre.defaultPasswordPlain
 	}
 	if mem.passwordUseInput {
 		return mem.passwordInputValue
