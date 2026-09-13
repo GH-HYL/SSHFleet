@@ -73,7 +73,18 @@ func (c *fileCore) Write(ent zapcore.Entry, _ []zapcore.Field) error {
 func (c *fileCore) Sync() error { return c.ws.Sync() }
 
 // Logger 是全工具唯一的日志入口；由 main 注入给需要的环节。
-type Logger struct{ l *zap.SugaredLogger }
+type Logger struct {
+	l      *zap.SugaredLogger
+	rotate *lumberjack.Logger
+}
+
+// Close 关闭日志落盘（进程退出前的收尾；幂等）。
+func (lg *Logger) Close() error {
+	if lg.rotate == nil {
+		return nil
+	}
+	return lg.rotate.Close()
+}
 
 func (lg *Logger) Debug(args ...any)   { lg.l.Debug(args...) }
 func (lg *Logger) Info(args ...any)    { lg.l.Info(args...) }
@@ -91,5 +102,5 @@ func Init(historys, toolFile string) (*Logger, error) {
 		MaxSize:  50, // MB
 	}
 	core := &fileCore{ws: zapcore.AddSync(rotate)}
-	return &Logger{l: zap.New(core).Sugar()}, nil
+	return &Logger{l: zap.New(core).Sugar(), rotate: rotate}, nil
 }
