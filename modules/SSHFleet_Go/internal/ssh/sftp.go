@@ -32,6 +32,7 @@ func (c *Client) UploadFiles(ctx context.Context, files []LocalFile, remotePath 
 		result.ConnectCostTime = time.Since(start).Seconds()
 		result.FailedFiles = len(files)
 		result.Error = strPtr(err.Error())
+		result.AuthFailure = c.classifyAuthFailure(err)
 		return result
 	}
 	defer func() { _ = c.Close() }()
@@ -186,6 +187,7 @@ func (c *Client) DownloadFiles(ctx context.Context, remotePath, localPath string
 	if err := c.Connect(ctx); err != nil {
 		result.ConnectCostTime = time.Since(start).Seconds()
 		result.Error = strPtr(err.Error())
+		result.AuthFailure = c.classifyAuthFailure(err)
 		return result
 	}
 	defer func() { _ = c.Close() }()
