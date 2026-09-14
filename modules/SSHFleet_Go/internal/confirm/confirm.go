@@ -19,6 +19,17 @@ import (
 	"sshfleet/internal/nodelist"
 )
 
+// ANSI 配色（对位旧 constants.py：横幅青 / 字段名亮青 / 值亮橙 / 确认亮黄 / 取消与提示黄）。
+const (
+	colorReset        = "\x1b[0m"
+	colorCyan         = "\x1b[36m"
+	colorYellow       = "\x1b[33m"
+	colorBlue         = "\x1b[34m"
+	colorBrightYellow = "\x1b[93m"
+	colorBrightCyan   = "\x1b[96m"
+	colorBrightOrange = "\x1b[38;5;214m"
+)
+
 // Confirm 主干第 7 步入口。
 func Confirm(args *cli.Args, nodes *nodelist.Nodes, cfg *config.Config, logger *log.Logger, in *common.Interactor) error {
 	// 上传并发建议（y 用建议值，n 保留原值继续执行，不退出）；取消错误向上传播
@@ -33,7 +44,7 @@ func Confirm(args *cli.Args, nodes *nodelist.Nodes, cfg *config.Config, logger *
 
 	// 非交互模式：显式跳过确认，直接执行
 	if in.Disinteractive {
-		fmt.Printf(" [非交互模式] 跳过执行参数确认环节，直接执行\n\n")
+		fmt.Printf("%s [非交互模式] 跳过执行参数确认环节，直接执行%s\n\n", colorYellow, colorReset)
 		return nil
 	}
 
@@ -41,9 +52,9 @@ func Confirm(args *cli.Args, nodes *nodelist.Nodes, cfg *config.Config, logger *
 	title := "           SSHFleet - 执行参数确认           "
 	border := strings.Repeat("═", len([]rune(title))+10)
 
-	fmt.Printf("\n╔%s╗\n", border)
-	fmt.Printf("║  %s  ║\n", title)
-	fmt.Printf("╚%s╝\n\n", border)
+	fmt.Printf("\n%s╔%s╗%s\n", colorCyan, border, colorReset)
+	fmt.Printf("%s║  %s  ║%s\n", colorCyan, title, colorReset)
+	fmt.Printf("%s╚%s╝%s\n\n", colorCyan, border, colorReset)
 
 	printInfoTable(buildInfoTable(args, nodes))
 
@@ -54,16 +65,16 @@ func Confirm(args *cli.Args, nodes *nodelist.Nodes, cfg *config.Config, logger *
 	}
 
 	fmt.Println("\n" + strings.Repeat("═", 60))
-	confirmed, err := in.Confirm("\n是否执行上述参数？", true)
+	confirmed, err := in.Confirm("\n"+colorBrightYellow+"是否执行上述参数？"+colorReset, true)
 	if err != nil {
 		return err
 	}
 	if !confirmed {
-		fmt.Println("操作已取消")
+		fmt.Println(colorYellow + "操作已取消" + colorReset)
 		logger.Warn("执行已取消，SSHFleet工具已退出")
 		return common.ErrCancelled
 	}
-	fmt.Print("SSHFleet工具开始执行......\n")
+	fmt.Printf("SSHFleet工具%s开始执行%s......\n", colorBlue, colorReset)
 	fmt.Println(strings.Repeat("=", 50))
 	return nil
 }
@@ -118,7 +129,7 @@ func printInfoTable(table [][2]string) {
 			continue
 		}
 		label := r[0] + strings.Repeat(" ", maxLabelWidth-lipgloss.Width(r[0]))
-		fmt.Printf("▶ %s-→   %s\n", label, r[1])
+		fmt.Printf("%s▶ %s-→%s   %s%s%s\n", colorBrightCyan, label, colorReset, colorBrightOrange, r[1], colorReset)
 	}
 }
 
@@ -137,7 +148,7 @@ func checkUploadConcurrency(args *cli.Args, cfg *config.Config, in *common.Inter
 	if allowed == 0 {
 		return nil
 	}
-	fmt.Printf("上传文件总大小 %s，建议并发数为 %d\n", formatSize(size), allowed)
+	fmt.Printf("%s上传文件总大小 %s，建议并发数为 %d%s\n", colorYellow, formatSize(size), allowed, colorReset)
 	yes, err := in.Confirm(fmt.Sprintf("是否使用建议并发数 %d ？", allowed), true)
 	if err != nil {
 		// EOF/取消：对位旧 get_user_confirmation 直接取消退出；不在子模块内自行
@@ -154,7 +165,7 @@ func checkUploadConcurrency(args *cli.Args, cfg *config.Config, in *common.Inter
 // showUploadContent 显示上传文件/目录内容（一层树，与旧版一致）。
 // 读取失败返回错误交由 main 统一退出——不在子模块内自行 os.Exit（2026-09-14 审计修复）。
 func showUploadContent(uPath string) error {
-	fmt.Printf("\n📁 上传文件/目录内容 (-u 参数):\n")
+	fmt.Printf("\n%s📁 上传文件/目录内容 (-u 参数):%s\n", colorYellow, colorReset)
 	info, err := os.Stat(uPath)
 	if err != nil {
 		return fmt.Errorf("无法解析上传路径内容：%v\n请检查 -u 指定的路径是否存在且可访问", err)

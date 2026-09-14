@@ -15,6 +15,13 @@ import (
 // （取消文案由交互器自己打印，对位旧 interaction 模块的行为）。
 var ErrCancelled = errors.New("用户取消输入")
 
+// 取消提示与 yes/no 掐示的配色（对位旧 constants.py / interaction.py：提示红、取消黄）。
+const (
+	colorReset  = "\x1b[0m"
+	colorRed    = "\x1b[31m"
+	colorYellow = "\x1b[33m"
+)
+
 // Interactor 是全工具唯一的用户交互入口（需注入依赖的类型，spec D32 条件 4）。
 // 归属 internal/common：nodelist（字段补全交互）与 confirm（参数确认）两个功能目录
 // 共用，且自身不持有状态——In/Out 为注入依赖。
@@ -35,7 +42,7 @@ func (i *Interactor) Prompt(prompt string) (string, error) {
 	fmt.Fprint(i.Out, prompt)
 	line, ok := i.readLine()
 	if !ok {
-		fmt.Fprint(i.Out, "\n用户取消输入\n")
+		fmt.Fprint(i.Out, "\n"+colorYellow+"用户取消输入"+colorReset+"\n")
 		return "", ErrCancelled
 	}
 	return line, nil
@@ -49,7 +56,7 @@ func (i *Interactor) PromptPassword(prompt string) (string, error) {
 		raw, err := term.ReadPassword(int(os.Stdin.Fd()))
 		fmt.Fprint(i.Out, "\n")
 		if err != nil {
-			fmt.Fprint(i.Out, "用户取消输入\n")
+			fmt.Fprint(i.Out, colorYellow+"用户取消输入"+colorReset+"\n")
 			return "", ErrCancelled
 		}
 		return string(raw), nil
@@ -65,14 +72,14 @@ func (i *Interactor) Confirm(prompt string, defaultYes bool) (bool, error) {
 	if i.Disinteractive {
 		return true, nil
 	}
-	hint := "[y/N]"
+	hint := colorRed + "[y/N]" + colorReset
 	if defaultYes {
-		hint = "[Y/n]"
+		hint = colorRed + "[Y/n]" + colorReset
 	}
 	fmt.Fprintf(i.Out, "%s %s: ", prompt, hint)
 	line, ok := i.readLine()
 	if !ok {
-		fmt.Fprint(i.Out, "\n输入结束，操作已取消\n")
+		fmt.Fprint(i.Out, "\n"+colorYellow+"输入结束，操作已取消"+colorReset+"\n")
 		return false, ErrCancelled
 	}
 	line = strings.ToLower(strings.TrimSpace(line))

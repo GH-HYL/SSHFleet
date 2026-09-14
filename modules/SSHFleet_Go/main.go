@@ -9,9 +9,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sync"
 	"syscall"
 	"time"
 
@@ -29,8 +31,18 @@ import (
 	"sshfleet/internal/ssh"
 )
 
+// 版本号：单一出处（显示在帮助信息首行下方，经 cli.Parse 传入 Usage）。
+const appVersion = "5.0.0"
+
 // 配置文件位置：基准为当前工作目录（spec D28）。
 const configPath = "./config/SSHFleet.conf"
+
+// 危险命令确认提示与 [ERROR] 前缀的配色（对位旧 constants.py / error_handler.py）。
+const (
+	colorReset  = "\x1b[0m"
+	colorRed    = "\x1b[31m"
+	colorYellow = "\x1b[33m"
+)
 
 // fatal 打印致命错误并退出（退出码 1）。main 独占退出权的唯一出口。
 // 交互取消（ErrCancelled）的文案已由交互器打印，此处只退出不再附加前缀。
@@ -38,7 +50,7 @@ func fatal(where string, err error) {
 	if errors.Is(err, common.ErrCancelled) {
 		os.Exit(1)
 	}
-	fmt.Fprintf(os.Stderr, "[ERROR] [function:%s] %s\n", where, err)
+	fmt.Fprintf(os.Stderr, "%s[ERROR]%s%s [function:%s]%s %s\n", colorRed, colorReset, colorYellow, where, colorReset, err)
 	os.Exit(1)
 }
 
@@ -69,7 +81,7 @@ func main() {
 	logger.Info(fmt.Sprintf("日志目录：%s，工具日志文件名：%s", cfg.Paths.Historys, cfg.Paths.Tool))
 
 	// ---- 步骤 3：解析命令行 ------------------------------------------
-	args, err := cli.Parse(cfg, os.Args[1:])
+	args, err := cli.Parse(cfg, appVersion, os.Args[1:])
 	if err != nil {
 		if errors.Is(err, cli.ErrHelp) {
 			return // 帮助已打印，以 0 退出
@@ -135,12 +147,12 @@ func main() {
 		logger.Warn(dangerNote)
 	case len(dangerReport.Matches) > 0:
 		output.PrintDangerWarning(dangerReport, false)
-		confirmed, cerr := in.Confirm("\n已明确风险继续执行？", false)
+		confirmed, cerr := in.Confirm("\n"+colorYellow+"已明确风险继续执行？"+colorReset, false)
 		if cerr != nil {
 			fatal("dangercheck", cerr)
 		}
 		if !confirmed {
-			fmt.Println("操作已取消")
+			fmt.Println(colorYellow + "操作已取消" + colorReset)
 			logger.Warn("执行已取消，SSHFleet工具已退出")
 			// 取消属非致命终止：与 confirm 确认取消同语义，以退出码 1 结束（2026-09-14 裁定，
 			// 对齐旧版 dangerous.py 取消即 sys.exit(1) 的行为）。fatal 对 ErrCancelled
@@ -205,19 +217,40 @@ func main() {
 
 	// 进度界面延迟到首个进度事件才创建：采集期提示（如上传源中被过滤的软链接）
 	// 得以先落到终端，不会被进度条的光标上移重绘覆盖（用户 2026-09-14 裁定）。
-	var ui *output.ProgressUI
+	// 界面创建后，运行期提示与单条结果改从界面上方打印（对位旧 rich Live：
+	// 上部滚动输出、下部进度条，两块区域互不覆盖）。
+	var (
+		uiMutex sync.Mutex
+		ui      *output.ProgressUI
+	)
+	printAbove := func(text string) {
+		uiMutex.Lock()
+		defer uiMutex.Unlock()
+		if ui != nil {
+			ui.PrintAbove(text)
+			return
+		}
+		fmt.Fprintln(os.Stdout, text)
+	}
 	execResults, err := batch.Run(execCtx, args, cfg, nodes, logger, batch.Hooks{
-		OnNotice: func(msg string) { fmt.Fprintln(os.Stdout, msg) },
+		OnNotice: printAbove,
 		OnProgress: func(s batch.Snapshot) {
+			uiMutex.Lock()
 			if ui == nil {
 				ui = output.NewProgressUI(os.Stdout, mode, nodes.Len())
 			}
+			uiMutex.Unlock()
 			ui.Update(s)
 		},
 		OnResult: func(r ssh.Result) {
 			category := categoryOf(r)
-			_ = output.PrintResult(os.Stdout, outputFile, r, mode, category)
-			_ = archive.ExecLog("%s", output.ResultLine(r, mode, category))
+			line := output.ResultLine(r, mode, category)
+			// 终端明细改经 printAbove（进度界面上方），PrintResult 只负责 output.txt
+			_ = output.PrintResult(io.Discard, outputFile, r, mode, category)
+			if mode == "execute" {
+				printAbove(line)
+			}
+			_ = archive.ExecLog("%s", line)
 		},
 	})
 	if ui != nil {
