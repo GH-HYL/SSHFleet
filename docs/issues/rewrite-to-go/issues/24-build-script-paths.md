@@ -39,6 +39,8 @@ Blocked by: 23
 
 `.gitignore` 白名单的 `!modules/**` 会连带放行 `modules/build/`（正是缺陷一被误入库的机制），补一条显式排除。
 
+提交时 git 报出「LF will be replaced by CRLF」——本机 `core.autocrlf=true` 来自 Git for Windows 的**系统级默认**（`C:/Program Files/Git/etc/gitconfig`），checkout 时会把 `build-linux.sh` 变成 CRLF，而它存在的唯一目的就是供 Linux / 自动化使用（Linux 与 Git Bash 都会因 `bash\r` 失败）。故新增 `.gitattributes` 把换行符按用途固定：`.sh` 强制 LF、`.bat` 强制 CRLF。已核对：仓库内 `build-windows.bat` 的 UTF-8 BOM（`EF BB BF`）完好保存（BOM 属内容，不受换行符规范化影响）。
+
 ## 验证
 
 - `gofmt -l .` 空；`go vet ./...` 无输出

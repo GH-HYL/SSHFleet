@@ -1,0 +1,21 @@
+# 换行符按文件用途固定，不随各人的 core.autocrlf 漂移
+#
+# 背景：Git for Windows 的系统默认 core.autocrlf=true，checkout 时会把索引里的 LF
+# 变成工作区的 CRLF。后果：
+#   - build-linux.sh 拿到 CRLF 后，Linux 与 Git Bash 都会因 `bash\r` 直接失败
+#     （这个脚本存在的唯一目的就是供 Linux / 自动化使用）
+#   - build-windows.bat 相反需要 CRLF（cmd 解析批处理），且首字节必须是 UTF-8 BOM
+#     ——BOM 属内容，不受本文件影响，已随提交保存（见工单 06）
+
+* text=auto
+
+.gitattributes text eol=lf
+*.sh    text eol=lf
+*.bat   text eol=crlf
+*.go    text eol=lf
+*.md    text eol=lf
+*.toml  text eol=lf
+*.tsv   text eol=lf
+*.conf  text eol=lf
+*.yaml  text eol=lf
+*.yml   text eol=lf
