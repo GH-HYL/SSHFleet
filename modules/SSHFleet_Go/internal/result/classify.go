@@ -107,7 +107,18 @@ func truncate(text string) string {
 	if len(text) <= fallbackMaxLen {
 		return text
 	}
-	return text[:fallbackMaxLen] + "…"
+	// 按 rune 截断：按字节切会把多字节字符切成无效 UTF-8（2026-09-14 审计修复）
+	r := []rune(text)
+	out := make([]rune, 0, fallbackMaxLen)
+	count := 0
+	for _, c := range r {
+		if count >= fallbackMaxLen {
+			break
+		}
+		out = append(out, c)
+		count++
+	}
+	return string(out) + "…"
 }
 
 func itoa(v int) string {

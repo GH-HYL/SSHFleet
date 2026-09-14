@@ -214,10 +214,10 @@ func (c *Client) DownloadFiles(ctx context.Context, remotePath, localPath string
 
 	effectiveSudo := useSudo && c.cfg.User != "root"
 
-	// 远程路径预检（sudo 时用 sudo test）
-	checkCmd := fmt.Sprintf("test -e '%s'", remotePath)
+	// 远程路径预检（sudo 时用 sudo test）；单引号转义与 find/mv 同口径（2026-09-14 审计修复）
+	checkCmd := fmt.Sprintf("test -e '%s'", escapeShellArg(remotePath))
 	if effectiveSudo {
-		checkCmd = fmt.Sprintf("sudo test -e '%s'", remotePath)
+		checkCmd = fmt.Sprintf("sudo test -e '%s'", escapeShellArg(remotePath))
 	}
 	if err := c.runCommand(checkCmd); err != nil {
 		result.ExitCode = extractExitCode(err)
