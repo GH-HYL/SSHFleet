@@ -321,12 +321,16 @@ README 既有用法写的是 `~/.MyPW/pw.txt`（受 `~` 展开，两版一致）
 | 目标平台 | **双平台**：`windows/amd64` + `linux/amd64` |
 | 编译产物名 | `SSHFleet`（Windows 为 `SSHFleet.exe`） |
 | 编译输出 | 工作区根 `build/`（构建中间产物） |
-| 发布目录 | 工作区根 `release/SSHFleet_<版本>_<平台>/`，内含可执行文件 + `config/SSHFleet.conf` 模板 + `README.md`，并打包为压缩包 |
-| 构建脚本 | 工作区根 `build-windows.bat`（双击即可跑，UTF-8 带 BOM + CRLF，`chcp 65001`）+ `build-linux.sh`（供 Linux / 自动化使用）。**置于工作区根、不放 tools/**（用户 2026-09-11 指定） |
+| 发布目录 | 工作区根 `release/SSHFleet_<版本>_<平台>/`，内含可执行文件 + `README.md` + `config/`。**config/ 里除 `SSHFleet.conf` 模板外还必须带两个规则文件**（`dangerous_keywords.toml`、`error_keywords.toml`）——原表漏列，而缺了它们工具根本起不来（配置的 `paths.*` 指向它们）；2026-09-14 补齐。压缩包与目录同级 |
+| 压缩格式 | **分平台惯例**（用户 2026-09-14 裁定）：Windows `.zip`（用 Windows 10 1803+ 自带的 `tar.exe`）、Linux `.tar.gz`（GNU tar，能保住执行权限）。**各平台的包在各自平台打**：实测 Windows 的 bsdtar 打出的 tar.gz 里 Linux 二进制是 `-rw-rw-rw-`（丢了执行权限），故不做交叉打包 |
+| 构建脚本 | 工作区根 `build-windows.bat`（双击即可跑，UTF-8 带 BOM + CRLF，`chcp 65001`）+ `build-linux.sh`（供 Linux / 自动化使用）。**置于工作区根、不放 tools/**（用户 2026-09-11 指定）。**带 `release` 参数**时额外组装发布目录并压缩；不带参数只编译（用户 2026-09-14 裁定：用现有脚本加参数，不新增文件、不动白名单） |
 
 > **目录层级提醒**：`tools/` / `build/` / `release/` 都是**工作区级**目录（工作区根下），**不在工程内**。工程只有 `modules/SSHFleet_Go/` 下的 `main.go` + `internal/` + `config/`。见 `个人开发规范.md` §一。
 | 「打包」环节 | **不存在**——Go 只有编译（不像 PyInstaller 还要捆绑运行时）。脚本三步：编译 → 组发布目录 → 压缩 |
-| 版本号来源 | 从 `CHANGELOG.md` 取首个非「待定」的版本号；取不到则用日期 |
+| 版本号来源 | 从 `CHANGELOG.md` 顶部取第一个形如 `## [x.y.z]` 的正式版本号（「待定」自然被跳过）；取不到则用当天日期 |
+| CHANGELOG | 从 **5.0.0** 起，于 2026-09-14 当日定版（重写起始日为 2026-09-11，满足个人规范「至少次日后才可定版」）；内容基线是旧版 4.2.4，旧仓库未发布的那条「待定」并入 5.0.0（用户 2026-09-14 裁定：不定「待定」） |
+| README 定位 | **面向全新安装的完整手册**，结构参考旧 README（九章 + 附录）；**不写升级/迁移内容**——重构带来的变化由 `CHANGELOG.md` 承担（用户 2026-09-14 裁定） |
+| 发布包的配置模板 | 沿用仓库内 `modules/SSHFleet_Go/config/SSHFleet.conf` 现有内容（含作者环境的默认值），不改中性模板、不新增文件（用户 2026-09-14 裁定）。因此 README 的安装一节需提示：配置里 `password_security = 3` 时首次使用要先 `--gen-key` |
 
 **需同步调整 D27**：构建脚本是项目资产（他人 clone 后要能自行构建），故白名单**放行根目录 `build-windows.bat` / `build-linux.sh`**；`tools/` 全部不追踪。
 
