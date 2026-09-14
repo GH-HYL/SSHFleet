@@ -86,11 +86,14 @@ func (lg *Logger) Close() error {
 	return lg.rotate.Close()
 }
 
-func (lg *Logger) Debug(args ...any)   { lg.l.Debug(args...) }
-func (lg *Logger) Info(args ...any)    { lg.l.Info(args...) }
+// 级别一律经本包自定义常量下发：zap 标准级别的数值与「SUCCESS 夹在 INFO 与 WARNING 之间」
+// 的旧口径撞号（zap 的 Warn=1、Error=2 会被渲染成 SUCCESS / WARNING），故不能用
+// SugaredLogger 的标准方法，统一走 Log(自定义级别, …)。
+func (lg *Logger) Debug(args ...any)   { lg.l.Log(LevelDebug, args...) }
+func (lg *Logger) Info(args ...any)    { lg.l.Log(LevelInfo, args...) }
 func (lg *Logger) Success(args ...any) { lg.l.Log(LevelSuccess, args...) }
-func (lg *Logger) Warn(args ...any)    { lg.l.Warn(args...) }
-func (lg *Logger) Error(args ...any)   { lg.l.Error(args...) }
+func (lg *Logger) Warn(args ...any)    { lg.l.Log(LevelWarn, args...) }
+func (lg *Logger) Error(args ...any)   { lg.l.Log(LevelError, args...) }
 
 // Init 创建 historys 目录并初始化工具日志（50MB 轮转，历史文件全保留）。
 func Init(historys, toolFile string) (*Logger, error) {

@@ -1,0 +1,230 @@
+# ============================================================
+# 错误分类关键词映射（TOML 版；分类顺序与关键词自旧 YAML 一字未改，spec D11）
+# ------------------------------------------------------------
+# 匹配顺序：自上而下遍历，取第一个命中的分类。因此"泛词"分类（如 permission denied）
+# 要排在"强特征"分类之后，否则会抢先命中，把具体原因盖掉。
+#
+# 通配符只有星号 *，含义是"任意长度的内容（可以为空）"：
+# 按片段顺序出现即可命中，不要求从头开始、到尾结束，片段之间也不要求相邻。
+# * 之外的符号（. ? [] ^ $ \d 等）一律按普通字符处理。
+# 不带 * 的关键词就是普通子串包含匹配（大小写不敏感）。
+#
+# 关键词用 TOML 字面字符串（单引号）书写，避免 \ 与 : 的转义歧义。
+# ============================================================
+
+
+[[categories]]
+name = '网络不可达'
+keywords = [
+    'no route to host',
+    'network is unreachable',
+    'host is unreachable',
+    'network unreachable',
+    '目标主机不可达',
+    '无法访问目标主机',
+    '无路由到主机',
+]
+
+[[categories]]
+name = '握手超时'
+keywords = [
+    '握手超时',
+]
+
+[[categories]]
+name = '密钥不匹配'
+keywords = [
+    '[none publickey]',
+]
+
+[[categories]]
+name = '密钥解析失败'
+keywords = [
+    '解析密钥失败',
+]
+
+[[categories]]
+name = '密码过期'
+keywords = [
+    'password expired',
+    'change your password now',
+    'has expired',
+    '密码过期',
+]
+
+[[categories]]
+name = '连接超时'
+keywords = [
+    '连接超时',
+    'connect timeout',
+    'connection timeout',
+    'authentication timeout',
+    'i/o timeout',
+]
+
+[[categories]]
+name = '资源耗尽'
+keywords = [
+    'too many open files',
+]
+
+[[categories]]
+name = '执行超时'
+keywords = [
+    '命令执行超时',
+]
+
+[[categories]]
+name = '任务已取消'
+keywords = [
+    'context canceled',
+]
+
+[[categories]]
+name = '连接中断'
+keywords = [
+    'connection lost',
+    'connection closed',
+    'disconnected',
+    'broken pipe',
+    'socket closed',
+    '连接中断',
+    '连接已断开',
+    '管道破裂',
+]
+
+[[categories]]
+name = '拒绝网络连接'
+keywords = [
+    'connection refused',
+    'connection reset',
+    'refused',
+    'connect refused',
+    '拒绝连接',
+    '连接被拒绝',
+    '拒绝网络连接',
+    'conn refused',
+    'reset by peer',
+]
+
+[[categories]]
+name = '身份验证失败'
+keywords = [
+    'authentication failed',
+    'unable to authenticate',
+    'password not accepted',
+    'access denied',
+    'permission denied (publickey',
+    'permission denied (password',
+    'permission denied (keyboard',
+    '认证失败',
+    '密码错误',
+    '身份验证失败',
+    'auth failed',
+]
+
+[[categories]]
+name = '命令执行请求被拒'
+keywords = [
+    'ssh: command * failed',
+    'ssh: could not start shell',
+]
+
+[[categories]]
+name = '会话创建失败'
+keywords = [
+    '创建会话失败',
+]
+
+[[categories]]
+name = '会话中断未返回退出码'
+keywords = [
+    'remote command exited without exit status',
+]
+
+[[categories]]
+name = '权限不足'
+keywords = [
+    'permission denied',
+]
+
+[[categories]]
+name = 'DNS解析失败'
+keywords = [
+    'name or service not known',
+    'cannot resolve hostname',
+    'dns resolution failed',
+    'unknown host',
+    'hostname not found',
+    'DNS解析错误',
+    '域名解析失败',
+    '无法解析主机名',
+]
+
+[[categories]]
+name = 'SSH协议错误'
+keywords = [
+    'ssh protocol error',
+    'incompatible ssh version',
+    'ssh handshake failed',
+    'ssh: handshake failed: eof',
+    'protocol mismatch',
+    '协议错误',
+]
+
+[[categories]]
+name = '远程路径不存在'
+keywords = [
+    '远程目标路径不存在',
+    '不存在或不是目录',
+]
+
+[[categories]]
+name = '远程无文件'
+keywords = [
+    '远程目录为空',
+    '远程路径中没有可下载的文件',
+    '没有下载到任何文件',
+]
+
+[[categories]]
+name = '远程文件已存在'
+keywords = [
+    '文件已存在',
+    'already exists',
+]
+
+[[categories]]
+name = 'SFTP失败'
+keywords = [
+    '创建远程文件失败',
+    '写入远程文件失败',
+    '写入临时文件失败',
+    '创建临时目录失败',
+    '创建临时文件失败',
+    '打开远程文件失败',
+    'SFTP 客户端创建失败',
+]
+
+[[categories]]
+name = 'sudo失败'
+keywords = [
+    'sudo mv 失败',
+    'sudo权限',
+]
+
+[[categories]]
+name = '本地文件错误'
+keywords = [
+    '打开本地文件失败',
+    '读取本地文件权限失败',
+    '本地文件不存在或不可读',
+    '创建本地文件失败',
+    '写入本地文件失败',
+]
+
+[[categories]]
+name = '上传超时'
+keywords = [
+    '上传超时被取消',
+]
