@@ -24,9 +24,10 @@ const (
 	LevelError   = zapcore.Level(3)
 )
 
-// levelName 级别名居中补齐到 7 列（对位旧 loguru "{level: ^7}"）。
+// levelName 级别名左对齐补齐到 7 列（[INFO   ] / [SUCCESS]，各行括号与文本列对齐；
+// 旧 loguru 的居中写法「 INFO  」视觉上参差，用户 2026-09-14 裁定改左对齐）。
 func levelName(l zapcore.Level) string {
-	var name string
+	name := ""
 	switch l {
 	case LevelDebug:
 		name = "DEBUG"
@@ -41,16 +42,10 @@ func levelName(l zapcore.Level) string {
 	default:
 		name = l.CapitalString()
 	}
-	left := (7 - len(name)) / 2
-	right := 7 - len(name) - left
-	pad := func(n int) string {
-		s := ""
-		for i := 0; i < n; i++ {
-			s += " "
-		}
-		return s
+	for len(name) < 7 {
+		name += " "
 	}
-	return pad(left) + name + pad(right)
+	return name
 }
 
 // fileCore 只向文件写一条主干消息（本工具的全部日志都是纯文本消息，不带结构化字段）。
@@ -65,7 +60,8 @@ func (c *fileCore) Check(ent zapcore.Entry, ce *zapcore.CheckedEntry) *zapcore.C
 }
 
 func (c *fileCore) Write(ent zapcore.Entry, _ []zapcore.Field) error {
-	_, err := fmt.Fprintf(c.ws, "%s - [%s] - %s\n",
+	// 分隔符「-」两侧各留两个空格，把时间戳、级别、正文三段分开（用户 2026-09-14 裁定）
+	_, err := fmt.Fprintf(c.ws, "%s  -  [%s]  -  %s\n",
 		ent.Time.Format("2006-01-02 15:04:05.000"), levelName(ent.Level), ent.Message)
 	return err
 }
@@ -86,6 +82,15 @@ func (lg *Logger) Close() error {
 	return lg.rotate.Close()
 }
 
+// Raw 写入原始内容（不带时间戳与级别前缀）——工具日志的执行分界符专用：
+// 经 logger 写会带上时间戳，用户 2026-09-14 裁定分界符直接落盘。
+func (lg *Logger) Raw(text string) {
+	if lg == nil || lg.rotate == nil {
+		return
+	}
+	_, _ = lg.rotate.Write([]byte(text))
+}
+
 // 级别一律经本包自定义常量下发：zap 标准级别的数值与「SUCCESS 夹在 INFO 与 WARNING 之间」
 // 的旧口径撞号（zap 的 Warn=1、Error=2 会被渲染成 SUCCESS / WARNING），故不能用
 // SugaredLogger 的标准方法，统一走 Log(自定义级别, …)。
@@ -104,6 +109,14 @@ func Init(historys, toolFile string) (*Logger, error) {
 		Filename: filepath.Join(historys, toolFile),
 		MaxSize:  50, // MB
 	}
+	core := &fileCore{ws: zapcore.AddSync(rotate)}
+	return &Logger{l: zap.New(core).Sugar(), rotate: rotate}, nil
+}
+
+// InitExec 在归档目录内创建执行期日志（对位旧引擎写入归档目录的 SSHFleet.log：
+// 带时间戳与级别的节点级运行明细）。一次执行一个文件，不轮转。
+func InitExec(dir, filename string) (*Logger, error) {
+	rotate := &lumberjack.Logger{Filename: filepath.Join(dir, filename)}
 	core := &fileCore{ws: zapcore.AddSync(rotate)}
 	return &Logger{l: zap.New(core).Sugar(), rotate: rotate}, nil
 }
