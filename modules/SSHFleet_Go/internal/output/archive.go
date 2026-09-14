@@ -15,7 +15,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -111,14 +110,9 @@ func (ar *Archive) BackupAssets(cfg *config.Config, a *cli.Args) error {
 	return nil
 }
 
-// CreateLatestHistoryLink 在当前目录建 latest_history 软链接指向最新归档目录（POSIX only）。
-// Windows 上创建符号链接需要开发者模式/管理员权限，旧实现多次尝试未成——此处同样跳过并提示。
+// CreateLatestHistoryLink 在当前目录建 latest_history 目录链接，指向最新归档目录。
+// POSIX 用软链接，Windows 用目录联接（junction）——两者的取舍与限制见 createDirLink。
 func CreateLatestHistoryLink(cfg *config.Config) error {
-	if runtime.GOOS == "windows" {
-		fmt.Println("提示：当前系统为 Windows，符号链接需要开发者模式或管理员权限，已跳过 latest_history 创建")
-		return nil
-	}
-
 	entries, err := os.ReadDir(cfg.Paths.Historys)
 	if err != nil {
 		return fmt.Errorf("读取历史记录目录失败：%s\n原因：%v", cfg.Paths.Historys, err)
@@ -135,23 +129,35 @@ func CreateLatestHistoryLink(cfg *config.Config) error {
 	}
 	// 目录名以时间开头，字典序即时间序
 	sort.Strings(dirs)
-	latest := filepath.Join(cfg.Paths.Historys, dirs[len(dirs)-1])
+	latest := absoluteOrSelf(filepath.Join(cfg.Paths.Historys, dirs[len(dirs)-1]))
 
 	const linkName = "latest_history"
-	if info, err := os.Lstat(linkName); err == nil {
-		if info.Mode()&os.ModeSymlink != 0 {
-			if err := os.Remove(linkName); err != nil {
-				return err
-			}
-		} else {
-			fmt.Printf("警告: 当前目录已存在同名文件 %s，跳过符号链接创建（如需快捷入口，删除该文件后重跑）\n", linkName)
-			return nil
+	if _, linked := linkTarget(linkName); linked {
+		// 已是指向别处的链接：先删再建。软链接与联接点都能安全删除（只删链接本身，
+		// 不会动到目标目录）。
+		if err := os.Remove(linkName); err != nil {
+			return fmt.Errorf("清理旧的 %s 失败：%v", linkName, err)
 		}
+	} else if _, err := os.Lstat(linkName); err == nil {
+		fmt.Printf("警告: 当前目录已存在同名文件 %s，跳过链接创建（如需快捷入口，删除该文件后重跑）\n", linkName)
+		return nil
 	}
-	if err := os.Symlink(absoluteOrSelf(latest), linkName); err != nil {
-		return fmt.Errorf("创建 latest_history 符号链接失败：%v", err)
+	if err := createDirLink(linkName, latest); err != nil {
+		return fmt.Errorf("创建 latest_history 目录链接失败：%v\n提示：Windows 使用目录联接（需目标位于本地 NTFS 卷），POSIX 使用符号链接", err)
 	}
 	return nil
+}
+
+// linkTarget 判断 path 是否为目录链接（POSIX 软链接 / Windows 目录联接），是则返回其指向。
+// 统一用 os.Readlink 作判据：它对普通文件与普通目录一律失败，对重解析点成功。
+// 不可只判 os.ModeSymlink——Go 1.23 起 junction（MOUNT_POINT）不再被标为 ModeSymlink，
+// 而是 ModeIrregular（见 os/types_windows.go 的 fs.mode）。
+func linkTarget(path string) (string, bool) {
+	target, err := os.Readlink(path)
+	if err != nil {
+		return "", false
+	}
+	return target, true
 }
 
 func absoluteOrSelf(p string) string {
