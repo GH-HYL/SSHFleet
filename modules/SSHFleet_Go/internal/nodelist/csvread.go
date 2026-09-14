@@ -55,7 +55,7 @@ func readCSVRows(csvPath string, isInline bool) ([][]string, error) {
 		joined := strings.Join(first, ",")
 		if strings.Contains(joined, ",") {
 			infos = infos[1:]
-			fmt.Printf("[INFO] [function:read_nodes_infos] 第一行不是IP格式，已移除表头行\n")
+			fmt.Printf("%s[INFO]%s%s [function:read_nodes_infos]%s 第一行不是IP格式，已移除表头行\n", colorCyan, colorReset, colorYellow, colorReset)
 			if len(infos) == 0 {
 				return nil, fmt.Errorf("CSV 中未解析出任何有效节点，请检查节点文件或内联文本内容")
 			}
