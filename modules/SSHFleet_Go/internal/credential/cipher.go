@@ -1,17 +1,13 @@
 // 加解密引擎。
 //
-// 0x01（旧格式，**只读**）：SHA256 派生双钥 + 计数器密钥流 XOR + HMAC-SHA256，
-// 布局 base64( 版本1B + nonce16B + 密文nB + HMAC32B )——逐字节对齐旧 Python 实现，
-// 保证旧密文无需迁移（spec D14）。
-// 0x02（新格式）：AES-256-GCM + HKDF（stdlib crypto/hkdf），
-// 布局 base64( 版本1B + nonce12B + ct||tag )。
+// 0x02（当前唯一支持格式，2026-09-14 裁定：不考虑与 4.x 旧密文的兼容，0x01 支持已移除）：
+// AES-256-GCM + HKDF（stdlib crypto/hkdf），布局 base64( 版本1B + nonce12B + ct||tag )。
 package credential
 
 import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/hkdf"
-	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
@@ -19,16 +15,10 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
-	"unicode/utf8"
 )
 
 const (
-	cipherV1 = 0x01
 	cipherV2 = 0x02
-
-	v1NonceSize = 16
-	v1MacSize   = 32
-	v1BlockSize = 32
 
 	v2NonceSize = 12 // AES-GCM 标准 nonce 长度
 	v2TagSize   = 16
@@ -41,67 +31,6 @@ func (e *CipherError) Error() string { return e.msg }
 
 func cipherErr(format string, args ...any) error {
 	return &CipherError{msg: fmt.Sprintf(format, args...)}
-}
-
-// ---- 0x01：SHA256 计数器密钥流（只读解密，与旧实现逐字节一致） ----
-
-func deriveKeysV1(masterKey string) (encKey, macKey []byte) {
-	seed := sha256.Sum256([]byte(masterKey))
-	encSum := sha256.Sum256(append(seed[:], []byte("enc")...))
-	macSum := sha256.Sum256(append(seed[:], []byte("mac")...))
-	return encSum[:], macSum[:]
-}
-
-// keystreamXorV1 SHA256 计数器密钥流逐块异或：block = SHA256(nonce || counter(8B大端) || encKey)
-func keystreamXorV1(encKey, nonce, data []byte) []byte {
-	out := make([]byte, len(data))
-	buf := make([]byte, len(nonce)+8)
-	copy(buf, nonce)
-	block := make([]byte, v1BlockSize)
-	for pos := 0; pos < len(data); pos += v1BlockSize {
-		counter := uint64(pos / v1BlockSize)
-		for i := 0; i < 8; i++ {
-			buf[len(nonce)+i] = byte(counter >> (8 * (7 - i)))
-		}
-		sum := sha256.Sum256(append(buf, encKey...))
-		copy(block, sum[:])
-		end := pos + v1BlockSize
-		if end > len(data) {
-			end = len(data)
-		}
-		for j := pos; j < end; j++ {
-			out[j] = data[j] ^ block[j-pos]
-		}
-	}
-	return out
-}
-
-// DecryptV1 解密 0x01 密文。校验失败 = 主密钥不匹配或文件损坏。
-func DecryptV1(token, masterKey string) (string, error) {
-	raw, err := decodeStrictB64(token)
-	if err != nil {
-		return "", cipherErr("不是有效的加密格式：%v", err)
-	}
-	if len(raw) < 1+v1NonceSize+v1MacSize {
-		return "", cipherErr("加密内容长度不足，文件可能被截断")
-	}
-	if raw[0] != cipherV1 {
-		return "", cipherErr("不支持的加密格式版本：%d", raw[0])
-	}
-	nonce := raw[1 : 1+v1NonceSize]
-	mac := raw[len(raw)-v1MacSize:]
-	ciphertext := raw[1+v1NonceSize : len(raw)-v1MacSize]
-	encKey, macKey := deriveKeysV1(masterKey)
-	macHash := hmac.New(sha256.New, macKey)
-	macHash.Write(append(append([]byte{cipherV1}, nonce...), ciphertext...))
-	if !hmac.Equal(mac, macHash.Sum(nil)) {
-		return "", cipherErr("完整性校验失败：主密钥不匹配或文件已损坏")
-	}
-	plain, err := safeUTF8(keystreamXorV1(encKey, nonce, ciphertext))
-	if err != nil {
-		return "", err
-	}
-	return plain, nil
 }
 
 // ---- 0x02：AES-256-GCM + HKDF ----
@@ -191,13 +120,21 @@ func compactB64(text string) string {
 	return b.String()
 }
 
+// 旧 0x01 格式的布局常量：仅剩结构识别在用（2026-09-14 裁定移除 0x01 解密支持）。
+const (
+	legacyV1Version = 0x01
+	legacyV1Nonce   = 16
+	legacyV1Mac     = 32
+)
+
 // looksEncryptedV1 结构判断：是否旧 0x01 加密格式（仅看结构，不解密）。
+// 保留仅用于给旧密文一个明确的「不再支持」报错，而不是含混的「解密失败」。
 func looksEncryptedV1(text string) bool {
 	raw, err := decodeStrictB64(text)
 	if err != nil {
 		return false
 	}
-	return len(raw) >= 1+v1NonceSize+v1MacSize && raw[0] == cipherV1
+	return len(raw) >= 1+legacyV1Nonce+legacyV1Mac && raw[0] == legacyV1Version
 }
 
 // looksEncryptedV2 结构判断：是否新 0x02 加密格式。
@@ -244,12 +181,4 @@ func GenerateMasterKey() (string, error) {
 		return "", err
 	}
 	return base64.RawURLEncoding.EncodeToString(buf), nil
-}
-
-// safeUTF8 校验解密结果为合法 UTF-8（旧实现 decode("utf-8") 的等价防御）。
-func safeUTF8(b []byte) (string, error) {
-	if !utf8.Valid(b) {
-		return "", cipherErr("解密结果不是有效的 UTF-8 文本，文件可能已损坏")
-	}
-	return string(b), nil
 }
