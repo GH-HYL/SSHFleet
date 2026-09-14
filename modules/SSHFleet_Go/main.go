@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"syscall"
@@ -34,6 +35,21 @@ import (
 
 // 版本号：单一出处（显示在帮助信息首行下方，经 cli.Parse 传入 Usage）。
 const appVersion = "5.0.0"
+
+// versionWithBuildTime 版本号拼上编译来源时间（git HEAD 提交时间，go build 在
+// 仓库内编译时自动注入 vcs.time）；取不到（仓库外编译 / -buildvcs=false）时只显示版本号。
+func versionWithBuildTime() string {
+	if bi, ok := debug.ReadBuildInfo(); ok {
+		for _, s := range bi.Settings {
+			if s.Key == "vcs.time" {
+				if tm, err := time.Parse(time.RFC3339, s.Value); err == nil {
+					return fmt.Sprintf("%s (%s)", appVersion, tm.Local().Format("2006-01-02 15:04:05"))
+				}
+			}
+		}
+	}
+	return appVersion
+}
 
 // 配置文件位置：基准为当前工作目录（spec D28）。
 const configPath = "./config/SSHFleet.conf"
@@ -84,7 +100,7 @@ func main() {
 	logger.Info(fmt.Sprintf("日志目录：%s，工具日志文件名：%s", cfg.Paths.Historys, cfg.Paths.Tool))
 
 	// ---- 步骤 3：解析命令行 ------------------------------------------
-	args, err := cli.Parse(cfg, appVersion, os.Args[1:])
+	args, err := cli.Parse(cfg, versionWithBuildTime(), os.Args[1:])
 	if err != nil {
 		if errors.Is(err, cli.ErrHelp) {
 			return // 帮助已打印，以 0 退出
