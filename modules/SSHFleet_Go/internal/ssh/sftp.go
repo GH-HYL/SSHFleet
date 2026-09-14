@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -75,7 +76,7 @@ func (c *Client) UploadFiles(ctx context.Context, files []LocalFile, remotePath 
 	for _, f := range files {
 		if _, err := os.Stat(f.Path); err != nil {
 			result.FailedFiles = len(files)
-			result.Error = strPtr(fmt.Sprintf("本地文件不存在或不可读: %s - %v", f.Name, err))
+			result.Error = strPtr(fmt.Sprintf("本地文件不存在或不可读: %s - %v", f.Rel, err))
 			return result
 		}
 	}
@@ -101,12 +102,13 @@ func (c *Client) UploadFiles(ctx context.Context, files []LocalFile, remotePath 
 		}
 
 		fileStart := time.Now()
-		remoteFilePath := remotePath + "/" + f.Name
+		// 远端路径 = 目标目录 + 相对上传根的路径（上传目录保留层级，spec D49）
+		remoteFilePath := path.Join(remotePath, f.Rel)
 
 		// 远程文件已存在：该文件失败并终止本节点传输（不覆盖，旧行为）
 		if _, err := sftpClient.Stat(remoteFilePath); err == nil {
 			failed++
-			msg := fmt.Sprintf("%s: 上传失败 - 文件已存在", f.Name)
+			msg := fmt.Sprintf("%s: 上传失败 - 文件已存在", f.Rel)
 			lines = append(lines, msg)
 			result.Error = strPtr(msg)
 			if onProgress != nil {
@@ -118,7 +120,7 @@ func (c *Client) UploadFiles(ctx context.Context, files []LocalFile, remotePath 
 		localInfo, err := os.Stat(f.Path)
 		if err != nil {
 			failed++
-			msg := fmt.Sprintf("%s: 上传失败 - %v", f.Name, err)
+			msg := fmt.Sprintf("%s: 上传失败 - %v", f.Rel, err)
 			lines = append(lines, msg)
 			result.Error = strPtr(msg)
 			if onProgress != nil {
@@ -135,7 +137,7 @@ func (c *Client) UploadFiles(ctx context.Context, files []LocalFile, remotePath 
 		if !effectiveSudo {
 			written, uploadErr = c.sftpUploadFile(sftpClient, f.Path, remoteFilePath, localMode, seq, totalBytes, len(files), onProgress)
 		} else {
-			written, uploadErr = c.sftpUploadWithSudo(sftpClient, f.Path, f.Name, remotePath, localMode, seq, totalBytes, len(files), onProgress)
+			written, uploadErr = c.sftpUploadWithSudo(sftpClient, f.Path, f.Rel, remotePath, localMode, seq, totalBytes, len(files), onProgress)
 		}
 
 		cost := time.Since(fileStart).Seconds()
@@ -143,7 +145,7 @@ func (c *Client) UploadFiles(ctx context.Context, files []LocalFile, remotePath 
 
 		if uploadErr != nil {
 			failed++
-			msg := fmt.Sprintf("%s: 上传失败 - %v", f.Name, uploadErr)
+			msg := fmt.Sprintf("%s: 上传失败 - %v", f.Rel, uploadErr)
 			lines = append(lines, msg)
 			result.Error = strPtr(msg)
 			if onProgress != nil {
@@ -153,7 +155,7 @@ func (c *Client) UploadFiles(ctx context.Context, files []LocalFile, remotePath 
 		}
 		success++
 		uploadedBytes += written
-		lines = append(lines, fmt.Sprintf("%s: 上传成功 (%.3fs)", f.Name, cost))
+		lines = append(lines, fmt.Sprintf("%s: 上传成功 (%.3fs)", f.Rel, cost))
 
 		if onProgress != nil && pacer.allow() {
 			onProgress(Progress{Seq: seq, IP: c.cfg.IP, UploadedBytes: uploadedBytes, TotalBytes: totalBytes, TotalFiles: len(files), SuccessFiles: success, FailedFiles: failed})
@@ -362,6 +364,14 @@ func (c *Client) DownloadFiles(ctx context.Context, remotePath, localPath string
 
 // sftpUploadFile 直接通过 SFTP 写入文件（非 sudo 路径），返回实际写入字节数。
 func (c *Client) sftpUploadFile(sftpClient *sftp.Client, localPath, remoteFilePath string, perm os.FileMode, seq int, totalBytes int64, totalFiles int, onProgress func(Progress)) (int64, error) {
+	// 中间目录按需创建：上传目录的相对层级要保留（spec D49）。
+	// 目标目录（-p）本身仍必须已存在——这里只建它下面的层级，不建它在远端的位置。
+	if dir := path.Dir(remoteFilePath); dir != "." {
+		if err := sftpClient.MkdirAll(dir); err != nil {
+			return 0, fmt.Errorf("创建远程目录失败 %s: %w", dir, err)
+		}
+	}
+
 	src, err := os.Open(localPath)
 	if err != nil {
 		return 0, fmt.Errorf("打开本地文件失败: %w", err)
@@ -393,7 +403,15 @@ func (c *Client) sftpUploadFile(sftpClient *sftp.Client, localPath, remoteFilePa
 }
 
 // sftpUploadWithSudo 经临时目录 + sudo mv 上传（sudo 路径），返回实际写入字节数。
-func (c *Client) sftpUploadWithSudo(sftpClient *sftp.Client, localPath, fileName, remotePath string, perm os.FileMode, seq int, totalBytes int64, totalFiles int, onProgress func(Progress)) (int64, error) {
+func (c *Client) sftpUploadWithSudo(sftpClient *sftp.Client, localPath, rel, remotePath string, perm os.FileMode, seq int, totalBytes int64, totalFiles int, onProgress func(Progress)) (int64, error) {
+	// 最终落点 = 目标目录 + 相对路径；中间的层级用 sudo 建（目标目录本身必须已存在）
+	remoteFilePath := path.Join(remotePath, rel)
+	if dir := path.Dir(remoteFilePath); dir != remotePath {
+		if err := c.runCommand(fmt.Sprintf("sudo mkdir -p '%s'", escapeShellArg(dir))); err != nil {
+			return 0, fmt.Errorf("创建远程目录失败 %s: %w", dir, err)
+		}
+	}
+
 	tmpDir := tmpRoot + randomHex()
 	if err := c.runCommand(fmt.Sprintf("sudo mkdir -p '%s' && sudo chmod 777 '%s'", tmpDir, tmpDir)); err != nil {
 		return 0, fmt.Errorf("创建临时目录失败: %w", err)
@@ -407,7 +425,8 @@ func (c *Client) sftpUploadWithSudo(sftpClient *sftp.Client, localPath, fileName
 	}
 	defer func() { _ = src.Close() }()
 
-	tmpFilePath := tmpDir + "/" + fileName
+	// 临时文件名用基名，避免相对路径里的分隔符在临时目录里再建一层
+	tmpFilePath := tmpDir + "/" + path.Base(rel)
 	dst, err := sftpClient.Create(tmpFilePath)
 	if err != nil {
 		cleanup()
@@ -431,14 +450,18 @@ func (c *Client) sftpUploadWithSudo(sftpClient *sftp.Client, localPath, fileName
 		// 权限设置失败不阻断（旧行为）
 	}
 
-	// sudo mv 到目标（引号转义防路径含特殊字符）
-	escaped := strings.ReplaceAll(remotePath, "'", `'\''`)
-	if err := c.runCommand(fmt.Sprintf("sudo mv '%s' '%s/'", tmpFilePath, escaped)); err != nil {
+	// sudo mv 到最终路径（引号转义防路径含特殊字符）
+	if err := c.runCommand(fmt.Sprintf("sudo mv '%s' '%s'", tmpFilePath, escapeShellArg(remoteFilePath))); err != nil {
 		cleanup()
 		return 0, fmt.Errorf("sudo mv 失败: %w", err)
 	}
 	cleanup()
 	return written, nil
+}
+
+// escapeShellArg 把路径嵌进远端命令的单引号里之前的转义。
+func escapeShellArg(s string) string {
+	return strings.ReplaceAll(s, "'", `'\''`)
 }
 
 // sftpDownloadFile 通过 SFTP 下载单个文件，返回实际下载字节数；失败删除本地半成品。

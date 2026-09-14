@@ -57,6 +57,6 @@ type Progress struct {
 // LocalFile 待上传的本地文件条目（ssh 传输的输入契约；清理由 batch 侧收集）。
 type LocalFile struct {
 	Path string // 绝对路径
-	Name string // 文件名（上传时扁平化，不保留子目录结构——旧行为）
+	Rel  string // 相对上传根目录的路径（POSIX 斜杠）：多远端就落在「-p 目标 + Rel」；单文件即文件名
 	Size int64
 }
