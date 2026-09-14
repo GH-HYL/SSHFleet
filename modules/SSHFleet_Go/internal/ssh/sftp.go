@@ -8,6 +8,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -228,12 +229,28 @@ func (c *Client) DownloadFiles(ctx context.Context, remotePath, localPath string
 	}
 	var (
 		files      []remoteFile
+		symlinks   []string // 被过滤的软链接（相对路径），只用于在结果里提示
 		totalBytes int64
 	)
-	if fi.IsDir() {
-		findCmd := fmt.Sprintf("find '%s' -type f -printf '%%s %%P\\n'", remotePath)
+
+	// 远端路径本身即软链接：过滤（不下载、不当失败）
+	rootIsLink := false
+	if lfi, lerr := sftpClient.Lstat(remotePath); lerr == nil && lfi.Mode()&os.ModeSymlink != 0 {
+		rootIsLink = true
+		symlinks = append(symlinks, filepath.Base(remotePath))
+	}
+
+	switch {
+	case rootIsLink:
+		// 已过滤，落到下面的「无可下载文件」判定
+
+	case fi.IsDir():
+		// 一次 find 同时枚举真文件（F）与软链接（L）：软链接**过滤**但要在结果里提示
+		//（用户 2026-09-14 裁定）。此前用 `-type f` 单查，软链接被静默丢弃、用户无从得知。
+		findCmd := fmt.Sprintf("find '%s' \\( -type f -printf 'F %%s %%P\\n' \\) -o \\( -type l -printf 'L %%P\\n' \\)",
+			escapeShellArg(remotePath))
 		if effectiveSudo {
-			findCmd = fmt.Sprintf("sudo find '%s' -type f -printf '%%s %%P\\n'", remotePath)
+			findCmd = "sudo " + findCmd
 		}
 		output, err := c.runCommandCapture(findCmd)
 		if err != nil {
@@ -241,33 +258,39 @@ func (c *Client) DownloadFiles(ctx context.Context, remotePath, localPath string
 			result.Error = strPtr(fmt.Sprintf("获取远程文件列表失败: %v", err))
 			return result
 		}
-		output = strings.TrimSpace(output)
-		if output == "" {
-			result.Error = strPtr("远程目录为空")
-			return result
-		}
-		for _, line := range strings.Split(output, "\n") {
+		for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
 			line = strings.TrimSpace(line)
-			if line == "" {
-				continue
+			switch {
+			case line == "":
+			case strings.HasPrefix(line, "F "):
+				parts := strings.SplitN(line[2:], " ", 2)
+				if len(parts) != 2 {
+					continue
+				}
+				var size int64
+				_, _ = fmt.Sscanf(parts[0], "%d", &size)
+				files = append(files, remoteFile{relativePath: parts[1], size: size})
+				totalBytes += size
+			case strings.HasPrefix(line, "L "):
+				symlinks = append(symlinks, line[2:])
 			}
-			parts := strings.SplitN(line, " ", 2)
-			if len(parts) != 2 {
-				continue
-			}
-			var size int64
-			_, _ = fmt.Sscanf(parts[0], "%d", &size)
-			files = append(files, remoteFile{relativePath: parts[1], size: size})
-			totalBytes += size
 		}
-	} else {
+
+	default:
 		files = append(files, remoteFile{relativePath: filepath.Base(remotePath), size: fi.Size()})
 		totalBytes = fi.Size()
 	}
 
+	sort.Strings(symlinks)
+
 	totalFiles := len(files)
 	if totalFiles == 0 {
-		result.Error = strPtr("远程路径中没有可下载的文件")
+		// 过滤后没有任何可传文件才报错（全文链接与目录本就为空，措辞分开）
+		if len(symlinks) > 0 {
+			result.Error = strPtr(fmt.Sprintf("没有可下载的文件：目标全部为软链接（已过滤 %d 个）", len(symlinks)))
+		} else {
+			result.Error = strPtr("远程路径中没有可下载的文件")
+		}
 		return result
 	}
 
@@ -277,9 +300,13 @@ func (c *Client) DownloadFiles(ctx context.Context, remotePath, localPath string
 		return result
 	}
 
-	success, failed, skipped := 0, 0, 0
+	success, failed := 0, 0
 	var downloadedBytes int64
-	var lines []string
+	// 被过滤的软链接先写进明细（随 output 字段落盘 / 进归档），不计成功也不计失败
+	lines := make([]string, 0, len(symlinks)+len(files))
+	for _, s := range symlinks {
+		lines = append(lines, fmt.Sprintf("%s: 已跳过（符号链接）", s))
+	}
 	var costTotal float64
 	pacer := &progressPacer{}
 
@@ -288,8 +315,8 @@ func (c *Client) DownloadFiles(ctx context.Context, remotePath, localPath string
 		case <-ctx.Done():
 			result.Error = strPtr("下载被取消")
 			result.SuccessFiles, result.FailedFiles = success, failed
-			result.TotalBytes, result.TotalFiles, result.ExecCostTime = downloadedBytes, totalFiles-skipped, costTotal
-			result.Output = buildTransferOutput(totalFiles-skipped, success, failed, lines)
+			result.TotalBytes, result.TotalFiles, result.ExecCostTime = downloadedBytes, totalFiles, costTotal
+			result.Output = buildTransferOutput(totalFiles, success, failed, lines)
 			return result
 		default:
 		}
@@ -303,14 +330,6 @@ func (c *Client) DownloadFiles(ctx context.Context, remotePath, localPath string
 		} else {
 			remoteFilePath = remotePath
 			localFilePath = filepath.Join(ipDir, filepath.Base(remotePath))
-		}
-
-		// 符号链接：跳过，不计失败，仅记明细；同时从总量里扣除以保证进度到 100%
-		if lfi, lerr := sftpClient.Lstat(remoteFilePath); lerr == nil && lfi.Mode()&os.ModeSymlink != 0 {
-			skipped++
-			totalBytes -= file.size
-			lines = append(lines, fmt.Sprintf("%s: 已跳过（符号链接）", file.relativePath))
-			continue
 		}
 
 		if err := os.MkdirAll(filepath.Dir(localFilePath), 0o755); err != nil {
@@ -347,16 +366,14 @@ func (c *Client) DownloadFiles(ctx context.Context, remotePath, localPath string
 		}
 	}
 
-	result.Output = buildTransferOutput(totalFiles-skipped, success, failed, lines)
-	// 全传输成功 = 至少成功 1 个文件且 0 失败；全部为符号链接则报「没有下载到任何文件」
+	result.Output = buildTransferOutput(totalFiles, success, failed, lines)
+	// 全传输成功 = 至少成功 1 个文件且 0 失败；「一个都没传」的情况已在枚举阶段拦下
 	if success > 0 && failed == 0 {
 		result.ExitCode = intPtr(0)
-	} else if success == 0 && failed == 0 && skipped > 0 {
-		result.Error = strPtr("没有下载到任何文件（全部为符号链接）")
 	}
 	result.ExecCostTime = costTotal
 	result.TotalBytes = downloadedBytes
-	result.TotalFiles = totalFiles - skipped
+	result.TotalFiles = totalFiles
 	result.SuccessFiles = success
 	result.FailedFiles = failed
 	return result
