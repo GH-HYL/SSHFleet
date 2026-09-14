@@ -21,8 +21,10 @@ import (
 
 // Confirm 主干第 7 步入口。
 func Confirm(args *cli.Args, nodes *nodelist.Nodes, cfg *config.Config, logger *log.Logger, in *common.Interactor) error {
-	// 上传并发建议（y 用建议值，n 保留原值继续执行，不退出）
-	checkUploadConcurrency(args, cfg, in)
+	// 上传并发建议（y 用建议值，n 保留原值继续执行，不退出）；取消错误向上传播
+	if err := checkUploadConcurrency(args, cfg, in); err != nil {
+		return err
+	}
 
 	// 未输入并发数，默认使用节点数量进行并发
 	if args.Number == 0 {
@@ -46,7 +48,9 @@ func Confirm(args *cli.Args, nodes *nodelist.Nodes, cfg *config.Config, logger *
 	printInfoTable(buildInfoTable(args, nodes))
 
 	if args.Upload != "" {
-		showUploadContent(args.Upload)
+		if err := showUploadContent(args.Upload); err != nil {
+			return err
+		}
 	}
 
 	fmt.Println("\n" + strings.Repeat("═", 60))
@@ -124,48 +128,46 @@ func printInfoTable(table [][2]string) {
 //   - file_size < small_file: 全并发（0 = 不限制，无需建议）
 //   - file_size > large_file: 串行（并发=1）
 //   - 两者之间: medium_concurrency
-func checkUploadConcurrency(args *cli.Args, cfg *config.Config, in *common.Interactor) {
+func checkUploadConcurrency(args *cli.Args, cfg *config.Config, in *common.Interactor) error {
 	if args.Upload == "" || cfg == nil {
-		return
+		return nil
 	}
 	size := calculateUploadSize(args.Upload)
 	allowed := checkConcurrencyThreshold(size, cfg)
 	if allowed == 0 {
-		return
+		return nil
 	}
 	fmt.Printf("上传文件总大小 %s，建议并发数为 %d\n", formatSize(size), allowed)
 	yes, err := in.Confirm(fmt.Sprintf("是否使用建议并发数 %d ？", allowed), true)
 	if err != nil {
-		// EOF/取消：对位旧 get_user_confirmation 直接取消退出
-		fmt.Println("输入结束，操作已取消")
-		os.Exit(1)
+		// EOF/取消：对位旧 get_user_confirmation 直接取消退出；不在子模块内自行
+		// os.Exit，返回 ErrCancelled 交由 main 统一退出（2026-09-14 审计修复）
+		return err
 	}
 	if yes {
 		args.Number = allowed
 	}
 	// 输入 n：保留原值（未指定 -n 时后续默认使用节点数），继续执行
+	return nil
 }
 
 // showUploadContent 显示上传文件/目录内容（一层树，与旧版一致）。
-func showUploadContent(uPath string) {
+// 读取失败返回错误交由 main 统一退出——不在子模块内自行 os.Exit（2026-09-14 审计修复）。
+func showUploadContent(uPath string) error {
 	fmt.Printf("\n📁 上传文件/目录内容 (-u 参数):\n")
 	info, err := os.Stat(uPath)
 	if err != nil {
-		fmt.Printf("[警告] 无法解析上传路径内容：%v\n", err)
-		fmt.Println("请检查 -u 指定的路径是否存在且可访问")
-		os.Exit(1)
+		return fmt.Errorf("无法解析上传路径内容：%v\n请检查 -u 指定的路径是否存在且可访问", err)
 	}
 	name := filepath.Base(uPath)
 	if !info.IsDir() {
 		fmt.Printf("└── %s (文件)\n", name)
-		return
+		return nil
 	}
 	fmt.Printf("└── %s/\n", name)
 	entries, err := os.ReadDir(uPath)
 	if err != nil {
-		fmt.Printf("[警告] 无法解析上传路径内容：%v\n", err)
-		fmt.Println("请检查 -u 指定的路径是否存在且可访问")
-		os.Exit(1)
+		return fmt.Errorf("无法解析上传路径内容：%v\n请检查 -u 指定的路径是否存在且可访问", err)
 	}
 	for i, item := range entries {
 		prefix := "    ├──"
@@ -178,6 +180,7 @@ func showUploadContent(uPath string) {
 			fmt.Printf("%s %s\n", prefix, item.Name())
 		}
 	}
+	return nil
 }
 
 // calculateUploadSize 上传大小：单文件取大小，目录取总大小（排除符号链接）。
