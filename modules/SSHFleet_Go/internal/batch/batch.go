@@ -37,11 +37,17 @@ type task struct {
 	useSudo bool
 }
 
-// RenderFunc 进度渲染函数（由 main 从 internal/output 注入；M5 实现终端渲染本体）。
+// RenderFunc 进度渲染函数（由 main 从 internal/output 注入）。
 type RenderFunc func(Snapshot)
 
+// Hooks 执行期回调注入：进度渲染 + 结果流水（写 output.txt / 执行日志 / 终端明细）。
+type Hooks struct {
+	OnProgress RenderFunc
+	OnResult   func(ssh.Result)
+}
+
 // Run 主干第 8 步入口：构建任务 → 并发执行 → 聚合进度 → 返回结果。
-func Run(ctx context.Context, a *cli.Args, cfg *config.Config, nodes *nodelist.Nodes, logger *log.Logger, render RenderFunc) (*Results, error) {
+func Run(ctx context.Context, a *cli.Args, cfg *config.Config, nodes *nodelist.Nodes, logger *log.Logger, hooks Hooks) (*Results, error) {
 	tasks, err := buildTasks(a, nodes)
 	if err != nil {
 		return nil, err
@@ -53,7 +59,7 @@ func Run(ctx context.Context, a *cli.Args, cfg *config.Config, nodes *nodelist.N
 	}
 	logger.Info(fmt.Sprintf("开始执行任务：节点 %d 个，并发 %d，模式 %s", len(tasks), concurrency, execModeName(a)))
 
-	agg := NewAggregator(len(tasks), render)
+	agg := NewAggregator(len(tasks), hooks.OnProgress)
 	newConfig := func(node nodelist.NodeInfo) *ssh.Config {
 		return &ssh.Config{
 			IP:             node.IP,
@@ -84,7 +90,7 @@ func Run(ctx context.Context, a *cli.Args, cfg *config.Config, nodes *nodelist.N
 		return *res
 	}
 
-	results := runPool(ctx, concurrency, tasks, work)
+	results := runPool(ctx, concurrency, tasks, work, hooks.OnResult)
 	sortBySeq(results)
 	return &Results{Items: results}, nil
 }
