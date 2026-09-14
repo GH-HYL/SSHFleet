@@ -1,0 +1,81 @@
+rm -rf /	forbidden	递归删除根目录
+rm -rf /*	forbidden	递归删除根目录
+rm -rf //	forbidden	递归删除根目录
+rm -rf /.	forbidden	递归删除根目录
+rm -r -f /	forbidden	递归删除根目录
+rm --recursive --force /	forbidden	递归删除根目录
+rm -R -f /	forbidden	递归删除根目录
+rm -rf --no-preserve-root /	forbidden	递归删除根目录
+rm -rf / /opt/x	forbidden	递归删除根目录
+rm -rf "/"	forbidden	递归删除根目录
+rm --no-preserve-root /	high	使用 --no-preserve-root 危险旗标
+rm -rf /etc	forbidden	递归删除系统目录
+rm -rf /etc/nginx	forbidden	递归删除系统目录
+rm -rf /var/log	forbidden	递归删除系统目录
+rm -rf /boot	forbidden	递归删除系统目录
+rm -rf /root/.ssh	forbidden	递归删除系统目录
+rm -rf /usr/lib	forbidden	递归删除系统目录
+sudo rm -rf /etc	forbidden	递归删除系统目录
+rm -rf /opt/test/123	high	递归强制删除
+rm -rf /home/user/bak	high	递归强制删除
+rm -rf /data/x	high	递归强制删除
+rm -rf /tmp/*	high	递归强制删除
+rm -rf /opt/a /data/b	high	递归强制删除
+rm -rf /etcx	high	递归强制删除
+rm -f /var/log/secure	medium	删除日志文件
+rm -f /etc/hosts	medium	删除系统文件
+rm -f /etcx	medium	强制删除
+rm -f a.log	high	强制删除配置或日志文件
+rm -f file.txt	medium	强制删除
+rm -r directory	medium	递归删除
+rm -rf $DIR	high	递归强制删除
+rm -rf /	forbidden	递归删除根目录
+echo "rm -rf /"	forbidden	
+echo 'reboot'	forbidden	
+grep -r "rm -rf" /etc/	forbidden	
+echo rm -rf /	forbidden	
+farm -rf /	none	
+echo "hello world"	none	
+echo $(rm -rf /)	forbidden	递归删除根目录
+bash -c "rm -rf /"	forbidden	递归删除根目录
+sh -c 'rm -rf /'	forbidden	递归删除根目录
+eval "rm -rf /"	forbidden	递归删除根目录
+echo `rm -rf /`	forbidden	递归删除根目录
+xargs rm -rf /	forbidden	递归删除根目录
+ssh 192.168.1.5 "rm -rf /"	forbidden	递归删除根目录
+find / -type f | xargs rm -f	medium	强制删除
+x=1; rm -rf /tmp/* && reboot	forbidden	系统重启
+nohup rm -rf /etc > /dev/null &	forbidden	递归删除系统目录
+sudo -u root rm -rf /	forbidden	递归删除根目录
+cd /tmp && rm -rf ./*	high	递归强制删除
+rm -rf /opt/x && systemctl stop nginx	high	
+reboot	forbidden	系统重启
+shutdown -h now	forbidden	系统关机
+init 0	forbidden	运行级别0
+init 3	low	运行级别切换
+mkfs /dev/sda	forbidden	格式化系统盘
+mkfs.ext4 /dev/sdb1	high	格式化文件系统
+dd if=/dev/zero of=/dev/sda	forbidden	销毁系统数据
+dd if=file.img of=/dev/sdb1	high	数据覆盖操作
+systemctl mask sshd	forbidden	屏蔽关键服务
+systemctl stop nginx	high	强制停止服务
+iptables -F	high	清空防火墙规则
+userdel testuser	high	删除用户账户
+rpm -e --nodeps package-name	high	强制软件包删除
+chmod 777 /etc/passwd	medium	权限修改
+chmod u+s /usr/bin/script	medium	设置SUID权限
+chown root:root /etc/passwd	medium	修改文件所有者
+systemctl disable nginx	medium	禁用系统服务
+sysctl -w kernel.param=1	medium	修改内核参数
+passwd -l tester	medium	锁定用户账户
+groupdel groupname	medium	删除用户组
+truncate -s 0 /var/log/messages	medium	清空系统日志
+yum update	low	软件包更新
+yum remove package-name	low	软件包删除
+rpm -i --force package.rpm	low	强制安装软件包
+history -c	low	清空命令历史
+systemctl restart nginx	low	普通服务重启
+export PATH=/new/path:$PATH	none	
+alias ll="ls -l"	none	
+exec $SHELL	none	
+ulimit -n 65535	none	
