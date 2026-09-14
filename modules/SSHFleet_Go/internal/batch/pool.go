@@ -9,7 +9,7 @@ import (
 
 // runPool worker pool：并发执行任务，结果收集后返回（按完成顺序，调用方自行保序）。
 // ctx 取消时不再启动新任务、结果静默丢弃（对位旧 runPool 语义）。
-func runPool(ctx context.Context, concurrency int, tasks []*task, work func(context.Context, *task) ssh.Result) []ssh.Result {
+func runPool(ctx context.Context, concurrency int, tasks []*task, work func(context.Context, *task) ssh.Result, onResult func(ssh.Result)) []ssh.Result {
 	taskCh := make(chan *task, len(tasks))
 	resCh := make(chan ssh.Result, len(tasks))
 
@@ -53,9 +53,14 @@ func runPool(ctx context.Context, concurrency int, tasks []*task, work func(cont
 		close(resCh)
 	}()
 
+	// 收集循环是单线程的：结果流水（output.txt / 执行日志 / 终端明细）在此回放，
+	// 取消时被丢弃的结果自然不会被写出（对位旧实现只处理收到的结果）。
 	results := make([]ssh.Result, 0, len(tasks))
 	for r := range resCh {
 		results = append(results, r)
+		if onResult != nil {
+			onResult(r)
+		}
 	}
 	return results
 }

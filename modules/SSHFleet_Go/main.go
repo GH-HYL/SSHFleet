@@ -26,6 +26,7 @@ import (
 	"sshfleet/internal/nodelist"
 	"sshfleet/internal/output"
 	"sshfleet/internal/result"
+	"sshfleet/internal/ssh"
 )
 
 // 配置文件位置：基准为当前工作目录（spec D28）。
@@ -39,6 +40,14 @@ func fatal(where string, err error) {
 	}
 	fmt.Fprintf(os.Stderr, "[ERROR] [function:%s] %s\n", where, err)
 	os.Exit(1)
+}
+
+// errorText 解引用错误指针（空指针给空串）。
+func errorText(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return *p
 }
 
 func main() {
@@ -111,6 +120,7 @@ func main() {
 	if err != nil {
 		fatal("dangercheck", fmt.Errorf("危险关键词内容检查失败\n原因：%v", err))
 	}
+	dangerNote := "" // 危险命令放行留痕（spec D35/D46）：先写工具日志，归档后同样写入执行日志
 	switch {
 	case dangerReport.HasForbidden():
 		// forbidden：打印警告后直接退出（与旧行为一致）
@@ -120,8 +130,9 @@ func main() {
 		os.Exit(1)
 	case len(dangerReport.Matches) > 0 && in.Disinteractive:
 		// 非交互模式：非 forbidden 放行，但写入工具日志留痕（spec D35）
-		logger.Warn(fmt.Sprintf("非交互模式放行危险命令（最高级别 %s，分类 %s，来源行 %d）：%s",
-			dangerReport.Highest(), dangerReport.Matches[0].RuleName, dangerReport.Matches[0].Line, dangerReport.Matches[0].Content))
+		dangerNote = fmt.Sprintf("非交互模式放行危险命令（最高级别 %s，分类 %s，来源行 %d）：%s",
+			dangerReport.Highest(), dangerReport.Matches[0].RuleName, dangerReport.Matches[0].Line, dangerReport.Matches[0].Content)
+		logger.Warn(dangerNote)
 	case len(dangerReport.Matches) > 0:
 		output.PrintDangerWarning(dangerReport, false)
 		confirmed, cerr := in.Confirm("\n已明确风险继续执行？", false)
@@ -133,7 +144,8 @@ func main() {
 			logger.Warn("执行已取消，SSHFleet工具已退出")
 			return
 		}
-		logger.Warn(fmt.Sprintf("用户已确认风险继续执行（最高级别 %s）：%s", dangerReport.Highest(), dangerReport.Matches[0].Content))
+		dangerNote = fmt.Sprintf("用户已确认风险继续执行（最高级别 %s）：%s", dangerReport.Highest(), dangerReport.Matches[0].Content)
+		logger.Warn(dangerNote)
 	}
 	logger.Success("危险关键词内容检查成功")
 
@@ -156,7 +168,48 @@ func main() {
 
 	execStart := time.Now()
 
-	execResults, err := batch.Run(execCtx, args, cfg, nodes, logger, output.ProgressRenderer(os.Stdout))
+	// 归档目录：本次执行的全部产物（执行日志 / 终端输出 / 报告 / xlsx / 资源备份）
+	archive, err := output.CreateArchive(cfg, args)
+	if err != nil {
+		fatal("output", err)
+	}
+	logger.Success(fmt.Sprintf("生成归档目录成功: %s", archive.Dir))
+	if dangerNote != "" {
+		_ = archive.ExecLog("%s", dangerNote)
+	}
+
+	mode := result.ModeOf(args)
+	categoryOf := func(r ssh.Result) string {
+		return result.Classify(result.Case{
+			ExitCode:     r.ExitCode,
+			Error:        errorText(r.Error),
+			Output:       r.Output,
+			AuthFailure:  errorText(r.AuthFailure),
+			Mode:         mode,
+			SuccessFiles: r.SuccessFiles,
+			FailedFiles:  r.FailedFiles,
+		}, errorKeywords)
+	}
+
+	outputPath := filepath.Join(archive.Dir, cfg.Paths.Output)
+	outputFile, err := os.Create(outputPath)
+	if err != nil {
+		logger.Warn(fmt.Sprintf("无法创建 output.txt 文件: %v", err))
+	} else {
+		defer func() { _ = outputFile.Close() }()
+	}
+
+	ui := output.NewProgressUI(os.Stdout, mode, nodes.Len())
+	execResults, err := batch.Run(execCtx, args, cfg, nodes, logger, batch.Hooks{
+		OnProgress: ui.Update,
+		OnResult: func(r ssh.Result) {
+			category := categoryOf(r)
+			_ = output.PrintResult(os.Stdout, outputFile, r, mode, category)
+			_ = archive.ExecLog("%s", output.ResultLine(r, mode, category))
+		},
+	})
+	ui.Stop()
+	_ = archive.Close()
 	if err != nil {
 		fatal("batch", err)
 	}
@@ -167,9 +220,10 @@ func main() {
 	// ---- 步骤 9：结果统计 + 错误分类 -----------------------------------
 	stats := result.Statistics(execResults, nodes, args, errorKeywords, execStart, time.Now())
 	logger.Success("计算统计结果信息成功")
+	output.PrintStatistics(os.Stdout, stats, errorKeywords)
 
-	// ---- 步骤 10：呈现 / 报告 / 归档 ------------------------------------
-	if err := output.Render(stats, args, cfg); err != nil {
+	// ---- 步骤 10：呈现 / 报告 / xlsx / 归档 -----------------------------
+	if err := output.Render(archive, stats, execResults, args, cfg, errorKeywords, os.Args, categoryOf, logger); err != nil {
 		fatal("output", err)
 	}
 
