@@ -51,6 +51,7 @@ type Hooks struct {
 }
 
 // Run 主干第 8 步入口：构建任务 → 并发执行 → 聚合进度 → 返回结果。
+// logger 是执行期日志（此时工具日志已轮转至此），运行期事件写入这里而非工具日志。
 func Run(ctx context.Context, a *cli.Args, cfg *config.Config, nodes *nodelist.Nodes, logger *log.Logger, hooks Hooks) (*Results, error) {
 	tasks, notices, err := buildTasks(a, nodes)
 	if err != nil {
