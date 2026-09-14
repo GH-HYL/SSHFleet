@@ -52,12 +52,13 @@ mkdir -p "$PKGDIR/config"
 echo "[发布] 组装 release/$NAME ..."
 cp "$OUT/SSHFleet" "$PKGDIR/"
 cp "$ROOT/README.md" "$PKGDIR/"
+cp "$ROOT/CHANGELOG.md" "$PKGDIR/"
 cp "$ROOT/modules/SSHFleet_Go/config/SSHFleet.conf" "$PKGDIR/config/"
 cp "$ROOT/modules/SSHFleet_Go/config/dangerous_keywords.toml" "$PKGDIR/config/"
 cp "$ROOT/modules/SSHFleet_Go/config/error_keywords.toml" "$PKGDIR/config/"
 
 # 权限：真实 Linux 上 tar 天然保留 0755；Git Bash（MSYS）下 chmod 对 NTFS 无效，
-# 用 GNU tar 的 --mode 兜底（发布树只有可执行文件 + README + config 三个文件，
+# 用 GNU tar 的 --mode 兜底（发布树只有可执行文件 + README/CHANGELOG + config，
 # 统一 755 对目录是必需的、对文本文件无害）。非 GNU tar 不支持该选项，故先探测。
 TAR_MODE=()
 if tar --help 2>&1 | grep -q -- '--mode'; then
