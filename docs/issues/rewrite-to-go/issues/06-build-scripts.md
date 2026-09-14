@@ -24,3 +24,4 @@ Blocked by: 01
 - 2026-09-11 完成。**位置调整（用户指定）**：脚本放工作区根 `build-windows.bat` / `build-linux.sh`，不放 tools/；D27 与 M6 展开已同步改写，白名单改为放行根目录两脚本。
 - bat 参考旧 `SSHFleet_Go_build.bat`：UTF-8 带 BOM + CRLF + `chcp 65001`（无 BOM 时 cmd 按 GBK 解析中文会碎行，已踩过并修复）、失败 pause、结尾 dir 产物。
 - 验证：双脚本各自产出 windows/amd64（PE32+）与 linux/amd64（ELF x86-64）双产物并落工作区根 build\，交叉编译通过。
+- **2026-09-14 更正**：M1 时把 `modules/build/` 里出现的两个构建产物归因为「损坏版 bat 的残留」——**判断错了**，那其实是本工单的 `build-linux.sh` 自己写的（`cd` 之后 `OUT=../build` 解析成了 `modules/build`）。同一脚本还有第二层坑：Git Bash 下 `pwd` 给 `/d/…`，原生 `go.exe` 会写成 `D:\d\…`。两处均已修（`ROOT` 按脚本位置定位 + `cygpath -m` 转换），并给 `.gitignore` 补了 `modules/build/` 显式排除。详见工单 24。
