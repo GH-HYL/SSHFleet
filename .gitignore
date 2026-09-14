@@ -1,6 +1,6 @@
 # SSHFleet 工作区忽略规则（白名单）
 #
-# 本仓库将对外推送，只保留「代码 + 决策文档 + 构建脚本」三类内容。
+# 本仓库将对外推送，只保留「代码 + 决策文档」两类内容。
 # 工作区会不断产生过程文件（草稿、临时数据、中间产物），用黑名单要反复维护；
 # 因此改为白名单：默认全部忽略，只明确列出需要跟踪的几处。
 # 需要新增追踪时，在下面补一行即可。
@@ -26,9 +26,8 @@
 !modules/
 !modules/**
 
-# 构建脚本（项目资产：他人 clone 后需能自行构建；置于工作区根）
-!/build-windows.bat
-!/build-linux.sh
+# 构建脚本（build-windows.bat / build-linux.sh）为个人使用工具，不进版本控制——
+# 他人按 README 的 go build 自行编译即可
 
 # 旧工程参考副本（只读，不进版本控制）
 modules/SSHFleet_bak/
@@ -43,4 +42,6 @@ modules/build/
 #   tools/                        辅助脚本、离线依赖包等（全部不纳入）
 #   test/                         本地测试语料与样本
 #   build/  release/              构建中间产物与发布产物
-#   根目录临时脚本（.bat 等）      除 build-windows.bat / build-linux.sh 外按需补白名单
+#   build-windows.bat             构建脚本（个人使用，不进版本控制）
+#   build-linux.sh                构建脚本（个人使用，不进版本控制）
+#   根目录临时脚本（.bat 等）      按需补白名单
