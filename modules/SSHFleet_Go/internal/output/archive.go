@@ -12,7 +12,6 @@ package output
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -23,14 +22,12 @@ import (
 	"sshfleet/internal/config"
 )
 
-// Archive 一次执行的归档目录（持有执行日志文件句柄）。
+// Archive 一次执行的归档目录（执行期日志由 internal/log.InitExec 落盘，不经此处）。
 type Archive struct {
-	Dir      string
-	execFile *os.File
-	execPath string
+	Dir string
 }
 
-// CreateArchive 创建归档目录与执行日志文件。
+// CreateArchive 创建归档目录。
 func CreateArchive(cfg *config.Config, a *cli.Args) (*Archive, error) {
 	dir, err := archiveDirName(cfg, a)
 	if err != nil {
@@ -39,40 +36,7 @@ func CreateArchive(cfg *config.Config, a *cli.Args) (*Archive, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, fmt.Errorf("创建归档目录失败：%s\n原因：%v", dir, err)
 	}
-
-	execPath := filepath.Join(dir, cfg.Paths.Exec)
-	f, err := os.Create(execPath)
-	if err != nil {
-		return nil, fmt.Errorf("创建执行日志失败：%s\n原因：%v", execPath, err)
-	}
-	return &Archive{Dir: dir, execFile: f, execPath: execPath}, nil
-}
-
-// ExecWriter 执行日志写入器（危险放行留痕、节点明细都写这里）。
-func (ar *Archive) ExecWriter() io.Writer {
-	if ar == nil {
-		return io.Discard
-	}
-	return ar.execFile
-}
-
-// ExecLog 写一行执行日志。
-func (ar *Archive) ExecLog(format string, args ...any) error {
-	if ar == nil || ar.execFile == nil {
-		return nil
-	}
-	_, err := fmt.Fprintf(ar.execFile, format+"\n", args...)
-	return err
-}
-
-// Close 关闭执行日志。
-func (ar *Archive) Close() error {
-	if ar == nil || ar.execFile == nil {
-		return nil
-	}
-	err := ar.execFile.Close()
-	ar.execFile = nil
-	return err
+	return &Archive{Dir: dir}, nil
 }
 
 // BackupAssets 把清单与脚本复制到 assets/（spec D38：不备份上传文件）。
