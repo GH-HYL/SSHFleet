@@ -92,19 +92,7 @@ SSHFleet 是一个 **SSH 批量运维工具**：一次命令输入，派出一�
 > [!NOTE]
 > 📖 深入：自行编译（可选）
 >
-> 不自己编译可以跳过这段。源码在 `modules/SSHFleet_Go/`，需要 **Go 1.27+**：
->
-> ```bash
-> # 工作区根目录下提供了两个构建脚本，双击/直接运行即可
-> build-windows.bat            # Windows：编译双平台，产物落 build\
-> ./build-linux.sh             # Linux / 自动化：编译双平台，产物落 build/
->
-> # 需要连发布目录和压缩包一起产出时，加一个 release 参数
-> build-windows.bat release    # 产出 release\SSHFleet_<版本>_windows.zip
-> ./build-linux.sh release     # 产出 release/SSHFleet_<版本>_linux.tar.gz
-> ```
->
-> 版本号取自 `CHANGELOG.md` 顶部第一个正式版本号；取不到时用当天日期。
+> 不自己编译可以跳过这段。源码在 `modules/SSHFleet_Go/`，需要 **Go 1.27+**，在工程目录下 `go build` 即可得到可执行文件。
 
 ---
 
