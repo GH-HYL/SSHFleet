@@ -40,17 +40,26 @@ type task struct {
 // RenderFunc 进度渲染函数（由 main 从 internal/output 注入）。
 type RenderFunc func(Snapshot)
 
-// Hooks 执行期回调注入：进度渲染 + 结果流水（写 output.txt / 执行日志 / 终端明细）。
+// Hooks 执行期回调注入：采集提示 + 进度渲染 + 结果流水（写 output.txt / 执行日志 / 终端明细）。
 type Hooks struct {
+	// OnNotice 采集期提示（目前仅「上传源中被过滤的软链接」，用户 2026-09-14 裁定）。
+	// 在进度界面之前回调，由 main 决定去向（终端）——batch 自己不打印。
+	OnNotice   func(string)
 	OnProgress RenderFunc
 	OnResult   func(ssh.Result)
 }
 
 // Run 主干第 8 步入口：构建任务 → 并发执行 → 聚合进度 → 返回结果。
 func Run(ctx context.Context, a *cli.Args, cfg *config.Config, nodes *nodelist.Nodes, logger *log.Logger, hooks Hooks) (*Results, error) {
-	tasks, err := buildTasks(a, nodes)
+	tasks, notices, err := buildTasks(a, nodes)
 	if err != nil {
 		return nil, err
+	}
+	// 采集期提示先于任何进度事件下发，保证不被进度条重绘覆盖
+	for _, msg := range notices {
+		if hooks.OnNotice != nil {
+			hooks.OnNotice(msg)
+		}
 	}
 
 	concurrency := a.Number
@@ -96,28 +105,35 @@ func Run(ctx context.Context, a *cli.Args, cfg *config.Config, nodes *nodelist.N
 }
 
 // buildTasks 按模式构建任务；需要读取本地资源的错误在此一次性暴露（尚未建连）。
-func buildTasks(a *cli.Args, nodes *nodelist.Nodes) ([]*task, error) {
+// 第二个返回值是采集期提示（如上传源中被过滤的软链接数量与名称）。
+func buildTasks(a *cli.Args, nodes *nodelist.Nodes) ([]*task, []string, error) {
 	tasks := make([]*task, 0, nodes.Len())
+	var notices []string
 
 	switch {
 	case a.Upload != "":
 		// 上传源转绝对路径（对位旧 Python builder 的 os.path.abspath）
 		src, err := filepath.Abs(a.Upload)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		files, err := CollectLocalFiles(src)
+		collected, err := CollectLocalFiles(src)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
+		}
+		// 软链接等被过滤的条目不阻断执行，但要让用户知道（-u 走终端提示）
+		if len(collected.Skipped) > 0 {
+			notices = append(notices, fmt.Sprintf("提示：上传源中有 %d 个软链接/快捷方式被过滤（不上传）：%s",
+				len(collected.Skipped), Summarize(collected.Skipped)))
 		}
 		for i, node := range nodes.Items {
-			tasks = append(tasks, &task{seq: i, node: node, files: files, remote: a.Path, useSudo: a.Mode == "sudo"})
+			tasks = append(tasks, &task{seq: i, node: node, files: collected.Files, remote: a.Path, useSudo: a.Mode == "sudo"})
 		}
 	case a.Download != "":
 		// 本地落地目录转绝对路径（对位旧 Python builder）
 		local, err := filepath.Abs(a.Path)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		for i, node := range nodes.Items {
 			tasks = append(tasks, &task{seq: i, node: node, remote: a.Download, local: local, useSudo: a.Mode == "sudo"})
@@ -127,7 +143,7 @@ func buildTasks(a *cli.Args, nodes *nodelist.Nodes) ([]*task, error) {
 		if a.Script != "" {
 			data, err := os.ReadFile(a.Script)
 			if err != nil {
-				return nil, fmt.Errorf("读取脚本文件失败：%s\n原因：%v", a.Script, err)
+				return nil, nil, fmt.Errorf("读取脚本文件失败：%s\n原因：%v", a.Script, err)
 			}
 			body = strings.TrimSpace(string(data))
 			interpreter = "bash"
@@ -140,7 +156,7 @@ func buildTasks(a *cli.Args, nodes *nodelist.Nodes) ([]*task, error) {
 			tasks = append(tasks, &task{seq: i, node: node, command: command, stdin: stdin})
 		}
 	}
-	return tasks, nil
+	return tasks, notices, nil
 }
 
 func execModeName(a *cli.Args) string {
