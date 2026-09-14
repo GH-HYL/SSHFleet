@@ -10,8 +10,10 @@ import (
 )
 
 // CollectLocalFiles 收集待上传的本地文件清单（对位旧 localfs.CollectFiles）：
-// 拒软链接与 .lnk、拒 FIFO/device/socket、验证可读性、目录递归，
-// 且**只取文件名**（扁平化上传，不保留子目录结构——旧行为）。
+// 拒软链接与 .lnk、拒 FIFO/device/socket、验证可读性、目录递归。
+//
+// 每条带**相对上传根的路径**（POSIX 斜杠），上传侧据此保留目录层级（spec D49）：
+// 上传根自身那一层不含在内（`-u modules -p /tmp/` → `/tmp/<contents>`），单文件即文件名。
 func CollectLocalFiles(root string) ([]ssh.LocalFile, error) {
 	if !filepath.IsAbs(root) {
 		return nil, fmt.Errorf("file_path 必须是绝对路径: %s", root)
@@ -26,7 +28,7 @@ func CollectLocalFiles(root string) ([]ssh.LocalFile, error) {
 		if fi.Mode()&os.ModeSymlink != 0 {
 			return nil, fmt.Errorf("file_path 是软链接: %s", root)
 		}
-		return []ssh.LocalFile{{Path: root, Name: fi.Name(), Size: fi.Size()}}, nil
+		return []ssh.LocalFile{{Path: root, Rel: fi.Name(), Size: fi.Size()}}, nil
 	}
 
 	var items []ssh.LocalFile
@@ -64,7 +66,12 @@ func CollectLocalFiles(root string) ([]ssh.LocalFile, error) {
 			return fmt.Errorf("文件不可读: %s: %w", p, oerr)
 		}
 		_ = f.Close()
-		items = append(items, ssh.LocalFile{Path: p, Name: info.Name(), Size: info.Size()})
+
+		rel, rerr := filepath.Rel(root, p)
+		if rerr != nil {
+			return fmt.Errorf("计算相对路径失败: %w", rerr)
+		}
+		items = append(items, ssh.LocalFile{Path: p, Rel: filepath.ToSlash(rel), Size: info.Size()})
 		return nil
 	})
 	if err != nil {

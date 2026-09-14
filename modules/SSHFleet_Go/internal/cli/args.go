@@ -115,6 +115,20 @@ func Parse(cfg *config.Config, raw []string) (*Args, error) {
 		a.keyChanged = kf.Changed
 	}
 
+	// 多出来的位置参数：一律报错。
+	// 常见来源三类——① 通配符被终端展开（`-u /x/abc/*` 会变成多个路径，而 -u 只吃第一个，
+	// 其余会落到这里）② 路径含空格未加引号 ③ 参数多打或打错。
+	// 不拦的话它们被静默忽略，会造成"看起来成功、实际少传"（2026-09-14 实测）。
+	if extra := fs.Args(); len(extra) > 0 {
+		return nil, fmt.Errorf(
+			"出现多余的参数（未被使用）：%s\n常见原因：\n"+
+				"  ① 通配符被终端展开——`-u /x/abc/*` 会变成多个路径。上传目录不需要通配符，"+
+				"直接写目录本身即可（目录内容会按原有层级传过去）\n"+
+				"  ② 路径含空格但没加引号——请写成 \"路径 含 空格\"\n"+
+				"  ③ 参数打多了或打错了",
+			strings.Join(extra, " "))
+	}
+
 	// -t / -T / -n：转 int，非法留给 CheckArguments 报错
 	a.Timeout, a.timeoutInvalid = toInt(a.timeoutRaw)
 	a.ConnectTimeout, a.connectTimeoutInvalid = toInt(a.connectTimeoutRaw)
