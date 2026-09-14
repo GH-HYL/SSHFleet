@@ -65,6 +65,7 @@ if exist "%PKGDIR%" rmdir /s /q "%PKGDIR%"
 mkdir "%PKGDIR%\config"
 copy /y "%OUT%\SSHFleet.exe" "%PKGDIR%\" >nul
 copy /y "%~dp0README.md" "%PKGDIR%\" >nul
+copy /y "%~dp0CHANGELOG.md" "%PKGDIR%\" >nul
 copy /y "%~dp0modules\SSHFleet_Go\config\SSHFleet.conf" "%PKGDIR%\config\" >nul
 copy /y "%~dp0modules\SSHFleet_Go\config\dangerous_keywords.toml" "%PKGDIR%\config\" >nul
 copy /y "%~dp0modules\SSHFleet_Go\config\error_keywords.toml" "%PKGDIR%\config\" >nul
