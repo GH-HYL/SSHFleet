@@ -142,13 +142,19 @@ func (p *ProgressUI) emitLocked(lines []string) {
 	p.lastLines = lines
 }
 
-// clearLocked 擦除当前进度块：光标上移到块起点，逐行清空后落在块下方行首。
+// clearLocked 擦除当前进度块：光标上移到块起点，逐行清空。
+// 与 PrintAbove 配合时清完即原地写新内容（不留空行），故清完落在块起点行首
+// 而非块下方——擦除留下的空行会在历史里显示为结果块之间的空带（用户 2026-09-14 指出）。
 func (p *ProgressUI) clearLocked() {
-	if p.lines > 0 {
-		fmt.Fprintf(p.out, "\x1b[%dA", p.lines)
+	if p.lines <= 0 {
+		return
 	}
+	fmt.Fprintf(p.out, "\x1b[%dA", p.lines)
 	for i := 0; i < p.lines; i++ {
-		fmt.Fprint(p.out, "\r\x1b[K\n")
+		fmt.Fprint(p.out, "\r\x1b[K")
+		if i < p.lines-1 {
+			fmt.Fprint(p.out, "\n")
+		}
 	}
 	p.lines = 0
 }
