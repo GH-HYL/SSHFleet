@@ -32,6 +32,7 @@ type task struct {
 	command string
 	stdin   string
 	files   []ssh.LocalFile
+	skipped []string // 上传：采集阶段被过滤的链接（相对路径），随结果明细留痕
 	remote  string
 	local   string
 	useSudo bool
@@ -89,7 +90,7 @@ func Run(ctx context.Context, a *cli.Args, cfg *config.Config, nodes *nodelist.N
 		var res *ssh.Result
 		switch {
 		case a.Upload != "":
-			res = client.UploadFiles(ctx, t.files, t.remote, t.useSudo, t.seq, onProgress)
+			res = client.UploadFiles(ctx, t.files, t.skipped, t.remote, t.useSudo, t.seq, onProgress)
 		case a.Download != "":
 			res = client.DownloadFiles(ctx, t.remote, t.local, t.useSudo, t.seq, onProgress)
 		default:
@@ -127,7 +128,7 @@ func buildTasks(a *cli.Args, nodes *nodelist.Nodes) ([]*task, []string, error) {
 				len(collected.Skipped), Summarize(collected.Skipped)))
 		}
 		for i, node := range nodes.Items {
-			tasks = append(tasks, &task{seq: i, node: node, files: collected.Files, remote: a.Path, useSudo: a.Mode == "sudo"})
+			tasks = append(tasks, &task{seq: i, node: node, files: collected.Files, skipped: collected.Skipped, remote: a.Path, useSudo: a.Mode == "sudo"})
 		}
 	case a.Download != "":
 		// 本地落地目录转绝对路径（对位旧 Python builder）
