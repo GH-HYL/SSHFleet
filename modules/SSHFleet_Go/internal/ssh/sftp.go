@@ -20,7 +20,10 @@ const tmpRoot = "/tmp/.SSHFleet_tmp/"
 
 // UploadFiles 上传本地文件清单到远程目录（对位旧 UploadFiles）。
 // 前置：远程目标目录**必须已存在**（用户 2026-09-11 裁定 Q7：工具不建目录，错路径当场报错）。
-func (c *Client) UploadFiles(ctx context.Context, files []LocalFile, remotePath string, useSudo bool, seq int, onProgress func(Progress)) *Result {
+//
+// skipped 是采集阶段被过滤的链接（相对上传根的路径）：上传侧的过滤发生在本地采集
+// （`-u` 输入后即可知，无需连服务器），这里只把它写进 Output 明细留痕（spec D51）。
+func (c *Client) UploadFiles(ctx context.Context, files []LocalFile, skipped []string, remotePath string, useSudo bool, seq int, onProgress func(Progress)) *Result {
 	result := &Result{
 		Seq:        seq,
 		IP:         c.cfg.IP,
@@ -87,7 +90,12 @@ func (c *Client) UploadFiles(ctx context.Context, files []LocalFile, remotePath 
 
 	success, failed := 0, 0
 	var uploadedBytes int64
-	var lines []string
+	// 采集阶段被过滤的软链接先写进明细（随 output 字段落盘/进归档；上传侧不在终端打结果明细），
+	// 不计成功也不计失败（spec D51）
+	lines := make([]string, 0, len(skipped)+len(files))
+	for _, s := range skipped {
+		lines = append(lines, fmt.Sprintf("%s: 已跳过（符号链接）", s))
+	}
 	var costTotal float64
 	pacer := &progressPacer{}
 
