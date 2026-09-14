@@ -221,7 +221,6 @@ func main() {
 	logger.Info(fmt.Sprintf("执行期日志已轮转至：%s（执行结束自动切回）", execLogPath))
 
 	mode := result.ModeOf(args)
-	execLog.Info(fmt.Sprintf("开始执行任务：节点 %d 个，并发 %d，模式 %s", nodes.Len(), args.Number, output.ActionName(mode)))
 	if dangerNote != "" {
 		execLog.Warn(dangerNote)
 	}
@@ -263,7 +262,8 @@ func main() {
 		}
 		fmt.Fprintln(os.Stdout, text)
 	}
-	execResults, err := batch.Run(execCtx, args, cfg, nodes, logger, batch.Hooks{
+	// batch 的运行期日志（开始执行任务）写执行期日志——此刻已轮转，不再进工具日志
+	execResults, err := batch.Run(execCtx, args, cfg, nodes, execLog, batch.Hooks{
 		OnNotice: func(msg string) {
 			printAbove(msg)
 			execLog.Info(msg)
