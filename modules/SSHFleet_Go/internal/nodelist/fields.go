@@ -70,8 +70,14 @@ func parseNode(row []string, idx, total int, keyMode cli.KeyMode, pre *precheckR
 
 	port, portErrs := resolvePort(strings.TrimSpace(row[1]), cfg.Account.Port, mem, idx, total, ip, args.Disinteractive, in)
 	errs = append(errs, portErrs...)
-	user := resolveUser(strings.TrimSpace(row[2]), cfg.Account.User, mem, idx, total, ip, args.Disinteractive, in)
-	password := resolvePassword(pre, cfg, mem, idx, total, ip, args.Disinteractive, in)
+	user, userErr := resolveUser(strings.TrimSpace(row[2]), cfg.Account.User, mem, idx, total, ip, args.Disinteractive, in)
+	if userErr != nil {
+		errs = append(errs, userErr.Error())
+	}
+	password, passErr := resolvePassword(pre, cfg, mem, idx, total, ip, args.Disinteractive, in)
+	if passErr != nil {
+		errs = append(errs, passErr.Error())
+	}
 
 	// 密钥内容：状态3 用统一私钥原文；其余为预检时读好的 PEM（本行有路径才有值）
 	keyContent := ""
@@ -163,72 +169,80 @@ func isAllDigits(s string) bool {
 }
 
 // resolveUser 用户名字段补全：CSV > config > 输入记忆 > 交互输入。
-func resolveUser(raw, defaultUser string, mem *FieldMemory, idx, total int, ip string, disinteractive bool, in *common.Interactor) string {
+// 取消（EOF）错误向上传播——与 resolvePort 一致，不再静默吞掉后继续执行（2026-09-14 审计修复）。
+func resolveUser(raw, defaultUser string, mem *FieldMemory, idx, total int, ip string, disinteractive bool, in *common.Interactor) (string, error) {
 	if raw != "" {
-		return raw
+		return raw, nil
 	}
 	if defaultUser != "" {
-		return defaultUser
+		return defaultUser, nil
 	}
 	if mem.userUseInput {
-		return mem.userInputValue
+		return mem.userInputValue, nil
 	}
 	val, err := in.Prompt(fmt.Sprintf("行 %d (IP: %s): 用户名为空，请输入用户名: ", idx, ip))
 	if err != nil {
-		return ""
+		return "", err
 	}
 	for strings.TrimSpace(val) == "" {
 		fmt.Println("用户名不能为空")
 		val, err = in.Prompt(fmt.Sprintf("行 %d (IP: %s): 用户名为空，请输入用户名: ", idx, ip))
 		if err != nil {
-			return ""
+			return "", err
 		}
 	}
 	// 询问是否将此用户名应用于所有后续用户为空的节点
 	if !mem.userUseInput && idx < total {
 		yes, cerr := in.Confirm(fmt.Sprintf("\n是否将此用户名应用于所有后续用户为空的节点？"), true)
-		if cerr == nil && yes {
+		if cerr != nil {
+			return "", cerr
+		}
+		if yes {
 			mem.userUseInput = true
 			mem.userInputValue = val
 		}
 	}
-	return val
+	return val, nil
 }
 
 // resolvePassword 密码字段补全：清单密码列 > 密钥认证（有私钥则空）> 配置默认密码 > 输入记忆 > 交互输入。
 // 解码值取自预检结果（读→校验→直接用，不再读盘）。
 // 注：私钥节点密码恒为空，不受其他节点是否使用默认密码影响（避免混合清单里的状态泄漏）。
-func resolvePassword(pre *precheckResult, cfg *config.Config, mem *FieldMemory, idx, total int, ip string, disinteractive bool, in *common.Interactor) string {
+// 取消（EOF）错误向上传播——与 resolvePort 一致（2026-09-14 审计修复）。
+func resolvePassword(pre *precheckResult, cfg *config.Config, mem *FieldMemory, idx, total int, ip string, disinteractive bool, in *common.Interactor) (string, error) {
 	if pre.rows[idx-1].passwordPlain != "" {
-		return pre.rows[idx-1].passwordPlain
+		return pre.rows[idx-1].passwordPlain, nil
 	}
 	if pre.rows[idx-1].hasKey {
-		return ""
+		return "", nil
 	}
 	if pre.defaultPasswordPlain != "" {
-		return pre.defaultPasswordPlain
+		return pre.defaultPasswordPlain, nil
 	}
 	if mem.passwordUseInput {
-		return mem.passwordInputValue
+		return mem.passwordInputValue, nil
 	}
 	val, err := in.PromptPassword(fmt.Sprintf("行 %d (IP: %s): 密码为空，请输入密码: ", idx, ip))
 	if err != nil {
-		return ""
+		return "", err
 	}
 	for val == "" {
 		fmt.Println("密码不能为空，请重新输入")
 		val, err = in.PromptPassword(fmt.Sprintf("行 %d (IP: %s): 密码为空，请输入密码: ", idx, ip))
 		if err != nil {
-			return ""
+			return "", err
 		}
 	}
 	// 询问是否将此密码应用于所有后续密码为空的节点
 	if !mem.passwordUseInput && idx < total {
 		yes, cerr := in.Confirm(fmt.Sprintf("\n是否将此密码应用于所有后续密码为空的节点？"), true)
-		if cerr == nil && yes {
+		if cerr != nil {
+			return "", cerr
+		}
+		if yes {
 			mem.passwordUseInput = true
 			mem.passwordInputValue = val
 		}
 	}
-	return val
+	return val, nil
 }

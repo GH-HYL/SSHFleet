@@ -19,7 +19,7 @@ import (
 // 与旧实现的一致性要点：
 //   - 状态3(universal)：-k 统一检查一次，忽略节点自带密钥/口令；口令交互输入
 //   - 状态2(default)：逐节点检查 CSV 第5列 / 配置默认 account.key 及第6列口令
-//   - 状态1(off)：不做密钥预检，但 CSV 第5/6列有值时仍按旧实现读取使用（不用配置回退）
+//   - 状态1(off)：不做密钥预检，强制空密钥，CSV 第5/6列整体忽略（spec D41）
 func precheckCredentials(rows [][]string, args *cli.Args, cfg *config.Config, in *common.Interactor) (*precheckResult, error) {
 	keyMode := args.KeyMode()
 	level := cfg.Account.PasswordSecurity
