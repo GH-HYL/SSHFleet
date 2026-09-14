@@ -12,6 +12,7 @@
 
 # 忽略规则自身
 !.gitignore
+!.gitattributes
 
 # 文档（ADR、规格、词表）
 !CONTEXT.md
