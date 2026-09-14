@@ -142,7 +142,11 @@ func main() {
 		if !confirmed {
 			fmt.Println("操作已取消")
 			logger.Warn("执行已取消，SSHFleet工具已退出")
-			return
+			// 取消属非致命终止：与 confirm 确认取消同语义，以退出码 1 结束（2026-09-14 裁定，
+			// 对齐旧版 dangerous.py 取消即 sys.exit(1) 的行为）。fatal 对 ErrCancelled
+			// 不加 [ERROR] 前缀、直接以 1 退出。
+			_ = logger.Close()
+			fatal("dangercheck", common.ErrCancelled)
 		}
 		dangerNote = fmt.Sprintf("用户已确认风险继续执行（最高级别 %s）：%s", dangerReport.Highest(), dangerReport.Matches[0].Content)
 		logger.Warn(dangerNote)
