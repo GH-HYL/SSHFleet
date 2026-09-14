@@ -139,7 +139,7 @@ func CreateLatestHistoryLink(cfg *config.Config) error {
 			return fmt.Errorf("清理旧的 %s 失败：%v", linkName, err)
 		}
 	} else if _, err := os.Lstat(linkName); err == nil {
-		fmt.Printf("警告: 当前目录已存在同名文件 %s，跳过链接创建（如需快捷入口，删除该文件后重跑）\n", linkName)
+		fmt.Printf("%s警告:%s 当前目录已存在同名文件 %s，跳过链接创建（如需快捷入口，删除该文件后重跑）\n", ansiYellow, ansiReset, linkName)
 		return nil
 	}
 	if err := createDirLink(linkName, latest); err != nil {

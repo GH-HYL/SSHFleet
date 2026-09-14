@@ -40,21 +40,21 @@ func Render(
 
 	if cfg.Enable.OutputToXlsx {
 		if err := WriteOutputXlsx(archive.Dir, results, cfg, mode, kw, categoryOf); err != nil {
-			fmt.Fprintf(os.Stderr, "[ERROR] 生成 output.xlsx 失败：%v（本次跳过，不影响执行结果）\n", err)
+			fmt.Fprintf(os.Stderr, "%s[ERROR]%s 生成 output.xlsx 失败：%v（本次跳过，不影响执行结果）\n", ansiRed, ansiReset, err)
 		} else {
 			logger.Success("生成 output.xlsx 成功")
 		}
 	}
 	if cfg.Enable.ResultsToXlsx {
 		if err := WriteResultsXlsx(archive.Dir, results, cfg, mode, kw, categoryOf); err != nil {
-			fmt.Fprintf(os.Stderr, "[ERROR] 生成 results.xlsx 失败：%v（本次跳过，不影响执行结果）\n", err)
+			fmt.Fprintf(os.Stderr, "%s[ERROR]%s 生成 results.xlsx 失败：%v（本次跳过，不影响执行结果）\n", ansiRed, ansiReset, err)
 		} else {
 			logger.Success("生成 results.xlsx 成功")
 		}
 	}
 
 	if err := CreateLatestHistoryLink(cfg); err != nil {
-		fmt.Fprintf(os.Stderr, "[警告] %v\n", err)
+		fmt.Fprintf(os.Stderr, "%s[警告]%s %v\n", ansiYellow, ansiReset, err)
 	}
 	return nil
 }

@@ -105,27 +105,32 @@ func PrintResult(out io.Writer, resultWriter io.Writer, r ssh.Result, mode, cate
 }
 
 // PrintStatistics 打印统计块（对位旧 format_statistic_results_to_terminal）。
+// 配色对位旧 terminal.py：标签青 / 校验红 / 成功绿 / 失败红 / 分类黄 / 失败分类统计红 / 提示黄。
 func PrintStatistics(out io.Writer, stats *result.Stats, kw *result.Keywords) {
 	bar := strings.Repeat("═", 60)
 	fmt.Fprintln(out, bar)
 	fmt.Fprintf(out, "  总耗时：%.2f 秒\n", stats.GlobalCostTime)
 
 	if stats.Verify == "通过" {
-		fmt.Fprintf(out, "  节点总数： %d  完成总数：%d\n", stats.NodesTotal, stats.ResultsTotal)
+		fmt.Fprintf(out, "  %s节点总数：%s %d  %s完成总数：%s%d\n",
+			ansiCyan, ansiReset, stats.NodesTotal, ansiCyan, ansiReset, stats.ResultsTotal)
 	} else {
-		fmt.Fprintf(out, "  节点总数： %d  完成总数：%d  总数校验：%s\n", stats.NodesTotal, stats.ResultsTotal, stats.Verify)
+		fmt.Fprintf(out, "  %s节点总数：%s %d  %s完成总数：%s%d  %s总数校验：%s%s%s%s\n",
+			ansiCyan, ansiReset, stats.NodesTotal, ansiCyan, ansiReset, stats.ResultsTotal,
+			ansiCyan, ansiReset, ansiRed, stats.Verify, ansiReset)
 	}
 
 	if stats.FailCounts > 0 {
-		fmt.Fprintf(out, "  成功： %d   失败： %d\n", stats.SuccessCounts, stats.FailCounts)
+		fmt.Fprintf(out, "  %s成功：%s %d   %s失败：%s %d\n",
+			ansiGreen, ansiReset, stats.SuccessCounts, ansiRed, ansiReset, stats.FailCounts)
 	} else {
-		fmt.Fprintf(out, "  成功： %d\n", stats.SuccessCounts)
+		fmt.Fprintf(out, "  %s成功：%s %d\n", ansiGreen, ansiReset, stats.SuccessCounts)
 	}
 
 	if len(stats.SortedFailCategories) > 0 {
 		var known, fallback []string
 		for _, c := range stats.SortedFailCategories {
-			item := fmt.Sprintf("%s：%d", c.Category, c.Count)
+			item := fmt.Sprintf("%s%s：%s%d", ansiYellow, c.Category, ansiReset, c.Count)
 			if result.IsFallbackCategory(c.Category, kw) {
 				fallback = append(fallback, item)
 			} else {
@@ -133,15 +138,15 @@ func PrintStatistics(out io.Writer, stats *result.Stats, kw *result.Keywords) {
 			}
 		}
 		if len(known) > 0 {
-			fmt.Fprintf(out, "  失败分类统计 >>>  %s\n", strings.Join(known, "  "))
+			fmt.Fprintf(out, "  %s失败分类统计%s >>>  %s\n", ansiRed, ansiReset, strings.Join(known, "  "))
 		} else {
-			fmt.Fprintln(out, "  失败分类统计 >>>")
+			fmt.Fprintf(out, "  %s失败分类统计%s >>>\n", ansiRed, ansiReset)
 		}
 		for _, item := range fallback {
 			fmt.Fprintf(out, "    %s\n", item)
 		}
 		if hints := exitCodeHintLine(stats.SortedFailCategories); hints != "" {
-			fmt.Fprintf(out, "  %s\n", hints)
+			fmt.Fprintf(out, "  %s%s%s\n", ansiYellow, hints, ansiReset)
 		}
 	}
 	fmt.Fprintln(out, bar)

@@ -32,6 +32,7 @@ const (
 	ansiGreen  = "\x1b[32m"
 	ansiCyan   = "\x1b[36m"
 	ansiBlue   = "\x1b[34m"
+	ansiRed    = "\x1b[31m"
 	ansiDim    = "\x1b[90m"
 	ansiYellow = "\x1b[33m"
 	ansiBGreen = "\x1b[92m"
@@ -40,14 +41,15 @@ const (
 
 // ProgressUI 进度呈现器（跨调用保存终端渲染状态；由 batch 的渲染回调逐次驱动）。
 type ProgressUI struct {
-	out    io.Writer
-	mode   string // execute / upload / download
-	total  int
-	start  time.Time
-	mutex  sync.Mutex
-	lines  int                  // 上次渲染的行数（用于光标上移重绘）
-	speeds map[int]*speedWindow // 逐节点速度窗口
-	total_ *speedWindow         // 总速度窗口
+	out       io.Writer
+	mode      string // execute / upload / download
+	total     int
+	start     time.Time
+	mutex     sync.Mutex
+	lines     int                  // 上次渲染的行数（用于光标上移重绘）
+	lastLines []string             // 上次渲染的内容（PrintAbove 擦除后原样重绘用）
+	speeds    map[int]*speedWindow // 逐节点速度窗口
+	total_    *speedWindow         // 总速度窗口
 }
 
 type speedSample struct {
@@ -128,10 +130,42 @@ func (p *ProgressUI) renderLocked(s batch.Snapshot, first bool) {
 	if !first && p.lines > 0 {
 		fmt.Fprintf(p.out, "\x1b[%dA", p.lines)
 	}
+	p.emitLocked(lines)
+}
+
+// emitLocked 在当前光标处绘制进度块并记录行数与内容（重绘与 PrintAbove 复用）。
+func (p *ProgressUI) emitLocked(lines []string) {
 	for _, line := range lines {
 		fmt.Fprint(p.out, "\r\x1b[K"+line+"\n")
 	}
 	p.lines = len(lines)
+	p.lastLines = lines
+}
+
+// clearLocked 擦除当前进度块：光标上移到块起点，逐行清空后落在块下方行首。
+func (p *ProgressUI) clearLocked() {
+	if p.lines > 0 {
+		fmt.Fprintf(p.out, "\x1b[%dA", p.lines)
+	}
+	for i := 0; i < p.lines; i++ {
+		fmt.Fprint(p.out, "\r\x1b[K\n")
+	}
+	p.lines = 0
+}
+
+// PrintAbove 在进度界面上方打印外部内容（对位旧 rich Live 的 console.print 行为）：
+// 先擦除当前进度块，打印内容，再在内容下方原样重绘进度块——
+// 外部输出与进度条各占一块区域、互不覆盖（用户 2026-09-14 要求对齐旧版观感）。
+// 多行文本（如单条结果明细）整体作为一个块打印。
+func (p *ProgressUI) PrintAbove(text string) {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+	p.clearLocked()
+	if !strings.HasSuffix(text, "\n") {
+		text += "\n"
+	}
+	fmt.Fprint(p.out, text)
+	p.emitLocked(p.lastLines)
 }
 
 func (p *ProgressUI) buildLines(s batch.Snapshot, first bool) []string {

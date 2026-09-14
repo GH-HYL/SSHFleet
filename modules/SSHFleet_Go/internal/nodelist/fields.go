@@ -10,6 +10,13 @@ import (
 	"sshfleet/internal/config"
 )
 
+// 字段补全交互提示与 INFO 前缀的配色（对位旧 constants.py / csv.py：提示黄、[INFO] 青配黄 function）。
+const (
+	colorReset  = "\x1b[0m"
+	colorCyan   = "\x1b[36m"
+	colorYellow = "\x1b[33m"
+)
+
 // FieldMemory 跨节点累积的输入记忆：是否把本次交互输入应用到后续空字段节点。
 // 端口 / 用户名 / 密码各持一组独立记忆（CONTEXT.md「输入记忆」）。
 type FieldMemory struct {
@@ -136,7 +143,7 @@ func resolvePort(raw string, defaultPort int, mem *FieldMemory, idx, total int, 
 		if cerr == nil && v >= 1 && v <= 65535 {
 			// 询问是否将此端口号应用于所有后续端口为空的节点
 			if !mem.portUseInput && idx < total {
-				yes, cerr2 := in.Confirm(fmt.Sprintf("\n是否将此端口号应用于所有后续端口为空的节点？"), true)
+				yes, cerr2 := in.Confirm("\n"+colorYellow+"是否将此端口号应用于所有后续端口为空的节点？"+colorReset, true)
 				if cerr2 != nil {
 					return 0, []string{cerr2.Error()}
 				}
@@ -193,7 +200,7 @@ func resolveUser(raw, defaultUser string, mem *FieldMemory, idx, total int, ip s
 	}
 	// 询问是否将此用户名应用于所有后续用户为空的节点
 	if !mem.userUseInput && idx < total {
-		yes, cerr := in.Confirm(fmt.Sprintf("\n是否将此用户名应用于所有后续用户为空的节点？"), true)
+		yes, cerr := in.Confirm("\n"+colorYellow+"是否将此用户名应用于所有后续用户为空的节点？"+colorReset, true)
 		if cerr != nil {
 			return "", cerr
 		}
@@ -235,7 +242,7 @@ func resolvePassword(pre *precheckResult, cfg *config.Config, mem *FieldMemory, 
 	}
 	// 询问是否将此密码应用于所有后续密码为空的节点
 	if !mem.passwordUseInput && idx < total {
-		yes, cerr := in.Confirm(fmt.Sprintf("\n是否将此密码应用于所有后续密码为空的节点？"), true)
+		yes, cerr := in.Confirm("\n"+colorYellow+"是否将此密码应用于所有后续密码为空的节点？"+colorReset, true)
 		if cerr != nil {
 			return "", cerr
 		}

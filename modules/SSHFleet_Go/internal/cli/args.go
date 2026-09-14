@@ -75,8 +75,8 @@ func (a *Args) KeyMode() KeyMode {
 	return KeyModeUniversal
 }
 
-// Parse 解析命令行并补默认值。raw 是 os.Args[1:]。
-func Parse(cfg *config.Config, raw []string) (*Args, error) {
+// Parse 解析命令行并补默认值。raw 是 os.Args[1:]，version 是入口定义的版本号（帮助显示用）。
+func Parse(cfg *config.Config, version string, raw []string) (*Args, error) {
 	fs := pflag.NewFlagSet("SSHFleet", pflag.ContinueOnError)
 	fs.SetOutput(io.Discard) // 解析错误与提示全部自撰，不走 pflag 默认输出
 
@@ -100,13 +100,13 @@ func Parse(cfg *config.Config, raw []string) (*Args, error) {
 
 	// 未提供任何参数：打印帮助后以 0 退出（与旧版一致，发生在配置加载之后）
 	if len(raw) == 0 {
-		Usage(cfg)
+		Usage(cfg, version)
 		return nil, ErrHelp
 	}
 
 	if err := fs.Parse(normalizeKeyFlag(raw)); err != nil {
 		if errors.Is(err, pflag.ErrHelp) {
-			Usage(cfg)
+			Usage(cfg, version)
 			return nil, ErrHelp
 		}
 		return nil, fmt.Errorf("%v（使用 -h 查看帮助）", err)
@@ -251,8 +251,9 @@ func defaultRemark(a *Args) string {
 	return ""
 }
 
-// Usage 打印帮助（未提供任何参数或 -h 时）。默认值从配置插值（与旧版一致）。
-func Usage(cfg *config.Config) {
+// Usage 打印帮助（未提供任何参数或 -h 时）。默认值从配置插值（与旧版一致）；
+// 首行下方显示入口定义的版本号。
+func Usage(cfg *config.Config, version string) {
 	name := filepath.Base(os.Args[0])
 	entries := [][3]string{
 		{"-c", "(命令模式)", "远程在多台服务器上执行一条命令"},
@@ -279,7 +280,8 @@ func Usage(cfg *config.Config) {
 		}
 	}
 	var b strings.Builder
-	b.WriteString("SSHFleet - 批量 SSH 运维工具（命令/脚本执行、文件上传下载）\n\n")
+	b.WriteString("SSHFleet - 批量 SSH 运维工具（命令/脚本执行、文件上传下载）\n")
+	b.WriteString(fmt.Sprintf("版本: v%s\n\n", version))
 	b.WriteString("用法:\n")
 	b.WriteString(fmt.Sprintf("  %s ( -c | -s | -u | -d ) ( -f ) ( -p ) [其他可选参数]   批量执行（四种模式四选一）\n", name))
 	b.WriteString(fmt.Sprintf("  %s --gen-key | --convert-password 文件路径               工具选项（单独使用）\n\n", name))

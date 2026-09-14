@@ -28,12 +28,13 @@ func PrintDangerWarning(report *dangercheck.Report, forbidden bool) {
 	bar := strings.Repeat("═", inner)
 
 	risk := report.Highest()
-	color := lipgloss.Color("15")
+	// 对位旧 constants.py：红 31 / 黄 33 / 白 37（lipgloss ANSI 1/3/7 正是这三个码）
+	color := lipgloss.Color("7")
 	switch risk {
 	case "forbidden", "high":
-		color = lipgloss.Color("9")
+		color = lipgloss.Color("1")
 	case "medium":
-		color = lipgloss.Color("11")
+		color = lipgloss.Color("3")
 	}
 	style := lipgloss.NewStyle().Foreground(color)
 
