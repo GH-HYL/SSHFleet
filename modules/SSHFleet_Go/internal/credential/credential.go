@@ -1,6 +1,6 @@
 // Package credential 承载主干第 4 步（工具模式分流）与凭据读写：
-// 三等级凭据、主密钥（SSHFLEET_KEY）、--convert-password、新 0x02 AEAD 加密
-// 与旧 0x01 只读解密（spec D14/D15/D30/D31）。
+// 三等级凭据、主密钥（SSHFLEET_KEY）、--convert-password 与 0x02 AEAD 加密
+// （spec D15/D30/D31；2026-09-14 裁定移除 0x01 旧密文兼容，见 D14 修订注）。
 package credential
 
 import (
@@ -23,6 +23,7 @@ const (
 	CodeEmptyDecoded      CredCode = "empty_decoded"
 	CodeBadPEM            CredCode = "bad_pem"
 	CodeBadCipher         CredCode = "bad_cipher"
+	CodeLegacyCipher      CredCode = "legacy_cipher"
 	CodeMismatchEncrypted CredCode = "mismatch_encrypted"
 	CodeMismatchBase64    CredCode = "mismatch_base64"
 )
@@ -54,6 +55,7 @@ func checkFmtLevel(fmtStr string, level int) (CredCode, bool) {
 // decodeCredential 按密码安全等级把凭据内容还原为明文（不读盘）。
 // 返回 (明文, 错误码, 错误细节, 致命错误)。明文与错误互斥；
 // 等级 3 且内容确为加密格式时才拉取主密钥（懒获取，对位旧 get_master_key_or_exit 时机）。
+// 旧 0x01 密文不再解密：识别为 legacy_cipher，给「不再支持」的明确报错（2026-09-14 裁定）。
 func decodeCredential(content string, level int) (string, CredCode, string, error) {
 	fmtStr := ContentFormat(content)
 	if code, bad := checkFmtLevel(fmtStr, level); bad {
@@ -63,15 +65,14 @@ func decodeCredential(content string, level int) (string, CredCode, string, erro
 	case 1:
 		return content, "", "", nil
 	case 3:
+		if looksEncryptedV1(content) {
+			return "", CodeLegacyCipher, "", nil
+		}
 		masterKey, fatalErr := GetMasterKey()
 		if fatalErr != nil {
 			return "", "", "", fatalErr
 		}
-		decryptor := DecryptV2
-		if looksEncryptedV1(content) {
-			decryptor = DecryptV1 // 旧 0x01 密文只读兼容（spec D14）
-		}
-		plain, err := decryptor(content, masterKey)
+		plain, err := DecryptV2(content, masterKey)
 		if err != nil {
 			return "", CodeBadCipher, err.Error(), nil
 		}
@@ -166,6 +167,8 @@ func CredErrorLabel(code CredCode, path string, detail string) string {
 		label = "不是有效的PEM格式（缺少 -----BEGIN 头）"
 	case CodeBadCipher:
 		label = "不是有效的加密格式或主密钥不匹配（请先用 --convert-password 转换该文件）"
+	case CodeLegacyCipher:
+		label = "是旧版 0x01 加密格式（5.0.0 起不再支持，请重新录入密码后按当前等级重新转换）"
 	case CodeMismatchEncrypted:
 		label = "文件是本工具等级3（加密）格式，与当前密码安全等级不匹配"
 	case CodeMismatchBase64:
@@ -201,6 +204,10 @@ func CredErrorDetail(code CredCode, level int, path string, detail string) strin
 			return fmt.Sprintf("凭据文件解密失败（文件可能尚未用 --convert-password 转换，或主密钥不匹配）：%s\n%s", path, detail)
 		}
 		return fmt.Sprintf("凭据文件不是等级%d（加密）格式，请先 --convert-password 转换：%s", level, path)
+	case CodeLegacyCipher:
+		return fmt.Sprintf(
+			"凭据文件是旧版 4.x 的 0x01 加密格式，5.0.0 起不再支持读取：%s\n"+
+				"请将明文密码重新写入该文件（或先降为明文等级），再用 --convert-password 按当前等级转换", path)
 	case CodeBadBase64:
 		return fmt.Sprintf("凭据文件不是等级%d（base64）格式（内容疑似明文），请先 --convert-password 转换：%s", level, path)
 	case CodeEmptyDecoded:
