@@ -199,16 +199,26 @@ func main() {
 		defer func() { _ = outputFile.Close() }()
 	}
 
-	ui := output.NewProgressUI(os.Stdout, mode, nodes.Len())
+	// 进度界面延迟到首个进度事件才创建：采集期提示（如上传源中被过滤的软链接）
+	// 得以先落到终端，不会被进度条的光标上移重绘覆盖（用户 2026-09-14 裁定）。
+	var ui *output.ProgressUI
 	execResults, err := batch.Run(execCtx, args, cfg, nodes, logger, batch.Hooks{
-		OnProgress: ui.Update,
+		OnNotice: func(msg string) { fmt.Fprintln(os.Stdout, msg) },
+		OnProgress: func(s batch.Snapshot) {
+			if ui == nil {
+				ui = output.NewProgressUI(os.Stdout, mode, nodes.Len())
+			}
+			ui.Update(s)
+		},
 		OnResult: func(r ssh.Result) {
 			category := categoryOf(r)
 			_ = output.PrintResult(os.Stdout, outputFile, r, mode, category)
 			_ = archive.ExecLog("%s", output.ResultLine(r, mode, category))
 		},
 	})
-	ui.Stop()
+	if ui != nil {
+		ui.Stop()
+	}
 	_ = archive.Close()
 	if err != nil {
 		fatal("batch", err)
