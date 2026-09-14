@@ -1,6 +1,7 @@
 // --convert-password 入口（对位旧 upgrade.py）：自适应识别文件内容格式
 // （明文/base64/加密），统一还原为明文后，按目标等级重新编码写回；
-// 支持升降级。目标等级 3 使用新 0x02；0x01 旧密文可解（只读兼容）。
+// 支持升降级。目标等级 3 使用 0x02（2026-09-14 裁定：0x01 旧密文不再支持，
+// 识别到时明确报错，见 D14 修订注）。
 package credential
 
 import (
@@ -31,15 +32,16 @@ func ConvertPassword(rawPath, secretDir string, level int) error {
 	var plaintext, sourceFormat string
 	switch fmtStr {
 	case "encrypted":
+		if looksEncryptedV1(content) {
+			return fmt.Errorf(
+				"凭据文件是旧版 4.x 的 0x01 加密格式，5.0.0 起不再支持读取：%s\n"+
+					"请将明文密码重新写入该文件，再用 --convert-password 按当前等级转换", path)
+		}
 		masterKey, err := GetMasterKey()
 		if err != nil {
 			return err
 		}
-		decryptor := DecryptV2
-		if looksEncryptedV1(content) {
-			decryptor = DecryptV1
-		}
-		plaintext, err = decryptor(content, masterKey)
+		plaintext, err = DecryptV2(content, masterKey)
 		if err != nil {
 			return fmt.Errorf("解密失败：主密钥与加密该文件时使用的密钥不一致，或文件已损坏/被修改：%s\n原因：%v", path, err)
 		}
