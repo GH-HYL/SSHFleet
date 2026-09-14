@@ -13,6 +13,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"syscall"
+	"time"
 
 	"sshfleet/internal/batch"
 	"sshfleet/internal/cli"
@@ -96,8 +97,43 @@ func main() {
 		fatal("cli", fmt.Errorf("参数合规性检查失败\n原因：%v", err))
 	}
 	logger.Success("输入的参数合规性检查成功")
-	if err := dangercheck.Check(args); err != nil {
+
+	// 危险命令检测：规则文件加载（含规则校验）+ 命中判定 + 处置
+	dangerRules, err := dangercheck.LoadRules(cfg.Paths.DangerousKeywords)
+	if err != nil {
 		fatal("dangercheck", fmt.Errorf("危险关键词内容检查失败\n原因：%v", err))
+	}
+	errorKeywords, err := result.LoadKeywords(cfg.Paths.ErrorKeywords)
+	if err != nil {
+		fatal("result", err)
+	}
+	dangerReport, err := dangercheck.Check(args, dangerRules)
+	if err != nil {
+		fatal("dangercheck", fmt.Errorf("危险关键词内容检查失败\n原因：%v", err))
+	}
+	switch {
+	case dangerReport.HasForbidden():
+		// forbidden：打印警告后直接退出（与旧行为一致）
+		output.PrintDangerWarning(dangerReport, true)
+		logger.Warn(fmt.Sprintf("命中禁止命令，已退出：%s", dangerReport.Matches[0].Content))
+		_ = logger.Close()
+		os.Exit(1)
+	case len(dangerReport.Matches) > 0 && in.Disinteractive:
+		// 非交互模式：非 forbidden 放行，但写入工具日志留痕（spec D35）
+		logger.Warn(fmt.Sprintf("非交互模式放行危险命令（最高级别 %s，分类 %s，来源行 %d）：%s",
+			dangerReport.Highest(), dangerReport.Matches[0].RuleName, dangerReport.Matches[0].Line, dangerReport.Matches[0].Content))
+	case len(dangerReport.Matches) > 0:
+		output.PrintDangerWarning(dangerReport, false)
+		confirmed, cerr := in.Confirm("\n已明确风险继续执行？", false)
+		if cerr != nil {
+			fatal("dangercheck", cerr)
+		}
+		if !confirmed {
+			fmt.Println("操作已取消")
+			logger.Warn("执行已取消，SSHFleet工具已退出")
+			return
+		}
+		logger.Warn(fmt.Sprintf("用户已确认风险继续执行（最高级别 %s）：%s", dangerReport.Highest(), dangerReport.Matches[0].Content))
 	}
 	logger.Success("危险关键词内容检查成功")
 
@@ -118,6 +154,8 @@ func main() {
 	execCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	execStart := time.Now()
+
 	execResults, err := batch.Run(execCtx, args, cfg, nodes, logger, output.ProgressRenderer(os.Stdout))
 	if err != nil {
 		fatal("batch", err)
@@ -127,10 +165,8 @@ func main() {
 		logger.Warn("收到中断信号，执行已停止")
 	}
 	// ---- 步骤 9：结果统计 + 错误分类 -----------------------------------
-	stats, err := result.Statistics(execResults, nodes, args)
-	if err != nil {
-		fatal("result", err)
-	}
+	stats := result.Statistics(execResults, nodes, args, errorKeywords, execStart, time.Now())
+	logger.Success("计算统计结果信息成功")
 
 	// ---- 步骤 10：呈现 / 报告 / 归档 ------------------------------------
 	if err := output.Render(stats, args, cfg); err != nil {
