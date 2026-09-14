@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -75,6 +76,8 @@ func main() {
 		fatal("log", fmt.Errorf("初始化工具日志失败：%v\n请检查配置 paths.historys 指向的日志目录是否存在且可写，然后重试", err))
 	}
 	defer func() { _ = logger.Close() }()
+	// 执行分界符：区分同一天多次执行，直接落盘（不经 logger，避免时间戳前缀）
+	logger.Raw("\n    " + strings.Repeat("─", 50) + "\n\n")
 	logger.Info("SSHFleet工具开始执行")
 	logger.Info(fmt.Sprintf("工作路径：%s", func() string { wd, _ := os.Getwd(); return wd }()))
 	logger.Info(fmt.Sprintf("原始命令行参数：%v", os.Args))
@@ -190,11 +193,23 @@ func main() {
 		fatal("output", err)
 	}
 	logger.Success(fmt.Sprintf("生成归档目录成功: %s", archive.Dir))
-	if dangerNote != "" {
-		_ = archive.ExecLog("%s", dangerNote)
+
+	// 执行期日志（对位旧引擎写入归档目录的 SSHFleet.log）：带时间戳与级别的
+	// 节点级运行明细。执行开始即轮转过去，结束后切回工具日志并在此声明去向。
+	execLog, err := log.InitExec(archive.Dir, cfg.Paths.Exec)
+	if err != nil {
+		fatal("log", fmt.Errorf("创建执行期日志失败\n原因：%v", err))
 	}
+	defer func() { _ = execLog.Close() }()
+	execLogPath := filepath.Join(archive.Dir, cfg.Paths.Exec)
+	logger.Info(fmt.Sprintf("执行期日志已轮转至：%s（执行结束自动切回）", execLogPath))
 
 	mode := result.ModeOf(args)
+	execLog.Info(fmt.Sprintf("开始执行任务：节点 %d 个，并发 %d，模式 %s", nodes.Len(), args.Number, output.ActionName(mode)))
+	if dangerNote != "" {
+		execLog.Warn(dangerNote)
+	}
+
 	categoryOf := func(r ssh.Result) string {
 		return result.Classify(result.Case{
 			ExitCode:     r.ExitCode,
@@ -233,7 +248,10 @@ func main() {
 		fmt.Fprintln(os.Stdout, text)
 	}
 	execResults, err := batch.Run(execCtx, args, cfg, nodes, logger, batch.Hooks{
-		OnNotice: printAbove,
+		OnNotice: func(msg string) {
+			printAbove(msg)
+			execLog.Info(msg)
+		},
 		OnProgress: func(s batch.Snapshot) {
 			uiMutex.Lock()
 			if ui == nil {
@@ -250,13 +268,31 @@ func main() {
 			if mode == "execute" {
 				printAbove(line)
 			}
-			_ = archive.ExecLog("%s", line)
+			logNodeResult(execLog, r, mode, category)
 		},
 	})
 	if ui != nil {
 		ui.Stop()
 	}
-	_ = archive.Close()
+	logger.Info(fmt.Sprintf("执行期日志已写完，切回工具日志：%s", execLogPath))
+
+	// 执行期日志收尾：连接与成败统计（对位旧引擎的「连接统计」「执行完成」记录）
+	var connOK, connFail, okCount, failCount int
+	for _, r := range execResults.Items {
+		if r.ConnectSuccess {
+			connOK++
+		} else {
+			connFail++
+		}
+		if r.ExitCode != nil && *r.ExitCode == 0 {
+			okCount++
+		} else {
+			failCount++
+		}
+	}
+	execLog.Info(fmt.Sprintf("连接统计：成功 %d，失败 %d", connOK, connFail))
+	execLog.Info(fmt.Sprintf("执行结束：成功 %d 台，失败 %d 台", okCount, failCount))
+
 	if err != nil {
 		fatal("batch", err)
 	}
@@ -275,4 +311,48 @@ func main() {
 	}
 
 	logger.Info(fmt.Sprintf("SSHFleet已退出，日志文件：%s", filepath.Join(cfg.Paths.Historys, cfg.Paths.Tool)))
+	logger.Raw("\n    " + strings.Repeat("─", 50) + "\n\n")
+}
+
+// logNodeResult 把单节点结果按运行事件写入执行期日志（对位旧引擎的
+// 「SSH连接成功/失败 → 执行结束/节点完成 → 分类」三级记录，全部带时间戳与级别）。
+func logNodeResult(el *log.Logger, r ssh.Result, mode, category string) {
+	ip := "【" + r.IP + "】"
+	if r.ConnectSuccess {
+		el.Success(fmt.Sprintf("%s连接成功，耗时 %.3fs", ip, r.ConnectCostTime))
+	} else {
+		errMsg := "未知错误"
+		if r.Error != nil && *r.Error != "" {
+			errMsg = *r.Error
+		}
+		el.Error(fmt.Sprintf("%s连接失败：%s", ip, errMsg))
+	}
+
+	if r.ConnectSuccess {
+		switch mode {
+		case "upload":
+			if r.FailedFiles == 0 {
+				el.Success(fmt.Sprintf("%s上传完成：成功 %d/%d 个文件", ip, r.SuccessFiles, r.TotalFiles))
+			} else {
+				el.Warn(fmt.Sprintf("%s上传完成：成功 %d/%d 个文件（有失败项）", ip, r.SuccessFiles, r.TotalFiles))
+			}
+		case "download":
+			if r.FailedFiles == 0 {
+				el.Success(fmt.Sprintf("%s下载完成：成功 %d/%d 个文件", ip, r.SuccessFiles, r.TotalFiles))
+			} else {
+				el.Warn(fmt.Sprintf("%s下载完成：成功 %d/%d 个文件（有失败项）", ip, r.SuccessFiles, r.TotalFiles))
+			}
+		default:
+			if r.ExitCode != nil && *r.ExitCode == 0 {
+				el.Success(fmt.Sprintf("%s命令执行成功，退出码 0，耗时 %.3fs", ip, r.ExecCostTime))
+			} else {
+				code := "无"
+				if r.ExitCode != nil {
+					code = fmt.Sprintf("%d", *r.ExitCode)
+				}
+				el.Error(fmt.Sprintf("%s命令执行失败，退出码 %s，耗时 %.3fs", ip, code, r.ExecCostTime))
+			}
+		}
+	}
+	el.Info(fmt.Sprintf("%s分类: %s", ip, category))
 }
