@@ -10,8 +10,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
-
 	"sshfleet/internal/cli"
 	"sshfleet/internal/common"
 	"sshfleet/internal/config"
@@ -115,11 +113,11 @@ func buildInfoTable(args *cli.Args, nodes *nodelist.Nodes) [][2]string {
 	return t
 }
 
-// printInfoTable 打印信息表格，对齐用 lipgloss.Width（全角标点按 2 列计，不错位）。
+// printInfoTable 打印信息表格，对齐用 common.DisplayWidth（全角标点按 2 列计，不错位）。
 func printInfoTable(table [][2]string) {
 	maxLabelWidth := 0
 	for _, r := range table {
-		if w := lipgloss.Width(r[0]); w > maxLabelWidth {
+		if w := common.DisplayWidth(r[0]); w > maxLabelWidth {
 			maxLabelWidth = w
 		}
 	}
@@ -128,7 +126,7 @@ func printInfoTable(table [][2]string) {
 			fmt.Println()
 			continue
 		}
-		label := r[0] + strings.Repeat(" ", maxLabelWidth-lipgloss.Width(r[0]))
+		label := r[0] + strings.Repeat(" ", maxLabelWidth-common.DisplayWidth(r[0]))
 		fmt.Printf("%s▶ %s-→%s   %s%s%s\n", colorBrightCyan, label, colorReset, colorBrightOrange, r[1], colorReset)
 	}
 }
