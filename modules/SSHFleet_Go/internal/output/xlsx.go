@@ -32,9 +32,14 @@ var (
 )
 
 // cleanForExcel 清理写入 Excel 的文本（对位旧 clean_for_excel）：
-// 去 ANSI 转义 → 去非打印/零宽字符 → 统一换行 → 行首 `=` 前补空格（防被判成公式）
-// → 去掉首尾空行。远端命令输出常带颜色转义，不清会污染单元格甚至写坏 xlsx。
+// 非法 UTF-8 替换 → 去 ANSI 转义 → 去非打印/零宽字符 → 统一换行 → 行首 `=` 前补空格
+// （防被判成公式）→ 去掉首尾空行。
+//
+// 为什么要清：远端命令输出是任意字节流（颜色转义、进度条控制符、二进制片段），
+// 终端与 output.txt 能原样吃下，但 xlsx 是 XML——控制字符与非法 UTF-8 会直接把文件写坏。
+// 采集侧刻意不做任何处理（spec：原生交给终端/txt），故清理只在这里做，且是全量唯一入口。
 func cleanForExcel(s string) string {
+	s = strings.ToValidUTF8(s, "\uFFFD")
 	s = ansiEscapeRe.ReplaceAllString(s, "")
 	s = excelInvisibleRe.ReplaceAllString(s, "")
 	s = strings.ReplaceAll(s, "\r\n", "\n")
@@ -48,6 +53,15 @@ func cleanForExcel(s string) string {
 		}
 	}
 	return strings.Trim(strings.Join(lines, "\n"), "\n")
+}
+
+// setCell 写单元格的唯一入口：字符串一律先过 cleanForExcel，避免任何来源的原文
+// （远端输出、错误原文、兜底分类）绕过清理写坏 xlsx；数字/布尔原样写入。
+func setCell(f *excelize.File, sheet, cell string, v any) error {
+	if s, ok := v.(string); ok {
+		v = cleanForExcel(s)
+	}
+	return f.SetCellValue(sheet, cell, v)
 }
 
 // ---- 样式 ----
@@ -132,7 +146,7 @@ func WriteOutputXlsx(archiveDir string, results *batch.Results, cfg *config.Conf
 	headers := []string{"IP地址", "事件类型", "内容详情"}
 	for i, h := range headers {
 		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
-		if err := f.SetCellValue(sheet, cell, h); err != nil {
+		if err := setCell(f, sheet, cell, h); err != nil {
 			return err
 		}
 		if err := f.SetCellStyle(sheet, cell, cell, st.header); err != nil {
@@ -145,7 +159,7 @@ func WriteOutputXlsx(archiveDir string, results *batch.Results, cfg *config.Conf
 		row++
 		for i, v := range []string{ip, event, detail} {
 			cell, _ := excelize.CoordinatesToCellName(i+1, row)
-			if err := f.SetCellValue(sheet, cell, v); err != nil {
+			if err := setCell(f, sheet, cell, v); err != nil {
 				return err
 			}
 		}
@@ -165,6 +179,14 @@ func WriteOutputXlsx(archiveDir string, results *batch.Results, cfg *config.Conf
 			return err
 		}
 
+		// 连接失败：补一行错误详情（旧版没这行，错误原文只能从 results.xlsx 的 error 列看到；
+		// 用户 2026-09-15 要求保留，便于只开 output.xlsx 时也能定位原因）
+		if !r.ConnectSuccess && r.Error != nil && *r.Error != "" {
+			if err := put(r.IP, "错误", *r.Error); err != nil {
+				return err
+			}
+		}
+
 		for _, line := range strings.Split(cleanForExcel(r.Output), "\n") {
 			if strings.TrimSpace(line) == "" {
 				continue
@@ -173,13 +195,13 @@ func WriteOutputXlsx(archiveDir string, results *batch.Results, cfg *config.Conf
 			ipCell, _ := excelize.CoordinatesToCellName(1, row)
 			eventCell, _ := excelize.CoordinatesToCellName(2, row)
 			detailCell, _ := excelize.CoordinatesToCellName(3, row)
-			if err := f.SetCellValue(sheet, ipCell, r.IP); err != nil {
+			if err := setCell(f, sheet, ipCell, r.IP); err != nil {
 				return err
 			}
-			if err := f.SetCellValue(sheet, eventCell, "标准输出和错误输出"); err != nil {
+			if err := setCell(f, sheet, eventCell, "标准输出和错误输出"); err != nil {
 				return err
 			}
-			if err := f.SetCellValue(sheet, detailCell, strings.TrimSpace(line)); err != nil {
+			if err := setCell(f, sheet, detailCell, strings.TrimSpace(line)); err != nil {
 				return err
 			}
 			if err := f.SetCellStyle(sheet, detailCell, detailCell, st.detail); err != nil {
@@ -244,7 +266,7 @@ func WriteResultsXlsx(archiveDir string, results *batch.Results, cfg *config.Con
 	maxWidths := make([]int, len(headers))
 	for i, h := range headers {
 		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
-		if err := f.SetCellValue(sheet, cell, h); err != nil {
+		if err := setCell(f, sheet, cell, h); err != nil {
 			return err
 		}
 		if err := f.SetCellStyle(sheet, cell, cell, st.headerBordered); err != nil {
@@ -270,7 +292,7 @@ func WriteResultsXlsx(archiveDir string, results *batch.Results, cfg *config.Con
 		}
 		for i, v := range values {
 			cell, _ := excelize.CoordinatesToCellName(i+1, idx+2)
-			if err := f.SetCellValue(sheet, cell, v); err != nil {
+			if err := setCell(f, sheet, cell, v); err != nil {
 				return err
 			}
 			if err := f.SetCellStyle(sheet, cell, cell, st.cell); err != nil {
