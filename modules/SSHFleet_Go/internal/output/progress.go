@@ -141,9 +141,13 @@ func (p *ProgressUI) emitLocked(lines []string) {
 	p.lastLines = lines
 }
 
-// clearLocked 擦除当前进度块：光标上移到块起点，逐行清空。
-// 与 PrintAbove 配合时清完即原地写新内容（不留空行），故清完落在块起点行首
-// 而非块下方——擦除留下的空行会在历史里显示为结果块之间的空带（用户 2026-09-14 指出）。
+// clearLocked 擦除当前进度块：光标上移到块起点，逐行清空后**停回块起点行首**。
+//
+// 必须停回起点——调用方（renderLocked / PrintAbove）都是从光标处原地覆盖：
+// 若停在块的最后一行，每次重绘整块都会下移 N-1 行、并在上方留下 N-1 个空行，
+// 传输模式（块有 20+ 行）下空行迅速堆满屏幕、进度条被顶出可视区
+// （用户 2026-09-15 反馈「看不到进度条，上面几百个空行」）。
+// 命令模式块只有 1 行，起点与末行重合，所以此前未暴露。
 func (p *ProgressUI) clearLocked() {
 	if p.lines <= 0 {
 		return
@@ -154,6 +158,11 @@ func (p *ProgressUI) clearLocked() {
 		if i < p.lines-1 {
 			fmt.Fprint(p.out, "\n")
 		}
+	}
+	// 清完光标停在块末行，回退 N-1 行回到块起点（N=1 时已就在起点，且
+	// \x1b[0A 在部分终端会被当作上移 1 行，故只在 N>1 时回退）
+	if p.lines > 1 {
+		fmt.Fprintf(p.out, "\x1b[%dA", p.lines-1)
 	}
 	p.lines = 0
 }
