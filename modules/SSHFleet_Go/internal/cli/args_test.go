@@ -205,7 +205,7 @@ func TestUsageTextEntriesWithoutShortOption(t *testing.T) {
 	}
 }
 
-// 长说明在窄终端下折行，续行仍落在说明列内。
+// 长说明在窄终端下折行，续行仍落在说明列内，且折行不丢字。
 func TestUsageTextWrapsLongDescriptionInOwnColumn(t *testing.T) {
 	cfg := helpTestCfg()
 	_, _, _, descCol := helpColumns(cfg)
@@ -224,15 +224,34 @@ func TestUsageTextWrapsLongDescriptionInOwnColumn(t *testing.T) {
 	if headIdx+1 >= len(block) {
 		t.Fatalf("100 列下长说明应折行，实际只有 %d 行：%v", len(block), block)
 	}
-	cont := block[headIdx+1]
-	if strings.TrimSpace(cont) == "" {
-		t.Fatalf("续行不应为空：%q", cont)
+
+	// 该选项声明的完整描述（用于核对折行没丢字）
+	var desc string
+	for _, e := range helpEntries(cfg) {
+		if e.long == "--convert-password" {
+			desc = e.desc
+		}
 	}
-	if strings.TrimSpace(prefixOf(cont, descCol)) != "" {
-		t.Fatalf("续行在说明列之前应全为空格：%q", cont)
+	if desc == "" {
+		t.Fatal("未取到 --convert-password 的描述")
 	}
-	if !strings.Contains(cont, "凭据") && !strings.Contains(cont, "格式") {
-		t.Fatalf("续行内容异常：%q", cont)
+
+	// 收集它的说明行：首行 + 紧跟的续行（续行以说明列之前的空白开头）
+	lines := []string{strings.TrimSpace(block[headIdx][len(prefixOf(block[headIdx], descCol)):])}
+	for i := headIdx + 1; i < len(block); i++ {
+		cont := block[i]
+		if strings.TrimSpace(prefixOf(cont, descCol)) != "" {
+			break
+		}
+		if strings.TrimSpace(cont) == "" {
+			break
+		}
+		lines = append(lines, strings.TrimSpace(cont))
+	}
+	got := strings.ReplaceAll(strings.Join(lines, ""), " ", "")
+	want := strings.ReplaceAll(desc, " ", "")
+	if got != want {
+		t.Fatalf("折行后说明内容不一致\n得到：%q\n期望：%q", got, want)
 	}
 }
 
