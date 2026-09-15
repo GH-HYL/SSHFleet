@@ -305,7 +305,7 @@ func helpEntries(cfg *config.Config) []helpEntry {
 		blankRow,
 
 		opt("-m", "--mode", fmt.Sprintf("[默认: %s]", cfg.Execution.Mode), "执行身份：direct=登录用户，sudo=root"),
-		opt("-t", "--timeout", fmt.Sprintf("[默认: %ds/%ds]", cfg.Execution.TimeoutExecute, cfg.Execution.TimeoutTransfer), "单台执行 / 传输超时（秒）"),
+		opt("-t", "--timeout", fmt.Sprintf("[默认: %d/%d]", cfg.Execution.TimeoutExecute, cfg.Execution.TimeoutTransfer), "单台执行 / 传输超时（秒）"),
 		opt("-T", "--connect-timeout", fmt.Sprintf("[默认: %d]", cfg.Execution.TimeoutConnect), "连接超时（秒）"),
 		opt("-n", "--number", "[默认: 全部]", "并发数：同时操作几台（不填=全部并行）"),
 		opt("-r", "--remark", "", "任务名，用作历史记录文件夹后缀（不填自动生成）"),
