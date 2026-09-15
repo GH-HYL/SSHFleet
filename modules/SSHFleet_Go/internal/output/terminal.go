@@ -9,8 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/text/width"
-
+	"sshfleet/internal/common"
 	"sshfleet/internal/result"
 	"sshfleet/internal/ssh"
 )
@@ -205,38 +204,12 @@ func elapsedText(d time.Duration) string {
 	return fmt.Sprintf("%d:%02d:%02d", total/3600, (total%3600)/60, total%60)
 }
 
-// runeWidth 单字符的终端显示宽度（对位旧 text_utils.display_width 的判定）。
-func runeWidth(r rune) int {
-	switch width.LookupRune(r).Kind() {
-	case width.EastAsianWide, width.EastAsianFullwidth:
-		return 2
-	}
-	return 1
-}
+// DisplayWidth 字符串的终端显示宽度（实现见 internal/common，全工具单一实现）。
+// 框线对齐必须按它算：按字符数或按字节数算都会在中文/全角内容处错位。
+func DisplayWidth(s string) int { return common.DisplayWidth(s) }
 
-// DisplayWidth 字符串的终端显示宽度：东亚宽/全角（含全角标点）占 2 列，其余 1 列。
-// 全工具单一实现（对位旧 text_utils.display_width）——框线对齐必须按它算，
-// 按字符数或按字节数算都会在中文/全角内容处错位。
-func DisplayWidth(s string) int {
-	n := 0
-	for _, r := range s {
-		n += runeWidth(r)
-	}
-	return n
-}
-
-// trimToWidth 按**显示宽度**截断到 limit 列，返回可放下的最长前缀。
-func trimToWidth(s string, limit int) string {
-	w := 0
-	for i, r := range s {
-		rw := runeWidth(r)
-		if w+rw > limit {
-			return s[:i]
-		}
-		w += rw
-	}
-	return s
-}
+// trimToWidth 按显示宽度截断到 limit 列。
+func trimToWidth(s string, limit int) string { return common.TrimToWidth(s, limit) }
 
 // formatSize 文件大小人性化（对位旧 text_utils.format_size）。
 func formatSize(n int64) string {
