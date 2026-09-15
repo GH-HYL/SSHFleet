@@ -25,14 +25,14 @@ func TestCommandViewIsSingleLineWithCounts(t *testing.T) {
 	m := newTestProgress("execute", 5)
 	m.applySnapshot(batch.Snapshot{Total: 5, Completed: 3, Succeeded: 2, Failed: 1})
 
-	view := m.View()
+	view := m.render()
 	for _, want := range []string{"执行进度", "已完成: 3/5", "Succ:2", "Fail:1"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("命令模式界面缺少 %q：\n%s", want, view)
 		}
 	}
 	if strings.Contains(view, "\n") {
-		t.Fatalf("命令模式应只有一行：\n%s", view)
+		t.Fatalf("命令模式正文应只有一行：\n%s", view)
 	}
 }
 
@@ -49,7 +49,7 @@ func TestTransferViewListsActiveNodesOnly(t *testing.T) {
 	})
 	m.syncBars()
 
-	view := m.View()
+	view := m.render()
 	for _, want := range []string{"上传进度", "节点进度", "10.0.0.2", "Total:4"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("传输模式界面缺少 %q：\n%s", want, view)
@@ -87,18 +87,52 @@ func TestTransferVisibleNodesCapped(t *testing.T) {
 	}
 }
 
-// 进度口径：有字节总量按字节（传输），没有则按完成台数（命令）。
-func TestProgressPrefersBytesThenCounts(t *testing.T) {
-	transfer := newTestProgress("upload", 10)
-	transfer.applySnapshot(batch.Snapshot{Total: 10, Completed: 9, BytesDone: 100, BytesTotal: 1000})
-	if got := transfer.progress(); got != 0.1 {
-		t.Fatalf("有字节总量时应按字节算（0.1），实际 %v", got)
+// View 末尾刻意多带一个换行：bubbletea 退出时会擦掉自己渲染的最后一行
+// （命令模式的进度条只有一行，正好是那行），留个空行替它接刀，进度条才能留在屏幕上。
+func TestViewLeavesSacrificialTrailingLine(t *testing.T) {
+	m := newTestProgress("execute", 2)
+	view := m.View()
+	if !strings.HasSuffix(view, "\n") {
+		t.Fatal("View 末尾应留一个换行，用于承接 bubbletea 退出时的擦行")
+	}
+	if strings.HasSuffix(strings.TrimSuffix(view, "\n"), "\n") {
+		t.Fatalf("只该多一个换行，不该多出空行：\n%q", view)
+	}
+}
+
+// 总进度按台数加权：并发受限时不会因为「当前这批传完」就冲到 100%。
+// （用户 2026-09-15 实测：50 台 10 并发上传，进度条先到 100% 再回落。）
+func TestProgressWeightsByNodeCount(t *testing.T) {
+	m := newTestProgress("upload", 50)
+	nodes := make([]batch.NodeSnapshot, 0, 10)
+	for i := 0; i < 10; i++ {
+		nodes = append(nodes, batch.NodeSnapshot{
+			Seq: i, IP: fmt.Sprintf("10.0.0.%d", i), Bytes: 100, TotalBytes: 100, Done: true,
+		})
+	}
+	// 字节口径下这里会算出 1000/1000 = 1.0
+	m.applySnapshot(batch.Snapshot{
+		Total: 50, Completed: 10, BytesDone: 1000, BytesTotal: 1000, Nodes: nodes,
+	})
+	if got := m.progress(); got != 0.2 {
+		t.Fatalf("10/50 完成时进度应为 0.2（按字节算会得到 1.0），实际 %v", got)
 	}
 
-	command := newTestProgress("execute", 10)
-	command.applySnapshot(batch.Snapshot{Total: 10, Completed: 9})
-	if got := command.progress(); got != 0.9 {
-		t.Fatalf("无字节总量时应按完成台数算（0.9），实际 %v", got)
+	// 在传的节点按自身进度计入
+	m2 := newTestProgress("upload", 4)
+	m2.applySnapshot(batch.Snapshot{Total: 4, Completed: 1, Nodes: []batch.NodeSnapshot{
+		{Seq: 0, Bytes: 10, TotalBytes: 10, Done: true},
+		{Seq: 1, Bytes: 5, TotalBytes: 10},
+	}})
+	if got := m2.progress(); got != 0.375 {
+		t.Fatalf("(1 完成 + 0.5 在传) / 4 应为 0.375，实际 %v", got)
+	}
+
+	// 命令模式：完成的台数 / 总数
+	c := newTestProgress("execute", 10)
+	c.applySnapshot(batch.Snapshot{Total: 10, Completed: 9})
+	if got := c.progress(); got != 0.9 {
+		t.Fatalf("命令模式 9/10 应为 0.9，实际 %v", got)
 	}
 }
 
@@ -136,7 +170,7 @@ func TestClampAndNodePercent(t *testing.T) {
 func TestViewRendersOnEmptySnapshot(t *testing.T) {
 	for _, mode := range []string{"execute", "upload", "download"} {
 		m := newTestProgress(mode, 0)
-		if got := m.View(); got == "" {
+		if got := m.render(); got == "" {
 			t.Fatalf("%s 模式在空快照下也应渲染出内容", mode)
 		}
 	}
