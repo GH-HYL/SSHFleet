@@ -35,6 +35,7 @@ const (
 	ansiYellow = "\x1b[33m"
 	ansiBGreen = "\x1b[92m"
 	ansiBRed   = "\x1b[91m"
+	ansiWhite  = "\x1b[37m"
 )
 
 // ProgressUI 进度呈现器（跨调用保存终端渲染状态；由 batch 的渲染回调逐次驱动）。
