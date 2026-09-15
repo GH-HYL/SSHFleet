@@ -8,13 +8,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"runtime/debug"
 	"strings"
-	"sync"
 	"syscall"
 	"time"
 
@@ -29,7 +27,6 @@ import (
 	"sshfleet/internal/nodelist"
 	"sshfleet/internal/output"
 	"sshfleet/internal/result"
-	"sshfleet/internal/ssh"
 )
 
 // 版本号：单一出处（显示在帮助信息首行下方，经 cli.Parse 传入 Usage）。
@@ -272,18 +269,6 @@ func main() {
 		execLog.Warn(dangerNote)
 	}
 
-	categoryOf := func(r ssh.Result) string {
-		return result.Classify(result.Case{
-			ExitCode:     r.ExitCode,
-			Error:        errorText(r.Error),
-			Output:       r.Output,
-			AuthFailure:  errorText(r.AuthFailure),
-			Mode:         mode,
-			SuccessFiles: r.SuccessFiles,
-			FailedFiles:  r.FailedFiles,
-		}, errorKeywords)
-	}
-
 	outputPath := filepath.Join(archive.Dir, cfg.Paths.Output)
 	outputFile, err := os.Create(outputPath)
 	if err != nil {
@@ -292,51 +277,17 @@ func main() {
 		defer func() { _ = outputFile.Close() }()
 	}
 
-	// 进度界面延迟到首个进度事件才创建：采集期提示（如上传源中被过滤的软链接）
-	// 得以先落到终端，不会被进度条的光标上移重绘覆盖（用户 2026-09-14 裁定）。
-	// 界面创建后，运行期提示与单条结果改从界面上方打印（对位旧 rich Live：
-	// 上部滚动输出、下部进度条，两块区域互不覆盖）。
-	var (
-		uiMutex sync.Mutex
-		ui      *output.ProgressUI
-	)
-	printAbove := func(text string) {
-		uiMutex.Lock()
-		defer uiMutex.Unlock()
-		if ui != nil {
-			ui.PrintAbove(text)
-			return
-		}
-		fmt.Fprintln(os.Stdout, text)
-	}
+	// 单节点结果的三个去向（终端明细 / output.txt / 执行期日志）与进度界面的
+	// 懒创建、上打提示都收在 output 的呈现器里；main 只构造并接上 batch 的三个事件。
+	// （呈现器只做呈现，不控制生命周期——主干与退出权仍在本函数手里。）
+	reporter := output.NewReporter(execLog, outputFile, mode, nodes.Len(), errorKeywords)
 	// batch 的运行期日志（开始执行任务）写执行期日志——此刻已轮转，不再进工具日志
 	execResults, err := batch.Run(execCtx, args, cfg, nodes, execLog, batch.Hooks{
-		OnNotice: func(msg string) {
-			printAbove(msg)
-			execLog.Info(msg)
-		},
-		OnProgress: func(s batch.Snapshot) {
-			uiMutex.Lock()
-			if ui == nil {
-				ui = output.NewProgressUI(os.Stdout, mode, nodes.Len())
-			}
-			uiMutex.Unlock()
-			ui.Update(s)
-		},
-		OnResult: func(r ssh.Result) {
-			category := categoryOf(r)
-			line := output.ResultLine(r, mode, category)
-			// 终端明细改经 printAbove（进度界面上方），PrintResult 只负责 output.txt
-			_ = output.PrintResult(io.Discard, outputFile, r, mode, category)
-			if mode == "execute" {
-				printAbove(line)
-			}
-			logNodeResult(execLog, r, mode, category)
-		},
+		OnNotice:   reporter.Notice,
+		OnProgress: reporter.Progress,
+		OnResult:   reporter.Result,
 	})
-	if ui != nil {
-		ui.Stop()
-	}
+	reporter.Stop()
 	logger.Info(fmt.Sprintf("执行期日志已写完，切回工具日志：%s", execLogPath))
 
 	// 执行期日志收尾：连接与成败统计（对位旧引擎的「连接统计」「执行完成」记录）
@@ -369,53 +320,10 @@ func main() {
 	output.PrintStatistics(os.Stdout, stats, errorKeywords)
 
 	// ---- 步骤 10：呈现 / 报告 / xlsx / 归档 -----------------------------
-	if err := output.Render(archive, stats, execResults, args, cfg, errorKeywords, os.Args, categoryOf, logger); err != nil {
+	if err := output.Render(archive, stats, execResults, args, cfg, errorKeywords, os.Args, reporter.Category, logger); err != nil {
 		fatal("output", err)
 	}
 
 	logger.Info(fmt.Sprintf("SSHFleet已退出，日志文件：%s", filepath.Join(cfg.Paths.Historys, cfg.Paths.Tool)))
 	logger.Raw("\n    " + strings.Repeat("─", 50) + "\n\n")
-}
-
-// logNodeResult 把单节点结果按运行事件写入执行期日志（对位旧引擎的
-// 「SSH连接成功/失败 → 执行结束/节点完成 → 分类」三级记录，全部带时间戳与级别）。
-func logNodeResult(el *log.Logger, r ssh.Result, mode, category string) {
-	ip := "【" + r.IP + "】"
-	if r.ConnectSuccess {
-		el.Success(fmt.Sprintf("%s连接成功，耗时 %.3fs", ip, r.ConnectCostTime))
-	} else {
-		errMsg := "未知错误"
-		if r.Error != nil && *r.Error != "" {
-			errMsg = *r.Error
-		}
-		el.Error(fmt.Sprintf("%s连接失败：%s", ip, errMsg))
-	}
-
-	if r.ConnectSuccess {
-		switch mode {
-		case "upload":
-			if r.FailedFiles == 0 {
-				el.Success(fmt.Sprintf("%s上传完成：成功 %d/%d 个文件", ip, r.SuccessFiles, r.TotalFiles))
-			} else {
-				el.Warn(fmt.Sprintf("%s上传完成：成功 %d/%d 个文件（有失败项）", ip, r.SuccessFiles, r.TotalFiles))
-			}
-		case "download":
-			if r.FailedFiles == 0 {
-				el.Success(fmt.Sprintf("%s下载完成：成功 %d/%d 个文件", ip, r.SuccessFiles, r.TotalFiles))
-			} else {
-				el.Warn(fmt.Sprintf("%s下载完成：成功 %d/%d 个文件（有失败项）", ip, r.SuccessFiles, r.TotalFiles))
-			}
-		default:
-			if r.ExitCode != nil && *r.ExitCode == 0 {
-				el.Success(fmt.Sprintf("%s命令执行成功，退出码 0，耗时 %.3fs", ip, r.ExecCostTime))
-			} else {
-				code := "无"
-				if r.ExitCode != nil {
-					code = fmt.Sprintf("%d", *r.ExitCode)
-				}
-				el.Error(fmt.Sprintf("%s命令执行失败，退出码 %s，耗时 %.3fs", ip, code, r.ExecCostTime))
-			}
-		}
-	}
-	el.Info(fmt.Sprintf("%s分类: %s", ip, category))
 }
