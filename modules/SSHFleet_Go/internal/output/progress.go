@@ -8,13 +8,9 @@ package output
 import (
 	"fmt"
 	"io"
-	"os"
-	"sort"
 	"strings"
 	"sync"
 	"time"
-
-	"golang.org/x/term"
 
 	"sshfleet/internal/batch"
 )
@@ -24,6 +20,8 @@ const (
 	speedWindowSpan = 2 * time.Second
 	separatorWidth  = 50
 	indent          = "    "
+	// maxVisibleNodes 单节点进度条的显示上限（对位旧版 MAX_VISIBLE_NODES = 20）
+	maxVisibleNodes = 20
 )
 
 // ANSI 片段（对位 rich 的配色：完成绿 / 结束蓝 / 节点青）
@@ -48,6 +46,7 @@ type ProgressUI struct {
 	mutex     sync.Mutex
 	lines     int                  // 上次渲染的行数（用于光标上移重绘）
 	lastLines []string             // 上次渲染的内容（PrintAbove 擦除后原样重绘用）
+	bars      map[int]bool         // 已获得显示位的节点 seq（传输模式排队机制，上限 maxVisibleNodes）
 	speeds    map[int]*speedWindow // 逐节点速度窗口
 	total_    *speedWindow         // 总速度窗口
 }
@@ -88,6 +87,7 @@ func NewProgressUI(out io.Writer, mode string, total int) *ProgressUI {
 		mode:   mode,
 		total:  total,
 		start:  time.Now(),
+		bars:   map[int]bool{},
 		speeds: map[int]*speedWindow{},
 		total_: &speedWindow{},
 	}
@@ -123,13 +123,12 @@ func (p *ProgressUI) emptySnapshot() batch.Snapshot {
 	return batch.Snapshot{Total: p.total}
 }
 
-// renderLocked 重绘整个界面：先上移光标回到界面起点，逐行重写并清行尾。
+// renderLocked 重绘整个界面：整块擦除旧界面后从原位重绘。
+// 不能只覆盖重写——传输模式下节点条完成移除后块会变短，旧块多出的行若不擦除
+// 会残留在屏幕上，统计结果打印时叠在半截进度条中间（用户 2026-09-15 指出）。
 func (p *ProgressUI) renderLocked(s batch.Snapshot, first bool) {
 	lines := p.buildLines(s, first)
-
-	if !first && p.lines > 0 {
-		fmt.Fprintf(p.out, "\x1b[%dA", p.lines)
-	}
+	p.clearLocked()
 	p.emitLocked(lines)
 }
 
@@ -216,20 +215,27 @@ func (p *ProgressUI) transferLines(s batch.Snapshot, first bool) []string {
 
 	lines = append(lines, indent+strings.Repeat("─", separatorWidth))
 
-	// 逐节点明细：只显示未完成节点，按 Seq 排序，行数按终端高度自适应
-	active := make([]batch.NodeSnapshot, 0, len(s.Nodes))
+	// 逐节点明细（对位旧版 MAX_VISIBLE_NODES=20 的排队机制）：
+	//   已完成的节点释放条；条授予「已开始传输（有字节）且未完成」的节点，
+	//   满 maxVisibleNodes 个为止——其余排队不显示，等有节点完成再补位。
+	//   不按终端高度自适应：72 台并发时满屏都是 0% 空条，观感极差（用户 2026-09-15 裁定）。
 	for _, n := range s.Nodes {
-		if !n.Done {
-			active = append(active, n)
+		if n.Done {
+			delete(p.bars, n.Seq)
 		}
 	}
-	sort.Slice(active, func(i, j int) bool { return active[i].Seq < active[j].Seq })
-
-	maxNodes := p.maxNodeLines()
-	if len(active) > maxNodes {
-		active = active[:maxNodes]
+	for _, n := range s.Nodes {
+		if len(p.bars) >= maxVisibleNodes {
+			break
+		}
+		if !n.Done && n.Bytes > 0 && !p.bars[n.Seq] {
+			p.bars[n.Seq] = true
+		}
 	}
-	for _, n := range active {
+	for _, n := range s.Nodes {
+		if !p.bars[n.Seq] {
+			continue
+		}
 		pct := 0
 		if n.TotalBytes > 0 {
 			pct = int(float64(n.Bytes) / float64(n.TotalBytes) * 100)
@@ -279,23 +285,4 @@ func bar(finished bool, pct int, completeColor, finishedColor string) string {
 		color = finishedColor
 	}
 	return color + strings.Repeat("━", filled) + ansiReset + ansiDim + strings.Repeat("━", barWidth-filled) + ansiReset
-}
-
-// maxNodeLines 逐节点明细的可见行数：按终端高度自适应（无法取到高度时给 10 行）。
-func (p *ProgressUI) maxNodeLines() int {
-	height := 0
-	if f, ok := p.out.(*os.File); ok {
-		if _, h, err := term.GetSize(int(f.Fd())); err == nil {
-			height = h
-		}
-	}
-	if height <= 0 {
-		return 10
-	}
-	// 总进度 1 + 节点进度 1 + 分隔线 1 + 余量 3 → 其余留给逐节点明细
-	n := height - 6
-	if n < 3 {
-		n = 3
-	}
-	return n
 }
