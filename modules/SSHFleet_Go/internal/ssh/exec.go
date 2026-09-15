@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"sync"
 	"time"
 
@@ -90,7 +91,7 @@ func (c *Client) RunCommand(ctx context.Context, command, stdin string, seq int)
 	execStart := time.Now()
 	err = c.runWithTimeoutAndCancel(ctx, session, command)
 	result.ExecCostTime = time.Since(execStart).Seconds()
-	result.Output = out.String()
+	result.Output = trimOuterBlankLines(out.String())
 
 	if err != nil {
 		if code := extractExitCode(err); code != nil {
@@ -103,6 +104,31 @@ func (c *Client) RunCommand(ctx context.Context, command, stdin string, seq int)
 		result.ExitCode = &code
 	}
 	return result
+}
+
+// trimOuterBlankLines 远端输出写进 Output 字段前的整备：只去掉**最前与最后**的空白行，
+// 中间原样——中间的空行、每行的行首缩进，都是命令输出自身的结构。
+//
+// 为什么只在这里做一次：Output 是原始字段，采集侧给出来就是干净的。终端与 output.txt
+// 拿它直接输出、不做任何处理；xlsx 那边只额外清非法字符（见 output.cleanForExcel）。
+// 整备若散到各输出端，就会各清各的、行为互相漂移。
+//
+// 为什么不能 TrimSpace：那等于把「块首」当成「行首」。`who -b` 只有一行，它的行首缩进
+// 正好落在块首，会被当作首部空白一起吃掉——而那是输出自身的排版（`system boot` 前
+// 那串空格是对齐用的）。多行输出只有第一行受害，症状看起来像「随机丢缩进」。
+//
+// 为什么不能逐行丢弃空白行：空行同样可能是输出的组成部分（`ls -l` 分组、`df -h`、
+// 日志分段都靠空行分隔），按行清理会改掉原输出的结构。
+func trimOuterBlankLines(s string) string {
+	lines := strings.Split(s, "\n")
+	start, end := 0, len(lines)
+	for start < end && strings.TrimSpace(lines[start]) == "" {
+		start++
+	}
+	for end > start && strings.TrimSpace(lines[end-1]) == "" {
+		end--
+	}
+	return strings.Join(lines[start:end], "\n")
 }
 
 // runWithTimeoutAndCancel 执行超时（context.WithTimeout + defer cancel）与外部中断。

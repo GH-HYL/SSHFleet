@@ -70,8 +70,8 @@ type xlsxStyles struct {
 	header, detail, separator, cell, headerBordered int
 }
 
-// newOutputStyles 旧 output.xlsx 的样式：表头深蓝底白字加粗居中；输出明细顶端对齐自动换行；
-// 结果之间一条浅蓝分隔行。
+// newOutputStyles output.xlsx 的样式：表头深蓝底白字加粗居中；输出明细顶端对齐、**不换行**
+// （单行显示，列宽够长，行内容不折行）；结果之间一条浅蓝分隔行。
 func newOutputStyles(f *excelize.File) (*xlsxStyles, error) {
 	st := &xlsxStyles{}
 	var err error
@@ -83,7 +83,7 @@ func newOutputStyles(f *excelize.File) (*xlsxStyles, error) {
 		return nil, err
 	}
 	if st.detail, err = f.NewStyle(&excelize.Style{
-		Alignment: &excelize.Alignment{Vertical: "top", WrapText: true},
+		Alignment: &excelize.Alignment{Vertical: "top"},
 	}); err != nil {
 		return nil, err
 	}
@@ -124,9 +124,12 @@ func newResultsStyles(f *excelize.File) (*xlsxStyles, error) {
 //
 //	IP | 连接: 成功 - X.XXXs |
 //	IP | 执行(上传|下载): 成功 - X.XXXs |
-//	IP | 标准输出和错误输出 | 输出第 N 行（每条输出独占一行、顶端对齐自动换行）
+//	IP | 标准输出和错误输出 | 输出第 N 行（每条输出独占一行、单行显示不折行）
 //	IP | 分类: 分类名 |
 //	（浅蓝分隔行）
+//
+// 明细行只经 cleanForExcel 清非法字符（决定「文本能不能写进 XML」），排版一概不动：
+// 行首缩进、中间空行都原样写入。output 字段的首尾空白行在采集侧已去掉，此处不重复处理。
 func WriteOutputXlsx(archiveDir string, results *batch.Results, cfg *config.Config, mode string, kw *result.Keywords, categoryOf func(ssh.Result) string) error {
 	if results.Len() == 0 {
 		return nil
@@ -187,10 +190,14 @@ func WriteOutputXlsx(archiveDir string, results *batch.Results, cfg *config.Conf
 			}
 		}
 
-		for _, line := range strings.Split(cleanForExcel(r.Output), "\n") {
-			if strings.TrimSpace(line) == "" {
-				continue
-			}
+		// 逐行写入，中间的空行照样占一行：空行可能是输出自身的分段
+		// （`ls -l` / `df -h` / 日志都靠它分隔），跳过就改掉了原输出的结构。
+		// 这里只清非法字符；排版（首尾空白行）在采集侧已定好，不重复处理。
+		var outputLines []string
+		if cleaned := cleanForExcel(r.Output); cleaned != "" {
+			outputLines = strings.Split(cleaned, "\n")
+		}
+		for _, line := range outputLines {
 			row++
 			ipCell, _ := excelize.CoordinatesToCellName(1, row)
 			eventCell, _ := excelize.CoordinatesToCellName(2, row)
@@ -201,7 +208,7 @@ func WriteOutputXlsx(archiveDir string, results *batch.Results, cfg *config.Conf
 			if err := setCell(f, sheet, eventCell, "标准输出和错误输出"); err != nil {
 				return err
 			}
-			if err := setCell(f, sheet, detailCell, strings.TrimSpace(line)); err != nil {
+			if err := setCell(f, sheet, detailCell, line); err != nil {
 				return err
 			}
 			if err := f.SetCellStyle(sheet, detailCell, detailCell, st.detail); err != nil {
@@ -221,7 +228,7 @@ func WriteOutputXlsx(archiveDir string, results *batch.Results, cfg *config.Conf
 		}
 	}
 
-	for i, width := range []float64{15, 20, 60} {
+	for i, width := range []float64{15, 20, 120} {
 		if err := f.SetColWidth(sheet, colName(i+1), colName(i+1), width); err != nil {
 			return err
 		}
@@ -238,9 +245,13 @@ func WriteOutputXlsx(archiveDir string, results *batch.Results, cfg *config.Conf
 	return f.SaveAs(filepath.Join(archiveDir, cfg.Paths.OutputXlsx))
 }
 
-// resultsFixedWidth N、O 两列（error / output）的固定列宽：
-// 这两列是长短不一的自由文本，不参与自适应，否则会撑出几百字符宽的列。
-const resultsFixedWidth = 50
+// 两列自由文本（N: error / O: output）的固定列宽：不参与自适应——这两列长短不一，
+// 按内容撑宽会被最长的错误串拉出几百字符宽的列。
+// error 列刻意窄（失败原因多是短句，需要看全时展开单元格即可），output 列是输出原文、留宽。
+const (
+	resultsErrorWidth  = 30.0
+	resultsOutputWidth = 50.0
+)
 
 // WriteResultsXlsx 生成 <归档目录>/<paths.results_xlsx>：结果逐条固化为一行（表头取字段名）。
 // 对位旧 format_dict_list_to_xlsx：表头带细边框、数据单元格带细边框、自动筛选；
@@ -304,11 +315,14 @@ func WriteResultsXlsx(archiveDir string, results *batch.Results, cfg *config.Con
 		}
 	}
 
-	// 列宽：A–M 自适应（内容 + 2 列留白），N/O 固定宽度
+	// 列宽：A–M 自适应（内容 + 2 列留白）；N（error）与 O（output）各按固定值
 	for i := range headers {
-		width := float64(resultsFixedWidth)
-		if i < resultsFixedWidthColumns {
-			width = float64(maxWidths[i] + 2)
+		width := float64(maxWidths[i] + 2)
+		switch i {
+		case resultsFixedWidthColumns: // N: error
+			width = resultsErrorWidth
+		case resultsFixedWidthColumns + 1: // O: output
+			width = resultsOutputWidth
 		}
 		if err := f.SetColWidth(sheet, colName(i+1), colName(i+1), width); err != nil {
 			return err

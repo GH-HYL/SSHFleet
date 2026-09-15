@@ -1,233 +1,143 @@
 package output
 
 import (
-	"bytes"
 	"fmt"
-	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"sshfleet/internal/batch"
 )
 
-// 进度块的重绘位置回归。
+// 进度界面的渲染回归。
 //
-// 这类 bug 只在真终端上肉眼可见（进度块整体下移、上方堆空行），用普通字符串断言
-// 抓不住，故此处用一个极简终端模型：只跟踪光标行与各物理行的可见文本，
-// 认 CSI A（上移）/ CSI B（下移）/ CSI K（清行）/ \r / \n。
-// 不模拟滚动——被测逻辑依赖的是相对行位移，终端滚动不改变相对关系。
+// 换用 bubbletea 之后，「底部固定、上方滚屏、重绘不残留旧块」这些由框架保证，
+// 不再是本项目代码的责任——原先那批「块锚点」测试（连带自写的 ANSI 终端模拟器）
+// 随实现一并删除。这里只钉住属于我们自己的部分：两种模式渲染成什么、
+// 逐节点显示位怎么分配、进度取值按什么口径。
 
-type ansiTerm struct {
-	row  int
-	col  int
-	rows map[int][]rune
+func newTestProgress(mode string, total int) progressModel {
+	return newProgressModel(mode, total, time.Now())
 }
 
-func newAnsiTerm() *ansiTerm { return &ansiTerm{rows: map[int][]rune{}} }
+// 命令模式：单行，含台数、成败与耗时。
+func TestCommandViewIsSingleLineWithCounts(t *testing.T) {
+	m := newTestProgress("execute", 5)
+	m.applySnapshot(batch.Snapshot{Total: 5, Completed: 3, Succeeded: 2, Failed: 1})
 
-func drain(buf *bytes.Buffer) string {
-	s := buf.String()
-	buf.Reset()
-	return s
-}
-
-// put 从当前列写入一段可见文本（同一行会被多段颜色转义切成多段，必须按列拼接而非覆盖）。
-func (t *ansiTerm) put(text string) {
-	line := t.rows[t.row]
-	for len(line) < t.col {
-		line = append(line, ' ')
-	}
-	for i, r := range []rune(text) {
-		if pos := t.col + i; pos < len(line) {
-			line[pos] = r
-		} else {
-			line = append(line, r)
+	view := m.View()
+	for _, want := range []string{"执行进度", "已完成: 3/5", "Succ:2", "Fail:1"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("命令模式界面缺少 %q：\n%s", want, view)
 		}
 	}
-	t.rows[t.row] = line
-	t.col += len([]rune(text))
+	if strings.Contains(view, "\n") {
+		t.Fatalf("命令模式应只有一行：\n%s", view)
+	}
 }
 
-func (t *ansiTerm) feed(s string) {
-	for i := 0; i < len(s); {
-		switch {
-		case s[i] == 0x1b && i+1 < len(s) && s[i+1] == '[':
-			j := i + 2
-			n := 0
-			for j < len(s) && s[j] >= '0' && s[j] <= '9' {
-				n = n*10 + int(s[j]-'0')
-				j++
-			}
-			if j >= len(s) {
-				return
-			}
-			switch s[j] {
-			case 'A':
-				if t.row -= n; t.row < 0 {
-					t.row = 0
-				}
-			case 'B':
-				t.row += n
-			case 'C':
-				t.col += n
-			case 'D':
-				if t.col -= n; t.col < 0 {
-					t.col = 0
-				}
-			case 'K', 'J': // 擦到行尾：按当前列截断
-				if line := t.rows[t.row]; len(line) > t.col {
-					t.rows[t.row] = line[:t.col]
-				}
-			}
-			i = j + 1
-		case s[i] == '\r':
-			t.col = 0
-			i++
-		case s[i] == '\n':
-			t.row++
-			t.col = 0
-			i++
-		default:
-			j := i
-			for j < len(s) && s[j] != 0x1b && s[j] != '\r' && s[j] != '\n' {
-				j++
-			}
-			t.put(s[i:j])
-			i = j
+// 传输模式：多行块（总进度 / 节点进度 / 分隔线 / 逐节点条）；
+// 已完成的节点让出显示位，正在传输的节点才有条。
+func TestTransferViewListsActiveNodesOnly(t *testing.T) {
+	m := newTestProgress("upload", 3)
+	m.applySnapshot(batch.Snapshot{
+		Total: 3, Completed: 1, Succeeded: 1, BytesDone: 512, BytesTotal: 1024,
+		Nodes: []batch.NodeSnapshot{
+			{Seq: 0, IP: "10.0.0.1", Bytes: 512, TotalBytes: 1024, TotalFiles: 4, SuccessFiles: 4, Done: true},
+			{Seq: 1, IP: "10.0.0.2", Bytes: 128, TotalBytes: 1024, TotalFiles: 4},
+		},
+	})
+	m.syncBars()
+
+	view := m.View()
+	for _, want := range []string{"上传进度", "节点进度", "10.0.0.2", "Total:4"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("传输模式界面缺少 %q：\n%s", want, view)
 		}
 	}
+	if strings.Contains(view, "10.0.0.1") {
+		t.Fatalf("已完成的节点不该再占显示位：\n%s", view)
+	}
+	if got := strings.Count(view, "\n") + 1; got < 3 {
+		t.Fatalf("传输模式应渲染成多行块，实际 %d 行：\n%s", got, view)
+	}
 }
 
-// line 某行的可见文本。
-func (t *ansiTerm) line(row int) string { return string(t.rows[row]) }
-
-// dump 按行号顺序导出可见内容，供断言失败时定位。
-func (t *ansiTerm) dump() string {
-	idx := make([]int, 0, len(t.rows))
-	for r := range t.rows {
-		idx = append(idx, r)
-	}
-	sort.Ints(idx)
-	var b strings.Builder
-	for _, r := range idx {
-		fmt.Fprintf(&b, "%3d|%s\n", r, string(t.rows[r]))
-	}
-	return b.String()
-}
-
-// blockTop 进度块首行（总进度行）所在行号；找不到返回 -1。
-func (t *ansiTerm) blockTop(label string) int {
-	for r, line := range t.rows {
-		if strings.Contains(string(line), label) {
-			return r
-		}
-	}
-	return -1
-}
-
-// uploadSnapshot active 个「已开始传输」的节点（节点条只在已有字节时授予）。
-func uploadSnapshot(active int) batch.Snapshot {
-	s := batch.Snapshot{Total: 30, BytesDone: 400, BytesTotal: 1000}
-	for i := 0; i < active; i++ {
-		s.Nodes = append(s.Nodes, batch.NodeSnapshot{
-			Seq: i, IP: fmt.Sprintf("10.0.0.%d", i+1),
-			Bytes: 40, TotalBytes: 100, TotalFiles: 2,
+// 逐节点条同时最多 maxVisibleNodes 条（其余排队），对位旧版排队机制。
+func TestTransferVisibleNodesCapped(t *testing.T) {
+	total := maxVisibleNodes + 5
+	nodes := make([]batch.NodeSnapshot, 0, total)
+	for i := 0; i < total; i++ {
+		nodes = append(nodes, batch.NodeSnapshot{
+			Seq: i, IP: fmt.Sprintf("10.0.0.%d", i), Bytes: 1, TotalBytes: 10,
 		})
 	}
-	return s
-}
+	m := newTestProgress("upload", total)
+	m.applySnapshot(batch.Snapshot{Total: total, Nodes: nodes})
+	m.syncBars()
 
-// 进度块锚点：同高重绘不下移，结果输出只把块往下推「输出行数」那么多，中间不留空行。
-func TestTransferProgressBlockStaysAnchored(t *testing.T) {
-	var buf bytes.Buffer
-	ui := NewProgressUI(&buf, "upload", 30)
-	term := newAnsiTerm()
-	term.feed(drain(&buf))
-
-	snap := uploadSnapshot(3)
-	ui.Update(snap)
-	term.feed(drain(&buf))
-
-	top := term.blockTop("上传进度")
-	if top < 0 {
-		t.Fatalf("首帧未画出进度块，终端内容：\n%s", term.dump())
+	visible := 0
+	for _, n := range m.nodes {
+		if n.hasBar {
+			visible++
+		}
 	}
-
-	// 模拟 20 次结果输出（每次一行）+ 每次跟随 3 帧同高重绘
-	expectTop := top
-	for round := 1; round <= 20; round++ {
-		ui.PrintAbove(fmt.Sprintf("【10.0.0.%d】 连接: 成功 - 0.010s", round))
-		term.feed(drain(&buf))
-		expectTop++
-		if got := term.blockTop("上传进度"); got != expectTop {
-			t.Fatalf("第 %d 轮结果输出后进度块应在第 %d 行，实际第 %d 行", round, expectTop, got)
-		}
-
-		for frame := 0; frame < 3; frame++ {
-			ui.Update(snap)
-			term.feed(drain(&buf))
-			if got := term.blockTop("上传进度"); got != expectTop {
-				t.Fatalf("第 %d 轮第 %d 帧同高重绘后进度块应在第 %d 行，实际第 %d 行（块整体下移）",
-					round, frame+1, expectTop, got)
-			}
-		}
-
-		if line := term.line(expectTop - 1); strings.TrimSpace(line) == "" {
-			t.Fatalf("第 %d 轮后进度块上方（第 %d 行）出现空行：块被推离了结果输出", round, expectTop-1)
-		}
+	if visible != maxVisibleNodes {
+		t.Fatalf("同时显示的节点条应上限 %d，实际 %d", maxVisibleNodes, visible)
 	}
 }
 
-// 块收缩：节点条完成后旧行必须被擦掉，不能在块下方残留半截进度条
-// （对应「统计结果叠在半截进度条中间」那次的修复）。
-func TestTransferProgressBlockClearsRowsAfterShrink(t *testing.T) {
-	var buf bytes.Buffer
-	ui := NewProgressUI(&buf, "upload", 30)
-	term := newAnsiTerm()
-	term.feed(drain(&buf))
-
-	ui.Update(uploadSnapshot(20))
-	term.feed(drain(&buf))
-
-	// 全部完成：节点条释放，块收缩回 3 行
-	ui.Update(batch.Snapshot{Total: 30, Completed: 30, Succeeded: 30, BytesDone: 1000, BytesTotal: 1000})
-	term.feed(drain(&buf))
-
-	top := term.blockTop("上传进度")
-	if top < 0 {
-		t.Fatalf("收缩后未画出进度块，终端内容：\n%s", term.dump())
+// 进度口径：有字节总量按字节（传输），没有则按完成台数（命令）。
+func TestProgressPrefersBytesThenCounts(t *testing.T) {
+	transfer := newTestProgress("upload", 10)
+	transfer.applySnapshot(batch.Snapshot{Total: 10, Completed: 9, BytesDone: 100, BytesTotal: 1000})
+	if got := transfer.progress(); got != 0.1 {
+		t.Fatalf("有字节总量时应按字节算（0.1），实际 %v", got)
 	}
-	for r := range term.rows {
-		if line := term.line(r); r > top+2 && strings.Contains(line, "━") {
-			t.Fatalf("块收缩后第 %d 行仍残留旧的节点条：%q", r, line)
-		}
+
+	command := newTestProgress("execute", 10)
+	command.applySnapshot(batch.Snapshot{Total: 10, Completed: 9})
+	if got := command.progress(); got != 0.9 {
+		t.Fatalf("无字节总量时应按完成台数算（0.9），实际 %v", got)
 	}
 }
 
-// 单行块（命令模式）也必须停回块起点：否则结果明细会与进度条互相顶走。
-func TestCommandProgressBlockStaysAnchored(t *testing.T) {
-	var buf bytes.Buffer
-	ui := NewProgressUI(&buf, "execute", 30)
-	term := newAnsiTerm()
-	term.feed(drain(&buf))
-
-	ui.Update(batch.Snapshot{Total: 30, Completed: 5, Succeeded: 5})
-	term.feed(drain(&buf))
-	top := term.blockTop("执行进度")
-	if top < 0 {
-		t.Fatalf("首帧未画出进度条，终端内容：\n%s", term.dump())
+// 目标值只在变化时下发：每次无脑 SetPercent 会刷新动画 tag，把排队中的动画帧作废。
+func TestSyncBarsSkipsUnchangedPercent(t *testing.T) {
+	m := newTestProgress("execute", 4)
+	m.applySnapshot(batch.Snapshot{Total: 4, Completed: 2})
+	if cmd := m.syncBars(); cmd == nil {
+		t.Fatal("进度推进时应下发动画命令")
 	}
+	if got := m.totalBar.Percent(); got != 0.5 {
+		t.Fatalf("总进度目标应为 0.5，实际 %v", got)
+	}
+	if cmd := m.syncBars(); cmd != nil {
+		t.Fatal("数据没变时不该重复下发动画命令")
+	}
+}
 
-	expectTop := top
-	for round := 1; round <= 5; round++ {
-		ui.PrintAbove("【10.0.0.9】 分类: 执行成功")
-		term.feed(drain(&buf))
-		expectTop++
-		if got := term.blockTop("执行进度"); got != expectTop {
-			t.Fatalf("第 %d 轮结果输出后进度条应在第 %d 行，实际第 %d 行", round, expectTop, got)
-		}
-		if line := term.line(expectTop - 1); strings.TrimSpace(line) == "" {
-			t.Fatalf("第 %d 轮后进度条上方（第 %d 行）出现空行", round, expectTop-1)
+func TestClampAndNodePercent(t *testing.T) {
+	if clamp01(-0.5) != 0 || clamp01(1.5) != 1 || clamp01(0.25) != 0.25 {
+		t.Fatal("clamp01 应把取值收在 [0,1]")
+	}
+	if got := nodePercent(nodeView{bytes: 25, totalBytes: 100, totalFiles: 4, successFiles: 1}); got != 0.25 {
+		t.Fatalf("有字节量时按字节算（0.25），实际 %v", got)
+	}
+	if got := nodePercent(nodeView{totalFiles: 4, successFiles: 3}); got != 0.75 {
+		t.Fatalf("无字节量时按文件数算（0.75），实际 %v", got)
+	}
+	if got := nodePercent(nodeView{}); got != 0 {
+		t.Fatalf("无任何数据应为 0，实际 %v", got)
+	}
+}
+
+// 空快照（还没收到任何进度）也要渲染出内容，不能是空串。
+func TestViewRendersOnEmptySnapshot(t *testing.T) {
+	for _, mode := range []string{"execute", "upload", "download"} {
+		m := newTestProgress(mode, 0)
+		if got := m.View(); got == "" {
+			t.Fatalf("%s 模式在空快照下也应渲染出内容", mode)
 		}
 	}
 }

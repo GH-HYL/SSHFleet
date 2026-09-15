@@ -109,14 +109,26 @@ func TestOutputXlsxLayout(t *testing.T) {
 		}
 	}
 
-	// 列宽与冻结
+	// 列宽与冻结（C 列 120 = 原 60 的两倍，装下整行输出原文）
 	for _, c := range []struct {
 		col  string
 		want float64
-	}{{"A", 15}, {"B", 20}, {"C", 60}} {
+	}{{"A", 15}, {"B", 20}, {"C", 120}} {
 		if got, err := f.GetColWidth(sheet, c.col); err != nil || got != c.want {
 			t.Fatalf("%s 列宽应为 %v，实际 %v（err=%v）", c.col, c.want, got, err)
 		}
+	}
+	// 明细单元格不换行：单行显示（用户 2026-09-15 要求）
+	detailStyleID, err := f.GetCellStyle(sheet, "C4")
+	if err != nil {
+		t.Fatal(err)
+	}
+	detailStyle, err := f.GetStyle(detailStyleID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if detailStyle.Alignment != nil && detailStyle.Alignment.WrapText {
+		t.Fatal("明细单元格不应换行（WrapText 应为 false）")
 	}
 	panes, err := f.GetPanes(sheet)
 	if err != nil {
@@ -140,6 +152,34 @@ func TestOutputXlsxLayout(t *testing.T) {
 		if len(style.Fill.Color) == 0 || !strings.EqualFold(style.Fill.Color[0], "D9E1F2") {
 			t.Fatalf("%s 分隔行应为 D9E1F2 填充，实际 %+v", cell, style.Fill)
 		}
+	}
+}
+
+// output.xlsx 的明细行只清非法字符，排版一概不动：行首缩进保留、中间空行照样占一行。
+// 整块首尾的空白行由采集侧去掉（output 字段到手即成品），落表时不再重复处理
+// （用户 2026-09-15 裁定的分层）。
+func TestOutputXlsxKeepsOutputStructure(t *testing.T) {
+	ok := 0
+	results := &batch.Results{Items: []ssh.Result{{
+		Seq: 1, IP: "10.0.0.1", User: "root", ConnectSuccess: true, ExitCode: &ok,
+		Output: "         system boot  2026-09-15 10:23\n\ndisk  use%",
+	}}}
+	dir := t.TempDir()
+	if err := WriteOutputXlsx(dir, results, testCfg(), "execute", nil, func(ssh.Result) string { return "执行成功" }); err != nil {
+		t.Fatal(err)
+	}
+	f := openXlsx(t, filepath.Join(dir, "output.xlsx"))
+	sheet := f.GetSheetName(0)
+
+	// 行序：1 表头 / 2 连接 / 3 执行 / 4–6 output 三行 / 7 分类 / 8 分隔行
+	if got := cellOf(t, f, sheet, "C4"); got != "         system boot  2026-09-15 10:23" {
+		t.Fatalf("行首缩进应原样保留，实际 %q", got)
+	}
+	if got := cellOf(t, f, sheet, "C6"); got != "disk  use%" {
+		t.Fatalf("中间空行应占一行，C6 应为 %q，实际 %q", "disk  use%", got)
+	}
+	if got := cellOf(t, f, sheet, "B7"); got != "分类: 执行成功" {
+		t.Fatalf("output 段应恰好 3 行（含中间空行），B7 应为分类行，实际 %q", got)
 	}
 }
 
@@ -174,8 +214,12 @@ func TestResultsXlsxLayoutAndAutoWidth(t *testing.T) {
 			t.Fatal(err)
 		}
 		if i >= resultsFixedWidthColumns {
-			if got != resultsFixedWidth {
-				t.Fatalf("%s 列（N/O）应固定 %v 宽，实际 %v", col, resultsFixedWidth, got)
+			want := resultsErrorWidth
+			if i == resultsFixedWidthColumns+1 {
+				want = resultsOutputWidth
+			}
+			if got != want {
+				t.Fatalf("%s 列（自由文本）应固定 %v 宽，实际 %v", col, want, got)
 			}
 			continue
 		}
