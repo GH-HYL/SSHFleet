@@ -54,7 +54,11 @@ var (
 func newBar(w int) progress.Model {
 	m := progress.New(
 		progress.WithWidth(w),
-		progress.WithSpringOptions(8, 0.7), // 频率越大越跟手，阻尼越小越弹
+		// 临界阻尼（1.0，也是 bubbles 的默认值）+ 高频率：主工程的进度值是**跳变**的
+		//（一次可能同时完成好几台），欠阻尼的弹簧会冲过目标值——冲过 100% 被截断显示成
+		// 满格、回落时又经过 95%，看起来就是「先满、回落、再满」（用户 2026-09-15 实测）。
+		// 临界阻尼的代价是少一点「弹」，换来的是数字只朝一个方向走。
+		progress.WithSpringOptions(18, 1.0),
 		progress.WithFillCharacters('━', '─'),
 		progress.WithScaledGradient("#00D9FF", "#5A56E0"),
 	)
