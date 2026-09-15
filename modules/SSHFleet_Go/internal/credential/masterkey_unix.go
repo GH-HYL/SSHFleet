@@ -16,6 +16,60 @@ import (
 // rcFiles 查找顺序：zsh 在前，与旧实现一致。
 var rcFiles = []string{".zshrc", ".bashrc"}
 
+// currentRCFile 当前登录 shell 对应的 rc 文件名（$SHELL 含 zsh → .zshrc，否则 .bashrc）。
+func currentRCFile() string {
+	if strings.Contains(os.Getenv("SHELL"), "zsh") {
+		return ".zshrc"
+	}
+	return ".bashrc"
+}
+
+// rcPath 当前 shell 的 rc 文件绝对路径（取不到主目录时退回文件名）。
+func rcPath() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return currentRCFile()
+	}
+	return filepath.Join(home, currentRCFile())
+}
+
+// ReadKeySources 读主密钥的两处来源：进程环境变量 + 两个 rc 文件。
+func ReadKeySources() KeySources {
+	src := KeySources{Env: strings.TrimSpace(os.Getenv(envName))}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return src
+	}
+	for _, rc := range rcFiles {
+		path := filepath.Join(home, rc)
+		key := findExportInFile(path)
+		if strings.TrimSpace(key) == "" {
+			continue
+		}
+		if src.Persisted == "" {
+			src.Persisted, src.PersistedWhere = key, path
+			continue
+		}
+		if key != src.Persisted {
+			src.OtherKey, src.OtherWhere = key, path
+		}
+	}
+	return src
+}
+
+// reloadHint 让「本次运行实际使用」与「本机已保存」一致的推荐做法。
+func reloadHint() string {
+	return fmt.Sprintf("执行 source %s 或重新打开终端", rcPath())
+}
+
+// persistHint 把「本次运行这把密钥」写成持久值的做法（不必把密钥打出来）。
+func persistHint() string {
+	return fmt.Sprintf(
+		"把 %s 里的 export 行改成当前值（先 echo $%s 取值）：\n"+
+			"       sed -i \"s|^export %s=.*|export %s='$%s'|\" %s && source %s",
+		rcPath(), envName, envName, envName, envName, rcPath(), rcPath())
+}
+
 // readPersistedKey 依次查 ~/.zshrc 与 ~/.bashrc，命中即返回；都没有返回空串。
 func readPersistedKey() string {
 	home, err := os.UserHomeDir()
@@ -40,10 +94,7 @@ func persistKey(key string, regenerated bool, out *strings.Builder) error {
 		actionDesc = "重新生成"
 	}
 
-	rc := ".bashrc"
-	if strings.Contains(os.Getenv("SHELL"), "zsh") {
-		rc = ".zshrc"
-	}
+	rc := currentRCFile()
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return err
@@ -66,5 +117,7 @@ func persistKey(key string, regenerated bool, out *strings.Builder) error {
 	}
 
 	fmt.Fprintf(out, "请执行 source %s 或重新打开终端后生效\n", rcPath)
+	fmt.Fprintf(out, "%s注意：在此之前，本次运行读到的仍是旧密钥，执行 --convert-password 会被拦下（避免加密出将来看不开的文件）%s\n",
+		colorYellow, colorReset)
 	return nil
 }

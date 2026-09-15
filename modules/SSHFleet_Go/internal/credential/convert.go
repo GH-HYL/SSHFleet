@@ -69,6 +69,10 @@ func ConvertPassword(rawPath, secretDir string, level int) error {
 			fmt.Printf("当前已是加密格式，无需转换：%s\n", path)
 			return nil
 		}
+		// 硬保护：两处主密钥不一致时拒绝加密（用旧密钥加的密，重开终端后就解不开了）
+		if err := GuardEncrypt(); err != nil {
+			return err
+		}
 		masterKey, err := GetMasterKey()
 		if err != nil {
 			return err
