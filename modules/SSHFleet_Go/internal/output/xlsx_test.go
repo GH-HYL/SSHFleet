@@ -3,8 +3,10 @@ package output
 import (
 	"fmt"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/xuri/excelize/v2"
 
@@ -86,6 +88,7 @@ func TestOutputXlsxLayout(t *testing.T) {
 		{"", "", ""}, // 分隔行（只有填充色）
 		{"10.0.0.2", "连接: 失败 - 0.500s", ""},
 		{"10.0.0.2", "执行: 失败 - 0.000s", ""},
+		{"10.0.0.2", "错误", "dial tcp 10.0.0.2:22: connect: connection refused"},
 		{"10.0.0.2", "分类: 拒绝网络连接", ""},
 		{"", "", ""},
 	}
@@ -124,7 +127,7 @@ func TestOutputXlsxLayout(t *testing.T) {
 	}
 
 	// 分隔行必须是浅蓝填充（D9E1F2）：每条结果之后各一行，含最后一行
-	for _, row := range []int{7, 11} {
+	for _, row := range []int{7, 12} {
 		cell := fmt.Sprintf("A%d", row)
 		styleID, err := f.GetCellStyle(sheet, cell)
 		if err != nil {
@@ -220,5 +223,104 @@ func TestCleanForExcel(t *testing.T) {
 				t.Fatalf("cleanForExcel(%q) 应为 %q，实际 %q", c.in, c.want, got)
 			}
 		})
+	}
+}
+
+// xlsx 违规字符：远端输出是任意字节流（颜色转义、控制符、非法 UTF-8），
+// 终端与 output.txt 能原样吃下，但 xlsx 是 XML——两处都必须清理，否则文件直接写坏。
+// 采集侧刻意不做处理（原文交给终端/txt），故清理必须覆盖每一个写入单元格的值，
+// 包括容易漏的「兜底分类＝错误原文」。（用户 2026-09-15 追问）
+func TestXlsxStripsIllegalCharsFromEveryField(t *testing.T) {
+	const dirtyOutput = "\x1b[31m红色失败\x1b[0m\x00\r\n进度\x08\x08ok\x1b[2K"
+	const dirtyError = "\x1b[31mdial\x07 failed\x1b[0m\x1f"
+	const dirtyCategory = "兜底原文\x1b[31m含颜色\x00\x08"
+
+	ok := 0
+	results := &batch.Results{Items: []ssh.Result{{
+		Seq: 1, IP: "10.0.0.1", User: "root",
+		ConnectSuccess: true, ExitCode: &ok,
+		Output: dirtyOutput,
+	}}}
+	dir := t.TempDir()
+	dirtyOf := func(ssh.Result) string { return dirtyCategory }
+	if err := WriteOutputXlsx(dir, results, testCfg(), "execute", nil, dirtyOf); err != nil {
+		t.Fatalf("含违规字符的输出应能生成 output.xlsx：%v", err)
+	}
+	f := openXlsx(t, filepath.Join(dir, "output.xlsx"))
+	assertNoIllegalChars(t, f, f.GetSheetName(0), "红色失败", "ok", "兜底原文")
+
+	failResults := &batch.Results{Items: []ssh.Result{{
+		Seq: 1, IP: "10.0.0.2", ConnectSuccess: false,
+		Error: strPtr(dirtyError),
+	}}}
+	dir2 := t.TempDir()
+	if err := WriteOutputXlsx(dir2, failResults, testCfg(), "execute", nil, dirtyOf); err != nil {
+		t.Fatalf("含违规字符的错误详情应能生成 output.xlsx：%v", err)
+	}
+	f2 := openXlsx(t, filepath.Join(dir2, "output.xlsx"))
+	assertNoIllegalChars(t, f2, f2.GetSheetName(0), "dial", "failed")
+
+	if err := WriteResultsXlsx(dir, results, testCfg(), "execute", nil, dirtyOf); err != nil {
+		t.Fatalf("含违规字符的结果应能生成 results.xlsx：%v", err)
+	}
+	f3 := openXlsx(t, filepath.Join(dir, "results.xlsx"))
+	assertNoIllegalChars(t, f3, f3.GetSheetName(0), "红色失败", "兜底原文")
+
+	// 非法 UTF-8 也必须被替换成合法字符（否则 XML 写入会失败）
+	badResults := &batch.Results{Items: []ssh.Result{{
+		Seq: 1, IP: "10.0.0.3", ConnectSuccess: true, ExitCode: &ok,
+		Output: "前缀\xff\xfe后缀",
+	}}}
+	dir3 := t.TempDir()
+	if err := WriteResultsXlsx(dir3, badResults, testCfg(), "execute", nil, dirtyOf); err != nil {
+		t.Fatalf("非法 UTF-8 应被替换后正常写出：%v", err)
+	}
+	f4 := openXlsx(t, filepath.Join(dir3, "results.xlsx"))
+	assertCellsClean(t, f4, f4.GetSheetName(0), true, "前缀", "后缀")
+}
+
+var excelIllegalRe = regexp.MustCompile("[\x00-\x08\x0b\x0c\x0e-\x1f\u007f-\u009f]")
+
+// assertNoIllegalChars 表里不得出现控制字符/转义残留/非法 UTF-8，且关键内容仍在。
+func assertNoIllegalChars(t *testing.T, f *excelize.File, sheet string, mustContain ...string) {
+	t.Helper()
+	assertCellsClean(t, f, sheet, false, mustContain...)
+}
+
+// assertCellsClean allowReplacement=true 时容忍 U+FFFD（专给「非法 UTF-8 输入」用：
+// 那种字节无法还原，只能替换）。其余情况必须彻底清干净——excelize 遇到非法字符不会报错，
+// 而是逐个替换成 U+FFFD，单元格里会留下「�[31m…」这种残缺垃圾，故 U+FFFD 本身就是
+// 「没清理」的标志（用户 2026-09-15 追问）。
+func assertCellsClean(t *testing.T, f *excelize.File, sheet string, allowReplacement bool, mustContain ...string) {
+	t.Helper()
+	rows, err := f.GetRows(sheet)
+	if err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Builder{}
+	for r, row := range rows {
+		for c, v := range row {
+			cell, _ := excelize.CoordinatesToCellName(c+1, r+1)
+			if m := excelIllegalRe.FindString(v); m != "" {
+				t.Fatalf("%s!%s 残留违规字符 %q：%q", sheet, cell, m, v)
+			}
+			if !utf8.ValidString(v) {
+				t.Fatalf("%s!%s 不是合法 UTF-8：%q", sheet, cell, v)
+			}
+			if strings.ContainsRune(v, '\x1b') {
+				t.Fatalf("%s!%s 残留 ANSI 转义：%q", sheet, cell, v)
+			}
+			if !allowReplacement && strings.ContainsRune(v, '\uFFFD') {
+				t.Fatalf("%s!%s 残留替换符（说明未清理，excelize 兜底替换的痕迹）：%q", sheet, cell, v)
+			}
+			joined.WriteString(v)
+			joined.WriteString("\n")
+		}
+	}
+	all := joined.String()
+	for _, want := range mustContain {
+		if !strings.Contains(all, want) {
+			t.Fatalf("清理过度，内容丢失 %q：\n%s", want, all)
+		}
 	}
 }
