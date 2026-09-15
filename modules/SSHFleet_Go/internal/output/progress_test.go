@@ -2,11 +2,15 @@ package output
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/bubbles/progress"
+
 	"sshfleet/internal/batch"
+	"sshfleet/internal/ssh"
 )
 
 // 进度界面的渲染回归。
@@ -97,6 +101,35 @@ func TestViewLeavesSacrificialTrailingLine(t *testing.T) {
 	}
 	if strings.HasSuffix(strings.TrimSuffix(view, "\n"), "\n") {
 		t.Fatalf("只该多一个换行，不该多出空行：\n%q", view)
+	}
+}
+
+// 命令模式的进度序列必须单调不减：用真实的聚合器喂一串「逐个节点完成」的快照，
+// 逐步打印进度值。（用户 2026-09-15 反馈看到「先 100% 又回落」，这里先把数据层钉死。）
+func TestExecuteProgressSequenceMonotonic(t *testing.T) {
+	total := 8
+	agg := batch.NewAggregator(total, nil)
+	m := newTestProgress("execute", total)
+
+	m.applySnapshot(agg.Snapshot())
+	t.Logf("初始        : %.4f", m.progress())
+
+	last := m.progress()
+	for i := 0; i < total; i++ {
+		agg.OnResult(ssh.Result{
+			Seq: i, IP: fmt.Sprintf("10.0.0.%d", i+1),
+			ConnectSuccess: true, ExitCode: intPtr(0),
+		})
+		m.applySnapshot(agg.Snapshot())
+		got := m.progress()
+		t.Logf("第 %d 台完成: %.4f", i+1, got)
+		if got < last {
+			t.Fatalf("第 %d 台完成后进度回落：%.4f → %.4f", i+1, last, got)
+		}
+		last = got
+	}
+	if last != 1 {
+		t.Fatalf("全部完成后进度应为 1，实际 %v", last)
 	}
 }
 
@@ -216,4 +249,52 @@ func TestViewRendersOnEmptySnapshot(t *testing.T) {
 			t.Fatalf("%s 模式在空快照下也应渲染出内容", mode)
 		}
 	}
+}
+
+// 弹簧动画不得回退：进度值是跳变的（一次可能同时完成好几台），欠阻尼的弹簧会冲过
+// 目标值再回落——冲过 100% 被截断显示成满格、回落时又经过 95%，看上去就是
+// 「先满、回落、再满」（用户 2026-09-15 实测反馈）。
+//
+// 顺带钉住一件事：弹簧收敛时会留微小残差（实测停在 99.9%，走不到精确 100%），
+// 所以退出前必须用终帧按目标值定格，不能指望动画自己收敛到位。
+func TestBarAnimationNeverGoesBackwards(t *testing.T) {
+	bar := newBar(24)
+	cmd := bar.SetPercent(1.0) // 从 0 直跳满格，最容易把过冲逼出来
+
+	last := 0.0
+	for i := 0; i < 600 && cmd != nil; i++ {
+		msg := cmd()
+		updated, next := bar.Update(msg)
+		bar = updated.(progress.Model)
+		cmd = next
+
+		shown := shownPercent(t, bar)
+		if shown < last {
+			t.Fatalf("第 %d 帧动画回退：%.1f%% → %.1f%%", i, last, shown)
+		}
+		last = shown
+	}
+	if last < 99.9 {
+		t.Fatalf("动画应最终收敛到接近 100%%，实际停在 %.1f%%", last)
+	}
+}
+
+// shownPercent 从渲染结果里读动画的当前百分比。
+// （bubbles 的 Percent() 给的是目标值，动画当前值只能从 View 里取。）
+func shownPercent(t *testing.T, b progress.Model) float64 {
+	t.Helper()
+	v := b.View()
+	i := strings.LastIndexByte(v, '%')
+	if i <= 0 {
+		t.Fatalf("渲染结果里找不到百分比：%q", v)
+	}
+	j := i - 1
+	for j >= 0 && ((v[j] >= '0' && v[j] <= '9') || v[j] == '.') {
+		j--
+	}
+	f, err := strconv.ParseFloat(v[j+1:i], 64)
+	if err != nil {
+		t.Fatalf("解析百分比失败（%q）：%q", v[j+1:i], v)
+	}
+	return f
 }
