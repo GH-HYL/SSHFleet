@@ -212,6 +212,10 @@ func markDivergenceWarned() {
 // PrecheckKey 开工前的主密钥预检查：正常状态返回空串，异常返回一段可直接打印的提示。
 // 用户（以及接手的人）最容易忘的就是「生成密钥后 source / 重开终端」，
 // 与其让他在用凭据时报一句看不懂的错，不如每次运行都主动说清现状与下一步。
+//
+// 不一致状态（Diverged）下顺带标记「这件事已经说过」（markDivergenceWarned）：
+// 本函数给的提示比读凭据时的短警告更完整，说过一遍即可，不必两处各说一次。
+// 标记只影响「还要不要再说」，不影响本函数的返回值——预检在哪一步调用都给出同样的提示。
 func PrecheckKey() string {
 	state, src := InspectKey()
 	switch state {
