@@ -33,9 +33,10 @@ func rcPath() string {
 	return filepath.Join(home, currentRCFile())
 }
 
-// ReadKeySources 读主密钥的两处来源：进程环境变量 + 两个 rc 文件。
-func ReadKeySources() KeySources {
-	src := KeySources{Env: strings.TrimSpace(os.Getenv(envName))}
+// readKeySourcesPlatform 读主密钥的持久值来源：两个 rc 文件里的 export 行
+// （环境变量那侧由 KeySource.Read 统一补上）。
+func readKeySourcesPlatform() KeySources {
+	var src KeySources
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return src
