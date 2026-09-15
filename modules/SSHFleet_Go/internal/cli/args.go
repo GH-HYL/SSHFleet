@@ -52,6 +52,7 @@ type Args struct {
 	Disinteractive  bool   // --disinteractive
 	Key             string // -k（含哨兵值）
 	GenKey          bool   // --gen-key
+	KeyStatus       bool   // --key-status
 	ConvertPassword string // --convert-password
 	FIsInline       bool   // -f 为内联清单（由 CheckArguments 判定）
 
@@ -96,6 +97,7 @@ func Parse(cfg *config.Config, version string, raw []string) (*Args, error) {
 	fs.BoolVar(&a.Disinteractive, "disinteractive", false, "跳过所有确认提示直接执行")
 	fs.StringVarP(&a.Key, "key", "k", "", "不指定=纯密码; 仅 -k=清单/配置默认密钥; -k 路径=统一私钥")
 	fs.BoolVar(&a.GenKey, "gen-key", false, "生成随机主密钥并持久化到 SSHFLEET_KEY")
+	fs.BoolVar(&a.KeyStatus, "key-status", false, "查看主密钥状态：两处来源、指纹、是否一致与下一步")
 	fs.StringVar(&a.ConvertPassword, "convert-password", "", "转换凭据文件（跟目标文件路径）")
 
 	// 未提供任何参数：打印帮助后以 0 退出（与旧版一致，发生在配置加载之后）
@@ -252,49 +254,55 @@ func defaultRemark(a *Args) string {
 }
 
 // Usage 打印帮助（未提供任何参数或 -h 时）。默认值从配置插值（与旧版一致）；
-// 首行下方显示入口定义的版本号。
+// 首行下方显示入口定义的版本号。选项列同时列出短选项与长选项
+// （长选项一直可用，此前未写入帮助——用户 2026-09-15 要求）。
 func Usage(cfg *config.Config, version string) {
 	name := filepath.Base(os.Args[0])
 	entries := [][3]string{
-		{"-c", "(命令模式)", "远程在多台服务器上执行一条命令"},
-		{"-s", "(脚本模式)", "远程在多台服务器上执行一个本地脚本"},
-		{"-u", "(上传模式)", "把本地文件或目录传到服务器"},
-		{"-d", "(下载模式)", "从服务器下载文件或目录到本地"},
-		{"-f", "", "节点清单：CSV 文件路径，或直接在命令行写一行节点信息 (-c/-s/-u/-d 时必须带)"},
-		{"-p", "", "目标路径：上传到服务器的目录 / 从服务器下载到的本地目录 (-u/-d 时必须带)"},
-		{"-m", fmt.Sprintf("[默认: %s]", cfg.Execution.Mode), "执行身份: direct=用登录用户身份, sudo=用 root 身份执行"},
-		{"-t", fmt.Sprintf("[默认: 命令%ds/上传%ds]", cfg.Execution.TimeoutExecute, cfg.Execution.TimeoutTransfer), "单台执行或传输的超时时间 (秒)"},
-		{"-T", fmt.Sprintf("[默认: %d]", cfg.Execution.TimeoutConnect), "连接每台服务器的超时时间 (秒)"},
-		{"-n", "[默认: 同时跑全部节点]", "并发数：同时操作几台服务器 (不填则全部并行)"},
-		{"-r", "", "给这次任务起个名字，会作为历史记录文件夹的后缀 (不填自动生成)"},
+		{"-c, --command", "(命令模式)", "远程在多台服务器上执行一条命令"},
+		{"-s, --script", "(脚本模式)", "远程在多台服务器上执行一个本地脚本"},
+		{"-u, --upload", "(上传模式)", "把本地文件或目录传到服务器"},
+		{"-d, --download", "(下载模式)", "从服务器下载文件或目录到本地"},
+		{"-f, --file", "", "节点清单：CSV 文件路径，或直接在命令行写一行节点信息 (-c/-s/-u/-d 时必须带)"},
+		{"-p, --path", "", "目标路径：上传到服务器的目录 / 从服务器下载到的本地目录 (-u/-d 时必须带)"},
+		{"-m, --mode", fmt.Sprintf("[默认: %s]", cfg.Execution.Mode), "执行身份: direct=用登录用户身份, sudo=用 root 身份执行"},
+		{"-t, --timeout", fmt.Sprintf("[默认: 命令%ds/上传%ds]", cfg.Execution.TimeoutExecute, cfg.Execution.TimeoutTransfer), "单台执行或传输的超时时间 (秒)"},
+		{"-T, --connect-timeout", fmt.Sprintf("[默认: %d]", cfg.Execution.TimeoutConnect), "连接每台服务器的超时时间 (秒)"},
+		{"-n, --number", "[默认: 同时跑全部节点]", "并发数：同时操作几台服务器 (不填则全部并行)"},
+		{"-r, --remark", "", "给这次任务起个名字，会作为历史记录文件夹的后缀 (不填自动生成)"},
 		{"--nobash", "", "命令模式专用: 不套一层 bash 环境，直接执行原始命令"},
 		{"--disinteractive", "", "跳过所有确认提示直接执行 (批量跑脚本时常用)"},
-		{"-k", "(密钥登录)", "不指定=纯密码; 仅 -k=用CSV/配置默认密钥; -k 路径=所有节点统一私钥"},
+		{"-k, --key", "(密钥登录)", "不指定=纯密码; 仅 -k=用CSV/配置默认密钥; -k 路径=所有节点统一私钥"},
 		{"--gen-key", "(密钥管理)", "生成随机主密钥并持久化到系统环境变量 SSHFLEET_KEY（凭据加密用）"},
+		{"--key-status", "(密钥管理)", "查看主密钥状态：本次运行读到哪把、本机保存的是哪把、两处是否一致与下一步怎么办"},
 		{"--convert-password", "(密钥管理)", "转换凭据文件（后面跟目标文件路径）：自动识别明文/base64/加密格式并按配置等级转换，支持升降级；加密/解密需已配置主密钥；路径支持相对 secret_dir"},
 	}
-	col2 := 0
+	col1, col2 := 0, 0
 	for _, e := range entries {
+		if w := lipgloss.Width(e[0]); w > col1 {
+			col1 = w
+		}
 		if w := lipgloss.Width(e[1]); w > col2 {
 			col2 = w
 		}
+	}
+	padTo := func(s string, width int) string {
+		if w := lipgloss.Width(s); w < width {
+			return s + strings.Repeat(" ", width-w)
+		}
+		return s
 	}
 	var b strings.Builder
 	b.WriteString("SSHFleet - 批量 SSH 运维工具（命令/脚本执行、文件上传下载）\n")
 	b.WriteString(fmt.Sprintf("版本: v%s\n\n", version))
 	b.WriteString("用法:\n")
 	b.WriteString(fmt.Sprintf("  %s ( -c | -s | -u | -d ) ( -f ) ( -p ) [其他可选参数]   批量执行（四种模式四选一）\n", name))
-	b.WriteString(fmt.Sprintf("  %s --gen-key | --convert-password 文件路径               工具选项（单独使用）\n\n", name))
+	b.WriteString(fmt.Sprintf("  %s --gen-key | --key-status | --convert-password 文件路径   工具选项（单独使用）\n\n", name))
 	b.WriteString("选项:\n")
 	for _, e := range entries {
-		tag := e[1]
-		if tag != "" {
-			tag += strings.Repeat(" ", col2-lipgloss.Width(e[1]))
-		} else {
-			tag = strings.Repeat(" ", col2)
-		}
-		b.WriteString(fmt.Sprintf("  %-6s %s  %s\n", e[0], tag, e[2]))
+		b.WriteString(fmt.Sprintf("  %s  %s  %s\n", padTo(e[0], col1), padTo(e[1], col2), e[2]))
 	}
+	b.WriteString("\n长选项与短选项等价（如 --command 与 -c）；短选项更省事，长选项更适合写在脚本里。\n")
 	b.WriteString("\n示例:\n")
 	b.WriteString(fmt.Sprintf("  命令模式: %s -f nodes.csv -c \"ls -l\"\n", name))
 	b.WriteString(fmt.Sprintf("  脚本模式: %s -f nodes.csv -s script.sh\n", name))
