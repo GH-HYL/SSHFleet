@@ -92,18 +92,31 @@ func divergenceNote(s KeySources) string {
 // KeyDivergenceNote 读当前来源并生成不一致提示（一致时为空串）。
 func KeyDivergenceNote() string { return divergenceNote(ReadKeySources()) }
 
-var divergenceWarnOnce sync.Once
+// divergenceWarned 本次运行是否已经就「两处主密钥来源不一致」提醒过。
+//
+// 这件事挂在逐节点读凭据这条高频路径上（几万个节点就是几万次），同一句话不能刷屏；
+// 预检也会说这件事（更完整的版本）。所以两处共用一个「已经说过」的事实，
+// 而不是共用一张只能被消费一次的票——谁先开口谁置位，提醒的有无与条数
+// 都不再取决于调用顺序。
+var (
+	divergenceWarnMu sync.Mutex
+	divergenceWarned bool
+)
 
-// warnKeyDivergenceOnce 每进程只警告一次（预检会逐节点读凭据，不节流会刷屏）。
+// warnKeyDivergenceOnce 提醒两处来源不一致（本次运行至多一次）；已经说过就不再开口。
 func warnKeyDivergenceOnce() {
-	divergenceWarnOnce.Do(func() {
-		note := KeyDivergenceNote()
-		if note == "" {
-			return
-		}
-		fmt.Fprintf(os.Stderr, "\n%s[警告]%s %s  让两处一致：%s\n",
-			colorYellow, colorReset, note, reloadHint())
-	})
+	divergenceWarnMu.Lock()
+	defer divergenceWarnMu.Unlock()
+	if divergenceWarned {
+		return
+	}
+	divergenceWarned = true
+	note := KeyDivergenceNote()
+	if note == "" {
+		return
+	}
+	fmt.Fprintf(os.Stderr, "\n%s[警告]%s %s  让两处一致：%s\n",
+		colorYellow, colorReset, note, reloadHint())
 }
 
 // GetMasterKey 从环境变量读取主密钥；缺失时返回带生成指引的错误。
@@ -188,9 +201,13 @@ func sourceLines(s KeySources) string {
 	return b.String()
 }
 
-// markDivergenceWarned 预检查已经就同一问题提示过：消费掉读密钥时的警告，
-// 避免同一次运行里同一件事说两遍。
-func markDivergenceWarned() { divergenceWarnOnce.Do(func() {}) }
+// markDivergenceWarned 标记「这件事已经说过」：预检自己会打一段更完整的提示，
+// 稍后逐节点读凭据时不再重复同一件事。
+func markDivergenceWarned() {
+	divergenceWarnMu.Lock()
+	defer divergenceWarnMu.Unlock()
+	divergenceWarned = true
+}
 
 // PrecheckKey 开工前的主密钥预检查：正常状态返回空串，异常返回一段可直接打印的提示。
 // 用户（以及接手的人）最容易忘的就是「生成密钥后 source / 重开终端」，
