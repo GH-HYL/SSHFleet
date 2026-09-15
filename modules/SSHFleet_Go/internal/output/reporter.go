@@ -124,7 +124,8 @@ func (r *Reporter) Result(res ssh.Result) {
 // 避免调用方自己再拼一份分类适配）。
 func (r *Reporter) Category(res ssh.Result) string { return r.classify(res) }
 
-// Stop 收尾：进度界面退出、光标落回界面下方，后续输出不再覆盖它。幂等。
+// Stop 收尾：先让进度界面渲染一帧「终帧」（各条按目标值定格），再退出、
+// 光标落回界面下方，后续输出不再覆盖它。幂等。
 func (r *Reporter) Stop() {
 	r.mu.Lock()
 	prog := r.prog
@@ -133,8 +134,12 @@ func (r *Reporter) Stop() {
 	if prog == nil {
 		return
 	}
-	prog.Quit()
-	prog.Wait() // 等渲染收尾，确保统计块从进度块下方开始
+	// 必须经由终帧消息退出，不能直接 Quit：进度条读的是弹簧动画的当前值，
+	// 而 Stop 紧跟着最后一个节点完成到来，动画往往还停在半路——节点进度已经
+	// 72/72，条却停在 97%（用户 2026-09-15 实测）。终帧由事件循环渲染、
+	// 渲染完才执行退出，所以这一帧一定会出现在屏幕上。
+	prog.Send(finalMsg{})
+	prog.Wait()
 }
 
 // ensureProgram 懒创建进度界面：首个进度事件才启动，好让采集期提示先落终端
