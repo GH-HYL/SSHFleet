@@ -211,43 +211,6 @@ func CredErrorLabel(code CredCode, path string, detail string) string {
 	return fmt.Sprintf("%s → %s", label, path)
 }
 
-// CredErrorDetail 凭据错误码 → 退出前完整指引文案（读取失败即退路径用）。
-func CredErrorDetail(code CredCode, level int, path string, detail string) string {
-	switch code {
-	case CodeMissing:
-		return fmt.Sprintf("凭据文件不存在：%s", path)
-	case CodeReadError:
-		return fmt.Sprintf("凭据文件无法读取：%s (%s)", path, detail)
-	case CodeEmpty:
-		return fmt.Sprintf("凭据文件内容为空：%s", path)
-	case CodeMismatchEncrypted:
-		return fmt.Sprintf(
-			"凭据文件是本工具等级3（加密）格式，与当前密码安全等级 %d（1=明文 2=base64 3=加密）不匹配：%s\n"+
-				"请将配置 account.password_security 改为 3，或先用 --convert-password 处理该文件", level, path)
-	case CodeMismatchBase64:
-		return fmt.Sprintf(
-			"凭据文件是等级2（base64）格式，与当前密码安全等级 1（明文）不匹配：%s\n"+
-				"请先将该文件内容还原为明文，或将配置改为 2", path)
-	case CodeBadCipher:
-		if detail != "" { // 解密失败（密钥不匹配/文件损坏）
-			return fmt.Sprintf("凭据文件解密失败（文件可能尚未用 --convert-password 转换，或主密钥不匹配）：%s\n%s", path, detail)
-		}
-		return fmt.Sprintf("凭据文件不是等级%d（加密）格式，请先 --convert-password 转换：%s", level, path)
-	case CodeLegacyCipher:
-		return fmt.Sprintf(
-			"凭据文件是旧版 4.x 的 0x01 加密格式，5.0.0 起不再支持读取：%s\n"+
-				"请将明文密码重新写入该文件（或先降为明文等级），再用 --convert-password 按当前等级转换", path)
-	case CodeBadBase64:
-		return fmt.Sprintf("凭据文件不是等级%d（base64）格式（内容疑似明文），请先 --convert-password 转换：%s", level, path)
-	case CodeEmptyDecoded:
-		return fmt.Sprintf("凭据文件内容解码后为空，请检查文件是否填入了有效密码：%s", path)
-	case CodeBadPEM:
-		return fmt.Sprintf("凭据文件不是有效的PEM格式（缺少 -----BEGIN 头）：%s", path)
-	default:
-		return fmt.Sprintf("凭据文件校验失败（%s）：%s", code, path)
-	}
-}
-
 // ---- D31 路径解析单点：写在文件里的凭据相对路径拼 secret_dir ----
 
 // ErrRelativeNoSecretDir 相对路径但 secret_dir 未配置（调用方按各自场景组织文案）。
