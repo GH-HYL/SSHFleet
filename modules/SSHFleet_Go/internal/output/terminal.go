@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/text/width"
+
 	"sshfleet/internal/result"
 	"sshfleet/internal/ssh"
 )
@@ -64,6 +66,8 @@ func FormatBytes(n int64) string {
 }
 
 // ResultLine 单条结果的明细文本（对位旧 format_result_line）。
+// 字段顺序（用户 2026-09-15 裁定）：连接 → 执行/错误 → 分类 → output 内容 → 分隔线。
+// 分类提到执行下面（一眼看出结果定性），output 原文放最下面（长文本不夹在状态行中间）。
 func ResultLine(r ssh.Result, mode string, category string) string {
 	var lines []string
 	lines = append(lines, fmt.Sprintf("【%s】 %s", r.IP, FormatConnStatus(r.ConnectSuccess, r.ConnectCostTime)))
@@ -74,9 +78,6 @@ func ResultLine(r ssh.Result, mode string, category string) string {
 			status = "成功"
 		}
 		lines = append(lines, fmt.Sprintf("【%s】 %s: %s - %.3fs", r.IP, ActionName(mode), status, r.ExecCostTime))
-		if strings.TrimSpace(r.Output) != "" {
-			lines = append(lines, strings.TrimSpace(r.Output))
-		}
 	} else {
 		errMsg := "未知错误"
 		if r.Error != nil && *r.Error != "" {
@@ -86,6 +87,13 @@ func ResultLine(r ssh.Result, mode string, category string) string {
 	}
 
 	lines = append(lines, fmt.Sprintf("【%s】 分类: %s", r.IP, category))
+
+	if r.ConnectSuccess {
+		if out := strings.TrimSpace(r.Output); out != "" {
+			lines = append(lines, out)
+		}
+	}
+
 	lines = append(lines, strings.Repeat("=", 50))
 	return strings.Join(lines, "\n")
 }
@@ -195,6 +203,39 @@ func exitCodeHintLine(categories []result.CategoryCount) string {
 func elapsedText(d time.Duration) string {
 	total := int(d.Seconds())
 	return fmt.Sprintf("%d:%02d:%02d", total/3600, (total%3600)/60, total%60)
+}
+
+// runeWidth 单字符的终端显示宽度（对位旧 text_utils.display_width 的判定）。
+func runeWidth(r rune) int {
+	switch width.LookupRune(r).Kind() {
+	case width.EastAsianWide, width.EastAsianFullwidth:
+		return 2
+	}
+	return 1
+}
+
+// DisplayWidth 字符串的终端显示宽度：东亚宽/全角（含全角标点）占 2 列，其余 1 列。
+// 全工具单一实现（对位旧 text_utils.display_width）——框线对齐必须按它算，
+// 按字符数或按字节数算都会在中文/全角内容处错位。
+func DisplayWidth(s string) int {
+	n := 0
+	for _, r := range s {
+		n += runeWidth(r)
+	}
+	return n
+}
+
+// trimToWidth 按**显示宽度**截断到 limit 列，返回可放下的最长前缀。
+func trimToWidth(s string, limit int) string {
+	w := 0
+	for i, r := range s {
+		rw := runeWidth(r)
+		if w+rw > limit {
+			return s[:i]
+		}
+		w += rw
+	}
+	return s
 }
 
 // formatSize 文件大小人性化（对位旧 text_utils.format_size）。

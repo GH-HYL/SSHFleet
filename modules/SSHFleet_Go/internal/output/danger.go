@@ -5,82 +5,92 @@ import (
 	"os"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
-
 	"sshfleet/internal/dangercheck"
 )
 
-// PrintDangerWarning 打印危险命令警告框（多命中全列、按风险降序，spec D34）。
-// M4 交付可用形态；M5 统一终端呈现时可再美化。
-func PrintDangerWarning(report *dangercheck.Report, forbidden bool) {
+// 警告框尺寸（对位旧 dangerous.py：框内宽度 = 顶部 ═ 的数量）。
+const (
+	dangerInnerWidth = 56
+	// dangerFieldLimit 字段值（来源/内容/分类）的显示宽度上限。
+	// 按**显示宽度**而非字符数截断——旧版按字符数截断，中文会占 2 列，
+	// 46 个中文字符即 92 列，直接把框线撑歪（用户 2026-09-15 反馈）。
+	dangerFieldLimit = 46
+)
+
+// dangerBox 渲染危险命令警告框（多命中全列、按风险降序，spec D34）。
+// 无命中返回空串。抽成纯函数便于断言每行等宽。
+func dangerBox(report *dangercheck.Report, forbidden bool) string {
 	if report == nil || len(report.Matches) == 0 {
-		return
+		return ""
 	}
 
-	title := "⚠️  发现危险命令 ⚠️"
+	// 标题/页脚：两侧各留两个空格（旧版右侧只有 1 个，看着像少了个空格）
+	title := "⚠️  发现危险命令  ⚠️"
 	footer := "是否继续执行？这可能会带来安全风险！"
 	if forbidden {
-		title = "🚫  发现禁止命令 🚫"
+		title = "🚫  发现禁止命令  🚫"
 		footer = "此命令被禁止执行，程序将立即退出！"
 	}
 
-	const inner = 56
+	const inner = dangerInnerWidth
 	bar := strings.Repeat("═", inner)
 
-	risk := report.Highest()
-	// 对位旧 constants.py：红 31 / 黄 33 / 白 37（lipgloss ANSI 1/3/7 正是这三个码）
-	color := lipgloss.Color("7")
-	switch risk {
+	// 对位旧 constants.py：红 31 / 黄 33 / 白 37
+	color := ansiWhite
+	switch report.Highest() {
 	case "forbidden", "high":
-		color = lipgloss.Color("1")
+		color = ansiRed
 	case "medium":
-		color = lipgloss.Color("3")
+		color = ansiYellow
 	}
-	style := lipgloss.NewStyle().Foreground(color)
 
 	pad := func(text string) string {
-		w := lipgloss.Width(text)
-		if w >= inner {
-			return text
+		if w := DisplayWidth(text); w < inner {
+			return text + strings.Repeat(" ", inner-w)
 		}
-		return text + strings.Repeat(" ", inner-w)
+		return text
 	}
 	center := func(text string) string {
-		w := lipgloss.Width(text)
-		if w >= inner {
+		remain := inner - DisplayWidth(text)
+		if remain <= 0 {
 			return text
 		}
-		remain := inner - w
 		left := remain / 2
 		return strings.Repeat(" ", left) + text + strings.Repeat(" ", remain-left)
 	}
+	line := func(s string) string { return color + s + ansiReset }
 
 	lines := []string{
-		style.Render("╔" + bar + "╗"),
-		style.Render("║" + center(title) + "║"),
-		style.Render("╠" + bar + "╣"),
+		line("╔" + bar + "╗"),
+		line("║" + center(title) + "║"),
+		line("╠" + bar + "╣"),
 	}
 	for _, m := range report.Matches {
 		source := "命令"
 		if report.IsScript {
 			source = "脚本: " + report.ScriptPath
 		}
-		content := []rune(m.Content)
-		if len(content) > 46 {
-			content = content[:46]
-		}
 		lines = append(lines,
-			style.Render("║"+pad("    来源: "+source)+"║"),
-			style.Render("║"+pad(fmt.Sprintf("    行号: %d", m.Line))+"║"),
-			style.Render("║"+pad("    内容: "+string(content))+"║"),
-			style.Render("║"+pad("    分类: "+m.RuleName)+"║"),
-			style.Render("║"+pad("    级别: "+strings.ToUpper(m.RiskLevel))+"║"),
-			style.Render("╠"+bar+"╢"),
+			line("║"+pad("    来源: "+trimToWidth(source, dangerFieldLimit))+"║"),
+			line("║"+pad(fmt.Sprintf("    行号: %d", m.Line))+"║"),
+			line("║"+pad("    内容: "+trimToWidth(m.Content, dangerFieldLimit))+"║"),
+			line("║"+pad("    分类: "+trimToWidth(m.RuleName, dangerFieldLimit))+"║"),
+			line("║"+pad("    级别: "+strings.ToUpper(m.RiskLevel))+"║"),
+			line("╠"+bar+"╢"),
 		)
 	}
 	lines = append(lines,
-		style.Render("║"+center(footer)+"║"),
-		style.Render("╚"+bar+"╝"),
+		line("║"+center(footer)+"║"),
+		line("╚"+bar+"╝"),
 	)
-	fmt.Fprintln(os.Stdout, "\n"+strings.Join(lines, "\n"))
+	return strings.Join(lines, "\n")
+}
+
+// PrintDangerWarning 打印危险命令警告框（前置一个空行，与旧版一致）。
+func PrintDangerWarning(report *dangercheck.Report, forbidden bool) {
+	box := dangerBox(report, forbidden)
+	if box == "" {
+		return
+	}
+	fmt.Fprintln(os.Stdout, "\n"+box)
 }
