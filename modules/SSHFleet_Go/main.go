@@ -112,7 +112,7 @@ func main() {
 	// 交互器：全工具唯一的用户交互入口（In/Out 注入 + 非交互标志）
 	in := common.NewInteractor(args.Disinteractive)
 
-	// ---- 步骤 4：工具模式分流（keygen / convert-password）-------------
+	// ---- 步骤 4：工具模式分流（keygen / key-status / convert-password）-----
 	// 独立工具与批量执行解耦，处理完直接退出，不进入后续步骤。
 	if args.GenKey {
 		logger.Info("进入密钥管理模式（--gen-key）")
@@ -121,12 +121,26 @@ func main() {
 		}
 		return
 	}
+	if args.KeyStatus {
+		logger.Info("进入主密钥状态查看模式（--key-status）")
+		fmt.Print(credential.KeyStatusReport())
+		return
+	}
 	if args.ConvertPassword != "" {
 		logger.Info("进入凭据转换模式（--convert-password）")
 		if err := credential.ConvertPassword(args.ConvertPassword, cfg.Account.SecretDir, cfg.Account.PasswordSecurity); err != nil {
 			fatal("credential", err)
 		}
 		return
+	}
+
+	// ---- 步骤 4.5：主密钥预检查 ---------------------------------------
+	// 「生成密钥后忘了 source / 重开终端」是最高频的坑（用户 2026-09-15 指出）：
+	// 与其等他用凭据时撞一句看不懂的报错，不如开工前就把现状与下一步说清。
+	if note := credential.PrecheckKey(); note != "" {
+		state, _ := credential.InspectKey()
+		logger.Warn(fmt.Sprintf("主密钥预检查未通过（%s）", state))
+		fmt.Fprintf(os.Stderr, "\n%s[警告]%s %s", colorYellow, colorReset, note)
 	}
 
 	// ---- 步骤 5：参数合规检查 + 危险命令检测 ---------------------------
