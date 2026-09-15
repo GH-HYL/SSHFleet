@@ -276,30 +276,57 @@ type helpEntry struct {
 	long  string
 	tag   string // (命令模式) / [默认: sudo] 这类标记，无则空
 	desc  string
+	blank bool // 分组用的空行（不与其它字段同时使用）
+}
+
+// blankRow 选项表的分组空行。
+var blankRow = helpEntry{blank: true}
+
+// opt 构造一行选项（blank 恒 false，不必逐个写字面量字段）。
+func opt(short, long, tag, desc string) helpEntry {
+	return helpEntry{short: short, long: long, tag: tag, desc: desc}
 }
 
 // helpEntries 选项表内容（默认值从配置插值，与旧版一致）。
+// 按用途分组：四种模式 / 清单与路径 / 执行参数与登录方式 / 密钥与凭据，组间空行分隔。
 func helpEntries(cfg *config.Config) []helpEntry {
 	return []helpEntry{
-		{"-c", "--command", "(命令模式)", "远程在多台服务器上执行一条命令"},
-		{"-s", "--script", "(脚本模式)", "远程在多台服务器上执行一个本地脚本"},
-		{"-u", "--upload", "(上传模式)", "把本地文件或目录传到服务器"},
-		{"-d", "--download", "(下载模式)", "从服务器下载文件或目录到本地"},
-		{"-f", "--file", "", "节点清单：CSV 文件路径，或直接在命令行写一行节点信息 (-c/-s/-u/-d 时必须带)"},
-		{"-p", "--path", "", "目标路径：上传到服务器的目录 / 从服务器下载到的本地目录 (-u/-d 时必须带)"},
-		{"-m", "--mode", fmt.Sprintf("[默认: %s]", cfg.Execution.Mode), "执行身份: direct=用登录用户身份, sudo=用 root 身份执行"},
-		{"-t", "--timeout", fmt.Sprintf("[默认: 命令%ds/上传%ds]", cfg.Execution.TimeoutExecute, cfg.Execution.TimeoutTransfer), "单台执行或传输的超时时间 (秒)"},
-		{"-T", "--connect-timeout", fmt.Sprintf("[默认: %d]", cfg.Execution.TimeoutConnect), "连接每台服务器的超时时间 (秒)"},
-		{"-n", "--number", "[默认: 同时跑全部节点]", "并发数：同时操作几台服务器 (不填则全部并行)"},
-		{"-r", "--remark", "", "给这次任务起个名字，会作为历史记录文件夹的后缀 (不填自动生成)"},
-		{"", "--nobash", "", "命令模式专用: 不套一层 bash 环境，直接执行原始命令"},
-		{"", "--disinteractive", "", "跳过所有确认提示直接执行 (批量跑脚本时常用)"},
-		{"-k", "--key", "(密钥登录)", "不指定=纯密码; 仅 -k=用CSV/配置默认密钥; -k 路径=所有节点统一私钥"},
-		{"", "--gen-key", "(密钥管理)", "生成随机主密钥并持久化到系统环境变量 SSHFLEET_KEY（凭据加密用）"},
-		{"", "--key-status", "(密钥管理)", "查看主密钥状态：本次运行读到哪把、本机保存的是哪把、两处是否一致、下一步怎么办"},
-		{"", "--convert-password", "(密钥管理)", "转换凭据文件（后面跟目标文件路径）：自动识别明文/base64/加密格式并按配置等级转换，支持升降级；加密/解密需已配置主密钥；路径支持相对 secret_dir"},
+		opt("-c", "--command", "(命令模式)", "远程在多台服务器上执行一条命令"),
+		opt("-s", "--script", "(脚本模式)", "远程在多台服务器上执行一个本地脚本"),
+		opt("-u", "--upload", "(上传模式)", "把本地文件或目录传到服务器"),
+		opt("-d", "--download", "(下载模式)", "从服务器下载文件或目录到本地"),
+
+		blankRow,
+
+		opt("-f", "--file", "", "节点清单：CSV 文件路径，或直接在命令行写一行节点信息 (-c/-s/-u/-d 时必须带)"),
+		opt("-p", "--path", "", "目标路径：上传到服务器的目录 / 从服务器下载到的本地目录 (-u/-d 时必须带)"),
+
+		blankRow,
+
+		opt("-m", "--mode", fmt.Sprintf("[默认: %s]", cfg.Execution.Mode), "执行身份: direct=用登录用户身份, sudo=用 root 身份执行"),
+		opt("-t", "--timeout", fmt.Sprintf("[默认: 命令%ds/上传%ds]", cfg.Execution.TimeoutExecute, cfg.Execution.TimeoutTransfer), "单台执行或传输的超时时间 (秒)"),
+		opt("-T", "--connect-timeout", fmt.Sprintf("[默认: %d]", cfg.Execution.TimeoutConnect), "连接每台服务器的超时时间 (秒)"),
+		opt("-n", "--number", "[默认: 同时跑全部节点]", "并发数：同时操作几台服务器 (不填则全部并行)"),
+		opt("-r", "--remark", "", "给这次任务起个名字，会作为历史记录文件夹的后缀 (不填自动生成)"),
+		opt("-k", "--key", "(密钥登录)", "不指定=纯密码; 仅 -k=用CSV/配置默认密钥; -k 路径=所有节点统一私钥"),
+		opt("", "--nobash", "", "命令模式专用: 不套一层 bash 环境，直接执行原始命令"),
+		opt("", "--disinteractive", "", "跳过所有确认提示直接执行 (批量跑脚本时常用)"),
+
+		blankRow,
+
+		opt("", "--gen-key", "(密钥管理)", "生成随机主密钥并持久化到系统环境变量 SSHFLEET_KEY（凭据加密用）"),
+		opt("", "--key-status", "(密钥管理)", "查看主密钥状态：本次运行读到哪把、本机保存的是哪把、两处是否一致、下一步怎么办"),
+		opt("", "--convert-password", "(密钥管理)", "转换凭据文件（后面跟目标文件路径）：自动识别明文/base64/加密格式并按配置等级转换，支持升降级；加密/解密需已配置主密钥；路径支持相对 secret_dir"),
 	}
 }
+
+// 帮助表的列间留白：短选项与长选项之间只留 1 个空格（贴成一个整体），
+// 其余列之间留 2 个空格。测试按同一组常量核对列位置，避免两边各写一份。
+const (
+	helpIndent = "  "
+	helpOptGap = " "
+	helpGap    = "  "
+)
 
 // minDescWidth 说明列保底宽度：终端太窄时宁可整行超宽，也不把说明挤成一列一个字。
 const minDescWidth = 24
@@ -312,11 +339,13 @@ func usageText(cfg *config.Config, version string, width int) string {
 
 	wShort, wLong, wTag := 0, 0, 0
 	for _, e := range entries {
+		if e.blank {
+			continue
+		}
 		wShort = max(wShort, common.DisplayWidth(e.short))
 		wLong = max(wLong, common.DisplayWidth(e.long))
 		wTag = max(wTag, common.DisplayWidth(e.tag))
 	}
-	const indent, gap = "  ", "  "
 	padTo := func(s string, w int) string {
 		if d := common.DisplayWidth(s); d < w {
 			return s + strings.Repeat(" ", w-d)
@@ -324,8 +353,8 @@ func usageText(cfg *config.Config, version string, width int) string {
 		return s
 	}
 	// 说明列的起始列与可用宽度：折行必须落在说明列内，不串到其它列
-	descStart := common.DisplayWidth(indent) + wShort + common.DisplayWidth(gap) +
-		wLong + common.DisplayWidth(gap) + wTag + common.DisplayWidth(gap)
+	descStart := common.DisplayWidth(helpIndent) + wShort + common.DisplayWidth(helpOptGap) +
+		wLong + common.DisplayWidth(helpGap) + wTag + common.DisplayWidth(helpGap)
 	descWidth := 0
 	if width > 0 {
 		descWidth = max(width-descStart-1, minDescWidth)
@@ -335,11 +364,15 @@ func usageText(cfg *config.Config, version string, width int) string {
 	b.WriteString("SSHFleet - 批量 SSH 运维工具（命令/脚本执行、文件上传下载）\n")
 	b.WriteString(fmt.Sprintf("版本: v%s\n\n", version))
 	b.WriteString("用法:\n")
-	b.WriteString(fmt.Sprintf("  %s ( -c | -s | -u | -d ) ( -f ) ( -p ) [其他可选参数]   批量执行（四种模式四选一）\n", name))
-	b.WriteString(fmt.Sprintf("  %s --gen-key | --key-status | --convert-password 文件路径   工具选项（单独使用）\n\n", name))
+	b.WriteString(helpIndent + fmt.Sprintf("%s ( -c | -s | -u | -d ) ( -f ) ( -p ) [其他可选参数]   批量执行（四种模式四选一）\n\n", name))
 	b.WriteString("选项:\n")
 	for _, e := range entries {
-		head := indent + padTo(e.short, wShort) + gap + padTo(e.long, wLong) + gap + padTo(e.tag, wTag) + gap
+		if e.blank { // 分组空行
+			b.WriteString("\n")
+			continue
+		}
+		head := helpIndent + padTo(e.short, wShort) + helpOptGap + padTo(e.long, wLong) +
+			helpGap + padTo(e.tag, wTag) + helpGap
 		for i, line := range common.WrapByWidth(e.desc, descWidth) {
 			if i == 0 {
 				b.WriteString(head + line + "\n")
@@ -348,14 +381,12 @@ func usageText(cfg *config.Config, version string, width int) string {
 			b.WriteString(strings.Repeat(" ", descStart) + line + "\n")
 		}
 	}
-	b.WriteString("\n长选项与短选项等价（如 --command 与 -c）；短选项更省事，长选项更适合写在脚本里。\n")
 	b.WriteString("\n示例:\n")
 	b.WriteString(fmt.Sprintf("  命令模式: %s -f nodes.csv -c \"ls -l\"\n", name))
 	b.WriteString(fmt.Sprintf("  脚本模式: %s -f nodes.csv -s script.sh\n", name))
 	b.WriteString(fmt.Sprintf("  上传模式: %s -f nodes.csv -u /local/path -p /remote/path/\n", name))
 	b.WriteString(fmt.Sprintf("  下载模式: %s -f nodes.csv -d /remote/path -p /local/path\n", name))
-	b.WriteString("\n上传并发说明:\n")
-	b.WriteString("  上传模式下，工具根据配置文件中的文件大小阈值输出建议并发数\n")
-	b.WriteString("  输入 y 使用建议值，输入 n 保留原值继续执行\n")
+	b.WriteString(fmt.Sprintf("  生成密钥: %s --gen-key\n", name))
+	b.WriteString(fmt.Sprintf("  转换凭据: %s --convert-password ~/.MyPW/pw.txt\n", name))
 	return b.String()
 }
