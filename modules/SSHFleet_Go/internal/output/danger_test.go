@@ -103,3 +103,22 @@ func TestDangerBoxEmptyReport(t *testing.T) {
 		t.Fatalf("nil 报告应返回空串，实际：%q", got)
 	}
 }
+
+// 变体选择符（U+FE0F）是零宽的：「⚠️」（U+26A0 + U+FE0F）与「⚠」在终端里画出来
+// 一样宽，宽度函数也必须给一样的值。此前前者被算成 2 列、后者 1 列，标题因此
+// 多算 2 列、居中偏移、右边框歪掉（用户 2026-09-15 反馈「两个感叹号没对齐」）。
+// 上面那条「逐行等宽」断言查不出这个——它用的是同一个宽度函数，自己证自己。
+func TestVariantSelectorCountsAsZeroWidth(t *testing.T) {
+	if got := DisplayWidth("⚠"); got != 1 {
+		t.Fatalf("「⚠」应为 1 列，实际 %d", got)
+	}
+	if got := DisplayWidth("⚠️"); got != 1 {
+		t.Fatalf("「⚠️」应也为 1 列（U+FE0F 零宽），实际 %d", got)
+	}
+	// 标题里不再出现带变体选择符的写法，避免终端按 emoji 呈现时宽度不可预期
+	for _, forbidden := range []bool{false, true} {
+		if strings.Contains(stripANSI(dangerBox(dangerReport("rm -rf /", "递归强制删除", "high"), forbidden)), "\ufe0f") {
+			t.Fatalf("forbidden=%v 标题不应使用变体选择符", forbidden)
+		}
+	}
+}

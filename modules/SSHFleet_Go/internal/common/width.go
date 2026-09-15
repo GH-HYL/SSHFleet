@@ -7,12 +7,21 @@ package common
 
 import (
 	"strings"
+	"unicode"
 
 	"golang.org/x/text/width"
 )
 
 // RuneWidth 单字符的终端显示宽度。
+//
+// 零宽字符必须算 0 列——变体选择符（U+FE00–FE0F）、组合记号、零宽连接符这些
+// 根本不占终端格子。此前一律按 EAW 判定给 1 列，于是「⚠️」（U+26A0 + U+FE0F）
+// 被算成 2 列、而终端只画 1 列，警告框标题因此多算 2 列、居中偏移、右边框歪掉
+// （用户 2026-09-15 反馈「两个感叹号没对齐」）。
 func RuneWidth(r rune) int {
+	if r == 0 || unicode.In(r, unicode.Mn, unicode.Me, unicode.Cf) {
+		return 0
+	}
 	switch width.LookupRune(r).Kind() {
 	case width.EastAsianWide, width.EastAsianFullwidth:
 		return 2

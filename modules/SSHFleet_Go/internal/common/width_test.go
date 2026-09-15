@@ -15,10 +15,12 @@ func TestDisplayWidth(t *testing.T) {
 		{"中文", 4},
 		{"中a", 3},
 		{"（全角括号）", 12},
-		{"═", 1},      // 制表符系（EastAsianAmbiguous）按 1 列，与旧版 display_width 一致
-		{"⚠️", 2},     // 基础码位 1 + 变体选择符 1 —— 恰好等于终端按 emoji 渲染的 2 列
-		{"🚫", 2},      // EastAsianWide
-		{"版本: v1", 8}, // 中(2)本(2):(1)空格(1)v(1)1(1)
+		{"═", 1},       // 制表符系（EastAsianAmbiguous）按 1 列，与旧版 display_width 一致
+		{"⚠", 1},       // EastAsianAmbiguous，按 1 列
+		{"⚠️", 1},      // U+26A0 + U+FE0F：变体选择符零宽，不额外占列
+		{"中\u200b", 2}, // 零宽空格同样不占列
+		{"🚫", 2},       // EastAsianWide
+		{"版本: v1", 8},  // 中(2)本(2):(1)空格(1)v(1)1(1)
 	}
 	for _, c := range cases {
 		if got := DisplayWidth(c.in); got != c.want {
