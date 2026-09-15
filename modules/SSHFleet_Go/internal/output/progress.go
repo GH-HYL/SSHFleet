@@ -253,15 +253,23 @@ func (m *progressModel) syncBars() tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-// progress 总进度：有字节总量时按字节，否则（命令模式）按完成台数。
+// progress 总进度：已完成台数 + 各在传节点自身进度之和，除以节点总数。
+//
+// 为什么不用「已传字节 ÷ 已开始节点的字节总量」：并发受限时（50 台 10 并发），
+// 前 10 台传完就凑满了分母、把进度顶到 100%，而另外 40 台还在排队；等下一批开始，
+// 分母变大、进度又跌回来——进度条会「先冲到满再回落」（用户 2026-09-15 实测反馈）。
+// 按台数求和天然反映「整体还剩多少没做完」：还没开始的节点贡献 0。
 func (m progressModel) progress() float64 {
-	if m.bytesTotal > 0 {
-		return clamp01(float64(m.bytesDone) / float64(m.bytesTotal))
-	}
 	if m.total == 0 {
 		return 0
 	}
-	return clamp01(float64(m.completed) / float64(m.total))
+	sum := float64(m.completed)
+	for _, n := range m.nodes {
+		if !n.done {
+			sum += nodePercent(*n)
+		}
+	}
+	return clamp01(sum / float64(m.total))
 }
 
 // nodePercent 单节点进度：优先按字节，其次按文件数。
@@ -286,7 +294,16 @@ func clamp01(v float64) float64 {
 	return v
 }
 
-func (m progressModel) View() string {
+// View 渲染整块。
+//
+// 末尾刻意多带一个换行：bubbletea 退出时会擦掉自己渲染的最后一行
+// （standardRenderer.stop 里的 EraseEntireLine，而 flush 把光标留在最后一行行首）。
+// 命令模式的进度条只有一行、正好就是那一行，会被整条抹掉。多留一个空行接刀，
+// 进度条本身就能像以前那样留在屏幕上（用户 2026-09-15 实测反馈）。
+func (m progressModel) View() string { return m.render() + "\n" }
+
+// render 界面正文（不含上面那个替死换行；测试直接断言它）。
+func (m progressModel) render() string {
 	if m.mode == "upload" || m.mode == "download" {
 		return m.transferView()
 	}
