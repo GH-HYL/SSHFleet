@@ -64,14 +64,12 @@ func precheckCredentials(rows [][]string, args *cli.Args, cfg *config.Config, in
 			if rerr != nil {
 				return nil, rerr
 			}
-			plain, credErrs, fatalErr := credential.ReadCredential(ppath, level, true)
+			plain, problems, fatalErr := credential.ReadCredential(ppath, level, true)
 			if fatalErr != nil {
 				return nil, fatalErr
 			}
-			if len(credErrs) > 0 {
-				for _, ce := range credErrs {
-					errs = append(errs, fmt.Sprintf("行 %d (IP: %s): 密码文件%s", idx+1, row[0], credential.CredErrorLabel(ce.Code, ppath, ce.Detail)))
-				}
+			if len(problems) > 0 {
+				errs = append(errs, prefixProblems(rowPrefix(idx, row[0], "密码"), problems)...)
 				pre.rows[idx] = rc
 				continue
 			}
@@ -90,11 +88,9 @@ func precheckCredentials(rows [][]string, args *cli.Args, cfg *config.Config, in
 			if rerr != nil {
 				return nil, rerr
 			}
-			keyPlain, credErrs := credential.ReadCredentialPEM(kpath)
-			if len(credErrs) > 0 {
-				for _, ce := range credErrs {
-					errs = append(errs, fmt.Sprintf("行 %d (IP: %s): 密钥文件%s", idx+1, row[0], credential.CredErrorLabel(ce.Code, kpath, ce.Detail)))
-				}
+			keyPlain, problems := credential.ReadCredentialPEM(kpath)
+			if len(problems) > 0 {
+				errs = append(errs, prefixProblems(rowPrefix(idx, row[0], "密钥"), problems)...)
 				pre.rows[idx] = rc
 				continue
 			}
@@ -112,14 +108,12 @@ func precheckCredentials(rows [][]string, args *cli.Args, cfg *config.Config, in
 					if rerr != nil {
 						return nil, rerr
 					}
-					plain, credErrs, fatalErr := credential.ReadCredential(ppPath, level, false)
+					plain, problems, fatalErr := credential.ReadCredential(ppPath, level, false)
 					if fatalErr != nil {
 						return nil, fatalErr
 					}
-					for _, ce := range credErrs {
-						errs = append(errs, fmt.Sprintf("行 %d (IP: %s): 私钥口令文件%s", idx+1, row[0], credential.CredErrorLabel(ce.Code, ppPath, ce.Detail)))
-					}
-					if len(credErrs) == 0 {
+					errs = append(errs, prefixProblems(rowPrefix(idx, row[0], "私钥口令"), problems)...)
+					if len(problems) == 0 {
 						rc.keyPassRaw = plain
 					}
 				}
@@ -133,14 +127,12 @@ func precheckCredentials(rows [][]string, args *cli.Args, cfg *config.Config, in
 		if cfg.Account.Password == "" {
 			errs = append(errs, "密码列有空值，但 config 未配置默认密码(account.password)")
 		} else {
-			plain, credErrs, fatalErr := credential.ReadCredential(cfg.Account.Password, level, true)
+			plain, problems, fatalErr := credential.ReadCredential(cfg.Account.Password, level, true)
 			if fatalErr != nil {
 				return nil, fatalErr
 			}
-			for _, ce := range credErrs {
-				errs = append(errs, fmt.Sprintf("默认密码文件%s", credential.CredErrorLabel(ce.Code, cfg.Account.Password, ce.Detail)))
-			}
-			if len(credErrs) == 0 {
+			errs = append(errs, prefixProblems("默认密码文件", problems)...)
+			if len(problems) == 0 {
 				pre.defaultPasswordPlain = plain
 			}
 		}
@@ -148,14 +140,12 @@ func precheckCredentials(rows [][]string, args *cli.Args, cfg *config.Config, in
 
 	// 配置私钥口令（spec D42：只配给「私钥取自配置」的节点；无此类节点则不读）
 	if keyMode == cli.KeyModeDefault && pre.anyNodeUsesConfigKey && cfg.Account.KeyPassphrase != "" {
-		plain, credErrs, fatalErr := credential.ReadCredential(cfg.Account.KeyPassphrase, level, true)
+		plain, problems, fatalErr := credential.ReadCredential(cfg.Account.KeyPassphrase, level, true)
 		if fatalErr != nil {
 			return nil, fatalErr
 		}
-		for _, ce := range credErrs {
-			errs = append(errs, fmt.Sprintf("密钥passphrase文件%s", credential.CredErrorLabel(ce.Code, cfg.Account.KeyPassphrase, ce.Detail)))
-		}
-		if len(credErrs) == 0 {
+		errs = append(errs, prefixProblems("密钥passphrase文件", problems)...)
+		if len(problems) == 0 {
 			pre.globalPassphrase = plain
 			for i := range pre.rows {
 				if pre.rows[i].keyFromConfig {
@@ -226,6 +216,24 @@ func resolveCredentialPath(raw, secretDir string) (string, error) {
 		return "", err
 	}
 	return resolved, nil
+}
+
+// rowPrefix 凭据问题文案的清单行前缀：行号 + IP + 列名（如「行 3 (IP: 1.2.3.4): 密码文件」）。
+func rowPrefix(idx int, ip, kind string) string {
+	return fmt.Sprintf("行 %d (IP: %s): %s文件", idx+1, ip, kind)
+}
+
+// prefixProblems 给凭据读取返回的问题文案套上调用方前缀
+// （清单行用 rowPrefix，默认密码 / 配置口令等无行号场景直接用固定前缀）。
+func prefixProblems(prefix string, problems []string) []string {
+	if len(problems) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(problems))
+	for _, p := range problems {
+		out = append(out, prefix+p)
+	}
+	return out
 }
 
 // padRow 短行补空到 6 列。
