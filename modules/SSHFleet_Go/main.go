@@ -1,8 +1,7 @@
 // SSHFleet —— 批量 SSH 运维工具（单可执行文件，Go 重写版 5.0.0）
 //
-// main.go 承载「初始化 → 运行 → 退出」主干全流程（主干十步，见
-// docs/issues/rewrite-to-go/spec.md 第六节）。所有环节的错误统一由
-// main 打印并独占退出权；子模块只返回 error，不自行退出。
+// main.go 承载「初始化 → 运行 → 退出」主干全流程。
+// 所有环节的错误统一由 main 打印并独占退出权；子模块只返回 error，不自行退出。
 package main
 
 import (
@@ -182,14 +181,14 @@ func main() {
 		fatal("cli", err)
 	}
 	if err := cli.CheckArguments(args); err != nil {
-		fatal("cli", fmt.Errorf("参数合规性检查失败\n原因：%v", err))
+		fatal("cli", fmt.Errorf("参数合规性检查未通过\n原因：%v", err))
 	}
-	logger.Success("输入的参数合规性检查成功")
+	logger.Success("输入的参数合规性检查通过")
 
 	// 危险命令检测：规则文件加载（含规则校验）+ 命中判定 + 处置
 	dangerRules, err := dangercheck.LoadRules(cfg.Paths.DangerousKeywords)
 	if err != nil {
-		fatal("dangercheck", fmt.Errorf("危险关键词内容检查失败\n原因：%v", err))
+		fatal("dangercheck", fmt.Errorf("危险关键词内容检查未通过\n原因：%v", err))
 	}
 	errorKeywords, err := result.LoadKeywords(cfg.Paths.ErrorKeywords)
 	if err != nil {
@@ -197,7 +196,7 @@ func main() {
 	}
 	dangerReport, err := dangercheck.Check(args, dangerRules)
 	if err != nil {
-		fatal("dangercheck", fmt.Errorf("危险关键词内容检查失败\n原因：%v", err))
+		fatal("dangercheck", fmt.Errorf("危险关键词内容检查未通过\n原因：%v", err))
 	}
 	dangerNote := "" // 危险命令放行留痕（spec D35/D46）：先写工具日志，归档后同样写入执行日志
 	switch {
@@ -230,7 +229,7 @@ func main() {
 		dangerNote = fmt.Sprintf("用户已确认风险继续执行（最高级别 %s）：%s", dangerReport.Highest(), dangerReport.Matches[0].Content)
 		logger.Warn(dangerNote)
 	}
-	logger.Success("危险关键词内容检查成功")
+	logger.Success("危险关键词内容检查通过")
 
 	// ---- 步骤 6：读取清单 + 字段补全 + 输入记忆 ------------------------
 	nodes, err := nodelist.Read(args, cfg, in)
