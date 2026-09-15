@@ -34,18 +34,52 @@ import (
 )
 
 // 版本号：单一出处（显示在帮助信息首行下方，经 cli.Parse 传入 Usage）。
+// 只在**定版**时改它——与 CHANGELOG 顶部的「待定」整理为正式版本号是同一个动作，
+// 必须同一次提交里完成。日常改动不动它，版本号保持不变是正常的（功能基线没变）。
 const appVersion = "5.0.1"
 
-// versionWithBuildTime 版本号拼上编译来源时间（git HEAD 提交时间，go build 在
-// 仓库内编译时自动注入 vcs.time）；取不到（仓库外编译 / -buildvcs=false）时只显示版本号。
-func versionWithBuildTime() string {
-	if bi, ok := debug.ReadBuildInfo(); ok {
-		for _, s := range bi.Settings {
-			if s.Key == "vcs.time" {
-				if tm, err := time.Parse(time.RFC3339, s.Value); err == nil {
-					return fmt.Sprintf("%s (%s)", appVersion, tm.Local().Format("2006-01-02 15:04:05"))
-				}
-			}
+// versionWithBuildID 版本号拼上**构建标识**：git 短提交号（仓库内编译时由 go build
+// 自动注入 vcs.revision；工作区有未提交改动时加 -dirty）+ HEAD 提交时间。
+//
+// 为什么要有构建标识：未定版期间版本号不变，光看 v5.0.1 分不清是哪一次代码。
+// 让人报出这一整行（如 v5.0.1+706036d (2026-09-15 10:43:52)）就能定位到那次提交。
+// 取不到（仓库外编译 / -buildvcs=false）时退化为只显示版本号。
+func versionWithBuildID() string {
+	bi, ok := debug.ReadBuildInfo()
+	if !ok {
+		return appVersion
+	}
+	var rev, tm string
+	dirty := false
+	for _, s := range bi.Settings {
+		switch s.Key {
+		case "vcs.revision":
+			rev = s.Value
+		case "vcs.time":
+			tm = s.Value
+		case "vcs.modified":
+			dirty = s.Value == "true"
+		}
+	}
+	id := ""
+	if rev != "" { // 短提交号取前 7 位（与 git 的默认缩写一致）
+		id = rev
+		if len(id) > 7 {
+			id = id[:7]
+		}
+		if dirty {
+			id += "-dirty"
+		}
+	}
+	switch {
+	case id != "" && tm != "":
+		if t, err := time.Parse(time.RFC3339, tm); err == nil {
+			return fmt.Sprintf("%s+%s (%s)", appVersion, id, t.Local().Format("2006-01-02 15:04:05"))
+		}
+		return fmt.Sprintf("%s+%s", appVersion, id)
+	case tm != "":
+		if t, err := time.Parse(time.RFC3339, tm); err == nil {
+			return fmt.Sprintf("%s (%s)", appVersion, t.Local().Format("2006-01-02 15:04:05"))
 		}
 	}
 	return appVersion
@@ -100,7 +134,7 @@ func main() {
 	logger.Info(fmt.Sprintf("日志目录：%s，工具日志文件名：%s", cfg.Paths.Historys, cfg.Paths.Tool))
 
 	// ---- 步骤 3：解析命令行 ------------------------------------------
-	args, err := cli.Parse(cfg, versionWithBuildTime(), os.Args[1:])
+	args, err := cli.Parse(cfg, versionWithBuildID(), os.Args[1:])
 	if err != nil {
 		if errors.Is(err, cli.ErrHelp) {
 			return // 帮助已打印，以 0 退出
