@@ -4,7 +4,6 @@ package credential
 
 import (
 	"fmt"
-	"os"
 	"os/exec"
 	"strings"
 
@@ -19,10 +18,10 @@ import (
 // 重开终端才会读到新的。故读密钥时做来源一致性检测（见 masterkey.go），
 // 加密方向上直接拦下。
 
-// ReadKeySources 读主密钥的两处来源：进程环境变量 + 注册表已保存值。
-func ReadKeySources() KeySources {
+// readKeySourcesPlatform 读主密钥的持久值来源：注册表已保存值
+// （环境变量那侧由 KeySource.Read 统一补上）。
+func readKeySourcesPlatform() KeySources {
 	return KeySources{
-		Env:            strings.TrimSpace(os.Getenv(envName)),
 		Persisted:      readPersistedKey(),
 		PersistedWhere: `注册表 HKCU\Environment`,
 	}
