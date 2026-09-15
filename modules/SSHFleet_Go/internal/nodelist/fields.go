@@ -39,7 +39,7 @@ func resolveNodes(rows [][]string, pre *precheckResult, args *cli.Args, cfg *con
 	total := len(rows)
 	for idx, raw := range rows {
 		row := padRow(raw)
-		rc := pre.rows[idx]
+		// 行号对外一律 1 基（提示文案「行 N」与 parseNode 同口径）；凭据经 rowCreds 取用
 		node, rowErrs := parseNode(row, idx+1, total, keyMode, pre, cfg, args, mem, in)
 		if len(rowErrs) > 0 {
 			ip := strings.TrimSpace(row[0])
@@ -49,7 +49,6 @@ func resolveNodes(rows [][]string, pre *precheckResult, args *cli.Args, cfg *con
 			errs = append(errs, fmt.Sprintf("行 %d (IP: %s): - %s", idx+1, ip, strings.Join(rowErrs, "，")))
 			continue
 		}
-		_ = rc
 		nodes = append(nodes, node)
 	}
 	if len(errs) > 0 {
@@ -64,9 +63,11 @@ func resolveNodes(rows [][]string, pre *precheckResult, args *cli.Args, cfg *con
 }
 
 // parseNode 解析单个节点行：IP 校验（D13）+ 字段补全 + 密钥内容 / 口令归属。
+// idx 为**1 基行号**（提示文案与凭据取用同一个口径）。
 func parseNode(row []string, idx, total int, keyMode cli.KeyMode, pre *precheckResult, cfg *config.Config, args *cli.Args, mem *FieldMemory, in *common.Interactor) (NodeInfo, []string) {
 	ip := strings.TrimSpace(row[0])
 	var errs []string
+	rc := pre.rowCreds(idx)
 
 	// IP：必须存在 + 严格 IPv4（D13，旧版正则不校验每段范围的缺陷在此修正）
 	if ip == "" {
@@ -81,7 +82,7 @@ func parseNode(row []string, idx, total int, keyMode cli.KeyMode, pre *precheckR
 	if userErr != nil {
 		errs = append(errs, userErr.Error())
 	}
-	password, passErr := resolvePassword(pre, cfg, mem, idx, total, ip, args.Disinteractive, in)
+	password, passErr := resolvePassword(rc, pre, cfg, mem, idx, total, ip, args.Disinteractive, in)
 	if passErr != nil {
 		errs = append(errs, passErr.Error())
 	}
@@ -90,16 +91,16 @@ func parseNode(row []string, idx, total int, keyMode cli.KeyMode, pre *precheckR
 	keyContent := ""
 	if keyMode == cli.KeyModeUniversal {
 		keyContent = pre.universalKeyContent
-	} else if pre.rows[idx-1].keyContent != "" {
-		keyContent = pre.rows[idx-1].keyContent
+	} else if rc.keyContent != "" {
+		keyContent = rc.keyContent
 	}
 
 	// 私钥口令：状态3 用统一口令；状态1/2 CSV 第6列优先，缺省用全局配置
 	keyPassphrase := ""
 	if keyMode == cli.KeyModeUniversal {
 		keyPassphrase = pre.universalPassphrase
-	} else if pre.rows[idx-1].keyPassRaw != "" {
-		keyPassphrase = pre.rows[idx-1].keyPassRaw
+	} else if rc.keyPassRaw != "" {
+		keyPassphrase = rc.keyPassRaw
 	} else if pre.globalPassphrase != "" {
 		keyPassphrase = pre.globalPassphrase
 	}
@@ -154,7 +155,7 @@ func resolvePort(raw string, defaultPort int, mem *FieldMemory, idx, total int, 
 			}
 			return v, nil
 		}
-		fmt.Printf("端口必须是1-65535之间的整数，当前输入：%s\n", val)
+		in.Notice(fmt.Sprintf("端口必须是1-65535之间的整数，当前输入：%s\n", val))
 		val, err = in.Prompt(fmt.Sprintf("行 %d (IP: %s): 端口为空，请输入端口号: ", idx, ip))
 		if err != nil {
 			return 0, []string{err.Error()}
@@ -192,7 +193,7 @@ func resolveUser(raw, defaultUser string, mem *FieldMemory, idx, total int, ip s
 		return "", err
 	}
 	for strings.TrimSpace(val) == "" {
-		fmt.Println("用户名不能为空")
+		in.Notice("用户名不能为空\n")
 		val, err = in.Prompt(fmt.Sprintf("行 %d (IP: %s): 用户名为空，请输入用户名: ", idx, ip))
 		if err != nil {
 			return "", err
@@ -213,14 +214,14 @@ func resolveUser(raw, defaultUser string, mem *FieldMemory, idx, total int, ip s
 }
 
 // resolvePassword 密码字段补全：清单密码列 > 密钥认证（有私钥则空）> 配置默认密码 > 输入记忆 > 交互输入。
-// 解码值取自预检结果（读→校验→直接用，不再读盘）。
+// rc 是本行的预检凭据（解码值取自预检，读→校验→直接用，不再读盘）。
 // 注：私钥节点密码恒为空，不受其他节点是否使用默认密码影响（避免混合清单里的状态泄漏）。
 // 取消（EOF）错误向上传播——与 resolvePort 一致（2026-09-14 审计修复）。
-func resolvePassword(pre *precheckResult, cfg *config.Config, mem *FieldMemory, idx, total int, ip string, disinteractive bool, in *common.Interactor) (string, error) {
-	if pre.rows[idx-1].passwordPlain != "" {
-		return pre.rows[idx-1].passwordPlain, nil
+func resolvePassword(rc rowCreds, pre *precheckResult, cfg *config.Config, mem *FieldMemory, idx, total int, ip string, disinteractive bool, in *common.Interactor) (string, error) {
+	if rc.passwordPlain != "" {
+		return rc.passwordPlain, nil
 	}
-	if pre.rows[idx-1].hasKey {
+	if rc.hasKey {
 		return "", nil
 	}
 	if pre.defaultPasswordPlain != "" {
@@ -234,7 +235,7 @@ func resolvePassword(pre *precheckResult, cfg *config.Config, mem *FieldMemory, 
 		return "", err
 	}
 	for val == "" {
-		fmt.Println("密码不能为空，请重新输入")
+		in.Notice("密码不能为空，请重新输入\n")
 		val, err = in.PromptPassword(fmt.Sprintf("行 %d (IP: %s): 密码为空，请输入密码: ", idx, ip))
 		if err != nil {
 			return "", err
