@@ -100,6 +100,48 @@ func TestViewLeavesSacrificialTrailingLine(t *testing.T) {
 	}
 }
 
+// 终帧必须按目标值静态定格：进度条读的是弹簧动画的当前值，而 Stop 紧跟着最后一个
+// 节点完成到来，动画往往还停在半路。（用户 2026-09-15 实测：节点进度已 72/72，
+// 条却停在 97.2%。）
+func TestFinalFrameSnapsToTarget(t *testing.T) {
+	m := newTestProgress("execute", 4)
+	m.applySnapshot(batch.Snapshot{Total: 4, Completed: 4})
+
+	// 没有动画帧驱动时，普通渲染停在弹簧的当前值 0%
+	if got := m.render(); !strings.Contains(got, "0.0%") {
+		t.Fatalf("动画未推进时普通渲染应停在 0%%，实际：\n%s", got)
+	}
+	m.final = true
+	if got := m.render(); !strings.Contains(got, "100.0%") {
+		t.Fatalf("终帧应定格在目标值 100.0%%，实际：\n%s", got)
+	}
+
+	// 传输模式的三条（总进度 / 节点进度 / 逐节点）同样要定格
+	tr := newTestProgress("upload", 2)
+	tr.applySnapshot(batch.Snapshot{
+		Total: 2, Completed: 2, BytesDone: 100, BytesTotal: 100,
+		Nodes: []batch.NodeSnapshot{{Seq: 0, IP: "10.0.0.1", Bytes: 50, TotalBytes: 50, Done: true}},
+	})
+	tr.syncBars()
+	tr.final = true
+	if got := tr.render(); !strings.Contains(got, "100.0%") {
+		t.Fatalf("传输模式终帧也应定格在 100.0%%，实际：\n%s", got)
+	}
+}
+
+// 终帧消息要带回退出命令：渲染由事件循环在本条消息之后做，退出紧随其后，
+// 这样终帧一定上屏（直接调 Program.Quit 则可能跳过这一帧）。
+func TestFinalMsgSetsFlagAndQuits(t *testing.T) {
+	m := newTestProgress("execute", 2)
+	updated, cmd := m.Update(finalMsg{})
+	if cmd == nil {
+		t.Fatal("终帧消息应带回退出命令")
+	}
+	if !updated.(progressModel).final {
+		t.Fatal("终帧标记应已置位")
+	}
+}
+
 // 总进度按台数加权：并发受限时不会因为「当前这批传完」就冲到 100%。
 // （用户 2026-09-15 实测：50 台 10 并发上传，进度条先到 100% 再回落。）
 func TestProgressWeightsByNodeCount(t *testing.T) {
