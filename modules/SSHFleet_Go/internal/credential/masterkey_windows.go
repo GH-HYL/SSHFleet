@@ -38,7 +38,8 @@ func persistKey(key string, regenerated bool, out *strings.Builder) error {
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("主密钥自动保存失败：%v\n可手动保存：执行 setx %s 你的随机密钥", err, envName)
 	}
-	fmt.Fprintf(out, "主密钥已%s，并自动保存到本机\n", actionDesc)
-	fmt.Fprintln(out, "请重新打开终端后再使用（当前终端读不到新密钥）")
+	fmt.Fprintf(out, "主密钥已%s，并写入本机（HKCU\\Environment）\n", actionDesc)
+	fmt.Fprintln(out, "请重新打开终端后再使用：当前终端的环境变量仍是旧密钥")
+	fmt.Fprintln(out, "注意：在当前终端执行 --convert-password 会用旧密钥加密文件，重开终端后就解不开了")
 	return nil
 }
