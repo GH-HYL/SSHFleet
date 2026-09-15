@@ -24,25 +24,14 @@ const tmpRoot = "/tmp/.SSHFleet_tmp/"
 // skipped 是采集阶段被过滤的链接（相对上传根的路径）：上传侧的过滤发生在本地采集
 // （`-u` 输入后即可知，无需连服务器），这里只把它写进 Output 明细留痕（spec D51）。
 func (c *Client) UploadFiles(ctx context.Context, files []LocalFile, skipped []string, remotePath string, useSudo bool, seq int, onProgress func(Progress)) *Result {
-	result := &Result{
-		Seq:        seq,
-		IP:         c.cfg.IP,
-		Port:       c.cfg.Port,
-		User:       c.cfg.User,
-		TotalFiles: len(files),
-	}
+	result := c.newResult(seq)
+	result.TotalFiles = len(files)
 
-	start := time.Now()
-	if err := c.Connect(ctx); err != nil {
-		result.ConnectCostTime = time.Since(start).Seconds()
+	if !c.connectFor(ctx, result) {
 		result.FailedFiles = len(files)
-		result.Error = strPtr(err.Error())
-		result.AuthFailure = c.classifyAuthFailure(err)
 		return result
 	}
 	defer func() { _ = c.Close() }()
-	result.ConnectCostTime = time.Since(start).Seconds()
-	result.ConnectSuccess = true
 
 	// 清理残留临时目录（仅 sudo 模式）
 	if useSudo {
@@ -187,23 +176,12 @@ func (c *Client) UploadFiles(ctx context.Context, files []LocalFile, skipped []s
 // DownloadFiles 从远程路径下载文件到本地目录（对位旧 DownloadFiles）：
 // 目录模式下按 IP 建子目录、保留远程相对路径；符号链接跳过不计失败。
 func (c *Client) DownloadFiles(ctx context.Context, remotePath, localPath string, useSudo bool, seq int, onProgress func(Progress)) *Result {
-	result := &Result{
-		Seq:  seq,
-		IP:   c.cfg.IP,
-		Port: c.cfg.Port,
-		User: c.cfg.User,
-	}
+	result := c.newResult(seq)
 
-	start := time.Now()
-	if err := c.Connect(ctx); err != nil {
-		result.ConnectCostTime = time.Since(start).Seconds()
-		result.Error = strPtr(err.Error())
-		result.AuthFailure = c.classifyAuthFailure(err)
+	if !c.connectFor(ctx, result) {
 		return result
 	}
 	defer func() { _ = c.Close() }()
-	result.ConnectCostTime = time.Since(start).Seconds()
-	result.ConnectSuccess = true
 
 	sftpClient, err := sftp.NewClient(c.conn)
 	if err != nil {

@@ -30,28 +30,39 @@ func (w *lockedBuffer) String() string {
 	return w.buf.String()
 }
 
-// RunCommand 连接并执行一条命令/脚本（stdin 为空表示不喂输入）。
-// 超时与中断：执行超时经 context.WithTimeout 表达（spec M3 差异，
-// 旧实现是 select + time.After 建一个不会被取消的 timer）。
-func (c *Client) RunCommand(ctx context.Context, command, stdin string, seq int) *Result {
-	result := &Result{
-		Seq:  seq,
-		IP:   c.cfg.IP,
-		Port: c.cfg.Port,
-		User: c.cfg.User,
-	}
+// newResult 单节点结果的共同开头：四条执行路径（命令 / 脚本 / 上传 / 下载）
+// 都从这里起手，避免各写一份 Seq / IP / Port / User 的填充。
+func (c *Client) newResult(seq int) *Result {
+	return &Result{Seq: seq, IP: c.cfg.IP, Port: c.cfg.Port, User: c.cfg.User}
+}
 
+// connectFor 建连并落定结果里的连接字段（成功与否、耗时、错误原文、认证失败分类）。
+// 失败时返回 false——调用方据此直接返回该结果，不必各写一遍收尾。
+// 成功后连接已建立，调用方负责 defer Close。
+func (c *Client) connectFor(ctx context.Context, result *Result) bool {
 	start := time.Now()
 	if err := c.Connect(ctx); err != nil {
 		result.ConnectCostTime = time.Since(start).Seconds()
 		result.ConnectSuccess = false
 		result.Error = strPtr(err.Error())
 		result.AuthFailure = c.classifyAuthFailure(err)
+		return false
+	}
+	result.ConnectCostTime = time.Since(start).Seconds()
+	result.ConnectSuccess = true
+	return true
+}
+
+// RunCommand 连接并执行一条命令/脚本（stdin 为空表示不喂输入）。
+// 超时与中断：执行超时经 context.WithTimeout 表达（spec M3 差异，
+// 旧实现是 select + time.After 建一个不会被取消的 timer）。
+func (c *Client) RunCommand(ctx context.Context, command, stdin string, seq int) *Result {
+	result := c.newResult(seq)
+
+	if !c.connectFor(ctx, result) {
 		return result
 	}
 	defer func() { _ = c.Close() }()
-	result.ConnectCostTime = time.Since(start).Seconds()
-	result.ConnectSuccess = true
 
 	session, err := c.conn.NewSession()
 	if err != nil {
