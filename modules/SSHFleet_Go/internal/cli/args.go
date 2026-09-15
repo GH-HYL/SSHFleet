@@ -287,36 +287,37 @@ func opt(short, long, tag, desc string) helpEntry {
 	return helpEntry{short: short, long: long, tag: tag, desc: desc}
 }
 
-// helpEntries 选项表内容（默认值从配置插值，与旧版一致）。
+// helpEntries 选项表内容：描述力求简洁、清晰、明确——能省的字省掉，
+// 「必填 / 取值语义 / 默认值」这些影响使用的信息一个不省。
 // 按用途分组：四种模式 / 清单与路径 / 执行参数与登录方式 / 密钥与凭据，组间空行分隔。
 func helpEntries(cfg *config.Config) []helpEntry {
 	return []helpEntry{
-		opt("-c", "--command", "(命令模式)", "远程在多台服务器上执行一条命令"),
-		opt("-s", "--script", "(脚本模式)", "远程在多台服务器上执行一个本地脚本"),
-		opt("-u", "--upload", "(上传模式)", "把本地文件或目录传到服务器"),
+		opt("-c", "--command", "(命令模式)", "在多台服务器上执行一条命令"),
+		opt("-s", "--script", "(脚本模式)", "在多台服务器上执行一个本地脚本"),
+		opt("-u", "--upload", "(上传模式)", "把本地文件或目录上传到服务器"),
 		opt("-d", "--download", "(下载模式)", "从服务器下载文件或目录到本地"),
 
 		blankRow,
 
-		opt("-f", "--file", "", "节点清单：CSV 文件路径，或直接在命令行写一行节点信息 (-c/-s/-u/-d 时必须带)"),
-		opt("-p", "--path", "", "目标路径：上传到服务器的目录 / 从服务器下载到的本地目录 (-u/-d 时必须带)"),
+		opt("-f", "--file", "", "节点清单：CSV 路径，或直接写一行节点信息（-c/-s/-u/-d 必填）"),
+		opt("-p", "--path", "", "目标路径：上传的远程目录 / 下载的本地目录（-u/-d 必填）"),
 
 		blankRow,
 
-		opt("-m", "--mode", fmt.Sprintf("[默认: %s]", cfg.Execution.Mode), "执行身份: direct=用登录用户身份, sudo=用 root 身份执行"),
-		opt("-t", "--timeout", fmt.Sprintf("[默认: 命令%ds/上传%ds]", cfg.Execution.TimeoutExecute, cfg.Execution.TimeoutTransfer), "单台执行或传输的超时时间 (秒)"),
-		opt("-T", "--connect-timeout", fmt.Sprintf("[默认: %d]", cfg.Execution.TimeoutConnect), "连接每台服务器的超时时间 (秒)"),
-		opt("-n", "--number", "[默认: 同时跑全部节点]", "并发数：同时操作几台服务器 (不填则全部并行)"),
-		opt("-r", "--remark", "", "给这次任务起个名字，会作为历史记录文件夹的后缀 (不填自动生成)"),
-		opt("-k", "--key", "(密钥登录)", "不指定=纯密码; 仅 -k=用CSV/配置默认密钥; -k 路径=所有节点统一私钥"),
-		opt("", "--nobash", "", "命令模式专用: 不套一层 bash 环境，直接执行原始命令"),
-		opt("", "--disinteractive", "", "跳过所有确认提示直接执行 (批量跑脚本时常用)"),
+		opt("-m", "--mode", fmt.Sprintf("[默认: %s]", cfg.Execution.Mode), "执行身份：direct=登录用户，sudo=root"),
+		opt("-t", "--timeout", fmt.Sprintf("[默认: %ds/%ds]", cfg.Execution.TimeoutExecute, cfg.Execution.TimeoutTransfer), "单台执行 / 传输超时（秒）"),
+		opt("-T", "--connect-timeout", fmt.Sprintf("[默认: %d]", cfg.Execution.TimeoutConnect), "连接超时（秒）"),
+		opt("-n", "--number", "[默认: 全部]", "并发数：同时操作几台（不填=全部并行）"),
+		opt("-r", "--remark", "", "任务名，用作历史记录文件夹后缀（不填自动生成）"),
+		opt("-k", "--key", "(密钥登录)", "不指定=只用密码；仅 -k=用清单/配置的密钥；-k 路径=统一私钥"),
+		opt("", "--nobash", "", "命令模式：不套 bash，直接执行原始命令"),
+		opt("", "--disinteractive", "", "跳过所有确认直接执行（批量/自动化常用）"),
 
 		blankRow,
 
-		opt("", "--gen-key", "(密钥管理)", "生成随机主密钥并持久化到系统环境变量 SSHFLEET_KEY（凭据加密用）"),
-		opt("", "--key-status", "(密钥管理)", "查看主密钥状态：本次运行读到哪把、本机保存的是哪把、两处是否一致、下一步怎么办"),
-		opt("", "--convert-password", "(密钥管理)", "转换凭据文件（后面跟目标文件路径）：自动识别明文/base64/加密格式并按配置等级转换，支持升降级；加密/解密需已配置主密钥；路径支持相对 secret_dir"),
+		opt("", "--gen-key", "(密钥管理)", "生成主密钥并写入系统环境变量 SSHFLEET_KEY"),
+		opt("", "--key-status", "(密钥管理)", "查看主密钥状态：读到哪把、已存哪把、是否一致、怎么办"),
+		opt("", "--convert-password", "(密钥管理)", "转换凭据文件（跟目标文件路径）：自动识别 明文/base64/加密 并按配置等级互转；加解密需已配置主密钥"),
 	}
 }
 
