@@ -117,6 +117,10 @@ type progressModel struct {
 	total int
 	start time.Time
 
+	// final 终帧标记：为 true 时各条按「目标百分比」静态定格渲染，
+	// 不再读弹簧动画的当前值（见 barView）。
+	final bool
+
 	completed  int
 	succeeded  int
 	failed     int
@@ -131,6 +135,11 @@ type progressModel struct {
 
 	totalWindow *speedWindow
 }
+
+// finalMsg 收尾消息：让界面把动画值定格到目标值再退出。
+// Stop 时下发一次，由 Update 返回 tea.Quit——
+// 这样「终帧渲染」与「退出」由事件循环按序执行，渲染一定发生在退出之前。
+type finalMsg struct{}
 
 // newProgressModel 建界面模型。start 由调用方给定（主干传 execStart），
 // 与统计块的总耗时同源。
@@ -153,6 +162,12 @@ func (m progressModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case batch.Snapshot:
 		m.applySnapshot(msg)
 		return m, m.syncBars()
+
+	// 收尾：定格终帧并退出。渲染由事件循环在本条消息处理完之后做，
+	// 所以这一帧一定会以目标值出现在屏幕上。
+	case finalMsg:
+		m.final = true
+		return m, tea.Quit
 
 	// 动画帧：各条自己按 spring 插值逼近目标值；FrameMsg 带 id，不匹配的条会自行忽略
 	case progress.FrameMsg:
@@ -237,10 +252,8 @@ func (m *progressModel) syncBars() tea.Cmd {
 	if pct := m.progress(); m.totalBar.Percent() < pct {
 		cmds = append(cmds, m.totalBar.SetPercent(pct))
 	}
-	if m.total > 0 {
-		if pct := float64(m.completed) / float64(m.total); m.nodeBar.Percent() < pct {
-			cmds = append(cmds, m.nodeBar.SetPercent(pct))
-		}
+	if pct := m.nodeProgress(); m.nodeBar.Percent() < pct {
+		cmds = append(cmds, m.nodeBar.SetPercent(pct))
 	}
 	for _, n := range m.nodes {
 		if !n.hasBar {
@@ -272,6 +285,14 @@ func (m progressModel) progress() float64 {
 	return clamp01(sum / float64(m.total))
 }
 
+// nodeProgress 节点完成进度（已完成台数 / 总台数）。
+func (m progressModel) nodeProgress() float64 {
+	if m.total == 0 {
+		return 0
+	}
+	return clamp01(float64(m.completed) / float64(m.total))
+}
+
 // nodePercent 单节点进度：优先按字节，其次按文件数。
 func nodePercent(n nodeView) float64 {
 	switch {
@@ -294,6 +315,16 @@ func clamp01(v float64) float64 {
 	return v
 }
 
+// barView 渲染一条进度条。终帧（final）按目标百分比静态定格——弹簧动画要几帧才
+// 收敛，而 Stop 紧跟着最后一个节点完成到来，动画往往还停在半路（用户 2026-09-15
+// 实测：节点进度已 72/72，条却停在 97.2%）。退出前必须用目标值渲染，不能靠等。
+func (m progressModel) barView(b progress.Model, target float64) string {
+	if m.final {
+		return b.ViewAs(target)
+	}
+	return b.View()
+}
+
 // View 渲染整块。
 //
 // 末尾刻意多带一个换行：bubbletea 退出时会擦掉自己渲染的最后一行
@@ -313,7 +344,7 @@ func (m progressModel) render() string {
 // commandView 命令模式：单行到位。
 func (m progressModel) commandView() string {
 	return fmt.Sprintf("%s%s  %s  已完成: %d/%d  %s  %s %s",
-		indent, styleTitle.Render("执行进度"), m.totalBar.View(),
+		indent, styleTitle.Render("执行进度"), m.barView(m.totalBar, m.progress()),
 		m.completed, m.total, styleDim.Render(elapsedText(time.Since(m.start))),
 		styleOK.Render(fmt.Sprintf("Succ:%d", m.succeeded)),
 		styleFail.Render(fmt.Sprintf("Fail:%d", m.failed)))
@@ -328,12 +359,12 @@ func (m progressModel) transferView() string {
 
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s%s  %s  %s  %s/%s\n",
-		indent, styleTitle.Render(label), m.totalBar.View(),
+		indent, styleTitle.Render(label), m.barView(m.totalBar, m.progress()),
 		styleDim.Render(FormatSpeed(m.totalSpeed)),
 		FormatBytes(m.bytesDone), FormatBytes(m.bytesTotal))
 
 	fmt.Fprintf(&b, "%s%s  %s  %s  %d/%d  %s %s\n",
-		indent, styleTitle.Render("节点进度"), m.nodeBar.View(),
+		indent, styleTitle.Render("节点进度"), m.barView(m.nodeBar, m.nodeProgress()),
 		styleDim.Render(elapsedText(time.Since(m.start))), m.completed, m.total,
 		styleOK.Render(fmt.Sprintf("Succ:%d", m.succeeded)),
 		styleFail.Render(fmt.Sprintf("Fail:%d", m.failed)))
@@ -345,7 +376,7 @@ func (m progressModel) transferView() string {
 			continue
 		}
 		fmt.Fprintf(&b, "%s%s  %s  %s  Total:%d Succ:%d Fail:%d\n",
-			indent, n.bar.View(), styleDim.Render(FormatSpeed(n.speed)),
+			indent, m.barView(n.bar, nodePercent(*n)), styleDim.Render(FormatSpeed(n.speed)),
 			styleDim.Render(n.ip), n.totalFiles, n.successFiles, n.failedFiles)
 	}
 	return strings.TrimRight(b.String(), "\n")
