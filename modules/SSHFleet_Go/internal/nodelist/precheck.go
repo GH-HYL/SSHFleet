@@ -16,6 +16,9 @@ import (
 // 校验 + 解码一次完成（读 → 校验 → 直接用），解码值随结果返回。
 // 全部通过才进入逐节点解析——保证交互提示不会发生在凭据错误暴露之前。
 //
+// 同一凭据文件在一次预检内只读一次：清单多行常共用同一个密码文件（甚至整个清单只写一个路径），
+// 逐行读会重复读盘解密 N 次，并在内存里留下 N 份相同明文；命中缓存的行直接复用首次结果。
+//
 // 与旧实现的一致性要点：
 //   - 状态3(universal)：-k 统一检查一次，忽略节点自带密钥/口令；口令交互输入
 //   - 状态2(default)：逐节点检查 CSV 第5列 / 配置默认 account.key 及第6列口令
@@ -25,6 +28,7 @@ func precheckCredentials(rows [][]string, args *cli.Args, cfg *config.Config, in
 	level := cfg.Account.PasswordSecurity
 
 	pre := &precheckResult{rows: make([]rowCreds, len(rows))}
+	cache := newCredCache()
 	var errs []string
 
 	// 状态3：统一检查命令行私钥一次（不走 secret_dir，走当前工作目录）
@@ -64,7 +68,7 @@ func precheckCredentials(rows [][]string, args *cli.Args, cfg *config.Config, in
 			if rerr != nil {
 				return nil, rerr
 			}
-			plain, problems, fatalErr := credential.ReadCredential(ppath, level, true)
+			plain, problems, fatalErr := cache.password(ppath, level, true)
 			if fatalErr != nil {
 				return nil, fatalErr
 			}
@@ -88,7 +92,7 @@ func precheckCredentials(rows [][]string, args *cli.Args, cfg *config.Config, in
 			if rerr != nil {
 				return nil, rerr
 			}
-			keyPlain, problems := credential.ReadCredentialPEM(kpath)
+			keyPlain, problems := cache.keyPEM(kpath)
 			if len(problems) > 0 {
 				errs = append(errs, prefixProblems(rowPrefix(idx, row[0], "密钥"), problems)...)
 				pre.rows[idx] = rc
@@ -108,7 +112,7 @@ func precheckCredentials(rows [][]string, args *cli.Args, cfg *config.Config, in
 					if rerr != nil {
 						return nil, rerr
 					}
-					plain, problems, fatalErr := credential.ReadCredential(ppPath, level, false)
+					plain, problems, fatalErr := cache.password(ppPath, level, false)
 					if fatalErr != nil {
 						return nil, fatalErr
 					}
@@ -127,7 +131,7 @@ func precheckCredentials(rows [][]string, args *cli.Args, cfg *config.Config, in
 		if cfg.Account.Password == "" {
 			errs = append(errs, "密码列有空值，但 config 未配置默认密码(account.password)")
 		} else {
-			plain, problems, fatalErr := credential.ReadCredential(cfg.Account.Password, level, true)
+			plain, problems, fatalErr := cache.password(cfg.Account.Password, level, true)
 			if fatalErr != nil {
 				return nil, fatalErr
 			}
@@ -140,7 +144,7 @@ func precheckCredentials(rows [][]string, args *cli.Args, cfg *config.Config, in
 
 	// 配置私钥口令（spec D42：只配给「私钥取自配置」的节点；无此类节点则不读）
 	if keyMode == cli.KeyModeDefault && pre.anyNodeUsesConfigKey && cfg.Account.KeyPassphrase != "" {
-		plain, problems, fatalErr := credential.ReadCredential(cfg.Account.KeyPassphrase, level, true)
+		plain, problems, fatalErr := cache.password(cfg.Account.KeyPassphrase, level, true)
 		if fatalErr != nil {
 			return nil, fatalErr
 		}
@@ -183,6 +187,51 @@ func precheckCredentials(rows [][]string, args *cli.Args, cfg *config.Config, in
 		return nil, errors.New(b.String())
 	}
 	return pre, nil
+}
+
+// ---- 一次运行内的凭据读取去重 ----
+//
+// 清单里成千上万行往往共用同一个凭据文件（最常见的写法：整个清单只填一个密码文件路径）。
+// 逐行读盘解密既浪费（N 次读盘 + N 次解密），又会在内存里留下 N 份相同明文。
+// 这里按「解析后的路径 + 读取口径」记住首次读取结果，命中即复用，不再碰磁盘。
+
+// credCache 凭据读取结果表（键含读取口径：等级与是否判空都会影响结果）。
+type credCache struct {
+	entries map[string]credEntry
+}
+
+type credEntry struct {
+	plain    string
+	problems []string
+}
+
+func newCredCache() *credCache {
+	return &credCache{entries: map[string]credEntry{}}
+}
+
+// password 密码 / 口令类凭据（读盘 + 校验 + 解码，带缓存）。
+func (c *credCache) password(path string, level int, requireNonempty bool) (string, []string, error) {
+	key := fmt.Sprintf("pass|%d|%t|%s", level, requireNonempty, path)
+	if e, ok := c.entries[key]; ok {
+		return e.plain, e.problems, nil
+	}
+	plain, problems, fatalErr := credential.ReadCredential(path, level, requireNonempty)
+	if fatalErr != nil {
+		return "", nil, fatalErr // 致命错误来自主密钥而非这个文件，原样上抛、不入表
+	}
+	c.entries[key] = credEntry{plain: plain, problems: problems}
+	return plain, problems, nil
+}
+
+// keyPEM 私钥 PEM 文件（读盘 + 校验，带缓存）。
+func (c *credCache) keyPEM(path string) (string, []string) {
+	key := "pem|" + path
+	if e, ok := c.entries[key]; ok {
+		return e.plain, e.problems
+	}
+	content, problems := credential.ReadCredentialPEM(path)
+	c.entries[key] = credEntry{plain: content, problems: problems}
+	return content, problems
 }
 
 // checkUniversalKey 状态3 的 -k 私钥文件前置检查（存在 / 可读 / 非空 / PEM）。
