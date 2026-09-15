@@ -73,3 +73,23 @@ func TestResultLineFieldOrderOnConnectFailure(t *testing.T) {
 		t.Fatalf("连接失败不应出现执行行：\n%s", got)
 	}
 }
+
+// output 字段在呈现层**零处理**（用户 2026-09-15 裁定的分层）：整备——去掉整块首尾的
+// 空白行——在采集侧做完（ssh.trimOuterBlankLines），ResultLine 拿到什么就输出什么。
+// 所以行首缩进（`who -b` 的 system boot）与中间空行（`ls -l` 的分段）都原样带出。
+// 终端与 output.txt 共用 ResultLine，此处断言同时覆盖两处去向。
+func TestResultLinePassesOutputThrough(t *testing.T) {
+	const raw = "         system boot  2026-09-15 10:23\n\ndisk  use%"
+	got := ResultLine(ssh.Result{
+		IP: "[10.0.0.1]", ConnectSuccess: true, ExitCode: intPtr(0),
+		ConnectCostTime: 0.01, ExecCostTime: 0.02,
+		Output: raw,
+	}, "execute", "执行成功")
+
+	if !strings.Contains(got, raw) {
+		t.Fatalf("output 应原样输出（含行首缩进与中间空行），实际：\n%s", got)
+	}
+	if !strings.Contains(got, "disk  use%\n"+strings.Repeat("=", 50)) {
+		t.Fatalf("output 末行与分隔线之间不应多出空行：\n%s", got)
+	}
+}

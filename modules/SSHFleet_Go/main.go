@@ -280,7 +280,7 @@ func main() {
 	// 单节点结果的三个去向（终端明细 / output.txt / 执行期日志）与进度界面的
 	// 懒创建、上打提示都收在 output 的呈现器里；main 只构造并接上 batch 的三个事件。
 	// （呈现器只做呈现，不控制生命周期——主干与退出权仍在本函数手里。）
-	reporter := output.NewReporter(execLog, outputFile, mode, nodes.Len(), errorKeywords)
+	reporter := output.NewReporter(execLog, outputFile, mode, nodes.Len(), errorKeywords, execStart)
 	// batch 的运行期日志（开始执行任务）写执行期日志——此刻已轮转，不再进工具日志
 	execResults, err := batch.Run(execCtx, args, cfg, nodes, execLog, batch.Hooks{
 		OnNotice:   reporter.Notice,

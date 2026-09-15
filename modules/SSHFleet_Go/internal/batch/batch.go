@@ -71,6 +71,10 @@ func Run(ctx context.Context, a *cli.Args, cfg *config.Config, nodes *nodelist.N
 	logger.Info(fmt.Sprintf("开始执行任务：节点 %d 个，并发 %d，模式 %s", len(tasks), concurrency, execModeName(a)))
 
 	agg := NewAggregator(len(tasks), hooks.OnProgress)
+	// 先渲染一次 0% 的初始界面：命令模式没有字节级进度回调，首个进度事件要等
+	// 第一个节点完成才来，此前屏幕上没有任何「执行中」的反馈（用户 2026-09-15 裁定）。
+	// 采集期提示已在上面下发完毕，此刻建界面不会把它顶掉。
+	agg.emit(agg.Snapshot(), true)
 	newConfig := func(node nodelist.NodeInfo) *ssh.Config {
 		return &ssh.Config{
 			IP:             node.IP,
