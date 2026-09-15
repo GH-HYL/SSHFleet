@@ -21,9 +21,9 @@ func helpTestCfg() *config.Config {
 	return cfg
 }
 
-// optionsBlock 取「选项:」之后、空行之前的选项行。
-func optionsBlock(text string) []string {
-	var block []string
+// optionsLines 取「选项:」与「示例:」之间的原始行（含分组空行）。
+func optionsLines(text string) []string {
+	var lines []string
 	in := false
 	for _, ln := range strings.Split(text, "\n") {
 		if strings.TrimSpace(ln) == "选项:" {
@@ -33,12 +33,45 @@ func optionsBlock(text string) []string {
 		if !in {
 			continue
 		}
-		if strings.TrimSpace(ln) == "" {
+		if strings.TrimSpace(ln) == "示例:" {
 			break
 		}
-		block = append(block, ln)
+		lines = append(lines, ln)
+	}
+	for len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {
+		lines = lines[:len(lines)-1]
+	}
+	return lines
+}
+
+// optionsBlock 只取非空的选项行（分组空行由 optionsLines 负责）。
+func optionsBlock(text string) []string {
+	var block []string
+	for _, ln := range optionsLines(text) {
+		if strings.TrimSpace(ln) != "" {
+			block = append(block, ln)
+		}
 	}
 	return block
+}
+
+// optionGroupCount 分组数 = 空行数 + 1。
+func optionGroupCount(text string) int {
+	blankRuns, prevBlank, hasOption := 0, true, false
+	for _, ln := range optionsLines(text) {
+		blank := strings.TrimSpace(ln) == ""
+		if !blank {
+			hasOption = true
+		}
+		if blank && !prevBlank {
+			blankRuns++
+		}
+		prevBlank = blank
+	}
+	if !hasOption {
+		return 0
+	}
+	return blankRuns + 1 // 分组数 = 组间空行数 + 1
 }
 
 // helpColumns 四列的起始显示列（与渲染实现同源口径：缩进 2 + 各列宽 + 列间 2 空格）。
@@ -50,11 +83,10 @@ func helpColumns(cfg *config.Config) (shortCol, longCol, tagCol, descCol int) {
 		wLong = max(wLong, common.DisplayWidth(e.long))
 		wTag = max(wTag, common.DisplayWidth(e.tag))
 	}
-	const indent, gap = 2, 2
-	shortCol = indent
-	longCol = shortCol + wShort + gap
-	tagCol = longCol + wLong + gap
-	descCol = tagCol + wTag + gap
+	shortCol = common.DisplayWidth(helpIndent)
+	longCol = shortCol + wShort + common.DisplayWidth(helpOptGap)
+	tagCol = longCol + wLong + common.DisplayWidth(helpGap)
+	descCol = tagCol + wTag + common.DisplayWidth(helpGap)
 	return
 }
 
@@ -91,8 +123,16 @@ func TestUsageTextFourColumnsAligned(t *testing.T) {
 			if len(block) == 0 {
 				t.Fatal("选项块为空")
 			}
-			if width <= 0 && len(block) != len(entries) {
-				t.Fatalf("不折行时应有 %d 行，实际 %d 行", len(entries), len(block))
+			if width <= 0 {
+				rows := 0
+				for _, e := range entries {
+					if !e.blank {
+						rows++
+					}
+				}
+				if len(block) != rows {
+					t.Fatalf("不折行时应有 %d 行选项，实际 %d 行", rows, len(block))
+				}
 			}
 
 			// 允许的最大行宽：终端宽度，但说明列有保底宽度（太窄时宁可超宽）
@@ -119,6 +159,9 @@ func TestUsageTextFourColumnsAligned(t *testing.T) {
 
 			// ② 每个选项都落在自己那几列上
 			for _, e := range entries {
+				if e.blank {
+					continue
+				}
 				var head string
 				for _, ln := range block {
 					if displayColumnOf(ln, e.long) == longCol {
@@ -190,6 +233,37 @@ func TestUsageTextWrapsLongDescriptionInOwnColumn(t *testing.T) {
 	}
 	if !strings.Contains(cont, "凭据") && !strings.Contains(cont, "格式") {
 		t.Fatalf("续行内容异常：%q", cont)
+	}
+}
+
+// 选项表按用途分组（组间空行），且用法只保留一行。
+func TestUsageTextGroupsOptions(t *testing.T) {
+	cfg := helpTestCfg()
+	text := usageText(cfg, "9.9.9", 120)
+	if got := optionGroupCount(text); got != 4 {
+		t.Fatalf("选项应分 4 组，实际 %d 组：\n%s", got, text)
+	}
+	// 用法只有一行（工具选项不再单列一行）
+	usageLines := 0
+	for _, ln := range strings.Split(text, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(ln), "cli.test.exe") {
+			usageLines++
+		}
+	}
+	if usageLines != 1 {
+		t.Fatalf("用法应只有一行，实际 %d 行", usageLines)
+	}
+	// 已删除的旧段落不应再出现
+	for _, gone := range []string{"长选项与短选项等价", "上传并发说明", "建议并发数"} {
+		if strings.Contains(text, gone) {
+			t.Fatalf("帮助中不应再有 %q", gone)
+		}
+	}
+	// 示例含生成与转换两条
+	for _, want := range []string{"--gen-key", "--convert-password ~/.MyPW/pw.txt"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("示例缺少 %q", want)
+		}
 	}
 }
 
