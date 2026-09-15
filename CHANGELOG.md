@@ -26,7 +26,7 @@
 - `output.xlsx` 里**连接失败会多一行「错误」详情**（旧版没有这行，错误原文只能在 results.xlsx 的 `error` 列看到）
 - `results.xlsx`：工作表名改为 `Results`，表头与数据单元格加**细边框**、表头蓝底白字居中；**A–M 列按内容自适应列宽**，N/O 两列（error / output）是长短不一的自由文本，保持固定宽度不撑列
 - `--gen-key` 的提示补全：报告保存位置与密钥指纹、说明**当前终端仍是旧密钥**、并明确此刻执行 `--convert-password` 会被拦下
-- README 全面对齐当前版本：参数表说明各参数都有**等价长选项**、工具选项补上 `--key-status`、安装包清单补上 CHANGELOG、配置示例补全 `password_security` 与 `secret_dir`；章节编号统一为 1.1–6.3，界面截图之外不再出现与当前版本无关的历史说明
+- README 全面对齐当前版本：参数表说明各参数都有**等价长选项**、工具选项补上 `--key-status`、安装包清单补上 CHANGELOG、配置示例补全 `password_security` 与 `secret_dir`；章节编号统一为 1.1–6.3，正文只描述当前版本功能，不再出现历史版本的说明
 
 ### Fixed
 
