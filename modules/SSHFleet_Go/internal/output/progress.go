@@ -1,22 +1,35 @@
-// 终端进度条（对位旧 rich 观感）：总进度 + 节点完成进度 + 逐节点进度明细。
-// 渲染归 internal/output（spec D2 展开），由 main 注入给 internal/batch 调用。
+// 进度界面（bubbletea + bubbles/progress）。
 //
-// 与旧版差异：没有 20 个节点的显示上限与"排队机制"——那是 rich 多进度条的限制逼出来的，
-// 自写实现按终端高度自适应（spec M5 实现层差异）。
+// 为什么换掉原先手写的 ANSI 渲染（用户 2026-09-15 裁定）：
+//   - 原实现自己算光标上移、逐行擦除、原地重绘，「进度块整体下移」「上方堆空行」
+//     这类 bug 全出在那套手写的光标算术里（progress_test.go 曾专门为它写回归）；
+//   - 进度条按整数百分比填充字符，没有动画。
+//
+// 换成 bubbletea 后：
+//   - 「底部固定区域 + 上方自由滚屏」是它的一等公民（View 原地重绘 + tea.Println
+//     往上插行），正对旧版 rich Live 的模型；
+//   - bubbles/progress 自带弹簧缓动（harmonica）与逐字符渐变色，动画是现成的；
+//   - 光标算术整体消失，不再是本项目要负责的正确性问题。
+//
+// 职责边界：本文件只管「怎么画」。Program 的生命周期（启动 / 收尾 / 非 TTY 退化）
+// 在 reporter.go，主干仍独占执行与退出权。
 package output
 
 import (
 	"fmt"
-	"io"
 	"strings"
-	"sync"
 	"time"
+
+	"github.com/charmbracelet/bubbles/progress"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"sshfleet/internal/batch"
 )
 
 const (
-	barWidth        = 40
+	barWidth        = 34
+	nodeBarWidth    = barWidth
 	speedWindowSpan = 2 * time.Second
 	separatorWidth  = 50
 	indent          = "    "
@@ -24,32 +37,31 @@ const (
 	maxVisibleNodes = 20
 )
 
-// ANSI 片段（对位 rich 的配色：完成绿 / 结束蓝 / 节点青）
-const (
-	ansiReset  = "\x1b[0m"
-	ansiGreen  = "\x1b[32m"
-	ansiCyan   = "\x1b[36m"
-	ansiBlue   = "\x1b[34m"
-	ansiRed    = "\x1b[31m"
-	ansiDim    = "\x1b[90m"
-	ansiYellow = "\x1b[33m"
-	ansiBGreen = "\x1b[92m"
-	ansiBRed   = "\x1b[91m"
-	ansiWhite  = "\x1b[37m"
+// 界面配色（lipgloss）：标签青、成功绿、失败红、分隔线暗灰。
+var (
+	styleTitle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("39"))
+	styleDim   = lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
+	styleOK    = lipgloss.NewStyle().Foreground(lipgloss.Color("42"))
+	styleFail  = lipgloss.NewStyle().Foreground(lipgloss.Color("203"))
+	styleSep   = lipgloss.NewStyle().Foreground(lipgloss.Color("238"))
+
+	// 百分比文字样式：bubbles 只给字段、没给 Option
+	stylePercent = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#F8F8F2"))
 )
 
-// ProgressUI 进度呈现器（跨调用保存终端渲染状态；由 batch 的渲染回调逐次驱动）。
-type ProgressUI struct {
-	out       io.Writer
-	mode      string // execute / upload / download
-	total     int
-	start     time.Time
-	mutex     sync.Mutex
-	lines     int                  // 上次渲染的行数（用于光标上移重绘）
-	lastLines []string             // 上次渲染的内容（PrintAbove 擦除后原样重绘用）
-	bars      map[int]bool         // 已获得显示位的节点 seq（传输模式排队机制，上限 maxVisibleNodes）
-	speeds    map[int]*speedWindow // 逐节点速度窗口
-	total_    *speedWindow         // 总速度窗口
+// newBar 造一条进度条。样式口径（用户在 demo 里选定的「满配」）：
+// 细线字符 ━/─、scaled 渐变（颜色随已填充宽度走）、暗空档色、百分比一位小数且加粗。
+func newBar(w int) progress.Model {
+	m := progress.New(
+		progress.WithWidth(w),
+		progress.WithSpringOptions(8, 0.7), // 频率越大越跟手，阻尼越小越弹
+		progress.WithFillCharacters('━', '─'),
+		progress.WithScaledGradient("#00D9FF", "#5A56E0"),
+	)
+	m.EmptyColor = "#3C3C50"
+	m.PercentFormat = " %5.1f%%"
+	m.PercentageStyle = stylePercent
+	return m
 }
 
 type speedSample struct {
@@ -57,6 +69,7 @@ type speedSample struct {
 	bytes int64
 }
 
+// speedWindow 滑动窗口测速（对位旧版逐节点 / 总速度的滑动采样）。
 type speedWindow struct{ samples []speedSample }
 
 func (w *speedWindow) update(bytes int64) float64 {
@@ -81,218 +94,242 @@ func (w *speedWindow) update(bytes int64) float64 {
 	return float64(deltaBytes) / deltaTime
 }
 
-// NewProgressUI 创建进度呈现器；返回的 Update 可直接作为 batch 的渲染函数。
-func NewProgressUI(out io.Writer, mode string, total int) *ProgressUI {
-	ui := &ProgressUI{
-		out:    out,
-		mode:   mode,
-		total:  total,
-		start:  time.Now(),
-		bars:   map[int]bool{},
-		speeds: map[int]*speedWindow{},
-		total_: &speedWindow{},
+// nodeView 单个节点在界面上的状态。bar 只在获得显示位时才建——
+// 691 台并发若每台都挂一条带动画的进度条，就是 691 个逐帧定时器。
+type nodeView struct {
+	seq          int
+	ip           string
+	bytes        int64
+	totalBytes   int64
+	totalFiles   int
+	successFiles int
+	failedFiles  int
+	done         bool
+	speed        float64
+
+	hasBar bool
+	bar    progress.Model
+	window *speedWindow
+}
+
+type progressModel struct {
+	mode  string
+	total int
+	start time.Time
+
+	completed  int
+	succeeded  int
+	failed     int
+	bytesDone  int64
+	bytesTotal int64
+	totalSpeed float64
+	totalBar   progress.Model
+	nodeBar    progress.Model
+
+	nodes []*nodeView
+	bySeq map[int]*nodeView
+
+	totalWindow *speedWindow
+}
+
+// newProgressModel 建界面模型。start 由调用方给定（主干传 execStart），
+// 与统计块的总耗时同源。
+func newProgressModel(mode string, total int, start time.Time) progressModel {
+	return progressModel{
+		mode:        mode,
+		total:       total,
+		start:       start,
+		totalBar:    newBar(barWidth),
+		nodeBar:     newBar(nodeBarWidth),
+		bySeq:       map[int]*nodeView{},
+		totalWindow: &speedWindow{},
 	}
-	ui.Start()
-	return ui
 }
 
-// Start 打印分隔与初始界面（旧版 Live start 的等价物）。
-func (p *ProgressUI) Start() {
-	p.mutex.Lock()
-	defer p.mutex.Unlock()
-	p.renderLocked(p.emptySnapshot(), true)
+func (m progressModel) Init() tea.Cmd { return nil }
+
+func (m progressModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case batch.Snapshot:
+		m.applySnapshot(msg)
+		return m, m.syncBars()
+
+	// 动画帧：各条自己按 spring 插值逼近目标值；FrameMsg 带 id，不匹配的条会自行忽略
+	case progress.FrameMsg:
+		cmds := make([]tea.Cmd, 0, len(m.nodes)+2)
+		nm, c := m.totalBar.Update(msg)
+		m.totalBar = nm.(progress.Model)
+		cmds = append(cmds, c)
+		nm, c = m.nodeBar.Update(msg)
+		m.nodeBar = nm.(progress.Model)
+		cmds = append(cmds, c)
+		for _, n := range m.nodes {
+			if !n.hasBar {
+				continue
+			}
+			nb, c := n.bar.Update(msg)
+			n.bar = nb.(progress.Model)
+			cmds = append(cmds, c)
+		}
+		return m, tea.Batch(cmds...)
+	}
+	return m, nil
 }
 
-// Update 接收聚合快照并重绘（作为 batch.RenderFunc 使用）。
-func (p *ProgressUI) Update(s batch.Snapshot) {
-	p.mutex.Lock()
-	defer p.mutex.Unlock()
-	p.renderLocked(s, false)
-}
+// applySnapshot 收下一份聚合快照：计数、字节、逐节点状态与速度窗口一次更新完。
+func (m *progressModel) applySnapshot(s batch.Snapshot) {
+	m.completed, m.succeeded, m.failed = s.Completed, s.Succeeded, s.Failed
+	m.bytesDone, m.bytesTotal = s.BytesDone, s.BytesTotal
+	m.totalSpeed = m.totalWindow.update(s.BytesDone)
 
-// Stop 收尾：光标落到界面下方，后续输出不再覆盖。
-func (p *ProgressUI) Stop() {
-	p.mutex.Lock()
-	defer p.mutex.Unlock()
-	if p.lines > 0 {
-		fmt.Fprint(p.out, "\n")
-		p.lines = 0
+	for _, n := range s.Nodes {
+		nv, ok := m.bySeq[n.Seq]
+		if !ok {
+			nv = &nodeView{seq: n.Seq, window: &speedWindow{}}
+			m.bySeq[n.Seq] = nv
+			m.nodes = append(m.nodes, nv)
+		}
+		nv.ip = n.IP
+		nv.totalBytes = n.TotalBytes
+		nv.totalFiles = n.TotalFiles
+		nv.successFiles = n.SuccessFiles
+		nv.failedFiles = n.FailedFiles
+		nv.done = n.Done
+		if n.Bytes > nv.bytes {
+			nv.bytes = n.Bytes
+		}
+		nv.speed = nv.window.update(nv.bytes)
 	}
 }
 
-func (p *ProgressUI) emptySnapshot() batch.Snapshot {
-	return batch.Snapshot{Total: p.total}
-}
-
-// renderLocked 重绘整个界面：整块擦除旧界面后从原位重绘。
-// 不能只覆盖重写——传输模式下节点条完成移除后块会变短，旧块多出的行若不擦除
-// 会残留在屏幕上，统计结果打印时叠在半截进度条中间（用户 2026-09-15 指出）。
-func (p *ProgressUI) renderLocked(s batch.Snapshot, first bool) {
-	lines := p.buildLines(s, first)
-	p.clearLocked()
-	p.emitLocked(lines)
-}
-
-// emitLocked 在当前光标处绘制进度块并记录行数与内容（重绘与 PrintAbove 复用）。
-func (p *ProgressUI) emitLocked(lines []string) {
-	for _, line := range lines {
-		fmt.Fprint(p.out, "\r\x1b[K"+line+"\n")
-	}
-	p.lines = len(lines)
-	p.lastLines = lines
-}
-
-// clearLocked 擦除当前进度块：光标上移到块起点，逐行清空后**停回块起点行首**。
+// syncBars 维护逐节点条的显示位并推进各条进度。
 //
-// 必须停回起点——调用方（renderLocked / PrintAbove）都是从光标处原地覆盖：
-// 若停在块的最后一行，每次重绘整块都会下移 N-1 行、并在上方留下 N-1 个空行，
-// 传输模式（块有 20+ 行）下空行迅速堆满屏幕、进度条被顶出可视区
-// （用户 2026-09-15 反馈「看不到进度条，上面几百个空行」）。
-// 命令模式块只有 1 行，起点与末行重合，所以此前未暴露。
-func (p *ProgressUI) clearLocked() {
-	if p.lines <= 0 {
-		return
-	}
-	fmt.Fprintf(p.out, "\x1b[%dA", p.lines)
-	for i := 0; i < p.lines; i++ {
-		fmt.Fprint(p.out, "\r\x1b[K")
-		if i < p.lines-1 {
-			fmt.Fprint(p.out, "\n")
+// 显示位规则（对位旧版 MAX_VISIBLE_NODES 的排队机制）：已完成的节点让出显示位；
+// 显示位只授予「已开始传输（有字节）且未完成」的节点，满 maxVisibleNodes 为止，
+// 其余排队不显示，等有节点完成再补位。不按终端高度自适应——72 台满屏 0% 空条
+// 观感极差（用户 2026-09-15 裁定）。
+func (m *progressModel) syncBars() tea.Cmd {
+	var cmds []tea.Cmd
+
+	visible := 0
+	for _, n := range m.nodes {
+		if n.hasBar && n.done {
+			n.hasBar = false // 完成的节点让位
+		}
+		if n.hasBar {
+			visible++
 		}
 	}
-	// 清完光标停在块末行，回退 N-1 行回到块起点（N=1 时已就在起点，且
-	// \x1b[0A 在部分终端会被当作上移 1 行，故只在 N>1 时回退）
-	if p.lines > 1 {
-		fmt.Fprintf(p.out, "\x1b[%dA", p.lines-1)
+	for _, n := range m.nodes {
+		if visible >= maxVisibleNodes {
+			break
+		}
+		if n.hasBar || n.done || n.bytes == 0 {
+			continue
+		}
+		n.bar = newBar(nodeBarWidth)
+		n.hasBar = true
+		visible++
 	}
-	p.lines = 0
+
+	// 推进目标值。Percent() 取的是目标值，只在变化时下发——
+	// 每次无脑 SetPercent 会刷新动画 tag，把排队中的动画帧全部作废。
+	if pct := m.progress(); m.totalBar.Percent() < pct {
+		cmds = append(cmds, m.totalBar.SetPercent(pct))
+	}
+	if m.total > 0 {
+		if pct := float64(m.completed) / float64(m.total); m.nodeBar.Percent() < pct {
+			cmds = append(cmds, m.nodeBar.SetPercent(pct))
+		}
+	}
+	for _, n := range m.nodes {
+		if !n.hasBar {
+			continue
+		}
+		if pct := nodePercent(*n); n.bar.Percent() < pct {
+			cmds = append(cmds, n.bar.SetPercent(pct))
+		}
+	}
+	return tea.Batch(cmds...)
 }
 
-// PrintAbove 在进度界面上方打印外部内容（对位旧 rich Live 的 console.print 行为）：
-// 先擦除当前进度块，打印内容，再在内容下方原样重绘进度块——
-// 外部输出与进度条各占一块区域、互不覆盖（用户 2026-09-14 要求对齐旧版观感）。
-// 多行文本（如单条结果明细）整体作为一个块打印。
-func (p *ProgressUI) PrintAbove(text string) {
-	p.mutex.Lock()
-	defer p.mutex.Unlock()
-	p.clearLocked()
-	if !strings.HasSuffix(text, "\n") {
-		text += "\n"
+// progress 总进度：有字节总量时按字节，否则（命令模式）按完成台数。
+func (m progressModel) progress() float64 {
+	if m.bytesTotal > 0 {
+		return clamp01(float64(m.bytesDone) / float64(m.bytesTotal))
 	}
-	fmt.Fprint(p.out, text)
-	p.emitLocked(p.lastLines)
+	if m.total == 0 {
+		return 0
+	}
+	return clamp01(float64(m.completed) / float64(m.total))
 }
 
-func (p *ProgressUI) buildLines(s batch.Snapshot, first bool) []string {
-	if p.mode == "upload" || p.mode == "download" {
-		return p.transferLines(s, first)
+// nodePercent 单节点进度：优先按字节，其次按文件数。
+func nodePercent(n nodeView) float64 {
+	switch {
+	case n.totalBytes > 0:
+		return clamp01(float64(n.bytes) / float64(n.totalBytes))
+	case n.totalFiles > 0:
+		return clamp01(float64(n.successFiles+n.failedFiles) / float64(n.totalFiles))
+	default:
+		return 0
 	}
-	return []string{p.commandLine(s, first)}
 }
 
-// transferLines 传输模式：总进度 + 节点完成进度 + 分隔线 + 逐节点明细。
-func (p *ProgressUI) transferLines(s batch.Snapshot, first bool) []string {
+func clamp01(v float64) float64 {
+	if v < 0 {
+		return 0
+	}
+	if v > 1 {
+		return 1
+	}
+	return v
+}
+
+func (m progressModel) View() string {
+	if m.mode == "upload" || m.mode == "download" {
+		return m.transferView()
+	}
+	return m.commandView()
+}
+
+// commandView 命令模式：单行到位。
+func (m progressModel) commandView() string {
+	return fmt.Sprintf("%s%s  %s  已完成: %d/%d  %s  %s %s",
+		indent, styleTitle.Render("执行进度"), m.totalBar.View(),
+		m.completed, m.total, styleDim.Render(elapsedText(time.Since(m.start))),
+		styleOK.Render(fmt.Sprintf("Succ:%d", m.succeeded)),
+		styleFail.Render(fmt.Sprintf("Fail:%d", m.failed)))
+}
+
+// transferView 传输模式：总进度 + 节点进度 + 分隔线 + 逐节点条。
+func (m progressModel) transferView() string {
 	label := "上传进度"
-	if p.mode == "download" {
+	if m.mode == "download" {
 		label = "下载进度"
 	}
 
-	totalBytes := s.BytesTotal
-	doneBytes := s.BytesDone
-	totalPct := 0
-	if totalBytes > 0 {
-		totalPct = int(float64(doneBytes) / float64(totalBytes) * 100)
-	}
-	speed := 0.0
-	if !first {
-		speed = p.total_.update(doneBytes)
-	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s%s  %s  %s  %s/%s\n",
+		indent, styleTitle.Render(label), m.totalBar.View(),
+		styleDim.Render(FormatSpeed(m.totalSpeed)),
+		FormatBytes(m.bytesDone), FormatBytes(m.bytesTotal))
 
-	lines := []string{
-		fmt.Sprintf("%s%s  %s %s%3d%%%s  %s  %s/%s",
-			indent, label, bar(totalBytes > 0 && totalPct >= 100, totalPct, ansiGreen, ansiBlue), "",
-			totalPct, ansiReset, FormatSpeed(speed), FormatBytes(doneBytes), FormatBytes(totalBytes)),
-	}
+	fmt.Fprintf(&b, "%s%s  %s  %s  %d/%d  %s %s\n",
+		indent, styleTitle.Render("节点进度"), m.nodeBar.View(),
+		styleDim.Render(elapsedText(time.Since(m.start))), m.completed, m.total,
+		styleOK.Render(fmt.Sprintf("Succ:%d", m.succeeded)),
+		styleFail.Render(fmt.Sprintf("Fail:%d", m.failed)))
 
-	nodePct := 0
-	if s.Total > 0 {
-		nodePct = int(float64(s.Completed) / float64(s.Total) * 100)
-	}
-	lines = append(lines, fmt.Sprintf("%s节点进度  %s %3d%%  %d/%d  %s  %sSucc:%s%d %sFail:%s%d%s",
-		indent, bar(s.Completed >= s.Total && s.Total > 0, nodePct, ansiGreen, ansiBlue), nodePct,
-		s.Completed, s.Total, elapsedText(time.Since(p.start)),
-		ansiBGreen, ansiDim, s.Succeeded, ansiBRed, ansiDim, s.Failed, ansiReset))
+	fmt.Fprintf(&b, "%s\n", styleSep.Render(indent+strings.Repeat("─", separatorWidth)))
 
-	lines = append(lines, indent+strings.Repeat("─", separatorWidth))
-
-	// 逐节点明细（对位旧版 MAX_VISIBLE_NODES=20 的排队机制）：
-	//   已完成的节点释放条；条授予「已开始传输（有字节）且未完成」的节点，
-	//   满 maxVisibleNodes 个为止——其余排队不显示，等有节点完成再补位。
-	//   不按终端高度自适应：72 台并发时满屏都是 0% 空条，观感极差（用户 2026-09-15 裁定）。
-	for _, n := range s.Nodes {
-		if n.Done {
-			delete(p.bars, n.Seq)
-		}
-	}
-	for _, n := range s.Nodes {
-		if len(p.bars) >= maxVisibleNodes {
-			break
-		}
-		if !n.Done && n.Bytes > 0 && !p.bars[n.Seq] {
-			p.bars[n.Seq] = true
-		}
-	}
-	for _, n := range s.Nodes {
-		if !p.bars[n.Seq] {
+	for _, n := range m.nodes {
+		if !n.hasBar {
 			continue
 		}
-		pct := 0
-		if n.TotalBytes > 0 {
-			pct = int(float64(n.Bytes) / float64(n.TotalBytes) * 100)
-		} else if n.TotalFiles > 0 {
-			pct = int(float64(n.SuccessFiles+n.FailedFiles) / float64(n.TotalFiles) * 100)
-		}
-		win, ok := p.speeds[n.Seq]
-		if !ok {
-			win = &speedWindow{}
-			p.speeds[n.Seq] = win
-		}
-		nodeSpeed := 0.0
-		if !first {
-			nodeSpeed = win.update(n.Bytes)
-		}
-		lines = append(lines, fmt.Sprintf("%s%s %3d%%  %s  %s  Total:%d Succ:%d Fail:%d",
-			indent, bar(pct >= 100, pct, ansiCyan, ansiBlue), pct, FormatSpeed(nodeSpeed),
-			n.IP, n.TotalFiles, n.SuccessFiles, n.FailedFiles))
+		fmt.Fprintf(&b, "%s%s  %s  %s  Total:%d Succ:%d Fail:%d\n",
+			indent, n.bar.View(), styleDim.Render(FormatSpeed(n.speed)),
+			styleDim.Render(n.ip), n.totalFiles, n.successFiles, n.failedFiles)
 	}
-	return lines
-}
-
-// commandLine 命令模式：单行节点完成进度。
-func (p *ProgressUI) commandLine(s batch.Snapshot, first bool) string {
-	pct := 0
-	if s.Total > 0 {
-		pct = int(float64(s.Completed) / float64(s.Total) * 100)
-	}
-	desc := "执行进度"
-	if s.Total > 0 {
-		desc = fmt.Sprintf("执行进度 已完成: %d/%d", s.Completed, s.Total)
-	}
-	return fmt.Sprintf("%s%s  %s %3d%%  %d/%d  %s  %sSucc:%s%d %sFail:%s%d%s",
-		indent, desc, bar(s.Completed >= s.Total && s.Total > 0, pct, ansiGreen, ansiBlue), pct,
-		s.Completed, s.Total, elapsedText(time.Since(p.start)),
-		ansiBGreen, ansiDim, s.Succeeded, ansiBRed, ansiDim, s.Failed, ansiReset)
-}
-
-// bar 生成 40 格条形图：完成部分着色，未完成部分暗色；finished 时完成部分改蓝色（对位 rich）。
-func bar(finished bool, pct int, completeColor, finishedColor string) string {
-	filled := pct * barWidth / 100
-	if filled > barWidth {
-		filled = barWidth
-	}
-	color := completeColor
-	if finished {
-		color = finishedColor
-	}
-	return color + strings.Repeat("━", filled) + ansiReset + ansiDim + strings.Repeat("━", barWidth-filled) + ansiReset
+	return strings.TrimRight(b.String(), "\n")
 }

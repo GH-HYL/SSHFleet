@@ -70,7 +70,7 @@ Status: needs-info
 | TOML 解析 | `github.com/BurntSushi/toml` | 配置与规则文件共用；用未识别键集合实现"未知字段零容忍" |
 | CLI | `spf13/pflag` | 长短名并存；`-k` 三态：pflag 的 `NoOptDefVal` 会吞掉 `-k <路径>` 空格形式（恒优先于消费下一参数，与 argparse `nargs='?'` 不一致），故改在解析前把裸 `-k` 预处理为哨兵值，哨兵只在 `KeyMode()` 一处解读；不引 cobra |
 | 日志 | `go.uber.org/zap` | 含自定义 SUCCESS 级别 |
-| 终端样式 | `charmbracelet/lipgloss` | 进度条自写，不引 bubbletea（TUI 框架会接管终端事件循环，与"禁止子模块反向驱动主流程"冲突） |
+| 终端样式 | `charmbracelet/lipgloss` + `bubbles/progress` + `bubbletea` | 进度条原为自写（当时判断：TUI 框架会接管终端事件循环，与「禁止子模块反向驱动主流程」冲突）。**2026-09-15 变更**：手写光标算术的缺陷（进度块整体下移、上方堆空行）与「没有动画」这两个问题都出在那套自写实现上，改用 bubbletea。原顾虑以 `WithInput(nil)` + `WithoutSignalHandler()` 化解——不接输入、不碰信号，事件循环只负责渲染，生命周期仍在 `Reporter` 手里；输出不是终端时不启动界面，退回直出 |
 | xlsx | `github.com/xuri/excelize/v2` | 对位旧版 openpyxl |
 
 ### D6 展开：配置字段的变化

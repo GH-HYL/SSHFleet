@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"sshfleet/internal/batch"
 	"sshfleet/internal/log"
@@ -31,7 +32,7 @@ func newTestReporter(t *testing.T, mode string, total int) (*Reporter, *bytes.Bu
 	t.Cleanup(func() { _ = execLog.Close() })
 
 	outBuf := &bytes.Buffer{}
-	return NewReporter(execLog, outBuf, mode, total, nil), outBuf, execLogPath
+	return NewReporter(execLog, outBuf, mode, total, nil, time.Now()), outBuf, execLogPath
 }
 
 // readExecLog 读执行期日志全文（呈现器写完即可读，Logger 每次写都直接落盘）。
@@ -157,15 +158,54 @@ func TestReporterStopWithoutProgress(t *testing.T) {
 	}
 }
 
-// 进度事件到达后才创建界面，且随后 Stop 会收尾（界面输出落在 stdout，这里只验证不 panic 且状态已建）。
-func TestReporterProgressThenStop(t *testing.T) {
+// 直通模式（输出不是终端，如 go test 的管道）：进度事件不打进度条，也不该崩；Stop 幂等。
+// 真终端下会启动 bubbletea 界面——那条路径走不到这里（go test 的 stdout 是管道），
+// 由手工跑一次真实执行覆盖。
+func TestReporterProgressInPlainModeWhenNotTTY(t *testing.T) {
 	r, _, _ := newTestReporter(t, "execute", 3)
+	if !r.plain {
+		t.Skip("当前 go test 的输出是终端，本用例只覆盖直通模式")
+	}
+
 	r.Progress(batch.Snapshot{Total: 3, Completed: 1, Succeeded: 1})
 	r.mu.Lock()
-	created := r.ui != nil
+	created := r.prog != nil
 	r.mu.Unlock()
-	if !created {
-		t.Fatal("收到进度事件后应已创建进度界面")
+	if created {
+		t.Fatal("直通模式下不该启动进度界面")
 	}
 	r.Stop()
+}
+
+// TTY 路径：进度界面能启动、能收得回来。
+// go test 的 stdout 是管道（所以上面的用例永远走直通），这里把 plain 关掉、
+// 输出改指临时文件，让 bubbletea 真跑一遍——渲染内容会落进那个文件。
+func TestReporterRunsProgressProgram(t *testing.T) {
+	r, _, _ := newTestReporter(t, "execute", 2)
+
+	f, err := os.CreateTemp(t.TempDir(), "progress-*.out")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = f.Close() }()
+	r.out = f
+	r.plain = false
+
+	r.Progress(batch.Snapshot{Total: 2, Completed: 1, Succeeded: 1})
+	r.mu.Lock()
+	started := r.prog != nil
+	r.mu.Unlock()
+	if !started {
+		t.Fatal("关掉直通模式后，首个进度事件应启动进度界面")
+	}
+
+	r.Stop() // 会等渲染收尾，因此之后文件里必有内容
+
+	info, err := os.Stat(f.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Size() == 0 {
+		t.Fatal("进度界面应至少渲染过一次")
+	}
 }

@@ -14,6 +14,22 @@ import (
 	"sshfleet/internal/ssh"
 )
 
+// ANSI 颜色片段（对位 rich 的配色）。原先定义在 progress.go，进度界面改用
+// bubbletea + lipgloss 之后搬到这儿——统计块、危险命令警告框、归档与 xlsx 的
+// 告警行仍按老办法直接拼这些转义序列。
+const (
+	ansiReset  = "\x1b[0m"
+	ansiGreen  = "\x1b[32m"
+	ansiCyan   = "\x1b[36m"
+	ansiBlue   = "\x1b[34m"
+	ansiRed    = "\x1b[31m"
+	ansiDim    = "\x1b[90m"
+	ansiYellow = "\x1b[33m"
+	ansiBGreen = "\x1b[92m"
+	ansiBRed   = "\x1b[91m"
+	ansiWhite  = "\x1b[37m"
+)
+
 // 常见退出码含义（Unix 通用语义，对位旧 EXIT_CODE_HINTS）。
 var exitCodeHints = map[int]string{
 	1:   "一般性错误",
@@ -67,6 +83,8 @@ func FormatBytes(n int64) string {
 // ResultLine 单条结果的明细文本（对位旧 format_result_line）。
 // 字段顺序（用户 2026-09-15 裁定）：连接 → 执行/错误 → 分类 → output 内容 → 分隔线。
 // 分类提到执行下面（一眼看出结果定性），output 原文放最下面（长文本不夹在状态行中间）。
+// output 原文**原样**输出，不做任何处理——整备（去首尾空白行）在采集侧完成，
+// r.Output 到手即成品（见 ssh.trimOuterBlankLines）；呈现层再动一次就会各清各的。
 func ResultLine(r ssh.Result, mode string, category string) string {
 	var lines []string
 	lines = append(lines, fmt.Sprintf("【%s】 %s", r.IP, FormatConnStatus(r.ConnectSuccess, r.ConnectCostTime)))
@@ -88,8 +106,8 @@ func ResultLine(r ssh.Result, mode string, category string) string {
 	lines = append(lines, fmt.Sprintf("【%s】 分类: %s", r.IP, category))
 
 	if r.ConnectSuccess {
-		if out := strings.TrimSpace(r.Output); out != "" {
-			lines = append(lines, out)
+		if r.Output != "" {
+			lines = append(lines, r.Output)
 		}
 	}
 
@@ -199,8 +217,10 @@ func exitCodeHintLine(categories []result.CategoryCount) string {
 }
 
 // elapsedText 耗时显示（对位旧 TimeElapsedColumn 的 H:MM:SS）。
+// 秒数四舍五入而非截断：统计块的总耗时用 %.2f（四舍五入），进度条若截断，
+// 11.9 秒会显示成 11，与同一时刻的 12.03 秒并排看着像差了 1 秒（用户 2026-09-15 裁定）。
 func elapsedText(d time.Duration) string {
-	total := int(d.Seconds())
+	total := int(d.Seconds() + 0.5)
 	return fmt.Sprintf("%d:%02d:%02d", total/3600, (total%3600)/60, total%60)
 }
 

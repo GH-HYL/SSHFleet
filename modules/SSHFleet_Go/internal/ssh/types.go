@@ -26,7 +26,7 @@ type Result struct {
 	User            string
 	ConnectSuccess  bool
 	ExitCode        *int
-	Output          string // 命令输出 / 传输明细（明文，不再 base64）
+	Output          string // 命令输出 / 传输明细：明文，采集侧已去整块首尾空白行，呈现层原样用
 	ConnectCostTime float64
 	ExecCostTime    float64
 	Error           *string
