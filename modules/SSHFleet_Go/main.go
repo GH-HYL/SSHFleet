@@ -34,7 +34,7 @@ import (
 )
 
 // 版本号：单一出处（显示在帮助信息首行下方，经 cli.Parse 传入 Usage）。
-const appVersion = "5.0.0"
+const appVersion = "5.0.1"
 
 // versionWithBuildTime 版本号拼上编译来源时间（git HEAD 提交时间，go build 在
 // 仓库内编译时自动注入 vcs.time）；取不到（仓库外编译 / -buildvcs=false）时只显示版本号。
