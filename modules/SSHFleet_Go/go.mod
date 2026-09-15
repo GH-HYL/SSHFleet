@@ -12,6 +12,7 @@ require (
 	golang.org/x/crypto v0.57.0
 	golang.org/x/sys v0.48.0
 	golang.org/x/term v0.46.0
+	golang.org/x/text v0.42.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	mvdan.cc/sh/v3 v3.14.1
 )
@@ -36,5 +37,4 @@ require (
 	github.com/xuri/nfp v0.0.2-0.20250530014748-2ddeb826f9a9 // indirect
 	go.uber.org/multierr v1.10.0 // indirect
 	golang.org/x/net v0.58.0 // indirect
-	golang.org/x/text v0.42.0 // indirect
 )
