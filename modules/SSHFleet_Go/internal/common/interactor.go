@@ -37,6 +37,13 @@ func NewInteractor(disinteractive bool) *Interactor {
 	return &Interactor{In: os.Stdin, Out: os.Stdout, Disinteractive: disinteractive}
 }
 
+// Notice 非交互性提示（校验重试提示、清单清洗说明等）：只往注入的输出流写，
+// 不读输入。存在这条通道，是为了让「提示」与「提问」都走同一个出口——
+// 提示直接写 os.Stdout 会让调用方无法在测试里捕获它们。
+func (i *Interactor) Notice(text string) {
+	fmt.Fprint(i.Out, text)
+}
+
 // Prompt 读取一行文本。EOF / 读取出错：打印取消文案并返回 ErrCancelled。
 func (i *Interactor) Prompt(prompt string) (string, error) {
 	fmt.Fprint(i.Out, prompt)

@@ -40,6 +40,10 @@ type rowCreds struct {
 }
 
 // precheckResult 凭据预检的汇总产出。
+//
+// rows 与清单行**按位置同序对齐**（第 i 项对应第 i 行，0 基）；逐节点解析侧请统一经
+// rowCreds(行号) 取用，不要自己写下标——历史上预检写 rows[idx]（0 基）、解析读
+// rows[idx-1]（1 基行号），两套口径并存，靠 padRow 各自兜底，改动时极易错位。
 type precheckResult struct {
 	rows                 []rowCreds
 	needDefaultPassword  bool   // 是否存在依赖默认密码的节点
@@ -51,9 +55,20 @@ type precheckResult struct {
 	universalPassphrase  string // 状态3：统一口令（交互输入）
 }
 
+// rowCreds 取指定清单行的预检凭据，行号用**1 基**（与「行 N」提示文案、CSV 阅读习惯一致）。
+// 越界返回零值：预检与解析都以同一份 rows 为准，正常流程不会越界；这里只做防御，
+// 保证两个调用点不会因下标口径不同而拿到邻行的凭据。
+func (p *precheckResult) rowCreds(lineNo int) rowCreds {
+	idx := lineNo - 1
+	if idx < 0 || idx >= len(p.rows) {
+		return rowCreds{}
+	}
+	return p.rows[idx]
+}
+
 // Read 主干第 6 步入口：CSV/内联 → 预检解码 → 字段补全 → 节点集合。
 func Read(args *cli.Args, cfg *config.Config, in *common.Interactor) (*Nodes, error) {
-	rows, err := readCSVRows(args.CsvFile, args.FIsInline)
+	rows, err := readCSVRows(args.CsvFile, args.FIsInline, in)
 	if err != nil {
 		return nil, err
 	}
