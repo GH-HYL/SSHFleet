@@ -153,7 +153,7 @@ func buildTasks(a *cli.Args, nodes *nodelist.Nodes) ([]*task, []string, error) {
 				interpreter = "python3"
 			}
 		}
-		command, stdin := ssh.BuildCommand(a, body, interpreter)
+		command, stdin := ssh.BuildCommand(a.Command, body, interpreter, a.NoBash, a.Mode == "sudo")
 		for i, node := range nodes.Items {
 			tasks = append(tasks, &task{seq: i, node: node, command: command, stdin: stdin})
 		}
