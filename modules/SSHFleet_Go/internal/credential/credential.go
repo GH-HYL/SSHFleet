@@ -89,11 +89,21 @@ func decodeCredential(content string, level int) (string, CredCode, string, erro
 	}
 }
 
-// ReadCredential 密码/口令类凭据：读盘 → 判空 → 格式分类 → 等级匹配 → 解码/解密。
+// ReadCredential 密码/口令类凭据的一条龙读取：读盘 → 判空 → 格式分类 → 等级匹配 → 解码/解密 → 出文案。
 // requireNonempty 对位密码类校验（口令类不判空）。旧版 (path, level) 解码缓存不移植：
 // 解码发生在预检、结果直接进节点数据（spec 实现层差异）。
-// 返回 (明文, 凭据错误列表, 致命错误)；凭据错误列表空 = 通过。
-func ReadCredential(path string, level int, requireNonempty bool) (string, []CredError, error) {
+// 返回 (明文, 问题文案列表, 致命错误)；列表空 = 通过。
+// 文案每条已含路径，调用方只需拼上自己的前缀（行号 / IP / 列名），不必了解错误码。
+func ReadCredential(path string, level int, requireNonempty bool) (string, []string, error) {
+	plain, credErrs, fatalErr := readCredentialCore(path, level, requireNonempty)
+	if fatalErr != nil {
+		return "", nil, fatalErr
+	}
+	return plain, credProblems(credErrs, path), nil
+}
+
+// readCredentialCore 结构化读取核心（包内 seam）：错误保持错误码形态，文案统一由 ReadCredential 组装。
+func readCredentialCore(path string, level int, requireNonempty bool) (string, []CredError, error) {
 	if _, err := os.Stat(path); err != nil {
 		return "", []CredError{{CodeMissing, ""}}, nil
 	}
@@ -119,7 +129,14 @@ func ReadCredential(path string, level int, requireNonempty bool) (string, []Cre
 }
 
 // ReadCredentialPEM 私钥 PEM 读取校验：读盘 → 判空 → -----BEGIN 前缀检查（不参与 fmt×level 矩阵）。
-func ReadCredentialPEM(path string) (string, []CredError) {
+// 返回 (内容, 问题文案列表)，语义同 ReadCredential。
+func ReadCredentialPEM(path string) (string, []string) {
+	content, credErrs := readCredentialPEMCore(path)
+	return content, credProblems(credErrs, path)
+}
+
+// readCredentialPEMCore 私钥 PEM 结构化读取核心（包内 seam）。
+func readCredentialPEMCore(path string) (string, []CredError) {
 	if _, err := os.Stat(path); err != nil {
 		return "", []CredError{{CodeMissing, ""}}
 	}
@@ -148,6 +165,18 @@ func ReadPEMRaw(path string) (string, error) {
 }
 
 // ---- 错误码 → 用户文案（单一事实来源，校验汇总 / 退出指引两条路径共用） ----
+
+// credProblems 错误码列表 → 调用方可直接拼接的短文案列表（每条已含路径），空 = 通过。
+func credProblems(credErrs []CredError, path string) []string {
+	if len(credErrs) == 0 {
+		return nil
+	}
+	problems := make([]string, 0, len(credErrs))
+	for _, ce := range credErrs {
+		problems = append(problems, CredErrorLabel(ce.Code, path, ce.Detail))
+	}
+	return problems
+}
 
 // CredErrorLabel 凭据错误码 → 汇总短文案（CSV 校验汇总路径用）。
 func CredErrorLabel(code CredCode, path string, detail string) string {
