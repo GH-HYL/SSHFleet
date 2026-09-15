@@ -29,8 +29,14 @@
 # 构建脚本（build-windows.bat / build-linux.sh）为个人使用工具，不进版本控制——
 # 他人按 README 的 go build 自行编译即可
 
-# 旧工程参考副本（只读，不进版本控制）
-modules/SSHFleet_bak/
+# 以下几类在 modules/ 里天然存在、但都不进版本控制。
+# 注意：放在 !modules/** 之后才能生效——白名单里后写的规则覆盖先写的。
+
+# 旧工程参考副本（只读）。用 * 通配，避免每换一次参考副本就回来改这条
+modules/*_bak*/
+
+# 运行期日志落点（工具自己生成的历史记录，属产物）
+historys/
 
 # 构建产物兜底排除：!modules/** 会连带放行它，而历史上 build-linux.sh 相对路径写错时
 # 产物曾落到这里并被误入库（2026-09-14 修脚本 + 补本条）
@@ -45,3 +51,5 @@ modules/build/
 #   build-windows.bat             构建脚本（个人使用，不进版本控制）
 #   build-linux.sh                构建脚本（个人使用，不进版本控制）
 #   根目录临时脚本（.bat 等）      按需补白名单
+#
+# 另：modules/ 下按上述规则排除 historys/ 与 *_bak*/，其余一律追踪。
