@@ -29,6 +29,11 @@ type Client struct {
 	// 账号过期、密码必须修改、/etc/nologin 通知等都只在这里出现——x/crypto 在没有
 	// BannerCallback 时会把它整包丢弃，所以必须自己接住（ADR-0005）。
 	banner string
+
+	// keyFallback 私钥解析失败、已退回密码认证（旧引擎会把这件事记进日志：
+	// 「密钥解析失败，回退到密码认证」）。留着它，登录方式才能如实说明——
+	// 否则「密钥坏了但密码能上」这件事不会有人知道，直到密码也失效那天。
+	keyFallback bool
 }
 
 func NewClient(cfg *Config) *Client { return &Client{cfg: cfg} }
@@ -112,6 +117,7 @@ func (c *Client) buildAuthMethods() ([]ssh.AuthMethod, error) {
 				return nil, fmt.Errorf("解析密钥失败 - %w", err)
 			}
 			// 密钥解析失败但配了密码：回退密码认证（旧行为，不算「两种都试过」）
+			c.keyFallback = true
 		} else {
 			methods = append(methods, ssh.PublicKeys(signer))
 			c.publicKeyOffered = true
@@ -167,8 +173,13 @@ func (c *Client) classifyAuthFailure(err error) *string {
 	return nil
 }
 
-// authMethodDesc 认证方式描述（日志口径与旧一致）。
+// authMethodDesc 认证方式描述（执行期日志的「登录方式」）。
+// 私钥解析失败而退回密码时如实说明——这条信息只在解析那一刻存在，
+// 事后从配置里看不出「明明配了密钥，为什么实际走的是密码」。
 func (c *Client) authMethodDesc() string {
+	if c.keyFallback {
+		return "密码（密钥解析失败，已回退）"
+	}
 	hasKey := c.cfg.KeyContent != ""
 	hasPwd := c.cfg.Password != ""
 	switch {

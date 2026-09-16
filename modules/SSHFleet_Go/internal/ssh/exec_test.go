@@ -23,3 +23,24 @@ func TestTrimOuterBlankLines(t *testing.T) {
 		})
 	}
 }
+
+// 登录方式要如实反映实际走的那条路：私钥解析失败而退回密码时，
+// 光看配置只会说「密钥/密码」——「密钥其实已经打不开了」这件事就此消失。
+func TestAuthMethodDescReportsKeyFallback(t *testing.T) {
+	c := NewClient(&Config{IP: "127.0.0.1", Port: 22, User: "u", KeyContent: "not-a-private-key", Password: "p"})
+	if _, err := c.buildAuthMethods(); err != nil {
+		t.Fatalf("配了密码时应回退密码认证，不该报错：%v", err)
+	}
+	if got := c.authMethodDesc(); got != "密码（密钥解析失败，已回退）" {
+		t.Fatalf("登录方式应说明已回退，实际 %q", got)
+	}
+
+	// 只有密钥、解析失败：直接报错，登录方式仍是配置口径
+	c2 := NewClient(&Config{IP: "127.0.0.1", Port: 22, User: "u", KeyContent: "bad"})
+	if _, err := c2.buildAuthMethods(); err == nil {
+		t.Fatal("只有密钥且解析失败时应报错")
+	}
+	if got := c2.authMethodDesc(); got != "密钥" {
+		t.Fatalf("未回退时登录方式应为配置口径，实际 %q", got)
+	}
+}

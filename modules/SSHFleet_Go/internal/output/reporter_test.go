@@ -2,6 +2,7 @@ package output
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -132,7 +133,7 @@ func TestReporterTransferMode(t *testing.T) {
 		Error: ptr("b.txt: 上传失败 - 文件已存在"),
 	})
 	logText2 := readExecLog(t, execLogPath2)
-	if !strings.Contains(logText2, "上传完成：成功 2/3 个文件（有失败项）") {
+	if !strings.Contains(logText2, "上传完成：成功 2/3 个文件（有失败项 1 个）") {
 		t.Fatalf("有失败项时应标「（有失败项）」：\n%s", logText2)
 	}
 	_ = outFile
@@ -207,5 +208,71 @@ func TestReporterRunsProgressProgram(t *testing.T) {
 	}
 	if info.Size() == 0 {
 		t.Fatal("进度界面应至少渲染过一次")
+	}
+}
+
+// 执行期日志要留下「为什么失败」的证据（用户 2026-09-16：异常时的报文此前全丢）。
+//
+// 两条通道此前都是空的：Error 原文只在连接失败时写过，Output 则从不进日志。
+// 前者是「连上了却没跑成」的唯一原因来源（创建会话失败 / 超时 / 路径不存在），
+// 后者是服务端拒绝语与逐文件失败原因的唯一来源（密码过期、nologin、传输明细）。
+func TestReporterLogsFailureEvidence(t *testing.T) {
+	// 1) 命令失败：输出明细进日志（密码过期就是这种：Error 为空、证据在 Output）
+	r, _, logPath := newTestReporter(t, "execute", 1)
+	r.Result(ssh.Result{
+		Seq: 0, IP: "10.0.0.9", User: "root", AuthMethod: "密码",
+		ConnectSuccess: true, ExitCode: intp(1), ConnectCostTime: 0.1, ExecCostTime: 0.004,
+		Output: "WARNING: Your password has expired.\nPassword change required but no TTY available.",
+	})
+	logText := readExecLog(t, logPath)
+	for _, want := range []string{
+		"连接成功，用户 root，登录方式 密码",
+		"命令执行失败，退出码 1",
+		"输出明细（2 行）：",
+		"WARNING: Your password has expired.",
+		"Password change required but no TTY available.",
+	} {
+		if !strings.Contains(logText, want) {
+			t.Fatalf("执行期日志缺少 %q：\n%s", want, logText)
+		}
+	}
+
+	// 2) 连上了但没跑成：报错原文进日志（Error 非空、退出码缺席）
+	r2, _, logPath2 := newTestReporter(t, "execute", 1)
+	r2.Result(ssh.Result{
+		Seq: 0, IP: "10.0.0.10", ConnectSuccess: true, ConnectCostTime: 0.2,
+		Error: ptr("创建会话失败 - ssh: rejected: connect failed (\"open failed\")"),
+	})
+	logText2 := readExecLog(t, logPath2)
+	if !strings.Contains(logText2, "错误详情：创建会话失败") {
+		t.Fatalf("执行期日志应记下失败原因原文：\n%s", logText2)
+	}
+
+	// 3) 成功节点不写输出明细（`cat 大文件` 这类命令不能把日志撑爆）
+	r3, _, logPath3 := newTestReporter(t, "execute", 1)
+	r3.Result(ssh.Result{
+		Seq: 0, IP: "10.0.0.11", ConnectSuccess: true, ExitCode: intp(0),
+		ConnectCostTime: 0.1, ExecCostTime: 0.2, Output: "line1\nline2\nline3",
+	})
+	if strings.Contains(readExecLog(t, logPath3), "输出明细") {
+		t.Fatalf("成功节点不该写输出明细：\n%s", readExecLog(t, logPath3))
+	}
+
+	// 4) 超长输出封顶：只写上限行数，其余报数并指向文件
+	var big strings.Builder
+	for i := 0; i < maxOutputLines+7; i++ {
+		fmt.Fprintf(&big, "line %d\n", i)
+	}
+	r4, _, logPath4 := newTestReporter(t, "execute", 1)
+	r4.Result(ssh.Result{
+		Seq: 0, IP: "10.0.0.12", ConnectSuccess: true, ExitCode: intp(2),
+		ConnectCostTime: 0.1, ExecCostTime: 0.2, Output: big.String(),
+	})
+	logText4 := readExecLog(t, logPath4)
+	if !strings.Contains(logText4, "其余 7 行省略") {
+		t.Fatalf("超出上限应报省略行数：\n%s", logText4)
+	}
+	if strings.Contains(logText4, fmt.Sprintf("line %d", maxOutputLines)) {
+		t.Fatalf("第 %d 行不该写入（已超上限）：\n%s", maxOutputLines, logText4)
 	}
 }
