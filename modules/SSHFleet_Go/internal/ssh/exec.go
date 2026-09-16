@@ -59,6 +59,7 @@ func (c *Client) connectFor(ctx context.Context, result *Result) bool {
 // 旧实现是 select + time.After 建一个不会被取消的 timer）。
 func (c *Client) RunCommand(ctx context.Context, command, stdin string, seq int) *Result {
 	result := c.newResult(seq)
+	defer c.applyBanner(result) // 服务端提示并入报错原文（ADR-0005）
 
 	if !c.connectFor(ctx, result) {
 		return result
