@@ -24,6 +24,7 @@ type Result struct {
 	IP              string
 	Port            int
 	User            string
+	AuthMethod      string // 登录方式（密钥 / 密码 / 密钥/密码）：执行期日志留痕用，不参与分类
 	ConnectSuccess  bool
 	ExitCode        *int
 	Output          string // 命令输出 / 传输明细：明文，采集侧已去整块首尾空白行，呈现层原样用

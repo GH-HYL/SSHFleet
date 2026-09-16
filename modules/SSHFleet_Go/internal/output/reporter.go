@@ -16,8 +16,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/mattn/go-isatty"
@@ -182,38 +184,56 @@ func (r *Reporter) printAbove(text string) {
 	fmt.Fprintln(r.out, text)
 }
 
+// 执行期日志里单个节点的「输出明细」上限：超出只报数，完整内容在 output.txt 与 output.xlsx。
+//
+// 为什么要把输出写进日志：失败节点的输出就是排障第一现场——密码过期的
+// 「Password change required but no TTY available」、nologin 的「此帐户目前不可用。」、
+// 逐文件失败的原因，全都只在那里。此前这些内容只进终端与 output.txt，日志里一片空白，
+// 事后翻日志只剩一句「命令执行失败，退出码 1」，看不出为什么。
+//
+// 为什么要封顶：`cat 大文件` 这类命令能产出上万行，日志不能无上限地长。
+const (
+	maxOutputLines   = 50
+	maxOutputLineLen = 500
+)
+
 // logNode 把单节点结果按运行事件写入执行期日志（对位旧引擎的
 // 「SSH连接成功/失败 → 执行结束/节点完成 → 分类」三级记录，全部带时间戳与级别）。
+//
+// 五级顺序：连接结果 → 执行结果 → 失败原因原文 → 输出明细 → 分类。
+// 「失败原因」与「输出明细」是本次补齐的两级：结果字段里一直有完整报文
+//（Error 是原因原文，Output 是输出/明细），但此前只有连接失败那一条被写进日志。
 func (r *Reporter) logNode(res ssh.Result, category string) {
 	el := r.logger
 	if el == nil {
 		return
 	}
 	ip := "【" + res.IP + "】"
+
+	// 一级：连接。失败时把报错原文（含服务端提示）逐行写下——这是「连不上」
+	// 这类结果唯一的原因来源，日志里没有它就只剩一个「连接失败」的空壳。
 	if res.ConnectSuccess {
-		el.Success(fmt.Sprintf("%s连接成功，耗时 %.3fs", ip, res.ConnectCostTime))
+		el.Success(fmt.Sprintf("%s连接成功%s，耗时 %.3fs",
+			ip, joinNotes(userNote(res.User), authNote(res.AuthMethod)), res.ConnectCostTime))
 	} else {
-		errMsg := "未知错误"
-		if res.Error != nil && *res.Error != "" {
-			errMsg = *res.Error
-		}
-		el.Error(fmt.Sprintf("%s连接失败：%s", ip, errMsg))
+		logMultiline(el.Error, ip, "连接失败"+joinNotes(userNote(res.User))+"：", errText(res, "未知错误"))
 	}
 
+	// 二级：执行结果（命令看退出码，传输看成功/失败文件数与字节数）
 	if res.ConnectSuccess {
 		switch r.mode {
-		case "upload":
-			if res.FailedFiles == 0 {
-				el.Success(fmt.Sprintf("%s上传完成：成功 %d/%d 个文件", ip, res.SuccessFiles, res.TotalFiles))
-			} else {
-				el.Warn(fmt.Sprintf("%s上传完成：成功 %d/%d 个文件（有失败项）", ip, res.SuccessFiles, res.TotalFiles))
+		case "upload", "download":
+			action := "上传"
+			if r.mode == "download" {
+				action = "下载"
 			}
-		case "download":
-			if res.FailedFiles == 0 {
-				el.Success(fmt.Sprintf("%s下载完成：成功 %d/%d 个文件", ip, res.SuccessFiles, res.TotalFiles))
-			} else {
-				el.Warn(fmt.Sprintf("%s下载完成：成功 %d/%d 个文件（有失败项）", ip, res.SuccessFiles, res.TotalFiles))
+			note := ""
+			var write func(...any) = el.Success
+			if res.FailedFiles > 0 {
+				note, write = fmt.Sprintf("（有失败项 %d 个）", res.FailedFiles), el.Warn
 			}
+			write(fmt.Sprintf("%s%s完成：成功 %d/%d 个文件%s，共 %s，耗时 %.3fs",
+				ip, action, res.SuccessFiles, res.TotalFiles, note, humanBytes(res.TotalBytes), res.ExecCostTime))
 		default:
 			if res.ExitCode != nil && *res.ExitCode == 0 {
 				el.Success(fmt.Sprintf("%s命令执行成功，退出码 0，耗时 %.3fs", ip, res.ExecCostTime))
@@ -226,7 +246,154 @@ func (r *Reporter) logNode(res ssh.Result, category string) {
 			}
 		}
 	}
+
+	// 三级：失败原因原文。连接失败已在上面写过；这里补「连上了却没跑成」的原因
+	//（创建会话失败 / 命令执行超时 / 远程路径不存在 / 逐文件失败……）。
+	if res.ConnectSuccess && res.Error != nil && *res.Error != "" {
+		logMultiline(el.Error, ip, "错误详情：", *res.Error)
+	}
+
+	// 四级：输出明细。只在失败节点记——成功节点的输出可能是整份文件内容。
+	// 与「错误详情」逐字相同的输出不再重复写一遍（传输模式下只有一个文件失败就是这种）。
+	if isFailedResult(res) && res.Output != "" && !sameAsError(res) {
+		logOutputBlock(el.Warn, ip, res.Output)
+	}
+
+	// 五级：分类
 	el.Info(fmt.Sprintf("%s分类: %s", ip, category))
+}
+
+// errText 取结果里的报错原文（nil 或空时给 fallback）。
+func errText(res ssh.Result, fallback string) string {
+	if res.Error != nil && *res.Error != "" {
+		return *res.Error
+	}
+	return fallback
+}
+
+// userNote / authNote 日志里的上下文片段（值为空时给空串，不占位）。
+func userNote(user string) string {
+	if user == "" {
+		return ""
+	}
+	return "用户 " + user
+}
+
+func authNote(authMethod string) string {
+	if authMethod == "" {
+		return ""
+	}
+	return "登录方式 " + authMethod
+}
+
+// joinNotes 把若干个可选片段拼成「，a，b」；全空时给空串。
+func joinNotes(parts ...string) string {
+	kept := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p != "" {
+			kept = append(kept, p)
+		}
+	}
+	if len(kept) == 0 {
+		return ""
+	}
+	return "，" + strings.Join(kept, "，")
+}
+
+// isFailedResult 该结果是否算失败（决定要不要把输出明细写进日志）。
+// 连接失败、有失败文件、退出码非 0 或缺席、带报错原文，任一成立即为失败。
+func isFailedResult(res ssh.Result) bool {
+	if !res.ConnectSuccess || res.FailedFiles > 0 {
+		return true
+	}
+	if res.ExitCode == nil || *res.ExitCode != 0 {
+		return true
+	}
+	return res.Error != nil && *res.Error != ""
+}
+
+// sameAsError 输出明细与报错原文是否逐字相同（相同则不必再写一遍明细）。
+func sameAsError(res ssh.Result) bool {
+	if res.Error == nil || res.Output == "" {
+		return false
+	}
+	return strings.Join(splitLines(res.Output), "\n") == strings.Join(splitLines(*res.Error), "\n")
+}
+
+// logMultiline 把可能含多行的报错原文按行写入日志：首行接在 head 后面，
+// 其余行缩进对齐，每行都带节点前缀——既能按 IP 过滤，也保证每行时间戳齐全。
+func logMultiline(fn func(...any), ip, head, text string) {
+	lines := splitLines(text)
+	if len(lines) == 0 {
+		fn(ip + head)
+		return
+	}
+	for i, ln := range lines {
+		if i == 0 {
+			fn(ip + head + truncateLine(ln))
+			continue
+		}
+		fn(ip + "  " + truncateLine(ln))
+	}
+}
+
+// logOutputBlock 把失败节点的输出明细按行写入日志（带行数抬头与上限）。
+func logOutputBlock(fn func(...any), ip, output string) {
+	lines := splitLines(output)
+	if len(lines) == 0 {
+		return
+	}
+	fn(fmt.Sprintf("%s输出明细（%d 行）：", ip, len(lines)))
+
+	shown, rest := lines, 0
+	if len(lines) > maxOutputLines {
+		shown, rest = lines[:maxOutputLines], len(lines)-maxOutputLines
+	}
+	for _, ln := range shown {
+		fn(ip + "  " + truncateLine(ln))
+	}
+	if rest > 0 {
+		fn(fmt.Sprintf("%s  ……其余 %d 行省略（完整内容见 output.txt / output.xlsx）", ip, rest))
+	}
+}
+
+// splitLines 按行拆分并去掉空行：日志每行都已带前缀与时间戳，空行只会把版面拉稀。
+// 传输明细首行的 `total_files=…` 统计头也在此剔除——执行结果行已经报过同一组数。
+func splitLines(text string) []string {
+	raw := strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n")
+	out := make([]string, 0, len(raw))
+	for _, ln := range raw {
+		ln = strings.TrimRight(ln, " \t\r")
+		if strings.TrimSpace(ln) == "" || strings.HasPrefix(ln, "total_files=") {
+			continue
+		}
+		out = append(out, ln)
+	}
+	return out
+}
+
+// truncateLine 单行超长时截断（超长行多为 JSON / base64 这类内容）。
+func truncateLine(s string) string {
+	if utf8.RuneCountInString(s) <= maxOutputLineLen {
+		return s
+	}
+	return string([]rune(s)[:maxOutputLineLen]) + "…"
+}
+
+// humanBytes 字节数转人类可读（0 显示 0 B）。
+func humanBytes(n int64) string {
+	switch {
+	case n <= 0:
+		return "0 B"
+	case n >= 1<<30:
+		return fmt.Sprintf("%.2f GB", float64(n)/(1<<30))
+	case n >= 1<<20:
+		return fmt.Sprintf("%.2f MB", float64(n)/(1<<20))
+	case n >= 1<<10:
+		return fmt.Sprintf("%.2f KB", float64(n)/(1<<10))
+	default:
+		return fmt.Sprintf("%d B", n)
+	}
 }
 
 // isTerminal 输出是否连在终端上（含 Windows 的 cygwin/mintty 管道）。
