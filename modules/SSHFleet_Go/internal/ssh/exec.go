@@ -34,7 +34,10 @@ func (w *lockedBuffer) String() string {
 // newResult 单节点结果的共同开头：四条执行路径（命令 / 脚本 / 上传 / 下载）
 // 都从这里起手，避免各写一份 Seq / IP / Port / User 的填充。
 func (c *Client) newResult(seq int) *Result {
-	return &Result{Seq: seq, IP: c.cfg.IP, Port: c.cfg.Port, User: c.cfg.User}
+	return &Result{
+		Seq: seq, IP: c.cfg.IP, Port: c.cfg.Port, User: c.cfg.User,
+		AuthMethod: c.authMethodDesc(),
+	}
 }
 
 // connectFor 建连并落定结果里的连接字段（成功与否、耗时、错误原文、认证失败分类）。
@@ -42,14 +45,17 @@ func (c *Client) newResult(seq int) *Result {
 // 成功后连接已建立，调用方负责 defer Close。
 func (c *Client) connectFor(ctx context.Context, result *Result) bool {
 	start := time.Now()
-	if err := c.Connect(ctx); err != nil {
-		result.ConnectCostTime = time.Since(start).Seconds()
+	err := c.Connect(ctx)
+	result.ConnectCostTime = time.Since(start).Seconds()
+	// 登录方式到这一刻才定得下来：私钥解析失败会退回密码，
+	// 配置里看不出来，只有走完认证才知道实际用的是哪一种。
+	result.AuthMethod = c.authMethodDesc()
+	if err != nil {
 		result.ConnectSuccess = false
 		result.Error = strPtr(err.Error())
 		result.AuthFailure = c.classifyAuthFailure(err)
 		return false
 	}
-	result.ConnectCostTime = time.Since(start).Seconds()
 	result.ConnectSuccess = true
 	return true
 }
