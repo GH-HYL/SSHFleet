@@ -164,8 +164,11 @@ func (r *Reporter) ensureProgram() *tea.Program {
 	// 若事件循环异常退出，后续 Send 退化为 no-op——界面不显示，执行照常。
 	go func() {
 		if _, err := p.Run(); err != nil {
-			fmt.Fprintf(os.Stderr, "%s[警告]%s 进度界面异常退出：%v\n",
-				ansiYellow, ansiReset, err)
+			msg := fmt.Sprintf("进度界面异常退出：%v", err)
+			fmt.Fprintf(os.Stderr, "%s[警告]%s %s\n", ansiYellow, ansiReset, msg)
+			if r.logger != nil {
+				r.logger.Warn(msg)
+			}
 		}
 	}()
 	r.prog = p
@@ -209,6 +212,14 @@ func (r *Reporter) logNode(res ssh.Result, category string) {
 		return
 	}
 	ip := "【" + res.IP + "】"
+
+	// 成功节点：合成一行就走。
+	// 目标机常是 1000+ 台，每个节点铺开三行会把日志刷满；正常路径只需要
+	// 「哪台跑了、多快」。失败节点才展开细节（下方逐条写、不合并）。
+	if !isFailedResult(res) {
+		el.Success(ip + "成功：" + r.successDetail(res))
+		return
+	}
 
 	// 一级：连接。失败时把报错原文（含服务端提示）逐行写下——这是「连不上」
 	// 这类结果唯一的原因来源，日志里没有它就只剩一个「连接失败」的空壳。
@@ -261,6 +272,21 @@ func (r *Reporter) logNode(res ssh.Result, category string) {
 
 	// 五级：分类
 	el.Info(fmt.Sprintf("%s分类: %s", ip, category))
+}
+
+// successDetail 成功节点那行的可变部分（按模式给「跑了什么、多快」）。
+func (r *Reporter) successDetail(res ssh.Result) string {
+	conn := fmt.Sprintf("连接 %.3fs，", res.ConnectCostTime)
+	switch r.mode {
+	case "upload":
+		return fmt.Sprintf("%s上传 %d/%d 个文件（%s），耗时 %.3fs",
+			conn, res.SuccessFiles, res.TotalFiles, humanBytes(res.TotalBytes), res.ExecCostTime)
+	case "download":
+		return fmt.Sprintf("%s下载 %d/%d 个文件（%s），耗时 %.3fs",
+			conn, res.SuccessFiles, res.TotalFiles, humanBytes(res.TotalBytes), res.ExecCostTime)
+	default:
+		return fmt.Sprintf("%s执行 %.3fs", conn, res.ExecCostTime)
+	}
 }
 
 // errText 取结果里的报错原文（nil 或空时给 fallback）。

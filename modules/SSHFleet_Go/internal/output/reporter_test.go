@@ -70,11 +70,15 @@ func TestReporterResultWritesBothSinks(t *testing.T) {
 		t.Fatalf("output.txt 末行应为分隔线：\n%s", txt)
 	}
 
+	// 成功节点在执行期日志里只占一行（连接与执行合并）：1000+ 节点的正常执行
+	// 不能靠逐节点铺行刷满日志；失败节点才展开（见 TestReporterLogsFailureEvidence）。
 	logText := readExecLog(t, execLogPath)
-	for _, want := range []string{"连接成功", "命令执行成功，退出码 0", "分类: 执行成功"} {
-		if !strings.Contains(logText, want) {
-			t.Fatalf("执行期日志缺少 %q：\n%s", want, logText)
-		}
+	want := "成功：连接 0.123s，执行 0.456s"
+	if !strings.Contains(logText, want) {
+		t.Fatalf("执行期日志缺少 %q：\n%s", want, logText)
+	}
+	if lines := strings.Count(strings.TrimSpace(logText), "\n") + 1; lines != 1 {
+		t.Fatalf("成功节点在执行期日志里应只占一行，实为 %d 行：\n%s", lines, logText)
 	}
 }
 
@@ -121,8 +125,8 @@ func TestReporterTransferMode(t *testing.T) {
 		t.Fatalf("传输模式成功分类应为 %q，实际 %q", result.SuccessCategoryTransport, got)
 	}
 	logText := readExecLog(t, execLogPath)
-	if !strings.Contains(logText, "上传完成：成功 3/3 个文件") {
-		t.Fatalf("执行期日志缺少上传完成记录：\n%s", logText)
+	if !strings.Contains(logText, "成功：连接 0.100s，上传 3/3 个文件") {
+		t.Fatalf("执行期日志缺少上传成功记录：\n%s", logText)
 	}
 
 	// 有失败项时改走 WARN 级别与「（有失败项）」措辞
