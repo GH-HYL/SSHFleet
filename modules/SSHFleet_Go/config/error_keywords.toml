@@ -10,6 +10,10 @@
 #   调分类效果：在对应分类的 keywords 里增删关键词，存盘后重新运行即可，不用改程序。
 #   加新分类  ：复制一整段 [[categories]]，改名和关键词，位置按上面第 2 条规则放。
 #   停用分类  ：整段删掉即可（该分类从结果里消失，它会退回显示报错原文）。
+#   加提示    ：想让某分类在统计末尾多一句"可能是什么"，给它加一行 tip（可不写）：
+#                 tip = '账号过期/被锁、禁止登录、并发限流、链路中断'
+#               只写"这个分类可能包括哪些情况"；写了才显示，没写就不显示。
+#               （「执行失败(退出码N)」那条由工具按退出码自动给，不用在这里写）
 #
 #   一段长这样：
 #     [[categories]]
@@ -82,6 +86,16 @@ keywords = [
 ]
 
 [[categories]]
+name = '握手被断开'
+# 认证阶段被对端断开，且对方没有说明原因：客户端拿到的只是一个 EOF。
+# 这一类的共同点是"连上了、但被服务端在认证阶段直接掐断"，原因不下发，
+# 所以提示词列出可能的情况，供顺着方向查。
+tip = '账号状态（过期/被锁/密码需改）、目标机禁止登录（AllowUsers、/etc/nologin）、服务端限流（MaxStartups、LoginGraceTime）、链路被掐断、sshd 重启'
+keywords = [
+    'ssh: handshake failed: EOF',
+]
+
+[[categories]]
 name = '连接超时'
 # 连接迟迟没有响应
 keywords = [
@@ -112,6 +126,7 @@ keywords = [
 [[categories]]
 name = '连接中断'
 # 执行途中连接被断开：目标机重启、网络抖动、对端主动断开
+tip = '目标机重启、网络抖动、中间设备超时'
 keywords = [
     'connection lost',
     'ssh: disconnect, reason',
@@ -130,6 +145,7 @@ keywords = [
 [[categories]]
 name = '身份验证失败'
 # 用户名或密码/密钥不对，目标机不接受
+tip = '密码错、私钥不被认、认证方式不被接受'
 keywords = [
     'unable to authenticate',
     'permission denied (publickey',
@@ -140,6 +156,7 @@ keywords = [
 [[categories]]
 name = '命令执行请求被拒'
 # 目标机接受了连接，但拒绝执行命令
+tip = '账号只许传文件、只许交互登录、shell 不可用'
 keywords = [
     'ssh: command * failed',
     'ssh: could not start shell',
@@ -148,6 +165,7 @@ keywords = [
 [[categories]]
 name = '会话创建失败'
 # 连上了，但目标机不给开会话（常见于并发会话数被限制）
+tip = '并发会话数限制、服务端资源不足'
 keywords = [
     '创建会话失败',
     '创建输入通道失败',
@@ -156,6 +174,7 @@ keywords = [
 [[categories]]
 name = '会话中断未返回退出码'
 # 命令执行到一半会话断了，拿不到退出码
+tip = '命令可能已执行；目标机重启/网络中断/sshd 断开'
 keywords = [
     'remote command exited without exit status',
 ]
@@ -194,6 +213,7 @@ keywords = [
 [[categories]]
 name = '远程无文件'
 # 下载模式：路径下没有可下载的文件（空目录，或全是软链接被过滤掉）
+tip = '目录为空，或全是符号链接已被过滤'
 keywords = [
     '远程路径中没有可下载的文件',
     '没有可下载的文件',
@@ -210,6 +230,7 @@ keywords = [
 [[categories]]
 name = 'SFTP失败'
 # 传输环节失败：建连接、建目录、开/写文件出了错
+tip = 'sftp 子系统被禁、远端目录权限/磁盘、账号受限、传输中断'
 keywords = [
     '创建远程文件失败',
     '写入远程文件失败',
