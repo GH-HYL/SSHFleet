@@ -40,8 +40,8 @@ failed_files = 2
 expected = "部分成功"
 
 [[cases]]
-name = "authentication failed"
-error = "authentication failed"
+name = "仅密码被拒 → 身份验证失败"
+error = "ssh: handshake failed: ssh: unable to authenticate, attempted methods [none password], no supported methods remain"
 output = ""
 mode = "download"
 success_files = 0
@@ -150,8 +150,8 @@ failed_files = 0
 expected = "资源耗尽"
 
 [[cases]]
-name = "本地文件不存在或不可读"
-error = "本地文件不存在或不可读: a.txt - stat a.txt: no such file"
+name = "本地文件不可读 → 本地文件错误"
+error = "文件不可读: a.txt: open a.txt: no such file or directory"
 output = ""
 mode = "upload"
 success_files = 0
@@ -168,15 +168,6 @@ failed_files = 0
 expected = "SFTP失败"
 
 [[cases]]
-name = "远程目录为空 → 远程无文件"
-error = "远程目录为空"
-output = ""
-mode = "download"
-success_files = 0
-failed_files = 0
-expected = "远程无文件"
-
-[[cases]]
 name = "没有可下载的文件 → 远程无文件"
 error = "远程路径中没有可下载的文件"
 output = ""
@@ -187,7 +178,7 @@ expected = "远程无文件"
 
 [[cases]]
 name = "全部为符号链接 → 远程无文件"
-error = "没有下载到任何文件（全部为符号链接）"
+error = "没有可下载的文件：目标全部为软链接（已过滤 3 个）"
 output = ""
 mode = "download"
 success_files = 0
@@ -221,3 +212,65 @@ mode = "execute"
 success_files = 0
 failed_files = 0
 expected = "身份验证失败"
+
+# ---- 2026-09-16 新增：会话被拒与认证阶段被拒（判据见 config/error_keywords.toml 第二块）----
+# 会话被拒时命令根本没执行，退出码来自拒绝方（nologin / sudo / sshd 会话）：命中判据即
+# 按原因分类，退出码字段本身照旧保留（ADR-0004）。
+
+[[cases]]
+name = "密码过期（会话被拒，退出码 1）"
+exit_code = 1
+error = ""
+output = "WARNING: Your password has expired.\nPassword change required but no TTY available."
+mode = "execute"
+success_files = 0
+failed_files = 0
+expected = "密码过期"
+
+[[cases]]
+name = "密码过期（认证阶段的服务端提示并入 error）"
+error = "建立连接失败 - ssh: handshake failed: EOF\nYou are required to change your password immediately (administrator enforced)."
+output = ""
+mode = "execute"
+success_files = 0
+failed_files = 0
+expected = "密码过期"
+
+[[cases]]
+name = "账号过期（服务端提示）"
+error = "建立连接失败 - ssh: handshake failed: EOF\nYour account has expired; please contact your system administrator."
+output = ""
+mode = "execute"
+success_files = 0
+failed_files = 0
+expected = "账号过期"
+
+[[cases]]
+name = "登录 shell 为 nologin（中文文案）"
+exit_code = 1
+error = ""
+output = "此帐户目前不可用。"
+mode = "execute"
+success_files = 0
+failed_files = 0
+expected = "登录被禁止"
+
+[[cases]]
+name = "仅允许 SFTP（ForceCommand internal-sftp）"
+exit_code = 1
+error = ""
+output = "This service allows sftp connections only."
+mode = "execute"
+success_files = 0
+failed_files = 0
+expected = "仅允许 SFTP"
+
+[[cases]]
+name = "退出码非 0 且判据未命中 → 仍按退出码分类"
+exit_code = 3
+error = ""
+output = "ls: cannot access '/nope': No such file or directory"
+mode = "execute"
+success_files = 0
+failed_files = 0
+expected = "执行失败(退出码3)"

@@ -25,6 +25,7 @@ const tmpRoot = "/tmp/.SSHFleet_tmp/"
 // （`-u` 输入后即可知，无需连服务器），这里只把它写进 Output 明细留痕（spec D51）。
 func (c *Client) UploadFiles(ctx context.Context, files []LocalFile, skipped []string, remotePath string, useSudo bool, seq int, onProgress func(Progress)) *Result {
 	result := c.newResult(seq)
+	defer c.applyBanner(result) // 服务端提示并入报错原文（ADR-0005）
 	result.TotalFiles = len(files)
 
 	if !c.connectFor(ctx, result) {
@@ -177,6 +178,7 @@ func (c *Client) UploadFiles(ctx context.Context, files []LocalFile, skipped []s
 // 目录模式下按 IP 建子目录、保留远程相对路径；符号链接跳过不计失败。
 func (c *Client) DownloadFiles(ctx context.Context, remotePath, localPath string, useSudo bool, seq int, onProgress func(Progress)) *Result {
 	result := c.newResult(seq)
+	defer c.applyBanner(result) // 服务端提示并入报错原文（ADR-0005）
 
 	if !c.connectFor(ctx, result) {
 		return result

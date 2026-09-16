@@ -1,8 +1,9 @@
-// 错误分类（对位旧 classifier.py，ADR-0003 退出码语义）：
+// 错误分类（对位旧 classifier.py）：
 //
 //	exit_code = 0    → 命令全部成功（传输模式为「传输成功」）
-//	exit_code ≠ 0    → 有命令失败，退出码是权威信号，不再匹配关键词
-//	exit_code = nil  → 未执行任何命令（连接失败 / 传输失败 / 超时 / 中断），靠关键词推断
+//	exit_code ≠ 0    → 有命令失败。先给「会话被拒」类判据一次覆盖机会，未命中才由退出码
+//	                   本身当权威信号（ADR-0004）
+//	exit_code = nil  → 未执行任何命令（连接失败 / 传输失败 / 超时 / 中断 / 会话被拒），靠关键词推断
 //
 // 关键词未命中时把报错原文本身作为分类（保留具体失败内容），仅 error 与 output 均空时才兜底。
 package result
@@ -35,13 +36,19 @@ type Case struct {
 
 // Classify 按响应字段给出一条分类名。
 func Classify(c Case, kw *Keywords) string {
-	// 有退出码：按退出码分类，不再对输出做关键词匹配
+	// 有退出码：0 为成功；非 0 时先给「会话被拒」类判据一次机会，未命中才按退出码分类
 	if c.ExitCode != nil {
 		if *c.ExitCode == 0 {
 			if isTransport(c.Mode) {
 				return SuccessCategoryTransport
 			}
 			return SuccessCategoryExecute
+		}
+		// 覆盖机会（ADR-0004）：会话被拒时命令根本没执行，这个退出码来自拒绝方
+		//（nologin / sudo / sshd 会话），代表不了命令的结果——命中判据就按原因分类。
+		// 退出码字段与它的显示逻辑都不动：保留原值，只是分类改按原因给。
+		if hit := kw.matchExitCode(joinText(c.Error, c.Output)); hit != "" {
+			return hit
 		}
 		return "执行失败(退出码" + itoa(*c.ExitCode) + ")"
 	}
@@ -102,6 +109,19 @@ func IsSuccessResult(exitCode *int, connectSuccess bool) bool {
 }
 
 func isTransport(mode string) bool { return mode == "upload" || mode == "download" }
+
+// joinText 合成判据匹配文本：判据都是服务端固定文案，合并两段只影响"能不能找到"，
+// 不影响找到的是哪一类（分类顺序由判据文件决定）。
+func joinText(a, b string) string {
+	switch {
+	case a == "":
+		return b
+	case b == "":
+		return a
+	default:
+		return a + "\n" + b
+	}
+}
 
 func truncate(text string) string {
 	if len(text) <= fallbackMaxLen {
