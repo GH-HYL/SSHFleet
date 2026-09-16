@@ -91,14 +91,56 @@ const (
 	colorYellow = "\x1b[33m"
 )
 
+// toolLog / execLogRef 是 fatal 写日志用的两个落点：工具日志在步骤 2 建好之后赋值，
+// 执行期日志在步骤 8 建好之后赋值。都可能是 nil——配置加载失败或初始化日志失败时
+// 两个都还没有（那时连日志路径都还没确定，只能落 stderr）。
+var (
+	toolLog    *log.Logger
+	execLogRef *log.Logger
+)
+
 // fatal 打印致命错误并退出（退出码 1）。main 独占退出权的唯一出口。
 // 交互取消（ErrCancelled）的文案已由交互器打印，此处只退出不再附加前缀。
+//
+// 致命错误同时落日志：终端一关就只剩日志可查——此前这类错误只打 stderr，
+// 日志里一片空白，事后完全查不出「那次为什么没跑起来」。
 func fatal(where string, err error) {
 	if errors.Is(err, common.ErrCancelled) {
 		os.Exit(1)
 	}
 	fmt.Fprintf(os.Stderr, "%s[ERROR]%s%s [function:%s]%s %s\n", colorRed, colorReset, colorYellow, where, colorReset, err)
+	closeLogsAfterFatal(where, err)
 	os.Exit(1)
+}
+
+// closeLogsAfterFatal 把致命错误逐行写入工具日志与执行期日志（若有），并关闭句柄。
+// os.Exit 不跑 defer，所以这里显式落盘收尾。
+func closeLogsAfterFatal(where string, err error) {
+	for _, lg := range []*log.Logger{toolLog, execLogRef} {
+		if lg == nil {
+			continue
+		}
+		logErrorLines(lg, where, err)
+		_ = lg.Close()
+	}
+}
+
+// logErrorLines 把可能多行的错误文本逐行写日志：每条日志一行、格式与其他行一致，
+// 续行缩进两格（错误文案本身就带「原因：…」「请检查…」这类换行分段）。
+func logErrorLines(lg *log.Logger, where string, err error) {
+	first := true
+	for _, line := range strings.Split(strings.ReplaceAll(err.Error(), "\r\n", "\n"), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		if first {
+			lg.Error(fmt.Sprintf("[%s] %s", where, line))
+			first = false
+			continue
+		}
+		lg.Error(fmt.Sprintf("[%s]   %s", where, line))
+	}
 }
 
 // errorText 解引用错误指针（空指针给空串）。
@@ -122,6 +164,7 @@ func main() {
 		fatal("log", fmt.Errorf("初始化工具日志失败：%v\n请检查配置 paths.historys 指向的日志目录是否存在且可写，然后重试", err))
 	}
 	defer func() { _ = logger.Close() }()
+	toolLog = logger // 交给 fatal：此后任何致命错误都要落日志
 	// 执行分界符：区分同一天多次执行，直接落盘（不经 logger，避免时间戳前缀）
 	logger.Raw("\n    " + strings.Repeat("─", 50) + "\n\n")
 	logger.Info("SSHFleet工具开始执行")
@@ -261,6 +304,7 @@ func main() {
 		fatal("log", fmt.Errorf("创建执行期日志失败\n原因：%v", err))
 	}
 	defer func() { _ = execLog.Close() }()
+	execLogRef = execLog // 交给 fatal：批量执行阶段的致命错误也要落进本次执行的档案
 	execLogPath := filepath.Join(archive.Dir, cfg.Paths.Exec)
 	logger.Info(fmt.Sprintf("执行期日志已轮转至：%s（执行结束自动切回）", execLogPath))
 
@@ -290,7 +334,7 @@ func main() {
 	reporter.Stop()
 	logger.Info(fmt.Sprintf("执行期日志已写完，切回工具日志：%s", execLogPath))
 
-	// 执行期日志收尾：连接与成败统计（对位旧引擎的「连接统计」「执行完成」记录）
+	// 汇总本轮连接与成败（写入执行期日志的收尾行）
 	var connOK, connFail, okCount, failCount int
 	for _, r := range execResults.Items {
 		if r.ConnectSuccess {
@@ -304,8 +348,10 @@ func main() {
 			failCount++
 		}
 	}
-	execLog.Info(fmt.Sprintf("连接统计：成功 %d，失败 %d", connOK, connFail))
-	execLog.Info(fmt.Sprintf("执行结束：成功 %d 台，失败 %d 台", okCount, failCount))
+	// 执行期日志收尾：连接与成败统计合成一行（对位旧引擎的「连接统计」「执行完成」两条，
+	// 正常路径能合并就合并——1000+ 节点时日志要尽量短）。
+	execLog.Info(fmt.Sprintf("执行结束：成功 %d 台，失败 %d 台；连接成功 %d，连接失败 %d",
+		okCount, failCount, connOK, connFail))
 
 	if err != nil {
 		fatal("batch", err)

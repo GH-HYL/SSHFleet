@@ -40,14 +40,19 @@ func Render(
 
 	if cfg.Enable.OutputToXlsx {
 		if err := WriteOutputXlsx(archive.Dir, results, cfg, mode, kw, categoryOf); err != nil {
-			fmt.Fprintf(os.Stderr, "%s[ERROR]%s 生成 output.xlsx 失败：%v（本次跳过，不影响执行结果）\n", ansiRed, ansiReset, err)
+			// 跳过但要留痕：终端一关，只有工具日志能说明「这次的 output.xlsx 为什么没生成」
+			msg := fmt.Sprintf("生成 output.xlsx 失败：%v（本次跳过，不影响执行结果）", err)
+			fmt.Fprintf(os.Stderr, "%s[ERROR]%s %s\n", ansiRed, ansiReset, msg)
+			logger.Error(msg)
 		} else {
 			logger.Success("生成 output.xlsx 成功")
 		}
 	}
 	if cfg.Enable.ResultsToXlsx {
 		if err := WriteResultsXlsx(archive.Dir, results, cfg, mode, kw, categoryOf); err != nil {
-			fmt.Fprintf(os.Stderr, "%s[ERROR]%s 生成 results.xlsx 失败：%v（本次跳过，不影响执行结果）\n", ansiRed, ansiReset, err)
+			msg := fmt.Sprintf("生成 results.xlsx 失败：%v（本次跳过，不影响执行结果）", err)
+			fmt.Fprintf(os.Stderr, "%s[ERROR]%s %s\n", ansiRed, ansiReset, msg)
+			logger.Error(msg)
 		} else {
 			logger.Success("生成 results.xlsx 成功")
 		}
@@ -55,6 +60,7 @@ func Render(
 
 	if err := CreateLatestHistoryLink(cfg); err != nil {
 		fmt.Fprintf(os.Stderr, "%s[警告]%s %v\n", ansiYellow, ansiReset, err)
+		logger.Warn(fmt.Sprintf("创建最新历史记录链接失败：%v", err))
 	}
 	return nil
 }
