@@ -13,8 +13,8 @@ import (
 	"sshfleet/internal/result"
 )
 
-// WriteReport 生成 <归档目录>/<paths.report>。
-func WriteReport(archiveDir string, stats *result.Stats, a *cli.Args, cfg *config.Config, argv []string) error {
+// WriteReport 生成 <归档目录>/<paths.report>。kw 用来取分类的提示语（配置里维护）。
+func WriteReport(archiveDir string, stats *result.Stats, a *cli.Args, cfg *config.Config, argv []string, kw *result.Keywords) error {
 	var b strings.Builder
 
 	b.WriteString("=============================执行结果统计报告=============================\n")
@@ -69,6 +69,14 @@ func WriteReport(archiveDir string, stats *result.Stats, a *cli.Args, cfg *confi
 			parts = append(parts, fmt.Sprintf("%s：%d", c.Category, c.Count))
 		}
 		fmt.Fprintf(&b, "  失败分类统计 -→  %s\n", strings.Join(parts, "  "))
+		if cfg.Enable.ShowCategoryTips {
+			if lines := categoryTipLines(stats.SortedFailCategories, kw); len(lines) > 0 {
+				b.WriteString("  提示：\n")
+				for _, line := range lines {
+					fmt.Fprintf(&b, "    %s\n", line)
+				}
+			}
+		}
 	}
 
 	b.WriteString("\n【IP清单统计】\n")

@@ -131,7 +131,9 @@ func PrintResult(out io.Writer, resultWriter io.Writer, r ssh.Result, mode, cate
 
 // PrintStatistics 打印统计块（对位旧 format_statistic_results_to_terminal）。
 // 配色对位旧 terminal.py：标签青 / 校验红 / 成功绿 / 失败红 / 分类黄 / 失败分类统计红 / 提示黄。
-func PrintStatistics(out io.Writer, stats *result.Stats, kw *result.Keywords) {
+// showTips 为配置开关 enable.show_category_tips：开启时在统计块末尾给出「提示：」块；
+// 关闭时退回旧行为（只给一行「常见退出码」）。
+func PrintStatistics(out io.Writer, stats *result.Stats, kw *result.Keywords, showTips bool) {
 	bar := strings.Repeat("═", 60)
 	fmt.Fprintln(out, bar)
 	fmt.Fprintf(out, "  总耗时：%.2f 秒\n", stats.GlobalCostTime)
@@ -170,7 +172,15 @@ func PrintStatistics(out io.Writer, stats *result.Stats, kw *result.Keywords) {
 		for _, item := range fallback {
 			fmt.Fprintf(out, "    %s\n", item)
 		}
-		if hints := exitCodeHintLine(stats.SortedFailCategories); hints != "" {
+		if showTips {
+			if lines := categoryTipLines(stats.SortedFailCategories, kw); len(lines) > 0 {
+				fmt.Fprintf(out, "  %s提示：%s\n", ansiYellow, ansiReset)
+				for _, line := range lines {
+					fmt.Fprintf(out, "    %s%s%s\n", ansiDim, line, ansiReset)
+				}
+			}
+		} else if hints := exitCodeHintLine(stats.SortedFailCategories); hints != "" {
+			// 关闭提示开关时保留旧行为：只给一行常见退出码含义
 			fmt.Fprintf(out, "  %s%s%s\n", ansiYellow, hints, ansiReset)
 		}
 	}
@@ -214,6 +224,32 @@ func exitCodeHintLine(categories []result.CategoryCount) string {
 		parts = append(parts, fmt.Sprintf("%d >> %s", code, exitCodeHints[code]))
 	}
 	return "常见退出码: " + strings.Join(parts, "  ")
+}
+
+// exitCodeFailTip 「执行失败(退出码N)」这条分类的固定说明。分类名里带数字，配置文件
+// 按名字查不到，所以它不由用户维护，由工具按退出码自动补上含义。
+const exitCodeFailTip = "命令自身失败，或命令没跑起来被拒（未识别出具体原因）"
+
+// categoryTipLines 汇总「提示：」块的内容：本次出现过的失败分类里，写了解释（配置文件里
+// 的 tip 字段）的各出一行「分类名：解释」。按传入顺序（已按台数降序）输出。
+func categoryTipLines(categories []result.CategoryCount, kw *result.Keywords) []string {
+	out := make([]string, 0, len(categories))
+	for _, c := range categories {
+		tip := kw.TipOf(c.Category)
+		if m := exitCodeRe.FindStringSubmatch(c.Category); m != nil {
+			tip = exitCodeFailTip
+			if code, err := strconv.Atoi(m[1]); err == nil {
+				if meaning, ok := exitCodeHints[code]; ok {
+					tip += "。退出码 " + m[1] + " = " + meaning
+				}
+			}
+		}
+		if tip == "" {
+			continue
+		}
+		out = append(out, c.Category+"："+tip)
+	}
+	return out
 }
 
 // elapsedText 耗时显示（对位旧 TimeElapsedColumn 的 H:MM:SS）。

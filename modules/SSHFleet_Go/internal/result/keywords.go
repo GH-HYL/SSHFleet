@@ -16,9 +16,11 @@ import (
 )
 
 // Category 一个分类及其关键词（顺序即匹配优先级）。
+// Tip 是可选的一句话排查建议：本次出现过该分类时，在统计块里跟着分类名提示一行。
 type Category struct {
 	Name     string   `toml:"name"`
 	Keywords []string `toml:"keywords"`
+	Tip      string   `toml:"tip"`
 }
 
 // Keywords 加载后的判据表：两块，触发条件互斥。
@@ -130,6 +132,25 @@ func (k *Keywords) KeywordsOf(name string) []string {
 		}
 	}
 	return out
+}
+
+// TipOf 取某分类的提示语（统计块里跟着分类名显示的那句排查建议）。
+// 没写 tip 的分类返回空串。同名分类跨两块时，取先出现且非空的那条。
+func (k *Keywords) TipOf(name string) string {
+	if k == nil {
+		return ""
+	}
+	for _, c := range k.items {
+		if c.Name == name && c.Tip != "" {
+			return c.Tip
+		}
+	}
+	for _, c := range k.exitItems {
+		if c.Name == name && c.Tip != "" {
+			return c.Tip
+		}
+	}
+	return ""
 }
 
 // match 第一块匹配（退出码为 nil 时用），返回第一个命中的分类；未命中返回空串。

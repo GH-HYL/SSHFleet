@@ -246,6 +246,15 @@ failed_files = 0
 expected = "账号过期"
 
 [[cases]]
+name = "握手被断开（只有 EOF，服务端没说原因）"
+error = "建立连接失败 - ssh: handshake failed: EOF"
+output = ""
+mode = "execute"
+success_files = 0
+failed_files = 0
+expected = "握手被断开"
+
+[[cases]]
 name = "登录 shell 为 nologin（中文文案）"
 exit_code = 1
 error = ""
