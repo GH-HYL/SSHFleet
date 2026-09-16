@@ -8,16 +8,18 @@
 #
 # 【怎么改】
 #   调分类效果：在对应分类的 keywords 里增删关键词，存盘后重新运行即可，不用改程序。
-#   加新分类  ：复制一整段 [[categories]]，改名和关键词，位置按上面第 2 条规则放。
+#   加新分类  ：复制一整段 [[categories]]，改名、关键词、tip，位置按上面第 2 条规则放。
 #   停用分类  ：整段删掉即可（该分类从结果里消失，它会退回显示报错原文）。
-#   加提示    ：想让某分类在统计末尾多一句"可能是什么"，给它加一行 tip（可不写）：
+#   加提示    ：每个分类都有一行 tip，写的是"这个分类可能包括哪些情况"：
 #                 tip = '账号过期/被锁、禁止登录、并发限流、链路中断'
-#               只写"这个分类可能包括哪些情况"；写了才显示，没写就不显示。
+#               本次真出现了该分类、且 tip 有内容时，统计末尾会跟着显示这一句；
+#               写空串 tip = '' 就不显示——还没想好的先留空，不影响使用。
 #               （「执行失败(退出码N)」那条由工具按退出码自动给，不用在这里写）
 #
 #   一段长这样：
 #     [[categories]]
 #     name = '分类名'                        ← 结果显示的分类名，自己能看懂就行
+#     tip = '可能包括哪些情况'                ← 统计末尾的提示，写空串 tip = '' 则不显示
 #     keywords = [ '关键词1', '关键词2' ]     ← 至少要有一个
 #
 # 【匹配规则】
@@ -42,6 +44,7 @@
 [[categories]]
 name = '网络不可达'
 # 网络层面就到不了目标机
+tip = ''
 keywords = [
     'no route to host',
     'network is unreachable',
@@ -51,6 +54,7 @@ keywords = [
 [[categories]]
 name = '握手超时'
 # 连上了但握手谈不拢，超过了配置里的连接超时
+tip = ''
 keywords = [
     '握手超时',
 ]
@@ -59,6 +63,7 @@ keywords = [
 name = '密钥不匹配'
 # 只在「没配密码、只用密钥、密钥被拒」时命中；配了密码的会落到下面的「身份验证失败」，
 # 这样才不会把「密码也被拒」这个事实盖掉
+tip = ''
 keywords = [
     '[none publickey]',
 ]
@@ -66,6 +71,7 @@ keywords = [
 [[categories]]
 name = '密钥解析失败'
 # 私钥本身有问题：格式不对、口令不对、文件内容不是私钥
+tip = ''
 keywords = [
     '解析密钥失败',
 ]
@@ -73,6 +79,7 @@ keywords = [
 [[categories]]
 name = '账号过期'
 # 目标机账号已过有效期，认证阶段就被拒绝
+tip = ''
 keywords = [
     'Your account has expired',
 ]
@@ -81,6 +88,7 @@ keywords = [
 name = '密码过期'
 # 密码必须马上修改的提示（工具没有终端、改不了，所以连接会被拒绝）。
 # 同一件事在目标机不同阶段会给两种提示，第一块和第二块各写一份。
+tip = ''
 keywords = [
     'You are required to change your password immediately',
 ]
@@ -98,6 +106,7 @@ keywords = [
 [[categories]]
 name = '连接超时'
 # 连接迟迟没有响应
+tip = ''
 keywords = [
     'i/o timeout',
 ]
@@ -105,6 +114,7 @@ keywords = [
 [[categories]]
 name = '资源耗尽'
 # 本机打开的文件太多（并发太高时可能出现）
+tip = ''
 keywords = [
     'too many open files',
 ]
@@ -112,6 +122,7 @@ keywords = [
 [[categories]]
 name = '执行超时'
 # 命令跑太久，超过配置里的执行超时
+tip = ''
 keywords = [
     '命令执行超时',
 ]
@@ -119,6 +130,7 @@ keywords = [
 [[categories]]
 name = '任务已取消'
 # 执行过程中被中断（Ctrl+C）
+tip = ''
 keywords = [
     'context canceled',
 ]
@@ -137,6 +149,7 @@ keywords = [
 [[categories]]
 name = '拒绝网络连接'
 # 目标机端口没开，或者被防火墙/安全组拒绝、重置
+tip = ''
 keywords = [
     'connection refused',
     'connection reset',
@@ -183,6 +196,7 @@ keywords = [
 name = '权限不足'
 # 登录用户没有操作权限（读写文件、执行命令等）。
 # 必须排在「身份验证失败」之后——上面那类已经把"认证被拒"的情形先认掉了
+tip = ''
 keywords = [
     'permission denied',
 ]
@@ -190,6 +204,7 @@ keywords = [
 [[categories]]
 name = 'DNS解析失败'
 # 主机名解析不出来（清单里填了域名、或目标机需要反查域名时）
+tip = ''
 keywords = [
     'no such host',
 ]
@@ -197,6 +212,7 @@ keywords = [
 [[categories]]
 name = 'SSH协议错误'
 # 对端不是 SSH 服务，或 SSH 版本谈不拢（如误连到 web 端口）
+tip = ''
 keywords = [
     'unsupported protocol',
     'junk character in version line',
@@ -206,6 +222,7 @@ keywords = [
 [[categories]]
 name = '远程路径不存在'
 # 下载模式：-d 指定的远程路径在目标机上不存在
+tip = ''
 keywords = [
     '远程路径不存在',
 ]
@@ -222,6 +239,7 @@ keywords = [
 [[categories]]
 name = '远程文件已存在'
 # 目标机上已经存在同名文件
+tip = ''
 keywords = [
     '文件已存在',
     'file already exists',
@@ -245,6 +263,7 @@ keywords = [
 [[categories]]
 name = 'sudo失败'
 # -m sudo 时，把文件搬到目标位置这一步失败
+tip = ''
 keywords = [
     'sudo mv 失败',
 ]
@@ -252,6 +271,7 @@ keywords = [
 [[categories]]
 name = '本地文件错误'
 # 本机这边的文件问题：不存在、读不了、写不了
+tip = ''
 keywords = [
     '打开本地文件失败',
     '创建本地文件失败',
@@ -268,6 +288,7 @@ keywords = [
 [[exit_code_categories]]
 name = '密码过期'
 # 密码到期，目标机不允许执行命令时打印的提示
+tip = ''
 keywords = [
     'Password change required but no TTY available',
     'WARNING: Your password has expired.',
@@ -277,6 +298,7 @@ keywords = [
 name = '登录被禁止'
 # 目标机把该账号的登录 shell 设成了 nologin（禁止登录）时打印的提示。
 # 中文、英文都留着——提示语言跟随目标机的系统语言
+tip = ''
 keywords = [
     '此帐户目前不可用。',
     'This account is currently not available.',
@@ -285,6 +307,7 @@ keywords = [
 [[exit_code_categories]]
 name = '仅允许 SFTP'
 # 目标机限制该账号只能传文件、不能执行命令时打印的提示
+tip = ''
 keywords = [
     'This service allows sftp connections only.',
 ]
