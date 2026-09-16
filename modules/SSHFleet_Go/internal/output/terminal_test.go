@@ -1,9 +1,12 @@
 package output
 
 import (
+	"bytes"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"sshfleet/internal/result"
 	"sshfleet/internal/ssh"
 )
 
@@ -91,5 +94,78 @@ func TestResultLinePassesOutputThrough(t *testing.T) {
 	}
 	if !strings.Contains(got, "disk  use%\n"+strings.Repeat("=", 50)) {
 		t.Fatalf("output 末行与分隔线之间不应多出空行：\n%s", got)
+	}
+}
+
+// 「提示：」块（2026-09-16）：内容取自配置文件里各分类的 tip 字段；
+// 只有「执行失败(退出码N)」由工具按退出码补含义（分类名带数字，配置里写不了）。
+func TestCategoryTipLines(t *testing.T) {
+	kw, err := result.LoadKeywords(filepath.Join("..", "..", "config", "error_keywords.toml"))
+	if err != nil {
+		t.Fatalf("关键词文件应可加载: %v", err)
+	}
+	cats := []result.CategoryCount{
+		{Category: "握手被断开", Count: 2},        // 配置里写了 tip
+		{Category: "密码过期", Count: 1},          // 没写 tip → 不出现
+		{Category: "执行失败(退出码1)", Count: 1},  // 内置说明 + 已知退出码含义
+		{Category: "执行失败(退出码3)", Count: 1},  // 内置说明 + 未知退出码（无含义）
+	}
+	lines := categoryTipLines(cats, kw)
+
+	if len(lines) != 3 {
+		t.Fatalf("应出 3 行（没写 tip 的不算），实为 %d 行：%v", len(lines), lines)
+	}
+	// 配置里的 tip 原样跟出（不把文案抄进测试，改配置不用改测试）
+	if want := "握手被断开：" + kw.TipOf("握手被断开"); lines[0] != want {
+		t.Errorf("第 1 行应取自配置的 tip：\n  期望 %q\n  实际 %q", want, lines[0])
+	}
+	// 「执行失败(退出码N)」由工具补含义（已知码带含义，未知码只给前半句）
+	for _, want := range []string{
+		"执行失败(退出码1)：命令自身失败，或命令没跑起来被拒（未识别出具体原因）。退出码 1 = 一般性错误",
+		"执行失败(退出码3)：命令自身失败，或命令没跑起来被拒（未识别出具体原因）",
+	} {
+		found := false
+		for _, ln := range lines {
+			if ln == want {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("缺少提示行：%q（实为 %v）", want, lines)
+		}
+	}
+}
+
+// 开关语义：开启时出「提示：」块、不再单独出「常见退出码」；
+// 关闭时退回旧行为（只出「常见退出码」）。
+func TestPrintStatisticsTipSwitch(t *testing.T) {
+	kw, err := result.LoadKeywords(filepath.Join("..", "..", "config", "error_keywords.toml"))
+	if err != nil {
+		t.Fatalf("关键词文件应可加载: %v", err)
+	}
+	stats := &result.Stats{
+		NodesTotal: 1, ResultsTotal: 1, Verify: "通过", FailCounts: 1,
+		SortedFailCategories: []result.CategoryCount{
+			{Category: "握手被断开", Count: 1},
+			{Category: "执行失败(退出码1)", Count: 1},
+		},
+	}
+
+	on := &bytes.Buffer{}
+	PrintStatistics(on, stats, kw, true)
+	if !strings.Contains(on.String(), "提示：") || !strings.Contains(on.String(), "握手被断开：") {
+		t.Errorf("开启时应有提示块：\n%s", on.String())
+	}
+	if strings.Contains(on.String(), "常见退出码") {
+		t.Errorf("开启时不应再单独出「常见退出码」（已并入提示块）：\n%s", on.String())
+	}
+
+	off := &bytes.Buffer{}
+	PrintStatistics(off, stats, kw, false)
+	if strings.Contains(off.String(), "提示：") {
+		t.Errorf("关闭时不应有提示块：\n%s", off.String())
+	}
+	if !strings.Contains(off.String(), "常见退出码: 1 >> 一般性错误") {
+		t.Errorf("关闭时应保留旧的「常见退出码」行：\n%s", off.String())
 	}
 }

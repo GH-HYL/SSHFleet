@@ -317,7 +317,7 @@ func main() {
 	// ---- 步骤 9：结果统计 + 错误分类 -----------------------------------
 	stats := result.Statistics(execResults, nodes, args, errorKeywords, execStart, time.Now())
 	logger.Success("计算统计结果信息成功")
-	output.PrintStatistics(os.Stdout, stats, errorKeywords)
+	output.PrintStatistics(os.Stdout, stats, errorKeywords, cfg.Enable.ShowCategoryTips)
 
 	// ---- 步骤 10：呈现 / 报告 / xlsx / 归档 -----------------------------
 	if err := output.Render(archive, stats, execResults, args, cfg, errorKeywords, os.Args, reporter.Category, logger); err != nil {

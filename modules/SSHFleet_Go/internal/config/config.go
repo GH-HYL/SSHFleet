@@ -35,8 +35,9 @@ type Execution struct {
 }
 
 type Enable struct {
-	OutputToXlsx  bool `toml:"output_to_xlsx"`
-	ResultsToXlsx bool `toml:"results_to_xlsx"`
+	OutputToXlsx    bool `toml:"output_to_xlsx"`
+	ResultsToXlsx   bool `toml:"results_to_xlsx"`
+	ShowCategoryTips bool `toml:"show_category_tips"`
 }
 
 // Paths：旧 paths.keywords / paths.logs / paths.files 三段并为一层（spec D6）。
@@ -122,6 +123,7 @@ func validate(cfg *Config, md toml.MetaData) error {
 		{"execution.timeout_transfer", definedInt(md, "execution", "timeout_transfer")},
 		{"enable.output_to_xlsx", definedStr(md, "enable", "output_to_xlsx")},
 		{"enable.results_to_xlsx", definedStr(md, "enable", "results_to_xlsx")},
+		{"enable.show_category_tips", definedStr(md, "enable", "show_category_tips")},
 		{"paths.error_keywords", definedStr(md, "paths", "error_keywords")},
 		{"paths.dangerous_keywords", definedStr(md, "paths", "dangerous_keywords")},
 		{"paths.historys", definedStr(md, "paths", "historys")},
