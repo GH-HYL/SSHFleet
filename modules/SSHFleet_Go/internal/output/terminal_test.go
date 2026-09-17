@@ -105,10 +105,10 @@ func TestCategoryTipLines(t *testing.T) {
 		t.Fatalf("关键词文件应可加载: %v", err)
 	}
 	cats := []result.CategoryCount{
-		{Category: "握手被断开", Count: 2},        // 配置里写了 tip
-		{Category: "密码过期", Count: 1},          // 没写 tip → 不出现
-		{Category: "执行失败(退出码1)", Count: 1},  // 内置说明 + 已知退出码含义
-		{Category: "执行失败(退出码3)", Count: 1},  // 内置说明 + 未知退出码（无含义）
+		{Category: "握手被断开", Count: 2},      // 配置里写了 tip
+		{Category: "密码过期", Count: 1},       // 没写 tip → 不出现
+		{Category: "执行失败(退出码1)", Count: 1}, // 内置说明 + 已知退出码含义
+		{Category: "执行失败(退出码3)", Count: 1}, // 内置说明 + 未知退出码（无含义）
 	}
 	lines := categoryTipLines(cats, kw)
 

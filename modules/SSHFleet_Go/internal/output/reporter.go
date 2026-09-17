@@ -209,7 +209,7 @@ const (
 //
 // 五级顺序：连接结果 → 执行结果 → 失败原因原文 → 输出明细 → 分类。
 // 「失败原因」与「输出明细」是本次补齐的两级：结果字段里一直有完整报文
-//（Error 是原因原文，Output 是输出/明细），但此前只有连接失败那一条被写进日志。
+// （Error 是原因原文，Output 是输出/明细），但此前只有连接失败那一条被写进日志。
 func (r *Reporter) logNode(res ssh.Result, category string) {
 	el := r.logger
 	if el == nil {
