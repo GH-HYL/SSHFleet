@@ -146,7 +146,7 @@ func checkUploadConcurrency(args *cli.Args, cfg *config.Config, in *common.Inter
 	if allowed == 0 {
 		return nil
 	}
-	fmt.Printf("%s上传文件总大小 %s，建议并发数为 %d%s\n", colorYellow, formatSize(size), allowed, colorReset)
+	fmt.Printf("%s上传文件总大小 %s，建议并发数为 %d%s\n", colorYellow, common.FormatBytes(size), allowed, colorReset)
 	yes, err := in.Confirm(fmt.Sprintf("是否使用建议并发数 %d ？", allowed), true)
 	if err != nil {
 		// EOF/取消：对位旧 get_user_confirmation 直接取消退出；不在子模块内自行
@@ -225,18 +225,4 @@ func checkConcurrencyThreshold(size int64, cfg *config.Config) int {
 	default:
 		return t.MediumConcurrency
 	}
-}
-
-// formatSize 文件大小人性化（对位旧 text_utils.format_size）。
-func formatSize(n int64) string {
-	const unit = 1024
-	if n < unit {
-		return fmt.Sprintf("%d B", n)
-	}
-	div, exp := int64(unit), 0
-	for m := n / unit; m >= unit; m /= unit {
-		div *= unit
-		exp++
-	}
-	return fmt.Sprintf("%.1f %cB", float64(n)/float64(div), "KMGTPE"[exp])
 }

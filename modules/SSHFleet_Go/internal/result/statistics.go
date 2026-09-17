@@ -36,12 +36,14 @@ type Stats struct {
 	GlobalCostTime       float64
 }
 
-// ModeOf 由命令行参数确定执行模式（execute / upload / download）。
+// ModeOf 由命令行参数确定执行类别（execute / upload / download）。
+// 命令与脚本同归 execute——统计与展示只分「执行 / 上传 / 下载」三类。
+// 四类模式名本身由 cli.Args.ModeName 单点判定，此处只做归并。
 func ModeOf(a *cli.Args) string {
-	switch {
-	case a.Upload != "":
+	switch a.ModeName() {
+	case "upload":
 		return "upload"
-	case a.Download != "":
+	case "download":
 		return "download"
 	default:
 		return "execute"

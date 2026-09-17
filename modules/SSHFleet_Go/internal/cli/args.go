@@ -78,6 +78,25 @@ func (a *Args) KeyMode() KeyMode {
 	return KeyModeUniversal
 }
 
+// ModeName 返回本次运行的模式名（command / script / upload / download）。
+// 四个值以 command > script > upload > download 的优先级判定；都没给时返回空串
+// （正常流程走不到——参数合规检查已保证四者必有一个，空串只作防御）。
+//
+// 全工具单一判据点：归档目录名、报告、日志文案此前各自重判一遍同一组字段。
+func (a *Args) ModeName() string {
+	switch {
+	case a.Command != "":
+		return "command"
+	case a.Script != "":
+		return "script"
+	case a.Upload != "":
+		return "upload"
+	case a.Download != "":
+		return "download"
+	}
+	return ""
+}
+
 // Parse 解析命令行并补默认值。raw 是 os.Args[1:]，version 是入口定义的版本号（帮助显示用）。
 func Parse(cfg *config.Config, version string, raw []string) (*Args, error) {
 	fs := pflag.NewFlagSet("SSHFleet", pflag.ContinueOnError)

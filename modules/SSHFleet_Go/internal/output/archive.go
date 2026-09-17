@@ -103,7 +103,7 @@ func CreateLatestHistoryLink(cfg *config.Config) error {
 			return fmt.Errorf("清理旧的 %s 失败：%v", linkName, err)
 		}
 	} else if _, err := os.Lstat(linkName); err == nil {
-		fmt.Printf("%s警告:%s 当前目录已存在同名文件 %s，跳过链接创建（如需快捷入口，删除该文件后重跑）\n", ansiYellow, ansiReset, linkName)
+		fmt.Fprintf(os.Stderr, "%s[警告]%s 当前目录已存在同名文件 %s，跳过链接创建（如需快捷入口，删除该文件后重跑）\n", ansiYellow, ansiReset, linkName)
 		return nil
 	}
 	if err := createDirLink(linkName, latest); err != nil {
@@ -133,17 +133,11 @@ func absoluteOrSelf(p string) string {
 }
 
 // archiveDirName 归档目录名：<时间>_<模式>[_备注]（对位旧命名）。
+// 模式名由 cli.Args.ModeName 单点判定，此处不再重判 Args 的字段。
 func archiveDirName(cfg *config.Config, a *cli.Args) (string, error) {
-	modeName := "unknown"
-	switch {
-	case a.Command != "":
-		modeName = "command"
-	case a.Script != "":
-		modeName = "script"
-	case a.Upload != "":
-		modeName = "upload"
-	case a.Download != "":
-		modeName = "download"
+	modeName := a.ModeName()
+	if modeName == "" {
+		modeName = "unknown" // 防御：参数合规检查已保证四者必有其一
 	}
 	name := fmt.Sprintf("%s_%s", time.Now().Format("2006-01-02_15-04-05"), modeName)
 	if remark := strings.TrimSpace(a.Remark); remark != "" {
