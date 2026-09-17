@@ -70,6 +70,13 @@ func Run(ctx context.Context, a *cli.Args, cfg *config.Config, nodes *nodelist.N
 	}
 	logger.Info(fmt.Sprintf("开始执行任务：节点 %d 个，并发 %d，模式 %s", len(tasks), concurrency, execModeName(a)))
 
+	// 交代命令被包成了什么（旧 Python builder.py 的「完整命令拼接完成」对应物）：
+	// 命令走 stdin 通道后，命令行里只剩固定形态的 bash -lc，事后看日志查不出
+	// 「原始命令是什么、被包成了哪一行」，脚本模式连解释器与身份都无从确认。
+	for _, line := range commandDescription(a, tasks) {
+		logger.Success(line)
+	}
+
 	agg := NewAggregator(len(tasks), hooks.OnProgress)
 	// 先渲染一次 0% 的初始界面：命令模式没有字节级进度回调，首个进度事件要等
 	// 第一个节点完成才来，此前屏幕上没有任何「执行中」的反馈（用户 2026-09-15 裁定）。
@@ -179,6 +186,58 @@ func execModeName(a *cli.Args) string {
 		return "下载"
 	}
 	return "未知"
+}
+
+// commandDescription 命令/脚本模式下「命令被包成了什么」的日志行。
+// 上传 / 下载模式没有命令可交代，返回 nil。
+//
+// 命令原文取自首个任务（同一轮下发的命令对所有节点相同，节点间不做区分）。
+func commandDescription(a *cli.Args, tasks []*task) []string {
+	if len(tasks) == 0 || (a.Command == "" && a.Script == "") {
+		return nil
+	}
+
+	interpreter := ""
+	if a.Script != "" {
+		interpreter = "bash"
+		if path.Ext(a.Script) == ".py" {
+			interpreter = "python3"
+		}
+	}
+
+	// 脚本正文从首个任务取（buildTasks 已读盘并按 CRLF 清理），不再读第二遍
+	body := tasks[0].stdin
+	if a.Command != "" {
+		body = ""
+	}
+
+	text := ssh.DescribeCommand(ssh.DescribeInput{
+		Command:     a.Command,
+		ScriptPath:  a.Script,
+		ScriptBody:  body,
+		Interpreter: interpreter,
+		Identity:    identityText(a.Mode),
+		NoBash:      a.NoBash,
+		AsRoot:      a.Mode == "sudo",
+	})
+	if text == "" {
+		return nil
+	}
+
+	lines := []string{"完整命令拼接完成"}
+	for _, ln := range strings.Split(text, "\n") {
+		lines = append(lines, "  "+ln)
+	}
+	return lines
+}
+
+// identityText 执行身份的中文说法（日志用）。-m 的取值合法性已由 CheckArguments 保证，
+// 这里只翻文案。
+func identityText(mode string) string {
+	if mode == "sudo" {
+		return "root（sudo 提权）"
+	}
+	return "登录用户（direct）"
 }
 
 func seconds(v int) time.Duration { return time.Duration(v) * time.Second }
