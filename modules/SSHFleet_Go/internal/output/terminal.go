@@ -75,11 +75,6 @@ func FormatSpeed(bytesPerSec float64) string {
 	}
 }
 
-// FormatBytes 字节数显示（对位旧 rich DownloadColumn 的「已传/总量」形态）。
-func FormatBytes(n int64) string {
-	return formatSize(n)
-}
-
 // ResultLine 单条结果的明细文本（对位旧 format_result_line）。
 // 字段顺序（用户 2026-09-15 裁定）：连接 → 执行/错误 → 分类 → output 内容 → 分隔线。
 // 分类提到执行下面（一眼看出结果定性），output 原文放最下面（长文本不夹在状态行中间）。
@@ -113,20 +108,6 @@ func ResultLine(r ssh.Result, mode string, category string) string {
 
 	lines = append(lines, strings.Repeat("=", 50))
 	return strings.Join(lines, "\n")
-}
-
-// PrintResult 输出单条结果：写 output.txt（各模式），命令模式同时打印到终端。
-func PrintResult(out io.Writer, resultWriter io.Writer, r ssh.Result, mode, category string) error {
-	formatted := ResultLine(r, mode, category)
-	if resultWriter != nil {
-		if _, err := fmt.Fprintln(resultWriter, formatted); err != nil {
-			return err
-		}
-	}
-	if mode == "execute" {
-		_, _ = fmt.Fprintln(out, formatted)
-	}
-	return nil
 }
 
 // PrintStatistics 打印统计块（对位旧 format_statistic_results_to_terminal）。
@@ -266,17 +247,3 @@ func DisplayWidth(s string) int { return common.DisplayWidth(s) }
 
 // trimToWidth 按显示宽度截断到 limit 列。
 func trimToWidth(s string, limit int) string { return common.TrimToWidth(s, limit) }
-
-// formatSize 文件大小人性化（对位旧 text_utils.format_size）。
-func formatSize(n int64) string {
-	const unit = 1024
-	if n < unit {
-		return fmt.Sprintf("%d B", n)
-	}
-	div, exp := int64(unit), 0
-	for m := n / unit; m >= unit; m /= unit {
-		div *= unit
-		exp++
-	}
-	return fmt.Sprintf("%.1f %cB", float64(n)/float64(div), "KMGTPE"[exp])
-}

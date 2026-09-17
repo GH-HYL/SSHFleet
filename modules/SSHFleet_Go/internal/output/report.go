@@ -24,18 +24,19 @@ func WriteReport(archiveDir string, stats *result.Stats, a *cli.Args, cfg *confi
 	fmt.Fprintf(&b, "\n【执行命令】 \n  %s\n", strings.Join(argv, " "))
 
 	b.WriteString("\n【执行参数】\n")
-	switch {
-	case a.Command != "":
+	// 模式名由 cli.Args.ModeName 单点判定，此处只做「模式 → 报告段落」的映射。
+	switch a.ModeName() {
+	case "command":
 		b.WriteString("  执行模式： 命令模式\n")
 		fmt.Fprintf(&b, "  执行命令： %s\n", a.Command)
-	case a.Script != "":
+	case "script":
 		b.WriteString("  执行模式： 脚本模式\n")
 		fmt.Fprintf(&b, "  脚本路径： %s\n", a.Script)
-	case a.Upload != "":
+	case "upload":
 		b.WriteString("  执行模式： 上传模式\n")
 		fmt.Fprintf(&b, "  本地路径： %s\n", a.Upload)
 		fmt.Fprintf(&b, "  远程路径： %s\n", a.Path)
-	case a.Download != "":
+	case "download":
 		// spec D37：旧版完全没有下载模式分支
 		b.WriteString("  执行模式： 下载模式\n")
 		fmt.Fprintf(&b, "  远程路径： %s\n", a.Download)

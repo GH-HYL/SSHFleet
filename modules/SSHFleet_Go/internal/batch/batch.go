@@ -165,15 +165,17 @@ func buildTasks(a *cli.Args, nodes *nodelist.Nodes) ([]*task, []string, error) {
 	return tasks, notices, nil
 }
 
+// execModeName 模式名的中文文案（日志用）。模式本身由 cli.Args.ModeName 判定，
+// 这里只做「模式名 → 文案」的映射，不再重判 Args 的字段。
 func execModeName(a *cli.Args) string {
-	switch {
-	case a.Command != "":
+	switch a.ModeName() {
+	case "command":
 		return "命令"
-	case a.Script != "":
+	case "script":
 		return "脚本"
-	case a.Upload != "":
+	case "upload":
 		return "上传"
-	case a.Download != "":
+	case "download":
 		return "下载"
 	}
 	return "未知"
