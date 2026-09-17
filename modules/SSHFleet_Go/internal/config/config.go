@@ -35,8 +35,8 @@ type Execution struct {
 }
 
 type Enable struct {
-	OutputToXlsx    bool `toml:"output_to_xlsx"`
-	ResultsToXlsx   bool `toml:"results_to_xlsx"`
+	OutputToXlsx     bool `toml:"output_to_xlsx"`
+	ResultsToXlsx    bool `toml:"results_to_xlsx"`
 	ShowCategoryTips bool `toml:"show_category_tips"`
 }
 
