@@ -11,7 +11,24 @@ import (
 	"sshfleet/internal/cli"
 	"sshfleet/internal/config"
 	"sshfleet/internal/result"
+	"sshfleet/internal/ssh"
 )
+
+// DisplayCommand 把 argv（含程序名）还原成能**照抄重跑**的一条命令行。
+//
+// 为什么不能直接空格拼接：本机 shell 早就把引号剥掉了——用户敲的
+// `-c 'who -b'` 到程序手里是 [prog -f x.csv -c "who -b"]，平铺打印成
+// `-c who -b` 就是另一条命令（`-b` 会被当成多余参数），事后照着重跑跑不起来。
+// 这里按「会不会被 shell 二次拆词」逐段补回引号（见 ssh.QuoteForShell）。
+//
+// 仅用于报告与日志展示，不参与解析、不影响执行。
+func DisplayCommand(argv []string) string {
+	parts := make([]string, 0, len(argv))
+	for _, s := range argv {
+		parts = append(parts, ssh.QuoteForShell(s))
+	}
+	return strings.Join(parts, " ")
+}
 
 // WriteReport 生成 <归档目录>/<paths.report>。kw 用来取分类的提示语（配置里维护）。
 func WriteReport(archiveDir string, stats *result.Stats, a *cli.Args, cfg *config.Config, argv []string, kw *result.Keywords) error {
@@ -21,7 +38,7 @@ func WriteReport(archiveDir string, stats *result.Stats, a *cli.Args, cfg *confi
 	fmt.Fprintf(&b, "执行开始时间： %s\n", stats.GlobalStartTime.Format("2006-01-02 15:04:05.000000"))
 	fmt.Fprintf(&b, "执行结束时间： %s\n", stats.GlobalStopTime.Format("2006-01-02 15:04:05.000000"))
 	fmt.Fprintf(&b, "执行耗时： %.2f  秒\n", stats.GlobalCostTime)
-	fmt.Fprintf(&b, "\n【执行命令】 \n  %s\n", strings.Join(argv, " "))
+	fmt.Fprintf(&b, "\n【执行命令】 \n  %s\n", DisplayCommand(argv))
 
 	b.WriteString("\n【执行参数】\n")
 	// 模式名由 cli.Args.ModeName 单点判定，此处只做「模式 → 报告段落」的映射。

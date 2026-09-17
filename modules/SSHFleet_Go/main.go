@@ -169,7 +169,9 @@ func main() {
 	logger.Raw("\n    " + strings.Repeat("─", 50) + "\n\n")
 	logger.Info("SSHFleet工具开始执行")
 	logger.Info(fmt.Sprintf("工作路径：%s", func() string { wd, _ := os.Getwd(); return wd }()))
-	logger.Info(fmt.Sprintf("原始命令行参数：%v", os.Args))
+	// 逐段补回引号：argv 里早没了引号，平铺打印会让 `-c 'who -b'` 这类命令
+	// 在日志里变成另一条命令（详情见 output.DisplayCommand）
+	logger.Info(fmt.Sprintf("原始命令行参数：%s", output.DisplayCommand(os.Args)))
 	logger.Info(fmt.Sprintf("日志目录：%s，工具日志文件名：%s", cfg.Paths.Historys, cfg.Paths.Tool))
 
 	// ---- 步骤 3：解析命令行 ------------------------------------------

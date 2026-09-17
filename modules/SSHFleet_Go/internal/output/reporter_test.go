@@ -280,3 +280,48 @@ func TestReporterLogsFailureEvidence(t *testing.T) {
 		t.Fatalf("第 %d 行不该写入（已超上限）：\n%s", maxOutputLines, logText4)
 	}
 }
+
+// DisplayCommand：报告与工具日志里的命令行必须能照抄重跑。
+//
+// argv 里早没了引号（本机 shell 剥掉了），平铺拼接会让 `-c 'who -b'` 变成
+// `-c who -b`——那是另一条命令，`-b` 会被当成多余参数。
+func TestDisplayCommand(t *testing.T) {
+	cases := []struct {
+		name string
+		argv []string
+		want string
+	}{
+		{
+			name: "带空格的命令补回引号",
+			argv: []string{"SSHFleet.exe", "-f", "nodes.csv", "-c", "who -b"},
+			want: "SSHFleet.exe -f nodes.csv -c 'who -b'",
+		},
+		{
+			name: "纯单字参数不加引号",
+			argv: []string{"SSHFleet.exe", "-f", "nodes.csv", "-c", "pwd"},
+			want: "SSHFleet.exe -f nodes.csv -c pwd",
+		},
+		{
+			name: "内联清单的逗号不加引号",
+			argv: []string{"SSHFleet.exe", "-f", "172.28.118.49,22,root", "-c", "id"},
+			want: "SSHFleet.exe -f 172.28.118.49,22,root -c id",
+		},
+		{
+			name: "带空格的路径补回引号",
+			argv: []string{"SSHFleet.exe", "-u", "D:/My Dir/a.txt", "-p", "/opt/"},
+			want: "SSHFleet.exe -u 'D:/My Dir/a.txt' -p /opt/",
+		},
+		{
+			name: "空参数给一对引号（不留看不见的空位）",
+			argv: []string{"SSHFleet.exe", "-k"},
+			want: "SSHFleet.exe -k",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := DisplayCommand(c.argv); got != c.want {
+				t.Fatalf("应为 %q，实际 %q", c.want, got)
+			}
+		})
+	}
+}
