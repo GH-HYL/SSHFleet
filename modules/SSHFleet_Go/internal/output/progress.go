@@ -25,6 +25,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"sshfleet/internal/batch"
+	"sshfleet/internal/common"
 )
 
 const (
@@ -365,7 +366,7 @@ func (m progressModel) transferView() string {
 	fmt.Fprintf(&b, "%s%s  %s  %s  %s/%s\n",
 		indent, styleTitle.Render(label), m.barView(m.totalBar, m.progress()),
 		styleDim.Render(FormatSpeed(m.totalSpeed)),
-		FormatBytes(m.bytesDone), FormatBytes(m.bytesTotal))
+		common.FormatBytes(m.bytesDone), common.FormatBytes(m.bytesTotal))
 
 	fmt.Fprintf(&b, "%s%s  %s  %s  %d/%d  %s %s\n",
 		indent, styleTitle.Render("节点进度"), m.barView(m.nodeBar, m.nodeProgress()),

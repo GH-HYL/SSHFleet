@@ -25,6 +25,7 @@ import (
 	"github.com/mattn/go-isatty"
 
 	"sshfleet/internal/batch"
+	"sshfleet/internal/common"
 	"sshfleet/internal/log"
 	"sshfleet/internal/result"
 	"sshfleet/internal/ssh"
@@ -111,13 +112,16 @@ func (r *Reporter) Progress(s batch.Snapshot) {
 // Result 单节点结果：写 output.txt（各模式）+ 命令模式打终端明细 + 写执行期日志。
 func (r *Reporter) Result(res ssh.Result) {
 	category := r.classify(res)
+	line := ResultLine(res, r.mode, category)
 
 	// output.txt 只落文件：终端明细改经 printAbove（进度界面上方），
 	// 与进度条各占一块区域、互不覆盖。
-	_ = PrintResult(io.Discard, r.outFile, res, r.mode, category)
+	if r.outFile != nil {
+		_, _ = fmt.Fprintln(r.outFile, line)
+	}
 
 	if r.mode == "execute" {
-		r.printAbove(ResultLine(res, r.mode, category))
+		r.printAbove(line)
 	}
 	r.logNode(res, category)
 }
@@ -244,7 +248,7 @@ func (r *Reporter) logNode(res ssh.Result, category string) {
 				note, write = fmt.Sprintf("（有失败项 %d 个）", res.FailedFiles), el.Warn
 			}
 			write(fmt.Sprintf("%s%s完成：成功 %d/%d 个文件%s，共 %s，耗时 %.3fs",
-				ip, action, res.SuccessFiles, res.TotalFiles, note, humanBytes(res.TotalBytes), res.ExecCostTime))
+				ip, action, res.SuccessFiles, res.TotalFiles, note, common.FormatBytes(res.TotalBytes), res.ExecCostTime))
 		default:
 			if res.ExitCode != nil && *res.ExitCode == 0 {
 				el.Success(fmt.Sprintf("%s命令执行成功，退出码 0，耗时 %.3fs", ip, res.ExecCostTime))
@@ -280,10 +284,10 @@ func (r *Reporter) successDetail(res ssh.Result) string {
 	switch r.mode {
 	case "upload":
 		return fmt.Sprintf("%s上传 %d/%d 个文件（%s），耗时 %.3fs",
-			conn, res.SuccessFiles, res.TotalFiles, humanBytes(res.TotalBytes), res.ExecCostTime)
+			conn, res.SuccessFiles, res.TotalFiles, common.FormatBytes(res.TotalBytes), res.ExecCostTime)
 	case "download":
 		return fmt.Sprintf("%s下载 %d/%d 个文件（%s），耗时 %.3fs",
-			conn, res.SuccessFiles, res.TotalFiles, humanBytes(res.TotalBytes), res.ExecCostTime)
+			conn, res.SuccessFiles, res.TotalFiles, common.FormatBytes(res.TotalBytes), res.ExecCostTime)
 	default:
 		return fmt.Sprintf("%s执行 %.3fs", conn, res.ExecCostTime)
 	}
@@ -404,22 +408,6 @@ func truncateLine(s string) string {
 		return s
 	}
 	return string([]rune(s)[:maxOutputLineLen]) + "…"
-}
-
-// humanBytes 字节数转人类可读（0 显示 0 B）。
-func humanBytes(n int64) string {
-	switch {
-	case n <= 0:
-		return "0 B"
-	case n >= 1<<30:
-		return fmt.Sprintf("%.2f GB", float64(n)/(1<<30))
-	case n >= 1<<20:
-		return fmt.Sprintf("%.2f MB", float64(n)/(1<<20))
-	case n >= 1<<10:
-		return fmt.Sprintf("%.2f KB", float64(n)/(1<<10))
-	default:
-		return fmt.Sprintf("%d B", n)
-	}
 }
 
 // isTerminal 输出是否连在终端上（含 Windows 的 cygwin/mintty 管道）。
