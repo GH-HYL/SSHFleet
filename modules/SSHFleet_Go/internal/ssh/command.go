@@ -1,12 +1,20 @@
 package ssh
 
 import (
-	"fmt"
 	"strings"
 )
 
-// 语言变量前缀：收进登录 shell 内部，export 确保对内部所有命令及子进程生效
-// （C.UTF-8 是 POSIX 标准，所有 Linux 发行版内置支持）。
+// 语言变量前缀：收进登录 shell 内部，export 确保对内部所有命令及子进程生效。
+//
+// 为什么必须显式 export：SSH 非交互会话拿到的是目标机默认的 locale，各机器不一样
+// ——有的 C、有的 POSIX、有的跟随发行版设置，于是同一条命令在不同机器上输出的
+// 字符编码与排序规则都不同，中文与 UTF-8 内容会变成乱码或按字节处理。这里强制成
+// 同一个 UTF-8，让「同一批节点上跑同一条命令」的输出形态保持一致、可比对。
+// （en_US.UTF-8 是各发行版普遍内置的 locale，取它比 C.UTF-8 更稳。）
+//
+// 注意这一层与登录 shell 是**两件独立的事**：即使哪天不套 bash -lc 了，
+// 这个 export 仍然要保留——它解决的是「目标环境 locale 不一致」，
+// 不是「命令找不到」。
 const envPrefix = "export LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8;"
 
 // 执行模式（只用到这三种取值；由调用方从命令行参数解读后传入）。
@@ -20,6 +28,34 @@ const (
 //
 // 只收命令构建真正需要的几个值，不收整份命令行参数——本包是传输层，
 // 不该认识参数载体（否则想单独测它得先凑齐一整套参数）。
+//
+// # 为什么要套一层 bash -lc
+//
+// 这不是预防性的防御，是**修过一个实际踩到的 bug**：
+//
+// 目标机用非交互方式拉起命令时，PATH 往往只剩 `/usr/bin:/bin` 这类极简值——
+// 用户 `.bashrc` 里那些补 PATH 的语句只在交互分支里跑，非交互根本不执行。
+// 结果是 `sudo`（常在 `/usr/sbin`、`/usr/local/bin`）和 `python3`
+// （常在 `/usr/local/bin`、`/opt/...`）找不到，报 `command not found`，
+// 而这跟命令本身对不对毫无关系。
+//
+// `bash -lc` 起的是**登录 shell**，会读 `/etc/profile` 与 `~/.bash_profile`／
+// `~/.profile`，PATH 因此补全，`sudo`／解释器都能被定位到——登录 shell 在完整
+// 环境里执行，没有任何一个组件裸露在极简 PATH 下。这是它唯一的存在理由。
+//
+// # 各行为分别为了什么
+//
+//   - `bash -lc`：定位 PATH（上面这条）。没有它，目标机的 PATH 差异会直接
+//     让命令跑不起来。
+//   - `export LC_ALL/LANG`：统一目标机 locale（见 envPrefix 的说明）。
+//     与 PATH 是两回事，即使去掉登录 shell 也该保留。
+//   - stdin 直喂内容：命令原文 / 脚本正文不进命令行，只经标准输入送下去。
+//     好处是内容不参与 shell 解析、没有引号转义套娃、也没有命令行长度上限。
+//   - 内层 `[sudo ]bash|python3`：sudo 时提权的是**解释器本身**
+//     （`sudo bash` 而非 `sudo` 单独一条命令），保证命令/脚本整体以 root 跑；
+//     脚本模式按扩展名换 python3。
+//   - `--nobash` 时全部绕开：用户在明确要求「原样下发」，此时不该由工具
+//     代他决定环境与身份。
 //
 // 参数：
 //   - command:     命令模式下的命令原文（脚本模式传空）
@@ -88,52 +124,59 @@ func needsQuoting(s string) bool {
 	return false
 }
 
-// DescribeCommand 交代一次下发「包成了什么」——供日志与报告打印，不参与下发。
+// DescribeCommand 交代「交给 SSH 执行的命令」是什么——供日志打印，不参与下发。
 //
-// 重构前（旧 Python builder.py）这里有一整段「完整命令拼接完成 / 原始命令 / 处理方式 /
-// 最终命令」的日志，重构后连同 base64 通道一起没了：命令怎么被包进登录 shell、
-// 内容走哪条通道，事后全查不到。本函数把这层黑箱重新说清楚。
+// 命令与脚本内容都从 stdin 送，命令行里只剩固定形态的登录 shell，所以「内容是什么」
+// 本身在日志里是看不见的，必须显式交代。这里不描述包装过程（不含「原始 / 最终」这类
+// 前后对照），只给两个实际发生的事实：命令行发的是什么、stdin 送的是什么。
 //
 // 下发行由本包自己拼（与 BuildCommand 同源），调用方只给业务侧的几项——
 // bash -lc 的形态是本包的格式，散到调用方就会两处各写一份、各自漂移。
-//
-// 返回多行文本，调用方逐行写日志即可。
 func DescribeCommand(a DescribeInput) string {
-	identity := a.Identity
-	if identity == "" {
-		identity = "登录用户"
-	}
-
-	// --nobash 为命令模式专用：原样下发，不套登录 shell、不喂 stdin
+	// --nobash：不套登录 shell、不经 stdin 通道，内容直接就是命令行
 	if a.NoBash && a.Command != "" {
-		return strings.Join([]string{
-			"处理方式：--nobash 原样下发，不套登录 shell、不经 stdin 通道",
-			"下发命令：" + a.Command,
-		}, "\n")
+		return "交给 SSH 执行：\n" +
+			"  命令行： " + a.Command + "\n" +
+			"  说明：   --nobash 原样执行，不套登录 shell、不经 stdin"
 	}
 
-	inner := loginInner(a.ScriptBody != "", a.Interpreter, a.AsRoot)
-	loginLine := "bash -lc " + shellQuote(inner)
+	loginLine := "bash -lc " + shellQuote(loginInner(a.ScriptBody != "", a.Interpreter, a.AsRoot))
 
 	if a.ScriptBody != "" {
-		lines := []string{
-			"处理方式：脚本内容经 stdin 直喂（写进会话输入通道，不进命令行）",
-			"执行身份：" + identity + "，解释器：" + a.Interpreter,
-			"下发行（命令行）：" + loginLine,
-			"下发内容（经 stdin）：脚本 " + a.ScriptPath,
-		}
-		return strings.Join(append(lines, scriptPreview(a.ScriptBody)...), "\n")
+		return "交给 SSH 执行：\n" +
+			"  命令行： " + loginLine + "\n" +
+			"  stdin：  脚本 " + a.ScriptPath + " 的内容（" + a.Interpreter + " 解释）\n" +
+			"  说明：   先导入 " + envNote() + "，再以 " + interpreterWho(a.AsRoot) + " 执行 stdin 送来的脚本"
 	}
 
 	if a.Command != "" {
-		return strings.Join([]string{
-			"处理方式：命令文本经 stdin 直喂（不进命令行），由内层 shell 读取执行",
-			"执行身份：" + identity,
-			"下发行（命令行）：" + loginLine,
-			"下发内容（经 stdin）：" + a.Command,
-		}, "\n")
+		return "交给 SSH 执行：\n" +
+			"  命令行： " + loginLine + "\n" +
+			"  stdin：  " + a.Command + "\n" +
+			"  说明：   先导入 " + envNote() + "，再把 stdin 送来的命令交给 " + shellWho(a.AsRoot) + " 执行"
 	}
 	return ""
+}
+
+// envNote 命令行里导入的环境变量（对位 envPrefix 的内容，不重复写一遍字面量）。
+func envNote() string {
+	return "LC_ALL / LANG（UTF-8）"
+}
+
+// shellWho 执行命令的 shell（含提权说明）。
+func shellWho(asRoot bool) string {
+	if asRoot {
+		return "root 身份的 bash（sudo）"
+	}
+	return "登录用户的 bash"
+}
+
+// interpreterWho 执行脚本的解释器（含提权说明）。
+func interpreterWho(asRoot bool) string {
+	if asRoot {
+		return "root 身份"
+	}
+	return "登录用户身份"
 }
 
 // loginInner 拼登录 shell 的内层命令（env 前缀 + [sudo ]解释器）。
@@ -152,31 +195,9 @@ func loginInner(isScript bool, interpreter string, asRoot bool) string {
 // DescribeInput DescribeCommand 的入参：只收打印真正需要的几项。
 type DescribeInput struct {
 	Command     string // 命令模式：命令原文
-	ScriptPath  string // 脚本模式：脚本文件路径（正文太长，抬头里报路径）
-	ScriptBody  string // 脚本模式：脚本正文（只打印前几行）
+	ScriptPath  string // 脚本模式：脚本文件路径
+	ScriptBody  string // 脚本模式：脚本正文（非空即判定为脚本模式）
 	Interpreter string // 脚本模式：bash / python3
-	Identity    string // 执行身份文案（空则按「登录用户」）
 	NoBash      bool   // --nobash 命令模式
 	AsRoot      bool   // -m sudo（拼下发行用）
-}
-
-// maxPreviewLines 脚本正文的打印上限：脚本可能有几百行，日志只要交代形态。
-const maxPreviewLines = 10
-
-// scriptPreview 脚本正文的前若干行（超出只报剩余行数）。
-func scriptPreview(body string) []string {
-	lines := strings.Split(strings.ReplaceAll(body, "\r\n", "\n"), "\n")
-	head := lines
-	rest := 0
-	if len(lines) > maxPreviewLines {
-		head, rest = lines[:maxPreviewLines], len(lines)-maxPreviewLines
-	}
-	out := make([]string, 0, len(head)+1)
-	for _, ln := range head {
-		out = append(out, "  | "+ln)
-	}
-	if rest > 0 {
-		out = append(out, fmt.Sprintf("  ……其余 %d 行省略", rest))
-	}
-	return out
 }
