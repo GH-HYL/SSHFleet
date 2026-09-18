@@ -182,7 +182,7 @@ func main() {
 		}
 		fatal("cli", fmt.Errorf("参数解析失败\n原因：%v", err))
 	}
-	logger.Success(fmt.Sprintf("参数解析成功，解析结果：%+v", args))
+	logger.Success("参数解析成功，解析结果：" + args.Summary())
 
 	// 交互器：全工具唯一的用户交互入口（In/Out 注入 + 非交互标志）
 	in := common.NewInteractor(args.Disinteractive)

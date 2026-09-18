@@ -97,6 +97,61 @@ func (a *Args) ModeName() string {
 	return ""
 }
 
+// Summary 把解析结果打印成旧版 argparse.Namespace 的样子（工具日志用）：
+// 单行 `字段=值` 平铺，字段名用旧版的单字符（c / s / u / d / f / p / m / t / T / n / r
+// / k 与 nobash / disinteractive），未指定的字符串打印成 ”、未指定的数值打印成 None，
+// 与旧版 `tlog.success(f"参数解析成功,解析结果: {args}")` 的输出逐字段对齐。
+//
+// 不复刻的只有两处：旧版把内联清单也塞进 f（靠 f_is_inline 二次判断），这里 f 只装
+// 清单原文、内联与否由 FIsInline 单独报；旧版没有 --key-status，故它排在最后。
+//
+// 日志与用户入口共用同一套字段名——旧日志里看到 c='who -b'，现在也还是这七个字符。
+func (a *Args) Summary() string {
+	// 未指定：字符串与 '' 同形，数值与 None 同形（对位 argparse 的默认值）
+	orEmpty := func(s string) string { return "'" + s + "'" }
+	// 数值字段报「本次实际生效的值」：显式指定过、或程序补过默认值（-t/-T 的模式默认、
+	// 配置里的 -m）都算生效；两者都没有才是 None。只看原始输入会把补出来的默认值漏掉。
+	orNone := func(v int) string {
+		if v == 0 {
+			return "None"
+		}
+		return strconv.Itoa(v)
+	}
+	keyVal := orEmpty(a.Key)
+	if a.KeyMode() == KeyModeDefault {
+		keyVal = orEmpty(keyModeSentinel) // 裸 -k：旧版 argparse 的 const='no_value'
+	}
+
+	fields := []string{
+		"c=" + orEmpty(a.Command),
+		"s=" + orEmpty(a.Script),
+		"u=" + orEmpty(a.Upload),
+		"d=" + orEmpty(a.Download),
+		"f=" + orEmpty(a.CsvFile),
+		"p=" + orEmpty(a.Path),
+		"m=" + orEmpty(a.Mode),
+		"t=" + orNone(a.Timeout),
+		"T=" + orNone(a.ConnectTimeout),
+		"n=" + orNone(a.Number),
+		"r=" + orEmpty(a.Remark),
+		"nobash=" + boolPy(a.NoBash),
+		"disinteractive=" + boolPy(a.Disinteractive),
+		"k=" + keyVal,
+	}
+	if a.KeyStatus {
+		fields = append(fields, "key_status=True")
+	}
+	return "Namespace(" + strings.Join(fields, ", ") + ")"
+}
+
+// boolPy 把 Go 布尔打印成 Python 的 True / False（拼写不同，别混用）。
+func boolPy(v bool) string {
+	if v {
+		return "True"
+	}
+	return "False"
+}
+
 // Parse 解析命令行并补默认值。raw 是 os.Args[1:]，version 是入口定义的版本号（帮助显示用）。
 func Parse(cfg *config.Config, version string, raw []string) (*Args, error) {
 	fs := pflag.NewFlagSet("SSHFleet", pflag.ContinueOnError)

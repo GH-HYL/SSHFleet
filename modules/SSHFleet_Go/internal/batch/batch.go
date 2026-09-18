@@ -188,10 +188,8 @@ func execModeName(a *cli.Args) string {
 	return "未知"
 }
 
-// commandDescription 命令/脚本模式下「命令被包成了什么」的日志行。
+// commandDescription 命令/脚本模式下「交给 SSH 执行的是什么」的日志行。
 // 上传 / 下载模式没有命令可交代，返回 nil。
-//
-// 命令原文取自首个任务（同一轮下发的命令对所有节点相同，节点间不做区分）。
 func commandDescription(a *cli.Args, tasks []*task) []string {
 	if len(tasks) == 0 || (a.Command == "" && a.Script == "") {
 		return nil
@@ -205,7 +203,7 @@ func commandDescription(a *cli.Args, tasks []*task) []string {
 		}
 	}
 
-	// 脚本正文从首个任务取（buildTasks 已读盘并按 CRLF 清理），不再读第二遍
+	// 脚本模式下正文非空即判定为脚本模式（DescribeCommand 的唯一依据）
 	body := tasks[0].stdin
 	if a.Command != "" {
 		body = ""
@@ -216,7 +214,6 @@ func commandDescription(a *cli.Args, tasks []*task) []string {
 		ScriptPath:  a.Script,
 		ScriptBody:  body,
 		Interpreter: interpreter,
-		Identity:    identityText(a.Mode),
 		NoBash:      a.NoBash,
 		AsRoot:      a.Mode == "sudo",
 	})
@@ -224,20 +221,11 @@ func commandDescription(a *cli.Args, tasks []*task) []string {
 		return nil
 	}
 
-	lines := []string{"完整命令拼接完成"}
+	lines := make([]string, 0, 4)
 	for _, ln := range strings.Split(text, "\n") {
 		lines = append(lines, "  "+ln)
 	}
 	return lines
-}
-
-// identityText 执行身份的中文说法（日志用）。-m 的取值合法性已由 CheckArguments 保证，
-// 这里只翻文案。
-func identityText(mode string) string {
-	if mode == "sudo" {
-		return "root（sudo 提权）"
-	}
-	return "登录用户（direct）"
 }
 
 func seconds(v int) time.Duration { return time.Duration(v) * time.Second }
