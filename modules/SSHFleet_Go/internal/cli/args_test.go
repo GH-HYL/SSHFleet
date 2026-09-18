@@ -293,3 +293,143 @@ func TestUsageTextShowsVersion(t *testing.T) {
 		t.Fatalf("帮助缺少版本行：\n%s", strings.SplitN(text, "\n", 4)[1])
 	}
 }
+
+// Summary：解析结果按旧版 argparse.Namespace 的样子单行平铺。
+//
+// 旧版是 `tlog.success(f"参数解析成功,解析结果: {args}")`，{args} 走 argparse.Namespace
+// 的 __repr__，输出形如：
+//
+//	Namespace(c='who -b', s='', u='', d='', f='nodes.csv', p='', m='direct',
+//	          t=None, T=None, n=None, r='v2_cmd', nobash=False, disinteractive=False, k='')
+//
+// 这里逐字段对齐：字段名、空值写法（” 与 None）、布尔写法（True/False）都不能自作主张。
+func TestSummaryMatchesArgparseNamespace(t *testing.T) {
+	a := &Args{Command: "who -b", CsvFile: "nodes.csv", Mode: "direct", Remark: "v2_cmd"}
+	got := a.Summary()
+	want := "Namespace(c='who -b', s='', u='', d='', f='nodes.csv', p='', m='direct', " +
+		"t=None, T=None, n=None, r='v2_cmd', nobash=False, disinteractive=False, k='')"
+	if got != want {
+		t.Fatalf("解析结果格式不对\n实际：%s\n应为：%s", got, want)
+	}
+}
+
+// 指定了数值参数就报数值，未指定才是 None——不能因为「值为 0」就退化成 None。
+func TestSummaryNumericFields(t *testing.T) {
+	a := &Args{Command: "pwd", Number: 4, Timeout: 60, ConnectTimeout: 10}
+	got := a.Summary()
+
+	for _, want := range []string{"t=60", "T=10", "n=4"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("应有 %q，实际：%s", want, got)
+		}
+	}
+	if strings.Contains(got, "=None") {
+		t.Fatalf("三个数值都已指定，不该出现 None，实际：%s", got)
+	}
+}
+
+// 超时未显式指定但已由程序补了默认值时，仍报出补后的值（日志要说明「这次实际用什么跑」）。
+func TestSummaryTimeoutFilledByDefault(t *testing.T) {
+	a := &Args{Command: "pwd", Timeout: 60, ConnectTimeout: 10} // timeoutRaw 为空 = 未显式指定
+	got := a.Summary()
+	if !strings.Contains(got, "t=60") || !strings.Contains(got, "T=10") {
+		t.Fatalf("补过默认值就该报出来，实际：%s", got)
+	}
+}
+
+// 密钥三态在 k= 里如实体现：未指定 ”、裸 -k 为哨兵、带路径为路径本身。
+func TestSummaryKeyMode(t *testing.T) {
+	cases := []struct {
+		name string
+		a    *Args
+		want string
+	}{
+		{"未指定", &Args{Command: "pwd"}, "k=''"},
+		{"裸 -k", &Args{Command: "pwd", Key: keyModeSentinel, keyChanged: true}, "k='default'"},
+		{"带路径", &Args{Command: "pwd", Key: "/x/id_rsa", keyChanged: true}, "k='/x/id_rsa'"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := c.a.Summary(); !strings.Contains(got, c.want) {
+				t.Fatalf("应有 %q，实际：%s", c.want, got)
+			}
+		})
+	}
+}
+
+// 布尔字段用 Python 的 True / False 拼写，与 argparse 一致。
+func TestSummaryBooleanFields(t *testing.T) {
+	a := &Args{Command: "pwd", NoBash: true, Disinteractive: true}
+	got := a.Summary()
+	for _, want := range []string{"nobash=True", "disinteractive=True"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("应有 %q，实际：%s", want, got)
+		}
+	}
+	// 没给时是 False，不是空串、也不是 omits
+	a = &Args{Command: "pwd"}
+	got = a.Summary()
+	for _, want := range []string{"nobash=False", "disinteractive=False"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("应有 %q，实际：%s", want, got)
+		}
+	}
+}
+
+// 内部状态字段不该泄漏到日志里——旧版 Namespace 里没有它们，读者也不需要。
+func TestSummaryHidesInternalState(t *testing.T) {
+	a := &Args{Command: "pwd", CsvFile: "n.csv"}
+	got := a.Summary()
+	for _, unwanted := range []string{
+		"keyChanged", "timeoutInvalid", "numberRaw", "FIsInline",
+		"timeoutRaw", "connectTimeoutRaw", "ModeName", "KeyMode",
+	} {
+		if strings.Contains(got, unwanted) {
+			t.Fatalf("不该出现内部字段 %q，实际：%s", unwanted, got)
+		}
+	}
+}
+
+// 四种模式各自的字段都落在自己的位置上，不串位。
+func TestSummaryByMode(t *testing.T) {
+	cases := []struct {
+		name string
+		a    *Args
+		want []string
+	}{
+		{"命令", &Args{Command: "pwd"}, []string{"c='pwd'", "s=''", "d=''"}},
+		{"脚本", &Args{Script: "/x/t.sh"}, []string{"c=''", "s='/x/t.sh'"}},
+		{"上传", &Args{Upload: "/x/a.txt", Path: "/opt/"}, []string{"u='/x/a.txt'", "p='/opt/'", "c=''"}},
+		{"下载", &Args{Download: "/etc/x", Path: "D:/dl"}, []string{"d='/etc/x'", "p='D:/dl'", "c=''"}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := c.a.Summary()
+			for _, want := range c.want {
+				if !strings.Contains(got, want) {
+					t.Fatalf("应有 %q，实际：%s", want, got)
+				}
+			}
+		})
+	}
+}
+
+// --key-status 是旧版没有的字段，排在末尾补上；未指定时整个字段不出现。
+func TestSummaryKeyStatus(t *testing.T) {
+	a := &Args{KeyStatus: true}
+	if got := a.Summary(); !strings.Contains(got, "key_status=True") {
+		t.Fatalf("--key-status 应报 key_status=True，实际：%s", got)
+	}
+	a = &Args{Command: "pwd"}
+	if got := a.Summary(); strings.Contains(got, "key_status") {
+		t.Fatalf("未指定时不该出现 key_status，实际：%s", got)
+	}
+}
+
+// 命令含单引号时不做转义处理——这个输出的用途是与旧日志逐字对照，加反斜杠反而对不上。
+func TestSummaryKeepsRawValue(t *testing.T) {
+	a := &Args{Command: "echo 'hi'"}
+	if got := a.Summary(); !strings.Contains(got, `c='echo 'hi''`) {
+		t.Fatalf("命令应原样打印，实际：%s", got)
+	}
+}

@@ -1,7 +1,6 @@
 package ssh
 
 import (
-	"fmt"
 	"strings"
 	"testing"
 )
@@ -159,103 +158,96 @@ func TestQuoteForShellRestoresBrokenArgv(t *testing.T) {
 	}
 }
 
-// DescribeCommand 命令模式：交代处理方式 + 执行身份 + 下发行 + 经 stdin 的内容。
+// DescribeCommand 命令模式：交代命令行发什么、stdin 送什么、内层是什么 shell。
+//
+// 不描述「包装前后」——内容走 stdin 通道后，日志里看不见内容本身，
+// 所以只需把「实际交给 SSH 执行的事实」讲清：命令行、stdin、导入的环境变量。
 func TestDescribeCommandCommandMode(t *testing.T) {
-	text := DescribeCommand(DescribeInput{
-		Command:  "who -b",
-		Identity: "登录用户（direct）",
-	})
+	text := DescribeCommand(DescribeInput{Command: "who -b"})
 
 	for _, want := range []string{
-		"经 stdin 直喂",
-		"登录用户（direct）",
-		"bash -lc 'export LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8; bash'",
-		"who -b",
+		"交给 SSH 执行",
+		"命令行： bash -lc 'export LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8; bash'",
+		"stdin：  who -b",
+		"LC_ALL / LANG",
+		"登录用户的 bash",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("应有 %q，实际：\n%s", want, text)
 		}
 	}
-	// 下发行的内层前缀必须与真下发的命令同源
+	// 命令行必须与真下发的命令同源
 	login, _ := BuildCommand("who -b", "", "", false, false)
 	if !strings.Contains(text, login) {
-		t.Fatalf("交代的下发行应与 BuildCommand 同源\n期望含：%s\n实际：\n%s", login, text)
+		t.Fatalf("交代的命令行应与 BuildCommand 同源\n期望含：%s\n实际：\n%s", login, text)
 	}
 }
 
-// DescribeCommand sudo 身份：下发行里带上 sudo。
-func TestDescribeCommandSudoIdentity(t *testing.T) {
-	text := DescribeCommand(DescribeInput{
-		Command: "id -u",
-		AsRoot:  true,
-	})
+// sudo 身份：命令行里带 sudo，说明里点明是 root 身份的 bash。
+func TestDescribeCommandSudo(t *testing.T) {
+	text := DescribeCommand(DescribeInput{Command: "id -u", AsRoot: true})
+
 	login, _ := BuildCommand("id -u", "", "", false, true)
 	if !strings.Contains(text, login) {
-		t.Fatalf("sudo 时下发行应与 BuildCommand 同源\n期望含：%s\n实际：\n%s", login, text)
+		t.Fatalf("sudo 时命令行应与 BuildCommand 同源\n期望含：%s\n实际：\n%s", login, text)
 	}
-	if !strings.Contains(text, "sudo bash") {
-		t.Fatalf("sudo 身份下发行应含 sudo bash，实际：\n%s", text)
+	if !strings.Contains(text, "root 身份的 bash（sudo）") {
+		t.Fatalf("应点明 root 身份，实际：\n%s", text)
 	}
 }
 
-// DescribeCommand --nobash：交代「原样下发、不过 stdin」，且不出现 bash -lc。
+// --nobash：命令行就是命令原文，不出现登录 shell 包装。
 func TestDescribeCommandNoBash(t *testing.T) {
 	text := DescribeCommand(DescribeInput{Command: "raw-cmd --flag", NoBash: true})
-	if !strings.Contains(text, "--nobash 原样下发") {
-		t.Fatalf("应交代 --nobash 处理方式，实际：\n%s", text)
+
+	if !strings.Contains(text, "命令行： raw-cmd --flag") {
+		t.Fatalf("应把命令原文作为命令行交代，实际：\n%s", text)
+	}
+	if !strings.Contains(text, "--nobash") {
+		t.Fatalf("应说明是 --nobash 形态，实际：\n%s", text)
 	}
 	if strings.Contains(text, "bash -lc") {
-		t.Fatalf("--nobash 下不该出现登录 shell 下发行，实际：\n%s", text)
-	}
-	if !strings.Contains(text, "raw-cmd --flag") {
-		t.Fatalf("应交代原始命令，实际：\n%s", text)
+		t.Fatalf("--nobash 下不该出现登录 shell，实际：\n%s", text)
 	}
 }
 
-// DescribeCommand 脚本模式：交代解释器与身份，正文只打前若干行。
+// 脚本模式：命令行里换成解释器，stdin 报脚本路径（不打印正文）。
 func TestDescribeCommandScriptMode(t *testing.T) {
-	body := "echo 1\necho 2"
 	text := DescribeCommand(DescribeInput{
 		ScriptPath:  "/x/t.sh",
-		ScriptBody:  body,
+		ScriptBody:  "echo 1\necho 2",
 		Interpreter: "bash",
-		Identity:    "root（sudo 提权）",
 		AsRoot:      true,
 	})
+
 	for _, want := range []string{
-		"脚本内容经 stdin 直喂",
-		"bash",
-		"root（sudo 提权）",
+		"交给 SSH 执行",
 		"bash -lc 'export LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8; sudo bash'",
-		"| echo 1",
-		"| echo 2",
+		"stdin：  脚本 /x/t.sh 的内容（bash 解释）",
+		"root 身份",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("应有 %q，实际：\n%s", want, text)
 		}
 	}
+	// 正文不进日志（脚本可能几百行）
+	if strings.Contains(text, "echo 1") {
+		t.Fatalf("脚本正文不该打印，实际：\n%s", text)
+	}
 }
 
-// 脚本正文超长时只打前 maxPreviewLines 行，并报清省略了多少行。
-func TestDescribeCommandScriptPreviewCapped(t *testing.T) {
-	var sb strings.Builder
-	for i := 1; i <= maxPreviewLines+7; i++ {
-		fmt.Fprintf(&sb, "line%d\n", i)
-	}
+// py 脚本用 python3 解释（命令行与说明两处都要跟着变）。
+func TestDescribeCommandPythonScript(t *testing.T) {
 	text := DescribeCommand(DescribeInput{
-		ScriptPath:  "/x/t.sh",
-		ScriptBody:  strings.TrimSpace(sb.String()),
-		Interpreter: "bash",
+		ScriptPath:  "/x/t.py",
+		ScriptBody:  "print('hi')",
+		Interpreter: "python3",
 	})
-
-	if !strings.Contains(text, "| line1") || !strings.Contains(text, fmt.Sprintf("| line%d", maxPreviewLines)) {
-		t.Fatalf("前 %d 行都应打印，实际：\n%s", maxPreviewLines, text)
+	if !strings.Contains(text, "; python3'") {
+		t.Fatalf("命令行应换用 python3，实际：\n%s", text)
 	}
-	if strings.Contains(text, fmt.Sprintf("| line%d", maxPreviewLines+1)) {
-		t.Fatalf("超过上限的行不该打印，实际：\n%s", text)
-	}
-	if !strings.Contains(text, "……其余 7 行省略") {
-		t.Fatalf("应报清省略行数，实际：\n%s", text)
+	if !strings.Contains(text, "（python3 解释）") {
+		t.Fatalf("说明应点明解释器，实际：\n%s", text)
 	}
 }
 
