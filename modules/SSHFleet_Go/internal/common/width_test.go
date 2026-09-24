@@ -58,7 +58,7 @@ func TestWrapByWidth(t *testing.T) {
 	})
 
 	t.Run("每行不超宽且内容不丢", func(t *testing.T) {
-		text := "转换凭据文件（后面跟目标文件路径）：自动识别明文/base64/加密格式并按配置等级转换，支持升降级；加密/解密需已配置主密钥"
+		text := "转换凭据文件（后面跟要转的文件路径）：按配置里的加密开关，转成明文或密文"
 		for _, width := range []int{8, 16, 24, 30, 40, 61} {
 			lines := WrapByWidth(text, width)
 			var got strings.Builder

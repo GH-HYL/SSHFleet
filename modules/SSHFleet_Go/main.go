@@ -187,8 +187,11 @@ func main() {
 	// 交互器：全工具唯一的用户交互入口（In/Out 注入 + 非交互标志）
 	in := common.NewInteractor(args.Disinteractive)
 
-	// ---- 步骤 4：工具模式分流（keygen / key-status / convert-password）-----
+	// ---- 步骤 4：工具模式分流（keygen / key-status / convert-secret）-----
 	// 独立工具与批量执行解耦，处理完直接退出，不进入后续步骤。
+	if err := cli.CheckKeyToolExclusivity(args); err != nil {
+		fatal("cli", fmt.Errorf("参数合规性检查未通过\n原因：%v", err))
+	}
 	if args.GenKey {
 		logger.Info("进入密钥管理模式（--gen-key）")
 		if err := credential.GenKey(in); err != nil {
@@ -202,7 +205,7 @@ func main() {
 		return
 	}
 	if args.ConvertPassword != "" {
-		logger.Info("进入凭据转换模式（--convert-password）")
+		logger.Info("进入凭据转换模式（--convert-secret）")
 		if err := credential.ConvertPassword(args.ConvertPassword, cfg.Account.SecretDir, cfg.Account.Encrypt); err != nil {
 			fatal("credential", err)
 		}

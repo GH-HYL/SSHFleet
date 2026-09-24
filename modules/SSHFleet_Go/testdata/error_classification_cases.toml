@@ -105,13 +105,13 @@ failed_files = 0
 expected = "command not found: ntpq"
 
 [[cases]]
-name = "error/output 均为空 → 错误未分类"
+name = "error/output 均为空 → 原因未知"
 error = ""
 output = ""
 mode = "execute"
 success_files = 0
 failed_files = 0
-expected = "错误未分类"
+expected = "原因未知"
 
 [[cases]]
 name = "密钥解析失败"
@@ -123,13 +123,13 @@ failed_files = 0
 expected = "密钥解析失败"
 
 [[cases]]
-name = "会话创建失败"
+name = "无法建立会话"
 error = "创建会话失败 - ssh: rejected: administratively prohibited"
 output = ""
 mode = "execute"
 success_files = 0
 failed_files = 0
-expected = "会话创建失败"
+expected = "无法建立会话"
 
 [[cases]]
 name = "任务已取消 context canceled"
@@ -168,22 +168,22 @@ failed_files = 0
 expected = "SFTP失败"
 
 [[cases]]
-name = "没有可下载的文件 → 远程无文件"
+name = "没有可下载的文件 → 远端没有文件"
 error = "远程路径中没有可下载的文件"
 output = ""
 mode = "download"
 success_files = 0
 failed_files = 0
-expected = "远程无文件"
+expected = "远端没有文件"
 
 [[cases]]
-name = "全部为符号链接 → 远程无文件"
+name = "全部为符号链接 → 远端没有文件"
 error = "没有可下载的文件：目标全部为软链接（已过滤 3 个）"
 output = ""
 mode = "download"
 success_files = 0
 failed_files = 0
-expected = "远程无文件"
+expected = "远端没有文件"
 
 [[cases]]
 name = "成功+跳过 → 传输成功"
@@ -246,13 +246,13 @@ failed_files = 0
 expected = "账号过期"
 
 [[cases]]
-name = "握手被断开（只有 EOF，服务端没说原因）"
+name = "连接被断开（只有 EOF，服务端没说原因）"
 error = "建立连接失败 - ssh: handshake failed: EOF"
 output = ""
 mode = "execute"
 success_files = 0
 failed_files = 0
-expected = "握手被断开"
+expected = "连接被断开"
 
 [[cases]]
 name = "登录 shell 为 nologin（中文文案）"

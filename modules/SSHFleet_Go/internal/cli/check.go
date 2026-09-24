@@ -91,9 +91,9 @@ func CheckArguments(a *Args) error {
 		}
 	}
 
-	// -m
-	if a.Mode != "" && a.Mode != "direct" && a.Mode != "sudo" {
-		return fmt.Errorf("-m 参数必须是 'direct' 或 'sudo'，当前值：%s", a.Mode)
+	// 执行身份：--sudo 与 --no-sudo 是一对开关，同时写就是自相矛盾
+	if a.sudoFlag && a.noSudoFlag {
+		return fmt.Errorf("--sudo 与 --no-sudo 只能给一个（两个都不给=按配置里的值）")
 	}
 
 	// -c
@@ -176,6 +176,83 @@ func CheckArguments(a *Args) error {
 		return err
 	}
 
+	return nil
+}
+
+// keyTools 本次给出的密钥管理命令名（`--gen-key` / `--key-status` / `--convert-secret`）。
+func keyTools(a *Args) []string {
+	var names []string
+	if a.GenKey {
+		names = append(names, "--gen-key")
+	}
+	if a.KeyStatus {
+		names = append(names, "--key-status")
+	}
+	if a.ConvertPassword != "" {
+		names = append(names, "--convert-secret")
+	}
+	return names
+}
+
+// batchParamsGiven 本次给出的批量执行参数（模式、清单、目标路径、执行参数、-k）。
+// `--yes` 不算：它对密钥管理命令也有意义（跳过覆盖确认），且不指向任何节点。
+func batchParamsGiven(a *Args) []string {
+	var given []string
+	for _, m := range [][2]string{{"-c", a.Command}, {"-s", a.Script}, {"-u", a.Upload}, {"-d", a.Download}} {
+		if m[1] != "" {
+			given = append(given, m[0])
+		}
+	}
+	if a.CsvFile != "" {
+		given = append(given, "-f")
+	}
+	if a.Path != "" {
+		given = append(given, "-p")
+	}
+	if a.numberRaw != "" {
+		given = append(given, "-n")
+	}
+	if a.Remark != "" {
+		given = append(given, "-r")
+	}
+	if a.timeoutRaw != "" {
+		given = append(given, "-t")
+	}
+	if a.connectTimeoutRaw != "" {
+		given = append(given, "-T")
+	}
+	if a.Key {
+		given = append(given, "-k")
+	}
+	if a.NoBash {
+		given = append(given, "--no-bash")
+	}
+	if a.sudoFlag {
+		given = append(given, "--sudo")
+	}
+	if a.noSudoFlag {
+		given = append(given, "--no-sudo")
+	}
+	return given
+}
+
+// CheckKeyToolExclusivity 密钥管理命令与批量执行参数不能同时给：检查通过就意味着
+// 它要做的事一定会做，不允许参数被悄悄丢掉。多个密钥管理命令同时给也在这里拦。
+//
+// 这一步跑在工具模式分流之前（那时还没走到批量参数检查），所以单独成一个入口。
+func CheckKeyToolExclusivity(a *Args) error {
+	tools := keyTools(a)
+	if len(tools) == 0 {
+		return nil
+	}
+	if len(tools) > 1 {
+		return fmt.Errorf("%s 只能给一个——它们是三个独立命令，一次做一件事", strings.Join(tools, "、"))
+	}
+	if given := batchParamsGiven(a); len(given) > 0 {
+		return fmt.Errorf(
+			"%s 不能和批量执行参数一起用：同时给了 %s\n"+
+				"提示：分成两次执行——先跑密钥管理命令，再跑批量执行", tools[0], strings.Join(given, "、"))
+	}
 	return nil
 }
 
