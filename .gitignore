@@ -17,7 +17,7 @@
 !.gitignore
 !.gitattributes
 
-# 文档（决策：ADR；仓库级说明与词表）
+# 文档（决策：ADR；仓库级说明与词表；面向用户的手册）
 !CONTEXT.md
 !AGENTS.md
 !README.md
@@ -25,6 +25,8 @@
 !docs/
 !docs/adr/
 !docs/adr/**
+!docs/manual/
+!docs/manual/**
 
 # 代码
 !modules/
