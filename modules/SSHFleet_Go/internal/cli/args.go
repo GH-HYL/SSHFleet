@@ -478,8 +478,8 @@ func usageText(cfg *config.Config, version string, width int) string {
 	examples := [][2]string{
 		{"执行命令:", fmt.Sprintf("%s -f nodes.csv -c \"ls -l\"", name)},
 		{"执行脚本:", fmt.Sprintf("%s -f nodes.csv -s deploy.sh", name)},
-		{"上传文件:", fmt.Sprintf("%s -f nodes.csv -u D:/dist/app -p /opt/app/", name)},
-		{"下载文件:", fmt.Sprintf("%s -f nodes.csv -d /var/log/app -p D:/logs/", name)},
+		{"上传文件:", fmt.Sprintf("%s -f nodes.csv -u ./dist/app -p /opt/app/", name)},
+		{"下载文件:", fmt.Sprintf("%s -f nodes.csv -d /var/log/app -p ./logs/", name)},
 		{"用密钥登录:", fmt.Sprintf("%s -f nodes.csv -c \"uptime\" -k", name)},
 		{"不确认执行:", fmt.Sprintf("%s -f nodes.csv -c \"uptime\" --yes", name)},
 	}

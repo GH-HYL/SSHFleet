@@ -74,7 +74,7 @@ func CheckArguments(a *Args) error {
 	// -d
 	if a.Download != "" {
 		if a.Path == "" {
-			return fmt.Errorf("-d 参数必须搭配 -p 参数使用\n提示：-p 写文件要存到本机的哪个目录，例如 -p D:/logs/")
+			return fmt.Errorf("-d 参数必须搭配 -p 参数使用\n提示：-p 写文件要存到本机的哪个目录，例如 -p ./logs/")
 		}
 		if !strings.HasPrefix(a.Download, "/") {
 			return fmt.Errorf("下载模式：-d 参数指定的远程路径必须是绝对路径，当前值：%s\n提示：服务器上的路径要从 / 写起，例如 /var/log/app", a.Download)

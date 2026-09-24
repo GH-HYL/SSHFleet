@@ -251,7 +251,7 @@ func normalizeConfigPath(name, raw string) (string, error) {
 		return "", fmt.Errorf(
 			"%s 必须是绝对路径，当前值：%s\n"+
 				"原因：配置里的凭据路径一律写全路径；相对路径与 ~ 只在清单里能用\n"+
-				"提示：像 D:/Keys/id_rsa 或 /home/ops/.keys/id_rsa 这样写", name, raw)
+				"提示：像 /home/ops/.keys/id_rsa 或 D:/Keys/id_rsa 这样写", name, raw)
 	}
 	return p, nil
 }
