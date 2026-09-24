@@ -24,7 +24,10 @@ func CheckConfigFiles() error {
 		}
 	}
 	if len(missing) > 0 {
-		return fmt.Errorf("配置文件缺失: %s", strings.Join(missing, ", "))
+		// 标签不能用「配置文件缺失」——查的是两份规则文件，用户会跑去翻配置。
+		// 半角冒号也一并改全角（同一份输出里的标点要一致）。
+		return fmt.Errorf("规则文件缺失：%s\n提示：这两份文件随发布包提供，不要删；从压缩包里重新解压一份覆盖回 config/ 即可",
+			strings.Join(missing, "、"))
 	}
 	return nil
 }
