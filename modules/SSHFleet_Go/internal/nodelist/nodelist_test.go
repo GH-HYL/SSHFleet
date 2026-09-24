@@ -27,15 +27,13 @@ func newTestInteractor(input string, disinteractive bool) (*common.Interactor, *
 }
 
 // testArgsCfg 造一份可用的参数与配置。
-// 参数走真实的 cli.Parse 入口——密钥三态（-k 是否出现）是包内私有状态，
-// 只能在解析期定下来，外部无法直接构造。
 func testArgsCfg(t *testing.T, argv ...string) (*cli.Args, *config.Config) {
 	t.Helper()
 	cfg := &config.Config{}
 	cfg.Account.Port = 22
 	cfg.Account.User = "root"
-	cfg.Account.PasswordSecurity = 1
-	cfg.Execution.Mode = "direct"
+	cfg.Account.Encrypt = false
+	cfg.Execution.Sudo = false
 	cfg.Execution.TimeoutConnect = 10
 	cfg.Execution.TimeoutExecute = 60
 	cfg.Execution.TimeoutTransfer = 300
@@ -88,10 +86,9 @@ func TestResolveNodesCredentialsMatchRows(t *testing.T) {
 			{passwordPlain: "密码三"},
 		},
 	}
-	args, cfg := testArgsCfg(t, "-f", "x.csv", "-c", "echo hi")
-	in, _ := newTestInteractor("", true)
+	_, cfg := testArgsCfg(t, "-f", "x.csv", "-c", "echo hi")
 
-	nodes, err := resolveNodes(rows, pre, args, cfg, in)
+	nodes, err := resolveNodes(rows, pre, cfg)
 	if err != nil {
 		t.Fatalf("解析失败：%v", err)
 	}
@@ -113,7 +110,7 @@ func TestResolveNodesCredentialsMatchRows(t *testing.T) {
 	}
 }
 
-// 私钥节点：密码恒为空，且私钥与口令成对取自同一行（spec D42）。
+// 私钥节点：密码恒为空，且私钥与口令成对取自同一行。
 func TestResolveNodesKeyBinding(t *testing.T) {
 	rows := [][]string{
 		{"10.0.0.1", "22", "root", "pw1.txt"}, // 密码行
@@ -123,11 +120,12 @@ func TestResolveNodesKeyBinding(t *testing.T) {
 		{passwordPlain: "密码一"},
 		{hasKey: true, keyContent: "PEM-第二行", keyPassRaw: "口令二"},
 	}}
-	// 裸 -k：逐节点按清单解析密钥（三态由解析期定下，故在参数里给出）
 	args, cfg := testArgsCfg(t, "-f", "x.csv", "-c", "echo hi", "-k")
-	in, _ := newTestInteractor("", true)
+	if !args.Key {
+		t.Fatal("给了 -k 就该是密钥登录")
+	}
 
-	nodes, err := resolveNodes(rows, pre, args, cfg, in)
+	nodes, err := resolveNodes(rows, pre, cfg)
 	if err != nil {
 		t.Fatalf("解析失败：%v", err)
 	}
@@ -142,34 +140,32 @@ func TestResolveNodesKeyBinding(t *testing.T) {
 	}
 }
 
-// 交互式输入非法端口时重试，提示必须落进注入的输出流
-// （此前直写 os.Stdout，测试抓不到）。注意：清单列里的非法端口是**直接报错**、
-// 不给重试的，重试只发生在交互输入这条路径上。
-func TestResolvePortRetryNoticeGoesToInteractor(t *testing.T) {
-	args, cfg := testArgsCfg(t, "-f", "x.csv", "-c", "echo hi")
-	cfg.Account.Port = 0 // 无配置默认值，走交互
+// 端口补全不再有交互这条路径：清单列有值就用它（非法直接报错），没值就用配置默认值。
+func TestResolvePortNoInteraction(t *testing.T) {
+	_, cfg := testArgsCfg(t, "-f", "x.csv", "-c", "echo hi")
+	cfg.Account.Port = 22
+
 	rows := [][]string{{"10.0.0.1", "", "root", "pw.txt"}}
 	pre := &precheckResult{rows: []rowCreds{{passwordPlain: "pw"}}}
-	// 第一次输入越界端口，第二次给合法值
-	in, out := newTestInteractor("99999\n22\nn\n", false)
+	_, out := newTestInteractor("", true)
 
-	nodes, err := resolveNodes(rows, pre, args, cfg, in)
+	nodes, err := resolveNodes(rows, pre, cfg)
 	if err != nil {
 		t.Fatalf("解析失败：%v", err)
 	}
-	if !strings.Contains(out.String(), "端口必须是1-65535之间的整数") {
-		t.Fatalf("重试提示应写进注入的输出流，实际输出：%q", out.String())
-	}
 	if nodes[0].Port != 22 {
-		t.Fatalf("重试后应取到合法端口 22，实际 %d", nodes[0].Port)
+		t.Fatalf("端口为空应落到配置默认值 22，实际 %d", nodes[0].Port)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("不该有任何交互输出，实际：%q", out.String())
 	}
 
-	// 清单列里的非法端口不给重试，直接进错误汇总
+	// 清单列里的非法端口直接进错误汇总，不重试
 	rows2 := [][]string{{"10.0.0.1", "99999", "root", "pw.txt"}}
-	in2, _ := newTestInteractor("", true)
-	if _, err := resolveNodes(rows2, pre, args, cfg, in2); err == nil ||
+	var buf strings.Builder
+	if _, err := resolveNodes(rows2, pre, cfg); err == nil ||
 		!strings.Contains(err.Error(), "当前值为：99999") {
-		t.Fatalf("清单里的非法端口应直接报错，实际：%v", err)
+		t.Fatalf("清单里的非法端口应直接报错，实际：%v（输出：%q）", err, buf.String())
 	}
 }
 
@@ -239,8 +235,7 @@ func TestResolvePortValidation(t *testing.T) {
 		{"abc", 0, false},
 	}
 	for _, c := range cases {
-		in, _ := newTestInteractor("", true)
-		got, errs := resolvePort(c.raw, 0, &FieldMemory{}, 1, 1, "10.0.0.1", true, in)
+		got, errs := resolvePort(c.raw, 0)
 		if c.valid {
 			if len(errs) > 0 || got != c.want {
 				t.Fatalf("端口 %q 应通过并得 %d，实际 %d（%v）", c.raw, c.want, got, errs)
@@ -258,12 +253,12 @@ func TestResolveNodesFallsBackToConfig(t *testing.T) {
 	rows := [][]string{{"10.0.0.1", "", "", ""}}
 	// 密码列也为空：由预检阶段备好的默认密码兜底（与主流程一致）
 	pre := &precheckResult{rows: []rowCreds{{}}, defaultPasswordPlain: "配置默认密码"}
-	args, cfg := testArgsCfg(t, "-f", "x.csv", "-c", "echo hi")
+	_, cfg := testArgsCfg(t, "-f", "x.csv", "-c", "echo hi")
 	cfg.Account.Port = 2200
 	cfg.Account.User = "deploy"
-	in, out := newTestInteractor("", true)
+	_, out := newTestInteractor("", true)
 
-	nodes, err := resolveNodes(rows, pre, args, cfg, in)
+	nodes, err := resolveNodes(rows, pre, cfg)
 	if err != nil {
 		t.Fatalf("解析失败：%v", err)
 	}
@@ -290,10 +285,9 @@ func TestParseNodeStrictIPv4(t *testing.T) {
 		{passwordPlain: "pw"}, {passwordPlain: "pw"},
 		{passwordPlain: "pw"}, {passwordPlain: "pw"},
 	}}
-	args, cfg := testArgsCfg(t, "-f", "x.csv", "-c", "echo hi")
-	in, _ := newTestInteractor("", true)
+	_, cfg := testArgsCfg(t, "-f", "x.csv", "-c", "echo hi")
 
-	_, err := resolveNodes(rows, pre, args, cfg, in)
+	_, err := resolveNodes(rows, pre, cfg)
 	if err == nil {
 		t.Fatal("存在非法 IP 时应报错")
 	}
@@ -305,71 +299,59 @@ func TestParseNodeStrictIPv4(t *testing.T) {
 	}
 }
 
-// 输入记忆：首个空字段交互后，后续空字段直接复用，不再重复提问。
-func TestFieldMemoryAppliesToLaterRows(t *testing.T) {
+// 缺字段一律报错，不再交互补输入：同样的命令加同样的文件，永远跑出同样的结果。
+func TestResolveNodesMissingFieldErrors(t *testing.T) {
 	rows := [][]string{
-		{"10.0.0.1", "", "root", "pw.txt"},
-		{"10.0.0.2", "", "root", "pw.txt"},
+		{"10.0.0.1", "22", "", "pw.txt"}, // 用户名缺，配置也空
+		{"10.0.0.2", "22", "root", ""},   // 密码缺，配置也空
 	}
 	pre := &precheckResult{rows: []rowCreds{
-		{passwordPlain: "pw"}, {passwordPlain: "pw"},
+		{passwordPlain: "pw"}, {},
 	}}
-	args, cfg := testArgsCfg(t, "-f", "x.csv", "-c", "echo hi")
-	cfg.Account.Port = 0 // 无配置默认值，走交互
-	// 行 1 输入 2222 并对「应用到后续」答 y —— 第 2 行不该再问
-	in, out := newTestInteractor("2222\ny\n", false)
+	_, cfg := testArgsCfg(t, "-f", "x.csv", "-c", "echo hi")
+	cfg.Account.User = ""
+	cfg.Account.Password = ""
 
-	nodes, err := resolveNodes(rows, pre, args, cfg, in)
-	if err != nil {
-		t.Fatalf("解析失败：%v", err)
+	_, err := resolveNodes(rows, pre, cfg)
+	if err == nil {
+		t.Fatal("用户名与密码都无处可补，应报错")
 	}
-	if nodes[0].Port != 2222 || nodes[1].Port != 2222 {
-		t.Fatalf("两行端口都应为 2222，实际 %d / %d", nodes[0].Port, nodes[1].Port)
-	}
-	if n := strings.Count(out.String(), "请输入端口号"); n != 1 {
-		t.Fatalf("端口提问应只发生一次，实际 %d 次：%q", n, out.String())
+	msg := err.Error()
+	for _, want := range []string{"行 1", "用户名为空", "行 2", "密码为空"} {
+		if !strings.Contains(msg, want) {
+			t.Fatalf("错误汇总缺少 %q：\n%s", want, msg)
+		}
 	}
 }
 
 // resolvePassword 的三级回落：行内密码 > 有私钥则空 > 配置默认密码。
 func TestResolvePasswordFallbacks(t *testing.T) {
-	cfg := &config.Config{}
-	cfg.Account.PasswordSecurity = 1
 	pre := &precheckResult{
 		rows:                 []rowCreds{{passwordPlain: "行内密码"}, {hasKey: true}, {}},
 		defaultPasswordPlain: "配置默认密码",
 	}
-	mem := &FieldMemory{}
-
-	in, _ := newTestInteractor("", true)
-	if pw, err := resolvePassword(pre.rowCreds(1), pre, cfg, mem, 1, 3, "10.0.0.1", true, in); err != nil || pw != "行内密码" {
+	if pw, err := resolvePassword(pre.rowCreds(1), pre); err != nil || pw != "行内密码" {
 		t.Fatalf("第 1 行应取行内密码，实际 %q（%v）", pw, err)
 	}
-	if pw, err := resolvePassword(pre.rowCreds(2), pre, cfg, mem, 2, 3, "10.0.0.2", true, in); err != nil || pw != "" {
+	if pw, err := resolvePassword(pre.rowCreds(2), pre); err != nil || pw != "" {
 		t.Fatalf("第 2 行持有私钥，密码应为空，实际 %q（%v）", pw, err)
 	}
-	if pw, err := resolvePassword(pre.rowCreds(3), pre, cfg, mem, 3, 3, "10.0.0.3", true, in); err != nil || pw != "配置默认密码" {
+	if pw, err := resolvePassword(pre.rowCreds(3), pre); err != nil || pw != "配置默认密码" {
 		t.Fatalf("第 3 行应取配置默认密码，实际 %q（%v）", pw, err)
+	}
+	// 配置默认密码也没有：报错，不询问
+	if _, err := resolvePassword(rowCreds{}, &precheckResult{}); err == nil {
+		t.Fatal("三级都空时应报错")
 	}
 }
 
-// 工具函数：~ 展开与短行补齐。
+// 工具函数：短行补齐与判定。
 func TestHelpers(t *testing.T) {
 	if got := padRow([]string{"a", "b"}); len(got) != 6 || got[0] != "a" || got[2] != "" {
 		t.Fatalf("padRow 应补齐到 6 列，实际 %v", got)
 	}
 	if got := padRow([]string{"a", "b", "c", "d", "e", "f", "g"}); len(got) != 6 {
 		t.Fatalf("padRow 应截到 6 列，实际 %v", got)
-	}
-
-	if got := expandTilde("/abs/path"); got != "/abs/path" {
-		t.Fatalf("非 ~ 开头应原样返回，实际 %q", got)
-	}
-	if got := expandTilde("~"); strings.HasPrefix(got, "~") {
-		t.Fatalf("~ 应展开为家目录，实际 %q", got)
-	}
-	if got := expandTilde("~/x"); strings.Contains(got, "~") {
-		t.Fatalf("~/ 前缀应展开，实际 %q", got)
 	}
 
 	if !isAllDigits("0123") || isAllDigits("") || isAllDigits("1a") || isAllDigits("-1") {

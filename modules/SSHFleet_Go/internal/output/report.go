@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"sshfleet/internal/cli"
+	"sshfleet/internal/common"
 	"sshfleet/internal/config"
 	"sshfleet/internal/result"
 	"sshfleet/internal/ssh"
@@ -60,7 +61,7 @@ func WriteReport(archiveDir string, stats *result.Stats, a *cli.Args, cfg *confi
 		fmt.Fprintf(&b, "  本地路径： %s\n", a.Path)
 	}
 
-	fmt.Fprintf(&b, "  CSV文件路径： %s\n", a.CsvFile)
+	fmt.Fprintf(&b, "  CSV文件路径： %s\n", common.MaskInlineListIf(a.CsvFile))
 	fmt.Fprintf(&b, "  节点数量： %d\n", stats.NodesTotal)
 	if a.Command != "" || a.Script != "" {
 		fmt.Fprintf(&b, "  并发数值： %d\n", a.Number)
@@ -122,6 +123,6 @@ func WriteReport(archiveDir string, stats *result.Stats, a *cli.Args, cfg *confi
 		}
 	}
 
-	path := filepath.Join(archiveDir, cfg.Paths.Report)
+	path := filepath.Join(archiveDir, config.BuiltinPaths.Report)
 	return os.WriteFile(path, []byte(b.String()), 0o644)
 }

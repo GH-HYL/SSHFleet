@@ -1,11 +1,9 @@
 // Package config 承载主干第 1 步：加载 ./config/SSHFleet.conf（TOML）。
 //
-// 字段基准 = 旧 YAML 配置；与旧实现不同的部分见 spec D6 / D28 / D31：
-//   - 删 paths.exe 段；keywords/logs/files 三段两层并入单段 [paths]
-//   - password_security 为 int，仅允许 1/2/3
-//   - **所有字段必填、全工具不写死任何默认值**（用户 2026-09-14 裁定）：缺字段与非法取值都在此报错
-//   - 未知字段零容忍：解码后取未识别键，报错列出具体键名
-//   - 路径解析一条规则：去首尾空白 → ~ 展开 → 绝对则原样 → 相对则拼 secret_dir
+// 三条硬规则：
+//   - **所有字段必填**（字段要出现，值可留空），不写死任何默认值：缺字段与非法取值都在这层报错
+//   - **未知字段零容忍**：解码后取未识别键，报错列出具体键名
+//   - **配置里的路径一律绝对路径**，分隔符 `\` 与 `/` 通用、盘符统一大写，程序用时按 `/` 处理
 package config
 
 import (
@@ -17,30 +15,39 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
+// Account 账号与凭据。password / key_password 的**值语义随 Encrypt 变**：
+//   - Encrypt = false：值是密码 / 口令**本身**
+//   - Encrypt = true：值是凭据文件的**绝对路径**
 type Account struct {
-	Port             int    `toml:"port"`
-	User             string `toml:"user"`
-	PasswordSecurity int    `toml:"password_security"`
-	SecretDir        string `toml:"secret_dir"`
-	Password         string `toml:"password"`
-	Key              string `toml:"key"`
-	KeyPassphrase    string `toml:"key_passphrase"`
+	Port        int    `toml:"port"`
+	User        string `toml:"user"`
+	Password    string `toml:"password"`
+	Encrypt     bool   `toml:"encrypt"`
+	Key         string `toml:"key"`
+	KeyPassword string `toml:"key_password"`
+	SecretDir   string `toml:"secret_dir"`
 }
 
+// Execution 执行身份与三个超时。
 type Execution struct {
-	Mode            string `toml:"mode"`
-	TimeoutConnect  int    `toml:"timeout_connect"`
-	TimeoutExecute  int    `toml:"timeout_execute"`
-	TimeoutTransfer int    `toml:"timeout_transfer"`
+	Sudo            bool `toml:"sudo"`
+	TimeoutConnect  int  `toml:"timeout_connect"`
+	TimeoutExecute  int  `toml:"timeout_execute"`
+	TimeoutTransfer int  `toml:"timeout_transfer"`
 }
 
+// Enable 功能开关。
 type Enable struct {
 	OutputToXlsx     bool `toml:"output_to_xlsx"`
 	ResultsToXlsx    bool `toml:"results_to_xlsx"`
 	ShowCategoryTips bool `toml:"show_category_tips"`
 }
 
-// Paths：旧 paths.keywords / paths.logs / paths.files 三段并为一层（spec D6）。
+// Paths 产物的目录名与文件名。
+//
+// **已不开放配置**：字段定义原样留着，是为了将来能随时改回来（读取结构不动），
+// 只在加载时拦一句"配置里不允许出现 [paths]"；恢复开放只需删掉 Load 里那道判断。
+// 程序内部一律用 BuiltinPaths，不要去读用户的配置。
 type Paths struct {
 	ErrorKeywords     string `toml:"error_keywords"`
 	DangerousKeywords string `toml:"dangerous_keywords"`
@@ -54,22 +61,33 @@ type Paths struct {
 	ResultsXlsx       string `toml:"results_xlsx"`
 }
 
-type UploadConcurrencyThresholds struct {
-	SmallFile         int `toml:"small_file"`
-	LargeFile         int `toml:"large_file"`
-	MediumConcurrency int `toml:"medium_concurrency"`
-}
-
+// Upload 上传并发策略的三个阈值（单位字节）。
 type Upload struct {
-	ConcurrencyThresholds UploadConcurrencyThresholds `toml:"concurrency_thresholds"`
+	SmallFile      int `toml:"small_file"`
+	LargeFile      int `toml:"large_file"`
+	MediumParallel int `toml:"medium_parallel"`
 }
 
+// Config 配置文件全集。
 type Config struct {
 	Account   Account   `toml:"account"`
 	Execution Execution `toml:"execution"`
 	Enable    Enable    `toml:"enable"`
-	Paths     Paths     `toml:"paths"`
 	Upload    Upload    `toml:"upload"`
+}
+
+// BuiltinPaths 产物路径与文件名的内置取值（用户不可配）。
+var BuiltinPaths = Paths{
+	ErrorKeywords:     "./config/error_keywords.toml",
+	DangerousKeywords: "./config/dangerous_keywords.toml",
+	Historys:          "history",
+	Tool:              "SSHFleetTools.log",
+	Exec:              "SSHFleetExec.log",
+	Asset:             "assets",
+	Output:            "output.txt",
+	OutputXlsx:        "output.xlsx",
+	Report:            "report.txt",
+	ResultsXlsx:       "results.xlsx",
 }
 
 // Load 读取并校验配置文件，返回可直接使用的配置。
@@ -84,7 +102,14 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("解析 TOML 失败：%v", err)
 	}
 
-	// 未知字段零容忍：列出具体键名（对位旧 pydantic extra="forbid"）
+	// 已移除的段 / 键：给一句能照做的说明，不要混进"未识别字段"里
+	if md.IsDefined("paths") {
+		return nil, fmt.Errorf(
+			"配置里的 [paths] 段已移除：产物的目录名与文件名改由程序内置，不再开放配置\n" +
+				"提示：把 [paths] 整段删掉即可，其余字段不用动")
+	}
+
+	// 未知字段零容忍：列出具体键名
 	if undecoded := md.Undecoded(); len(undecoded) > 0 {
 		keys := make([]string, 0, len(undecoded))
 		for _, k := range undecoded {
@@ -102,41 +127,30 @@ func Load(path string) (*Config, error) {
 	return &cfg, nil
 }
 
-// validate 配置预检查：必填性（所有字段） + 取值合规性。
-// 用户 2026-09-14 裁定：全工具不写死任何默认值——预检查通过即代表配置自足，
-// 运行期一律取配置里的值。缺项一次列全，取值逐项校验并指出非法值。
+// validate 配置预检查：字段必须出现（值可留空） + 取值合规性。
+// 预检查通过即代表配置自足，运行期一律取配置里的值。
 func validate(cfg *Config, md toml.MetaData) error {
 	required := []struct {
 		key string
 		val string
 	}{
-		{"account.port", definedInt(md, "account", "port")},
+		{"account.port", definedStr(md, "account", "port")},
 		{"account.user", definedStr(md, "account", "user")},
-		{"account.password_security", definedInt(md, "account", "password_security")},
-		{"account.secret_dir", definedStr(md, "account", "secret_dir")},
 		{"account.password", definedStr(md, "account", "password")},
+		{"account.encrypt", definedStr(md, "account", "encrypt")},
 		{"account.key", definedStr(md, "account", "key")},
-		{"account.key_passphrase", definedStr(md, "account", "key_passphrase")},
-		{"execution.mode", definedStr(md, "execution", "mode")},
-		{"execution.timeout_connect", definedInt(md, "execution", "timeout_connect")},
-		{"execution.timeout_execute", definedInt(md, "execution", "timeout_execute")},
-		{"execution.timeout_transfer", definedInt(md, "execution", "timeout_transfer")},
+		{"account.key_password", definedStr(md, "account", "key_password")},
+		{"account.secret_dir", definedStr(md, "account", "secret_dir")},
+		{"execution.sudo", definedStr(md, "execution", "sudo")},
+		{"execution.timeout_connect", definedStr(md, "execution", "timeout_connect")},
+		{"execution.timeout_execute", definedStr(md, "execution", "timeout_execute")},
+		{"execution.timeout_transfer", definedStr(md, "execution", "timeout_transfer")},
 		{"enable.output_to_xlsx", definedStr(md, "enable", "output_to_xlsx")},
 		{"enable.results_to_xlsx", definedStr(md, "enable", "results_to_xlsx")},
 		{"enable.show_category_tips", definedStr(md, "enable", "show_category_tips")},
-		{"paths.error_keywords", definedStr(md, "paths", "error_keywords")},
-		{"paths.dangerous_keywords", definedStr(md, "paths", "dangerous_keywords")},
-		{"paths.historys", definedStr(md, "paths", "historys")},
-		{"paths.tool", definedStr(md, "paths", "tool")},
-		{"paths.exec", definedStr(md, "paths", "exec")},
-		{"paths.asset", definedStr(md, "paths", "asset")},
-		{"paths.output", definedStr(md, "paths", "output")},
-		{"paths.output_xlsx", definedStr(md, "paths", "output_xlsx")},
-		{"paths.report", definedStr(md, "paths", "report")},
-		{"paths.results_xlsx", definedStr(md, "paths", "results_xlsx")},
-		{"upload.concurrency_thresholds.small_file", definedInt(md, "upload", "concurrency_thresholds", "small_file")},
-		{"upload.concurrency_thresholds.large_file", definedInt(md, "upload", "concurrency_thresholds", "large_file")},
-		{"upload.concurrency_thresholds.medium_concurrency", definedInt(md, "upload", "concurrency_thresholds", "medium_concurrency")},
+		{"upload.small_file", definedStr(md, "upload", "small_file")},
+		{"upload.large_file", definedStr(md, "upload", "large_file")},
+		{"upload.medium_parallel", definedStr(md, "upload", "medium_parallel")},
 	}
 	var missing []string
 	for _, r := range required {
@@ -148,15 +162,8 @@ func validate(cfg *Config, md toml.MetaData) error {
 		return fmt.Errorf("配置缺少必填字段：%s", strings.Join(missing, ", "))
 	}
 
-	// 取值合规性（预检查通过即配置自足，运行期不再兜底）
 	if cfg.Account.Port < 1 || cfg.Account.Port > 65535 {
 		return fmt.Errorf("account.port 取值非法：%d（须为 1-65535）", cfg.Account.Port)
-	}
-	if cfg.Account.PasswordSecurity != 1 && cfg.Account.PasswordSecurity != 2 && cfg.Account.PasswordSecurity != 3 {
-		return fmt.Errorf("account.password_security 取值非法：%d（仅支持 1/2/3：1=明文，2=base64，3=加密）", cfg.Account.PasswordSecurity)
-	}
-	if cfg.Execution.Mode != "direct" && cfg.Execution.Mode != "sudo" {
-		return fmt.Errorf("execution.mode 取值非法：%s（仅支持 direct=登录用户 / sudo=root）", cfg.Execution.Mode)
 	}
 	for name, v := range map[string]int{
 		"execution.timeout_connect":  cfg.Execution.TimeoutConnect,
@@ -167,18 +174,17 @@ func validate(cfg *Config, md toml.MetaData) error {
 			return fmt.Errorf("%s 取值非法：%d（须为正整数，单位秒）", name, v)
 		}
 	}
-	th := cfg.Upload.ConcurrencyThresholds
-	if th.SmallFile < 1 {
-		return fmt.Errorf("upload.concurrency_thresholds.small_file 取值非法：%d（须为正整数，单位字节）", th.SmallFile)
+	if cfg.Upload.SmallFile < 1 {
+		return fmt.Errorf("upload.small_file 取值非法：%d（须为正整数，单位字节）", cfg.Upload.SmallFile)
 	}
-	if th.LargeFile < 1 {
-		return fmt.Errorf("upload.concurrency_thresholds.large_file 取值非法：%d（须为正整数，单位字节）", th.LargeFile)
+	if cfg.Upload.LargeFile < 1 {
+		return fmt.Errorf("upload.large_file 取值非法：%d（须为正整数，单位字节）", cfg.Upload.LargeFile)
 	}
-	if th.LargeFile < th.SmallFile {
-		return fmt.Errorf("upload.concurrency_thresholds 取值非法：large_file(%d) 不能小于 small_file(%d)", th.LargeFile, th.SmallFile)
+	if cfg.Upload.LargeFile < cfg.Upload.SmallFile {
+		return fmt.Errorf("上传阈值取值非法：large_file(%d) 不能小于 small_file(%d)", cfg.Upload.LargeFile, cfg.Upload.SmallFile)
 	}
-	if th.MediumConcurrency < 1 {
-		return fmt.Errorf("upload.concurrency_thresholds.medium_concurrency 取值非法：%d（须为正整数）", th.MediumConcurrency)
+	if cfg.Upload.MediumParallel < 1 {
+		return fmt.Errorf("upload.medium_parallel 取值非法：%d（须为正整数）", cfg.Upload.MediumParallel)
 	}
 	return nil
 }
@@ -190,64 +196,50 @@ func definedStr(md toml.MetaData, path ...string) string {
 	return ""
 }
 
-func definedInt(md toml.MetaData, path ...string) string { return definedStr(md, path...) }
-
-// resolveCredentialPaths 解析配置内三个凭据字段（spec D31）：
-// 去首尾空白 → ~ 展开 → 绝对则原样 → 相对则拼 secret_dir。
-// secret_dir 未配置且字段为相对路径 → 明确报错，给出两条出路。
-// 与旧实现的差异：取消 secret_dir 字面量 none 的宽容（TOML 中 "" 即未配置）。
+// resolveCredentialPaths 归一化配置里的路径字段。
+//
+//	secret_dir / key 恒为路径（取值不随加密开关变）
+//	password / key_password 只在打开加密时是路径；不加密时是密码 / 口令本身，原样保留
 func resolveCredentialPaths(cfg *Config) error {
-	secretDir := strings.TrimSpace(cfg.Account.SecretDir)
-	if secretDir != "" {
-		secretDir = expandHome(secretDir)
-		cfg.Account.SecretDir = secretDir
-	}
-
-	resolve := func(field, raw string) (string, error) {
-		p := strings.TrimSpace(raw)
-		if p == "" {
-			return "", nil
-		}
-		if strings.HasPrefix(p, "~") {
-			p = expandHome(p)
-		}
-		if filepath.IsAbs(p) {
-			return p, nil
-		}
-		if secretDir == "" {
-			return "", fmt.Errorf(
-				"account.%s 为相对路径 '%s'，但 account.secret_dir 未配置，无法拼接\n出路：① 改写绝对路径 ② 在配置中设置 account.secret_dir", field, strings.TrimSpace(raw))
-		}
-		return filepath.Join(secretDir, p), nil
-	}
-
-	// password 为必填字段，Load 出此函数前已确认存在；key / key_passphrase 允许为空。
 	var err error
-	cfg.Account.Password, err = resolve("password", cfg.Account.Password)
-	if err == nil {
-		cfg.Account.Key, err = resolve("key", cfg.Account.Key)
+	if cfg.Account.SecretDir, err = normalizeConfigPath("secret_dir", cfg.Account.SecretDir); err != nil {
+		return err
 	}
-	if err == nil {
-		cfg.Account.KeyPassphrase, err = resolve("key_passphrase", cfg.Account.KeyPassphrase)
+	if cfg.Account.Key, err = normalizeConfigPath("key", cfg.Account.Key); err != nil {
+		return err
 	}
-	return err
+	if cfg.Account.Encrypt {
+		if cfg.Account.Password, err = normalizeConfigPath("password", cfg.Account.Password); err != nil {
+			return err
+		}
+		if cfg.Account.KeyPassword, err = normalizeConfigPath("key_password", cfg.Account.KeyPassword); err != nil {
+			return err
+		}
+		return nil
+	}
+	cfg.Account.Password = strings.TrimSpace(cfg.Account.Password)
+	cfg.Account.KeyPassword = strings.TrimSpace(cfg.Account.KeyPassword)
+	return nil
 }
 
-// expandHome 把前导 ~ 展开为用户主目录。
-func expandHome(p string) string {
-	if p == "~" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return p
-		}
-		return home
+// normalizeConfigPath 归一化一个配置路径：分隔符统一为 /、盘符转大写，且必须是绝对路径。
+// 空值表示未配置，放行。不解析 ~：配置是长期备着的东西，写全路径。
+func normalizeConfigPath(name, raw string) (string, error) {
+	p := strings.TrimSpace(raw)
+	if p == "" {
+		return "", nil
 	}
-	if strings.HasPrefix(p, "~/") || strings.HasPrefix(p, `~\`) {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return p
-		}
-		return filepath.Join(home, p[2:])
+	p = strings.ReplaceAll(p, `\`, "/")
+	if len(p) >= 2 && p[1] == ':' && isDriveLetter(p[0]) {
+		p = strings.ToUpper(p[:1]) + p[1:]
 	}
-	return p
+	if strings.HasPrefix(p, "~") || !filepath.IsAbs(p) {
+		return "", fmt.Errorf(
+			"account.%s 必须是绝对路径，当前值：%s\n"+
+				"原因：配置里的凭据路径一律写全路径；相对路径与 ~ 只在清单里能用\n"+
+				"提示：像 D:/Keys/id_rsa 或 /home/ops/.keys/id_rsa 这样写", name, raw)
+	}
+	return p, nil
 }
+
+func isDriveLetter(b byte) bool { return (b >= 'A' && b <= 'Z') || (b >= 'a' && b <= 'z') }

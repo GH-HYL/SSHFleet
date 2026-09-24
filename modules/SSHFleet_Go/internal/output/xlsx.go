@@ -242,7 +242,7 @@ func WriteOutputXlsx(archiveDir string, results *batch.Results, cfg *config.Conf
 	}); err != nil {
 		return err
 	}
-	return f.SaveAs(filepath.Join(archiveDir, cfg.Paths.OutputXlsx))
+	return f.SaveAs(filepath.Join(archiveDir, config.BuiltinPaths.OutputXlsx))
 }
 
 // 两列自由文本（N: error / O: output）的固定列宽：不参与自适应——这两列长短不一，
@@ -333,7 +333,7 @@ func WriteResultsXlsx(archiveDir string, results *batch.Results, cfg *config.Con
 	if err := f.AutoFilter(sheet, fmt.Sprintf("A1:%s", last), nil); err != nil {
 		return err
 	}
-	return f.SaveAs(filepath.Join(archiveDir, cfg.Paths.ResultsXlsx))
+	return f.SaveAs(filepath.Join(archiveDir, config.BuiltinPaths.ResultsXlsx))
 }
 
 // resultsFixedWidthColumns 参与自适应列宽的列数：A–M 共 13 列，N/O 固定宽度。

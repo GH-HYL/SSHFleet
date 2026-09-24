@@ -18,10 +18,7 @@ import (
 // xlsx 格式化回归（对位旧 xlsx.py）：格式错在表格里肉眼难查，逐条断言。
 
 func testCfg() *config.Config {
-	cfg := &config.Config{}
-	cfg.Paths.OutputXlsx = "output.xlsx"
-	cfg.Paths.ResultsXlsx = "results.xlsx"
-	return cfg
+	return &config.Config{}
 }
 
 func testResults() *batch.Results {

@@ -5,42 +5,26 @@ import (
 	"strconv"
 	"strings"
 
-	"sshfleet/internal/cli"
-	"sshfleet/internal/common"
 	"sshfleet/internal/config"
 )
 
-// 字段补全交互提示与 INFO 前缀的配色（对位旧 constants.py / csv.py：提示黄、[INFO] 青配黄 function）。
+// 输出配色：提示黄、[INFO] 青配黄 function。
 const (
 	colorReset  = "\x1b[0m"
 	colorCyan   = "\x1b[36m"
 	colorYellow = "\x1b[33m"
 )
 
-// FieldMemory 跨节点累积的输入记忆：是否把本次交互输入应用到后续空字段节点。
-// 端口 / 用户名 / 密码各持一组独立记忆（CONTEXT.md「输入记忆」）。
-type FieldMemory struct {
-	portUseInput       bool
-	portInputValue     int
-	userUseInput       bool
-	userInputValue     string
-	passwordUseInput   bool
-	passwordInputValue string
-}
-
-// resolveNodes 逐节点解析（字段补全三套函数不合并，spec 明确不动）。
-func resolveNodes(rows [][]string, pre *precheckResult, args *cli.Args, cfg *config.Config, in *common.Interactor) ([]NodeInfo, error) {
-	keyMode := args.KeyMode()
-	mem := &FieldMemory{}
+// resolveNodes 逐节点解析：字段补全（清单 > 配置，缺了就报错，不再询问）。
+func resolveNodes(rows [][]string, pre *precheckResult, cfg *config.Config) ([]NodeInfo, error) {
 	var (
 		nodes []NodeInfo
 		errs  []string
 	)
-	total := len(rows)
 	for idx, raw := range rows {
 		row := padRow(raw)
 		// 行号对外一律 1 基（提示文案「行 N」与 parseNode 同口径）；凭据经 rowCreds 取用
-		node, rowErrs := parseNode(row, idx+1, total, keyMode, pre, cfg, args, mem, in)
+		node, rowErrs := parseNode(row, idx+1, pre, cfg)
 		if len(rowErrs) > 0 {
 			ip := strings.TrimSpace(row[0])
 			if ip == "" {
@@ -62,46 +46,34 @@ func resolveNodes(rows [][]string, pre *precheckResult, args *cli.Args, cfg *con
 	return nodes, nil
 }
 
-// parseNode 解析单个节点行：IP 校验（D13）+ 字段补全 + 密钥内容 / 口令归属。
+// parseNode 解析单个节点行：IP 校验 + 字段补全 + 密钥内容 / 口令归属。
 // idx 为**1 基行号**（提示文案与凭据取用同一个口径）。
-func parseNode(row []string, idx, total int, keyMode cli.KeyMode, pre *precheckResult, cfg *config.Config, args *cli.Args, mem *FieldMemory, in *common.Interactor) (NodeInfo, []string) {
+func parseNode(row []string, idx int, pre *precheckResult, cfg *config.Config) (NodeInfo, []string) {
 	ip := strings.TrimSpace(row[0])
 	var errs []string
 	rc := pre.rowCreds(idx)
 
-	// IP：必须存在 + 严格 IPv4（D13，旧版正则不校验每段范围的缺陷在此修正）
+	// IP：必须存在 + 严格 IPv4（旧版正则不校验每段范围的缺陷在此修正）
 	if ip == "" {
 		errs = append(errs, "IP必须存在")
 	} else if !isStrictIPv4(ip) {
 		errs = append(errs, "IP格式不正确")
 	}
 
-	port, portErrs := resolvePort(strings.TrimSpace(row[1]), cfg.Account.Port, mem, idx, total, ip, args.Disinteractive, in)
+	port, portErrs := resolvePort(strings.TrimSpace(row[1]), cfg.Account.Port)
 	errs = append(errs, portErrs...)
-	user, userErr := resolveUser(strings.TrimSpace(row[2]), cfg.Account.User, mem, idx, total, ip, args.Disinteractive, in)
+	user, userErr := resolveUser(strings.TrimSpace(row[2]), cfg.Account.User)
 	if userErr != nil {
 		errs = append(errs, userErr.Error())
 	}
-	password, passErr := resolvePassword(rc, pre, cfg, mem, idx, total, ip, args.Disinteractive, in)
+	password, passErr := resolvePassword(rc, pre)
 	if passErr != nil {
 		errs = append(errs, passErr.Error())
 	}
 
-	// 密钥内容：状态3 用统一私钥原文；其余为预检时读好的 PEM（本行有路径才有值）
-	keyContent := ""
-	if keyMode == cli.KeyModeUniversal {
-		keyContent = pre.universalKeyContent
-	} else if rc.keyContent != "" {
-		keyContent = rc.keyContent
-	}
-
-	// 私钥口令：状态3 用统一口令；状态1/2 CSV 第6列优先，缺省用全局配置
-	keyPassphrase := ""
-	if keyMode == cli.KeyModeUniversal {
-		keyPassphrase = pre.universalPassphrase
-	} else if rc.keyPassRaw != "" {
-		keyPassphrase = rc.keyPassRaw
-	} else if pre.globalPassphrase != "" {
+	// 私钥口令：清单第 6 列优先，缺省用配置里的
+	keyPassphrase := rc.keyPassRaw
+	if keyPassphrase == "" {
 		keyPassphrase = pre.globalPassphrase
 	}
 
@@ -113,57 +85,26 @@ func parseNode(row []string, idx, total int, keyMode cli.KeyMode, pre *precheckR
 		Port:          port,
 		User:          user,
 		Password:      password,
-		KeyContent:    keyContent,
+		KeyContent:    rc.keyContent,
 		KeyPassphrase: keyPassphrase,
 	}, nil
 }
 
-// resolvePort 端口字段补全：CSV > config > 输入记忆 > 交互输入。
-func resolvePort(raw string, defaultPort int, mem *FieldMemory, idx, total int, ip string, disinteractive bool, in *common.Interactor) (int, []string) {
+// resolvePort 端口补全：清单第 2 列 > 配置 account.port。
+func resolvePort(raw string, defaultPort int) (int, []string) {
 	if raw != "" {
-		// 对位旧 `port.isdigit()`：只接受纯数字（不接受正负号）
+		// 只接受纯数字（不接受正负号）
 		v, err := strconv.Atoi(raw)
 		if err != nil || !isAllDigits(raw) || v < 1 || v > 65535 {
 			return 0, []string{"端口必须是1-65535之间的整数，当前值为：" + raw}
 		}
 		return v, nil
 	}
-	// 配置预检查已保证 account.port ∈ [1,65535]（D43：无写死默认值，取值在启动时报错）
-	if defaultPort != 0 {
-		return defaultPort, nil
-	}
-	if mem.portUseInput {
-		return mem.portInputValue, nil
-	}
-	val, err := in.Prompt(fmt.Sprintf("行 %d (IP: %s): 端口为空，请输入端口号: ", idx, ip))
-	if err != nil {
-		return 0, []string{err.Error()}
-	}
-	for {
-		v, cerr := strconv.Atoi(val)
-		if cerr == nil && v >= 1 && v <= 65535 {
-			// 询问是否将此端口号应用于所有后续端口为空的节点
-			if !mem.portUseInput && idx < total {
-				yes, cerr2 := in.Confirm("\n"+colorYellow+"是否将此端口号应用于所有后续端口为空的节点？"+colorReset, true)
-				if cerr2 != nil {
-					return 0, []string{cerr2.Error()}
-				}
-				if yes {
-					mem.portUseInput = true
-					mem.portInputValue = v
-				}
-			}
-			return v, nil
-		}
-		in.Notice(fmt.Sprintf("端口必须是1-65535之间的整数，当前输入：%s\n", val))
-		val, err = in.Prompt(fmt.Sprintf("行 %d (IP: %s): 端口为空，请输入端口号: ", idx, ip))
-		if err != nil {
-			return 0, []string{err.Error()}
-		}
-	}
+	// 配置预检查已保证 account.port ∈ [1,65535]
+	return defaultPort, nil
 }
 
-// isAllDigits 纯数字判定（对位旧 str.isdigit()）。
+// isAllDigits 纯数字判定。
 func isAllDigits(s string) bool {
 	if s == "" {
 		return false
@@ -176,48 +117,20 @@ func isAllDigits(s string) bool {
 	return true
 }
 
-// resolveUser 用户名字段补全：CSV > config > 输入记忆 > 交互输入。
-// 取消（EOF）错误向上传播——与 resolvePort 一致，不再静默吞掉后继续执行（2026-09-14 审计修复）。
-func resolveUser(raw, defaultUser string, mem *FieldMemory, idx, total int, ip string, disinteractive bool, in *common.Interactor) (string, error) {
+// resolveUser 用户名补全：清单第 3 列 > 配置 account.user。
+func resolveUser(raw, defaultUser string) (string, error) {
 	if raw != "" {
 		return raw, nil
 	}
 	if defaultUser != "" {
 		return defaultUser, nil
 	}
-	if mem.userUseInput {
-		return mem.userInputValue, nil
-	}
-	val, err := in.Prompt(fmt.Sprintf("行 %d (IP: %s): 用户名为空，请输入用户名: ", idx, ip))
-	if err != nil {
-		return "", err
-	}
-	for strings.TrimSpace(val) == "" {
-		in.Notice("用户名不能为空\n")
-		val, err = in.Prompt(fmt.Sprintf("行 %d (IP: %s): 用户名为空，请输入用户名: ", idx, ip))
-		if err != nil {
-			return "", err
-		}
-	}
-	// 询问是否将此用户名应用于所有后续用户为空的节点
-	if !mem.userUseInput && idx < total {
-		yes, cerr := in.Confirm("\n"+colorYellow+"是否将此用户名应用于所有后续用户为空的节点？"+colorReset, true)
-		if cerr != nil {
-			return "", cerr
-		}
-		if yes {
-			mem.userUseInput = true
-			mem.userInputValue = val
-		}
-	}
-	return val, nil
+	return "", fmt.Errorf("用户名为空：清单第 3 列没写，配置 account.user 也没配")
 }
 
-// resolvePassword 密码字段补全：清单密码列 > 密钥认证（有私钥则空）> 配置默认密码 > 输入记忆 > 交互输入。
-// rc 是本行的预检凭据（解码值取自预检，读→校验→直接用，不再读盘）。
+// resolvePassword 密码补全：清单第 4 列 > 密钥登录（有私钥则不留密码）> 配置 account.password。
 // 注：私钥节点密码恒为空，不受其他节点是否使用默认密码影响（避免混合清单里的状态泄漏）。
-// 取消（EOF）错误向上传播——与 resolvePort 一致（2026-09-14 审计修复）。
-func resolvePassword(rc rowCreds, pre *precheckResult, cfg *config.Config, mem *FieldMemory, idx, total int, ip string, disinteractive bool, in *common.Interactor) (string, error) {
+func resolvePassword(rc rowCreds, pre *precheckResult) (string, error) {
 	if rc.passwordPlain != "" {
 		return rc.passwordPlain, nil
 	}
@@ -227,30 +140,5 @@ func resolvePassword(rc rowCreds, pre *precheckResult, cfg *config.Config, mem *
 	if pre.defaultPasswordPlain != "" {
 		return pre.defaultPasswordPlain, nil
 	}
-	if mem.passwordUseInput {
-		return mem.passwordInputValue, nil
-	}
-	val, err := in.PromptPassword(fmt.Sprintf("行 %d (IP: %s): 密码为空，请输入密码: ", idx, ip))
-	if err != nil {
-		return "", err
-	}
-	for val == "" {
-		in.Notice("密码不能为空，请重新输入\n")
-		val, err = in.PromptPassword(fmt.Sprintf("行 %d (IP: %s): 密码为空，请输入密码: ", idx, ip))
-		if err != nil {
-			return "", err
-		}
-	}
-	// 询问是否将此密码应用于所有后续密码为空的节点
-	if !mem.passwordUseInput && idx < total {
-		yes, cerr := in.Confirm("\n"+colorYellow+"是否将此密码应用于所有后续密码为空的节点？"+colorReset, true)
-		if cerr != nil {
-			return "", cerr
-		}
-		if yes {
-			mem.passwordUseInput = true
-			mem.passwordInputValue = val
-		}
-	}
-	return val, nil
+	return "", fmt.Errorf("密码为空：清单第 4 列没写，配置 account.password 也没配")
 }

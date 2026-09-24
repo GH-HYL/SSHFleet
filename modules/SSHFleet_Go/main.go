@@ -1,4 +1,4 @@
-// SSHFleet —— 批量 SSH 运维工具（单可执行文件，Go 重写版 5.0.0）
+// SSHFleet —— 批量 SSH 运维工具（单可执行文件）
 //
 // main.go 承载「初始化 → 运行 → 退出」主干全流程。
 // 所有环节的错误统一由 main 打印并独占退出权；子模块只返回 error，不自行退出。
@@ -32,7 +32,7 @@ import (
 // 版本号：单一出处（显示在帮助信息首行下方，经 cli.Parse 传入 Usage）。
 // 与 CHANGELOG 顶部当天段落的段头**同一个号**——开段、抬号时在同一次提交里同步改，
 // 两处不一致即为错误。同一天的改动共用一个号，不因改动多而另起号。
-const appVersion = "5.2.1"
+const appVersion = "6.0.0"
 
 // versionWithBuildID 版本号拼上**构建标识**：git 短提交号（仓库内编译时由 go build
 // 自动注入 vcs.revision；工作区有未提交改动时加 -dirty）+ HEAD 提交时间。
@@ -159,9 +159,9 @@ func main() {
 	}
 
 	// ---- 步骤 2：初始化日志 ------------------------------------------
-	logger, err := log.Init(cfg.Paths.Historys, cfg.Paths.Tool)
+	logger, err := log.Init(config.BuiltinPaths.Historys, config.BuiltinPaths.Tool)
 	if err != nil {
-		fatal("log", fmt.Errorf("初始化工具日志失败：%v\n请检查配置 paths.historys 指向的日志目录是否存在且可写，然后重试", err))
+		fatal("log", fmt.Errorf("初始化工具日志失败：%v\n请检查程序所在目录是否可写，然后重试", err))
 	}
 	defer func() { _ = logger.Close() }()
 	toolLog = logger // 交给 fatal：此后任何致命错误都要落日志
@@ -171,8 +171,8 @@ func main() {
 	logger.Info(fmt.Sprintf("工作路径：%s", func() string { wd, _ := os.Getwd(); return wd }()))
 	// 逐段补回引号：argv 里早没了引号，平铺打印会让 `-c 'who -b'` 这类命令
 	// 在日志里变成另一条命令（详情见 output.DisplayCommand）
-	logger.Info(fmt.Sprintf("原始命令行参数：%s", output.DisplayCommand(os.Args)))
-	logger.Info(fmt.Sprintf("日志目录：%s，工具日志文件名：%s", cfg.Paths.Historys, cfg.Paths.Tool))
+	logger.Info(fmt.Sprintf("原始命令行参数：%s", output.DisplayCommand(common.MaskCommandLine(os.Args))))
+	logger.Info(fmt.Sprintf("日志目录：%s，工具日志文件名：%s", config.BuiltinPaths.Historys, config.BuiltinPaths.Tool))
 
 	// ---- 步骤 3：解析命令行 ------------------------------------------
 	args, err := cli.Parse(cfg, versionWithBuildID(), os.Args[1:])
@@ -203,23 +203,25 @@ func main() {
 	}
 	if args.ConvertPassword != "" {
 		logger.Info("进入凭据转换模式（--convert-password）")
-		if err := credential.ConvertPassword(args.ConvertPassword, cfg.Account.SecretDir, cfg.Account.PasswordSecurity); err != nil {
+		if err := credential.ConvertPassword(args.ConvertPassword, cfg.Account.SecretDir, cfg.Account.Encrypt); err != nil {
 			fatal("credential", err)
 		}
 		return
 	}
 
 	// ---- 步骤 4.5：主密钥预检查 ---------------------------------------
-	// 「生成密钥后忘了 source / 重开终端」是最高频的坑（用户 2026-09-15 指出）：
-	// 与其等他用凭据时撞一句看不懂的报错，不如开工前就把现状与下一步说清。
-	if note := credential.PrecheckKey(); note != "" {
-		state, _ := credential.InspectKey()
-		logger.Warn(fmt.Sprintf("主密钥预检查未通过（%s）", state))
-		fmt.Fprintf(os.Stderr, "\n%s[警告]%s %s", colorYellow, colorReset, note)
+	// 「生成密钥后忘了 source / 重开终端」是最高频的坑：与其等他用凭据时撞一句
+	// 看不懂的报错，不如开工前就把现状与下一步说清。不加密时不做这件事——用不到主密钥。
+	if cfg.Account.Encrypt {
+		if note := credential.PrecheckKey(); note != "" {
+			state, _ := credential.InspectKey()
+			logger.Warn(fmt.Sprintf("主密钥预检查未通过（%s）", state))
+			fmt.Fprintf(os.Stderr, "\n%s[警告]%s %s", colorYellow, colorReset, note)
+		}
 	}
 
 	// ---- 步骤 5：参数合规检查 + 危险命令检测 ---------------------------
-	if err := cli.CheckConfigFiles(cfg); err != nil {
+	if err := cli.CheckConfigFiles(); err != nil {
 		fatal("cli", err)
 	}
 	if err := cli.CheckArguments(args); err != nil {
@@ -228,11 +230,11 @@ func main() {
 	logger.Success("输入的参数合规性检查通过")
 
 	// 危险命令检测：规则文件加载（含规则校验）+ 命中判定 + 处置
-	dangerRules, err := dangercheck.LoadRules(cfg.Paths.DangerousKeywords)
+	dangerRules, err := dangercheck.LoadRules(config.BuiltinPaths.DangerousKeywords)
 	if err != nil {
 		fatal("dangercheck", fmt.Errorf("危险关键词内容检查未通过\n原因：%v", err))
 	}
-	errorKeywords, err := result.LoadKeywords(cfg.Paths.ErrorKeywords)
+	errorKeywords, err := result.LoadKeywords(config.BuiltinPaths.ErrorKeywords)
 	if err != nil {
 		fatal("result", err)
 	}
@@ -273,7 +275,7 @@ func main() {
 	}
 	logger.Success("危险关键词内容检查通过")
 
-	// ---- 步骤 6：读取清单 + 字段补全 + 输入记忆 ------------------------
+	// ---- 步骤 6：读取清单 + 字段补全 -----------------------------------
 	nodes, err := nodelist.Read(args, cfg, in)
 	if err != nil {
 		fatal("nodelist", err)
@@ -301,13 +303,13 @@ func main() {
 
 	// 执行期日志（对位旧引擎写入归档目录的 SSHFleet.log）：带时间戳与级别的
 	// 节点级运行明细。执行开始即轮转过去，结束后切回工具日志并在此声明去向。
-	execLog, err := log.InitExec(archive.Dir, cfg.Paths.Exec)
+	execLog, err := log.InitExec(archive.Dir, config.BuiltinPaths.Exec)
 	if err != nil {
 		fatal("log", fmt.Errorf("创建执行期日志失败\n原因：%v", err))
 	}
 	defer func() { _ = execLog.Close() }()
 	execLogRef = execLog // 交给 fatal：批量执行阶段的致命错误也要落进本次执行的档案
-	execLogPath := filepath.Join(archive.Dir, cfg.Paths.Exec)
+	execLogPath := filepath.Join(archive.Dir, config.BuiltinPaths.Exec)
 	logger.Info(fmt.Sprintf("执行期日志已轮转至：%s（执行结束自动切回）", execLogPath))
 
 	mode := result.ModeOf(args)
@@ -315,7 +317,7 @@ func main() {
 		execLog.Warn(dangerNote)
 	}
 
-	outputPath := filepath.Join(archive.Dir, cfg.Paths.Output)
+	outputPath := filepath.Join(archive.Dir, config.BuiltinPaths.Output)
 	outputFile, err := os.Create(outputPath)
 	if err != nil {
 		logger.Warn(fmt.Sprintf("无法创建 output.txt 文件: %v", err))
@@ -372,6 +374,6 @@ func main() {
 		fatal("output", err)
 	}
 
-	logger.Info(fmt.Sprintf("SSHFleet已退出，日志文件：%s", filepath.Join(cfg.Paths.Historys, cfg.Paths.Tool)))
+	logger.Info(fmt.Sprintf("SSHFleet已退出，日志文件：%s", filepath.Join(config.BuiltinPaths.Historys, config.BuiltinPaths.Tool)))
 	logger.Raw("\n    " + strings.Repeat("─", 50) + "\n\n")
 }

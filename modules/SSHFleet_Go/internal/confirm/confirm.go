@@ -91,7 +91,7 @@ func buildInfoTable(args *cli.Args, nodes *nodelist.Nodes) [][2]string {
 		t = append(t, [2]string{"执行模式", "下载模式"}, [2]string{"远程路径", args.Download}, [2]string{"本地路径", args.Path}, [2]string{"", ""})
 	}
 	t = append(t,
-		[2]string{"CSV文件路径", args.CsvFile},
+		[2]string{"CSV文件路径", common.MaskInlineListIf(args.CsvFile)},
 		[2]string{"节点数量", fmt.Sprintf("%d", nodes.Len())},
 		[2]string{"并发数值", fmt.Sprintf("%d", args.Number)},
 		[2]string{"", ""},
@@ -216,13 +216,13 @@ func calculateUploadSize(path string) int64 {
 
 // checkConcurrencyThreshold 按文件大小返回建议并发数，0 = 不限制。
 func checkConcurrencyThreshold(size int64, cfg *config.Config) int {
-	t := cfg.Upload.ConcurrencyThresholds
+	t := cfg.Upload
 	switch {
 	case size < int64(t.SmallFile):
 		return 0
 	case size > int64(t.LargeFile):
 		return 1
 	default:
-		return t.MediumConcurrency
+		return t.MediumParallel
 	}
 }

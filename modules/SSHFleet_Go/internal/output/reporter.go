@@ -83,7 +83,6 @@ func NewReporter(execLog *log.Logger, outputFile io.Writer, mode string, total i
 			ExitCode:     res.ExitCode,
 			Error:        deref(res.Error),
 			Output:       res.Output,
-			AuthFailure:  deref(res.AuthFailure),
 			Mode:         mode,
 			SuccessFiles: res.SuccessFiles,
 			FailedFiles:  res.FailedFiles,

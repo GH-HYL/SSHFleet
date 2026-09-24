@@ -47,13 +47,11 @@ func (c *Client) connectFor(ctx context.Context, result *Result) bool {
 	start := time.Now()
 	err := c.Connect(ctx)
 	result.ConnectCostTime = time.Since(start).Seconds()
-	// 登录方式到这一刻才定得下来：私钥解析失败会退回密码，
-	// 配置里看不出来，只有走完认证才知道实际用的是哪一种。
+	// 登录方式到这一刻才定得下来：密钥还是密码由实际挂进认证列表的方式决定。
 	result.AuthMethod = c.authMethodDesc()
 	if err != nil {
 		result.ConnectSuccess = false
 		result.Error = strPtr(err.Error())
-		result.AuthFailure = c.classifyAuthFailure(err)
 		return false
 	}
 	result.ConnectSuccess = true
