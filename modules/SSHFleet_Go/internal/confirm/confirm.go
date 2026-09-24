@@ -30,35 +30,38 @@ const (
 
 // Confirm 主干第 7 步入口。
 func Confirm(args *cli.Args, nodes *nodelist.Nodes, cfg *config.Config, logger *log.Logger, in *common.Interactor) error {
-	// 上传并发建议（y 用建议值，n 保留原值继续执行，不退出）；取消错误向上传播
-	if err := checkUploadConcurrency(args, cfg, in); err != nil {
-		return err
-	}
-
 	// 未输入并发数，默认使用节点数量进行并发
 	if args.Number == 0 {
 		args.Number = nodes.Len()
 	}
 
-	// 非交互模式：显式跳过确认，直接执行
+	// 非交互模式：不出参数屏、不提问，但上传并发建议照旧生效（Confirm 直接返回已确认）
 	if in.Disinteractive {
+		if _, err := suggestUploadConcurrency(args, cfg, in); err != nil {
+			return err
+		}
 		fmt.Printf("%s [非交互模式] 跳过执行参数确认环节，直接执行%s\n\n", colorYellow, colorReset)
 		return nil
 	}
 
-	// 构建标题横幅
-	title := "           SSHFleet - 执行参数确认           "
-	border := strings.Repeat("═", len([]rune(title))+10)
-
-	fmt.Printf("\n%s╔%s╗%s\n", colorCyan, border, colorReset)
-	fmt.Printf("%s║  %s  ║%s\n", colorCyan, title, colorReset)
-	fmt.Printf("%s╚%s╝%s\n\n", colorCyan, border, colorReset)
-
-	printInfoTable(buildInfoTable(args, nodes))
+	printParamScreen(args, nodes, "", !args.NumberGiven())
 
 	if args.Upload != "" {
 		if err := showUploadContent(args.Upload); err != nil {
 			return err
+		}
+	}
+
+	// 上传并发建议排在参数屏之后：采纳了就把参数屏重显一遍、并发数那行凸显，
+	// 免得"参数屏说 3、实际跑 10"；没采纳说明值没变，不必重显。
+	// 重显的这一遍不再标"（全部并行）"——这个数是刚确认过的，不是"不指定"的默认。
+	if args.Upload != "" {
+		changed, err := suggestUploadConcurrency(args, cfg, in)
+		if err != nil {
+			return err
+		}
+		if changed {
+			printParamScreen(args, nodes, "并发数", false)
 		}
 	}
 
@@ -77,8 +80,22 @@ func Confirm(args *cli.Args, nodes *nodelist.Nodes, cfg *config.Config, logger *
 	return nil
 }
 
+// printParamScreen 打印参数屏（横幅 + 信息表）。
+// highlight 非空时把该标签那一行凸显；allParallel 决定并发数是否标"（全部并行）"。
+func printParamScreen(args *cli.Args, nodes *nodelist.Nodes, highlight string, allParallel bool) {
+	title := "           SSHFleet - 执行参数确认           "
+	border := strings.Repeat("═", len([]rune(title))+10)
+
+	fmt.Printf("\n%s╔%s╗%s\n", colorCyan, border, colorReset)
+	fmt.Printf("%s║  %s  ║%s\n", colorCyan, title, colorReset)
+	fmt.Printf("%s╚%s╝%s\n\n", colorCyan, border, colorReset)
+
+	printInfoTable(buildInfoTable(args, nodes, allParallel), highlight)
+}
+
 // buildInfoTable 构建显示信息的表格数据（行序与旧版一致）。
-func buildInfoTable(args *cli.Args, nodes *nodelist.Nodes) [][2]string {
+// allParallel 为真时，并发数一行补"（全部并行）"，让用户知道这个数从哪来。
+func buildInfoTable(args *cli.Args, nodes *nodelist.Nodes, allParallel bool) [][2]string {
 	identity := "登录用户"
 	if args.Sudo {
 		identity = "root"
@@ -97,7 +114,7 @@ func buildInfoTable(args *cli.Args, nodes *nodelist.Nodes) [][2]string {
 	t = append(t,
 		[2]string{"节点清单", common.MaskInlineListIf(args.CsvFile)},
 		[2]string{"节点数量", fmt.Sprintf("%d", nodes.Len())},
-		[2]string{"并发数", concurrentText(args)},
+		[2]string{"并发数", concurrentText(args, allParallel)},
 		[2]string{"", ""},
 	)
 	if args.ConnectTimeout != 0 {
@@ -117,16 +134,17 @@ func buildInfoTable(args *cli.Args, nodes *nodelist.Nodes) [][2]string {
 	return t
 }
 
-// concurrentText 并发数的显示文案：没给 -n 时说明这是"全部并行"。
-func concurrentText(args *cli.Args) string {
-	if args.NumberGiven() {
+// concurrentText 并发数的显示文案：不指定 -n 时说明这是"全部并行"。
+func concurrentText(args *cli.Args, allParallel bool) string {
+	if !allParallel {
 		return fmt.Sprintf("%d", args.Number)
 	}
 	return fmt.Sprintf("%d（全部并行）", args.Number)
 }
 
 // printInfoTable 打印信息表格，对齐用 common.DisplayWidth（全角标点按 2 列计，不错位）。
-func printInfoTable(table [][2]string) {
+// highlight 非空时，标签等于它的那一行改用醒目色——用于"并发数被建议改了"的重显。
+func printInfoTable(table [][2]string, highlight string) {
 	maxLabelWidth := 0
 	for _, r := range table {
 		if w := common.DisplayWidth(r[0]); w > maxLabelWidth {
@@ -138,38 +156,45 @@ func printInfoTable(table [][2]string) {
 			fmt.Println()
 			continue
 		}
+		color := colorBrightOrange
+		if highlight != "" && r[0] == highlight {
+			color = colorBrightYellow
+		}
 		label := r[0] + strings.Repeat(" ", maxLabelWidth-common.DisplayWidth(r[0]))
-		fmt.Printf("%s▶ %s-→%s   %s%s%s\n", colorBrightCyan, label, colorReset, colorBrightOrange, r[1], colorReset)
+		fmt.Printf("%s▶ %s-→%s   %s%s%s\n", colorBrightCyan, label, colorReset, color, r[1], colorReset)
 	}
 }
 
-// checkUploadConcurrency 按配置阈值输出上传并发建议，用户确认后应用。
+// suggestUploadConcurrency 按配置阈值给出上传并发建议，返回是否采纳（采纳=并发数被改）。
 //
-// 建议规则（config upload.concurrency_thresholds）：
-//   - file_size < small_file: 全并发（0 = 不限制，无需建议）
-//   - file_size > large_file: 串行（并发=1）
-//   - 两者之间: medium_concurrency
-func checkUploadConcurrency(args *cli.Args, cfg *config.Config, in *common.Interactor) error {
+// 建议规则（配置 [upload]）：
+//   - 上传总大小 < small_file: 全并发（0 = 不限制，无需建议）
+//   - > large_file: 串行（并发=1）
+//   - 两者之间: medium_parallel
+//
+// 文案给全「依据 / 建议值 / 现状值」三样——只报一个建议数，用户不知道它从哪来、
+// 不采纳会怎样，等于让他盲选。批量 SSH 是高风险操作，关键参数必须显式确认。
+func suggestUploadConcurrency(args *cli.Args, cfg *config.Config, in *common.Interactor) (bool, error) {
 	if args.Upload == "" || cfg == nil {
-		return nil
+		return false, nil
 	}
 	size := calculateUploadSize(args.Upload)
 	allowed := checkConcurrencyThreshold(size, cfg)
 	if allowed == 0 {
-		return nil
+		return false, nil
 	}
-	fmt.Printf("%s上传文件总大小 %s，建议并发数为 %d%s\n", colorYellow, common.FormatBytes(size), allowed, colorReset)
-	yes, err := in.Confirm(fmt.Sprintf("是否使用建议并发数 %d ？", allowed), true)
+	fmt.Printf("%s上传总大小 %s，按配置里的阈值建议同时传 %d 个（当前是 %d 个）。%s\n",
+		colorYellow, common.FormatBytes(size), allowed, args.Number, colorReset)
+	yes, err := in.Confirm(fmt.Sprintf("改成 %d 个？", allowed), true)
 	if err != nil {
-		// EOF/取消：对位旧 get_user_confirmation 直接取消退出；不在子模块内自行
-		// os.Exit，返回 ErrCancelled 交由 main 统一退出（2026-09-14 审计修复）
-		return err
+		// EOF/取消：返回 ErrCancelled 交由 main 统一退出（不在子模块内自行 os.Exit）
+		return false, err
 	}
-	if yes {
-		args.Number = allowed
+	if !yes {
+		return false, nil // 保留原值继续执行
 	}
-	// 输入 n：保留原值（未指定 -n 时后续默认使用节点数），继续执行
-	return nil
+	args.Number = allowed
+	return true, nil
 }
 
 // showUploadContent 显示上传文件/目录内容（一层树，与旧版一致）。

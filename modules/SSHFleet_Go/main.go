@@ -260,7 +260,7 @@ func main() {
 		logger.Warn(dangerNote)
 	case len(dangerReport.Matches) > 0:
 		output.PrintDangerWarning(dangerReport, false)
-		confirmed, cerr := in.Confirm("\n"+colorYellow+"已明确风险继续执行？"+colorReset, false)
+		confirmed, cerr := in.Confirm("\n"+colorYellow+"确定继续？"+colorReset, false)
 		if cerr != nil {
 			fatal("dangercheck", cerr)
 		}
