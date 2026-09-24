@@ -13,7 +13,7 @@ rm -rf /etc	forbidden	递归删除系统目录
 rm -rf /etc/nginx	forbidden	递归删除系统目录
 rm -rf /var/log	forbidden	递归删除系统目录
 rm -rf /boot	forbidden	递归删除系统目录
-rm -rf /root/.ssh	forbidden	递归删除系统目录
+rm -rf /root/.ssh	high	递归强制删除
 rm -rf /usr/lib	forbidden	递归删除系统目录
 sudo rm -rf /etc	forbidden	递归删除系统目录
 rm -rf /opt/test/123	high	递归强制删除
