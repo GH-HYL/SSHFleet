@@ -459,6 +459,6 @@ func usageText(cfg *config.Config, version string, width int) string {
 	for _, e := range examples {
 		b.WriteString("  " + padTo(e[0], labelWidth) + " " + e[1] + "\n")
 	}
-	b.WriteString("\n更多用法、配置说明、示例：见 docs/manual/\n")
+	b.WriteString("\n更多用法、配置说明、示例：见 docs/\n")
 	return b.String()
 }
