@@ -21,12 +21,6 @@ func ConvertSecret(rawPath, secretDir string, encrypted bool) error {
 	if err != nil {
 		return err
 	}
-	if looksEncryptedV1(content) {
-		return fmt.Errorf(
-			"凭据文件是旧版加密格式，本版不再支持读取：%s\n"+
-				"请把明文密码重新写入该文件，再转换一次", path)
-	}
-
 	if encrypted {
 		return convertToCipher(path, content)
 	}

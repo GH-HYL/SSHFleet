@@ -23,7 +23,6 @@ const (
 	CodeEmptyDecoded CredCode = "empty_decoded"
 	CodeBadPEM       CredCode = "bad_pem"
 	CodeBadCipher    CredCode = "bad_cipher"
-	CodeLegacyCipher CredCode = "legacy_cipher"
 
 	// 开关方向的两种错配：读到的东西与当前开关要求的形态不符
 	CodeSwitchMismatch CredCode = "switch_mismatch" // 没开加密却读到密文
@@ -46,9 +45,6 @@ type CredError struct {
 func decodeCredential(content string, encrypted bool) (string, CredCode, string, error) {
 	if !encrypted {
 		// 不加密：内容就是密码本身。读到密文说明加密开关刚被改过，这是唯一要拦的情况。
-		if looksEncryptedV1(content) {
-			return "", CodeLegacyCipher, "", nil
-		}
 		if looksEncryptedV2(content) {
 			return "", CodeSwitchMismatch, "", nil
 		}
@@ -56,9 +52,6 @@ func decodeCredential(content string, encrypted bool) (string, CredCode, string,
 	}
 
 	// 加密：内容必须是本工具的密文，别的一概拒绝
-	if looksEncryptedV1(content) {
-		return "", CodeLegacyCipher, "", nil
-	}
 	if !looksEncryptedV2(content) {
 		return "", CodeNotCiphertext, "", nil
 	}
@@ -193,8 +186,6 @@ func CredErrorLabel(code CredCode, path string, detail string) string {
 		label = "不是有效的PEM格式（缺少 -----BEGIN 头）"
 	case CodeBadCipher:
 		label = "不是有效的密文，或主密钥不匹配（先用 --convert-secret 重新转换）"
-	case CodeLegacyCipher:
-		label = "是旧版加密格式，本版不再支持"
 	case CodeSwitchMismatch:
 		label = "读到的是密文，但当前没开加密；若刚把 encrypt 改成 false，这些位置的写法也要跟着改（改成密码/口令本身）"
 	case CodeNotCiphertext:
@@ -261,7 +252,7 @@ func ReadCredFileContent(path string) (string, error) {
 	}
 	// 防御：明文凭据应为单行；密文（去空白后仍是合法存储形态）放行
 	if strings.ContainsAny(text, "\n\r") {
-		if !looksEncryptedV1(text) && !looksEncryptedV2(text) {
+		if !looksEncryptedV2(text) {
 			return "", fmt.Errorf("凭据文件有多行内容，但密码应为单行，请检查是否误粘贴：%s", path)
 		}
 	}
