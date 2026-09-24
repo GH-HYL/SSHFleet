@@ -25,8 +25,8 @@
 !docs/
 !docs/adr/
 !docs/adr/**
-!docs/manual/
-!docs/manual/**
+# 面向用户的手册（README 在仓库根，其余五册直接放 docs/ 下）
+!docs/*.md
 
 # 代码
 !modules/

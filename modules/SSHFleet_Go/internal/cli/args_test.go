@@ -358,7 +358,7 @@ func TestUsageTextGroupsOptions(t *testing.T) {
 	}
 
 	// 示例与手册指向
-	for _, wantLine := range []string{"-c \"ls -l\"", "--yes", "-k", "见 docs/manual/"} {
+	for _, wantLine := range []string{"-c \"ls -l\"", "--yes", "-k", "见 docs/"} {
 		if !strings.Contains(text, wantLine) {
 			t.Fatalf("帮助缺少 %q：\n%s", wantLine, text)
 		}
