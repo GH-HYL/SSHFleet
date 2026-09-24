@@ -81,8 +81,11 @@ func versionWithBuildID() string {
 	return appVersion
 }
 
-// 配置文件位置：基准为当前工作目录（spec D28）。
-const configPath = "./config/SSHFleet.conf"
+// 配置文件位置：基准为当前工作目录。
+const (
+	configPath      = "./config/SSHFleet.conf"     // 实际读取用
+	configPathShown = "config/SSHFleet.conf"       // 文案里显示的形态：不带 ./，它不是路径的一部分
+)
 
 // 危险命令确认提示与 [ERROR] 前缀的配色（对位旧 constants.py / error_handler.py）。
 const (
@@ -104,13 +107,32 @@ var (
 //
 // 致命错误同时落日志：终端一关就只剩日志可查——此前这类错误只打 stderr，
 // 日志里一片空白，事后完全查不出「那次为什么没跑起来」。
+// 末尾统一附一行日志路径（统一兜底）：任何致命错误都告诉用户去哪找这次的记录。
+// 日志初始化之前的失败给不出这一行（那时连日志文件都还没建）。
 func fatal(where string, err error) {
 	if errors.Is(err, common.ErrCancelled) {
 		os.Exit(1)
 	}
-	fmt.Fprintf(os.Stderr, "%s[ERROR]%s%s [function:%s]%s %s\n", colorRed, colorReset, colorYellow, where, colorReset, err)
+	msg := err.Error()
+	if p := toolLogPath(); p != "" {
+		msg += "\n日志：" + p
+	}
+	fmt.Fprintf(os.Stderr, "%s[ERROR]%s%s [function:%s]%s %s\n", colorRed, colorReset, colorYellow, where, colorReset, msg)
 	closeLogsAfterFatal(where, err)
 	os.Exit(1)
+}
+
+// toolLogPath 工具日志的绝对路径；日志还没建起来时返回空串。
+func toolLogPath() string {
+	if toolLog == nil {
+		return ""
+	}
+	rel := filepath.Join(config.BuiltinPaths.Historys, config.BuiltinPaths.Tool)
+	abs, err := filepath.Abs(rel)
+	if err != nil {
+		return rel
+	}
+	return abs
 }
 
 // closeLogsAfterFatal 把致命错误逐行写入工具日志与执行期日志（若有），并关闭句柄。
@@ -155,7 +177,7 @@ func main() {
 	// ---- 步骤 1：加载配置 --------------------------------------------
 	cfg, err := config.Load(configPath)
 	if err != nil {
-		fatal("config", fmt.Errorf("加载配置文件失败：%s\n原因：%v\n请检查该文件是否存在、TOML 格式是否正确后重试", configPath, err))
+		fatal("config", fmt.Errorf("加载配置文件失败：%s\n原因：%v", configPathShown, err))
 	}
 
 	// ---- 步骤 2：初始化日志 ------------------------------------------

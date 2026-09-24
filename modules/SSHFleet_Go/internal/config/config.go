@@ -93,13 +93,18 @@ var BuiltinPaths = Paths{
 // Load 读取并校验配置文件，返回可直接使用的配置。
 func Load(path string) (*Config, error) {
 	if _, err := os.Stat(path); err != nil {
-		return nil, fmt.Errorf("配置文件 %s 不存在", path)
+		wd, _ := os.Getwd()
+		return nil, fmt.Errorf(
+			"这个位置没有配置文件\n"+
+				"      应该在这里：%s\n"+
+				"      当前目录：%s\n"+
+				"提示：请在本工具的解压目录下执行；配置文件必须放在该目录的 config 文件夹里", DisplayPath(path), wd)
 	}
 
 	var cfg Config
 	md, err := toml.DecodeFile(path, &cfg)
 	if err != nil {
-		return nil, fmt.Errorf("解析 TOML 失败：%v", err)
+		return nil, fmt.Errorf("解析 TOML 失败：%v\n提示：多数是引号或方括号没配对，照随包的配置文件核一遍", err)
 	}
 
 	// 已移除的段 / 键：给一句能照做的说明，不要混进"未识别字段"里
@@ -115,7 +120,7 @@ func Load(path string) (*Config, error) {
 		for _, k := range undecoded {
 			keys = append(keys, k.String())
 		}
-		return nil, fmt.Errorf("配置包含未识别字段：%s", strings.Join(keys, ", "))
+		return nil, fmt.Errorf("配置包含未识别字段：%s\n提示：请使用随包提供的配置文件，不要增删任何字段", strings.Join(keys, ", "))
 	}
 
 	if err := validate(&cfg, md); err != nil {
@@ -126,6 +131,10 @@ func Load(path string) (*Config, error) {
 	}
 	return &cfg, nil
 }
+
+// DisplayPath 给用户看的路径形态：去掉开头的 "./"，它对用户没有意义，
+// 留着会让人看不出这是相对当前目录的路径。
+func DisplayPath(p string) string { return strings.TrimPrefix(p, "./") }
 
 // validate 配置预检查：字段必须出现（值可留空） + 取值合规性。
 // 预检查通过即代表配置自足，运行期一律取配置里的值。
@@ -159,7 +168,7 @@ func validate(cfg *Config, md toml.MetaData) error {
 		}
 	}
 	if len(missing) > 0 {
-		return fmt.Errorf("配置缺少必填字段：%s", strings.Join(missing, ", "))
+		return fmt.Errorf("配置缺少必填字段：%s\n提示：请使用随包提供的配置文件，不要删掉里面的任何一行", strings.Join(missing, ", "))
 	}
 
 	if cfg.Account.Port < 1 || cfg.Account.Port > 65535 {

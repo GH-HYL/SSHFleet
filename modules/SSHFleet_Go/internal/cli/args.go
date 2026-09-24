@@ -219,7 +219,7 @@ func Parse(cfg *config.Config, version string, raw []string) (*Args, error) {
 			continue
 		}
 		if strings.Contains(strings.TrimSpace(*val), " ") {
-			return nil, fmt.Errorf("路径参数中间不能包含空格")
+			return nil, fmt.Errorf("路径参数中间不能包含空格\n提示：路径里有空格时用引号包起来，例如 -u \"D:/my dir/app\"")
 		}
 		*val = normalizePath(*val)
 	}

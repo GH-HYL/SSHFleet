@@ -43,10 +43,13 @@ func precheckCredentials(rows [][]string, args *cli.Args, cfg *config.Config) (*
 				rc.keyFromConfig = key != ""
 			}
 			if key == "" {
-				errs = append(errs, fmt.Sprintf("行 %d (IP: %s): 加了 -k 却没有私钥可用——清单第 5 列为空，配置 account.key 也没配", idx+1, row[0]))
+				errs = append(errs, fmt.Sprintf("行 %d (IP: %s): 用了 -k，但没有找到可用的私钥——在第 5 列写私钥路径，或把统一私钥配到配置 account.key", idx+1, row[0]))
 				pre.rows[idx] = rc
 				continue
 			}
+		} else if keyRaw != "" {
+			// 没加 -k 却在清单里配了私钥：配了没用上，值得提醒一句（配置文件里的默认值不提醒）
+			pre.unusedKeyRows = append(pre.unusedKeyRows, idx+1)
 		}
 		rc.hasKey = key != ""
 
@@ -145,6 +148,38 @@ func precheckCredentials(rows [][]string, args *cli.Args, cfg *config.Config) (*
 		return nil, errors.New(b.String())
 	}
 	return pre, nil
+}
+
+// unusedKeyNotice 清单里配了私钥、本次却没加 -k 时的提示；没有这种情况返回空串。
+//
+// 清单里的每一格都是用户当场写下的判断，配了没用上值得提醒一句；
+// 配置里的默认值不在此列——那是长期备着的东西，配了没用上不是错误。
+// 同一类提示一次运行只出一次：清单可能上千行都配了私钥，逐行提醒没有意义。
+func (p *precheckResult) unusedKeyNotice() string {
+	rows := p.unusedKeyRows
+	if len(rows) == 0 {
+		return ""
+	}
+	const shown = 5
+	parts := make([]string, 0, shown)
+	for i, r := range rows {
+		if i >= shown {
+			break
+		}
+		parts = append(parts, fmt.Sprintf("%d", r))
+	}
+	list := strings.Join(parts, "、")
+	tail := "这几台会用密码登录"
+	switch {
+	case len(rows) > shown:
+		list = fmt.Sprintf("共 %d 行配了私钥（如第 %s 行）", len(rows), list)
+	case len(rows) == 1:
+		list = fmt.Sprintf("第 %s 行配了私钥", list)
+		tail = "这一台会用密码登录"
+	default:
+		list = fmt.Sprintf("第 %s 行配了私钥", list)
+	}
+	return fmt.Sprintf("[提示] 清单%s，本次没加 -k，%s\n", list, tail)
 }
 
 // credentialValueSpec 把一个凭据位置的取值解释成读取口径：

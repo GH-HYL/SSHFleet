@@ -106,7 +106,7 @@ func TestCategoryTipLines(t *testing.T) {
 	}
 	cats := []result.CategoryCount{
 		{Category: "连接被断开", Count: 2},      // 配置里写了 tip
-		{Category: "密码过期", Count: 1},       // 没写 tip → 不出现
+		{Category: "这个分类不在配置里", Count: 1}, // 查不到 tip → 不出现
 		{Category: "执行失败(退出码1)", Count: 1}, // 内置说明 + 已知退出码含义
 		{Category: "执行失败(退出码3)", Count: 1}, // 内置说明 + 未知退出码（无含义）
 	}
@@ -138,8 +138,7 @@ func TestCategoryTipLines(t *testing.T) {
 
 // 开关语义：开启时出「提示：」块、不再单独出「常见退出码」；
 // 关闭时退回旧行为（只出「常见退出码」）。
-func TestPrintStatisticsTipSwitch(t *testing.T) {
-	kw, err := result.LoadKeywords(filepath.Join("..", "..", "config", "error_keywords.toml"))
+func TestPrintStatisticsTipSwitch(t *testing.T) {	kw, err := result.LoadKeywords(filepath.Join("..", "..", "config", "error_keywords.toml"))
 	if err != nil {
 		t.Fatalf("关键词文件应可加载: %v", err)
 	}
@@ -167,5 +166,36 @@ func TestPrintStatisticsTipSwitch(t *testing.T) {
 	}
 	if !strings.Contains(off.String(), "常见退出码：1 >> 一般性错误") {
 		t.Errorf("关闭时应保留旧的「常见退出码」行：\n%s", off.String())
+	}
+}
+
+// 出现未归类的分类时，末尾要给出"怎么把它归到类里"的引导——
+// 用户反复看到同一个原因却不知道能自己加分类，是这份统计最大的浪费。
+func TestPrintStatisticsUnclassifiedGuide(t *testing.T) {
+	kw, err := result.LoadKeywords(filepath.Join("..", "..", "config", "error_keywords.toml"))
+	if err != nil {
+		t.Fatalf("关键词文件应可加载: %v", err)
+	}
+	stats := &result.Stats{
+		NodesTotal: 1, ResultsTotal: 1, Verify: "通过", FailCounts: 1,
+		SortedFailCategories: []result.CategoryCount{
+			{Category: "ssh: handshake failed: 一段没被收录的报错原文", Count: 1},
+		},
+	}
+	out := &bytes.Buffer{}
+	PrintStatistics(out, stats, kw, true)
+	got := out.String()
+	for _, want := range []string{"未归类 1 类", "上方直接显示的是报错原文", "error_keywords", "之后就会单独归为一类"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("未归类引导缺少 %q：\n%s", want, got)
+		}
+	}
+
+	// 没有未归类分类时不出这段引导
+	stats.SortedFailCategories = []result.CategoryCount{{Category: "连接超时", Count: 1}}
+	out.Reset()
+	PrintStatistics(out, stats, kw, true)
+	if strings.Contains(out.String(), "未归类") {
+		t.Fatalf("没有未归类分类时不该出引导：\n%s", out.String())
 	}
 }

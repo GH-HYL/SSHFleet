@@ -49,6 +49,7 @@ type precheckResult struct {
 	anyNodeUsesConfigKey bool   // 是否存在私钥取自配置文件的节点（决定配置口令是否读取）
 	defaultPasswordPlain string // needDefaultPassword 时配置默认密码的取值
 	globalPassphrase     string // 配置中的私钥口令取值（只配给「私钥取自配置」的节点）
+	unusedKeyRows        []int  // 清单里配了私钥却没加 -k 的行号（1 基，用于提示"配了没用上"）
 }
 
 // rowCreds 取指定清单行的预检凭据，行号用**1 基**（与「行 N」提示文案、CSV 阅读习惯一致）。
@@ -72,6 +73,9 @@ func Read(args *cli.Args, cfg *config.Config, in *common.Interactor) (*Nodes, er
 	pre, err := precheckCredentials(rows, args, cfg)
 	if err != nil {
 		return nil, err
+	}
+	if notice := pre.unusedKeyNotice(); notice != "" {
+		in.Notice(notice)
 	}
 
 	nodes, err := resolveNodes(rows, pre, cfg)

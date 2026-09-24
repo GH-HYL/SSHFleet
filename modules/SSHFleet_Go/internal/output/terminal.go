@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"sshfleet/internal/common"
+	"sshfleet/internal/config"
 	"sshfleet/internal/result"
 	"sshfleet/internal/ssh"
 )
@@ -152,6 +153,15 @@ func PrintStatistics(out io.Writer, stats *result.Stats, kw *result.Keywords, sh
 		}
 		for _, item := range fallback {
 			fmt.Fprintf(out, "    %s\n", item)
+		}
+		if len(fallback) > 0 {
+			// 未归类的那些分类显示的是报错原文；末尾给一条"怎么把它们归到类里"的引导——
+			// 用户反复看到同一个原因却没人告诉他能自己加分类，是这份统计最大的浪费。
+			fmt.Fprintf(out, "  %s未归类 %d 类：%s上方直接显示的是报错原文，没能匹配到已有分类。\n",
+				ansiYellow, len(fallback), ansiReset)
+			fmt.Fprintf(out, "  若其中某类会反复出现，可把它的特征词补进 %s，\n",
+				config.DisplayPath(config.BuiltinPaths.ErrorKeywords))
+			fmt.Fprintf(out, "  之后就会单独归为一类。\n")
 		}
 		if showTips {
 			if lines := categoryTipLines(stats.SortedFailCategories, kw); len(lines) > 0 {
