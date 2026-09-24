@@ -44,7 +44,7 @@
 [[categories]]
 name = '网络不可达'
 # 网络层面就到不了目标机
-tip = ''
+tip = '目标机没开机、IP 写错、不在同一网段、路由或防火墙把 ICMP 挡了'
 keywords = [
     'no route to host',
     'network is unreachable',
@@ -54,7 +54,7 @@ keywords = [
 [[categories]]
 name = '握手超时'
 # 连上了但握手谈不拢，超过了配置里的连接超时
-tip = ''
+tip = '目标机负载过高、sshd 在认证前被限流（MaxStartups）、链路质量差、中间设备限速'
 keywords = [
     '握手超时',
 ]
@@ -63,7 +63,7 @@ keywords = [
 name = '密钥不匹配'
 # 只在「没配密码、只用密钥、密钥被拒」时命中；配了密码的会落到下面的「身份验证失败」，
 # 这样才不会把「密码也被拒」这个事实盖掉
-tip = ''
+tip = '目标机上没有这把公钥、authorized_keys 没加或加到了别的机器、私钥与目标机上的公钥不是一对'
 keywords = [
     '[none publickey]',
 ]
@@ -71,7 +71,7 @@ keywords = [
 [[categories]]
 name = '密钥解析失败'
 # 私钥本身有问题：格式不对、口令不对、文件内容不是私钥
-tip = ''
+tip = '私钥有口令但没给口令、格式不对（如 PuTTY 的 .ppk 未转换）、私钥内容不完整或被改动'
 keywords = [
     '解析密钥失败',
 ]
@@ -79,7 +79,7 @@ keywords = [
 [[categories]]
 name = '账号过期'
 # 目标机账号已过有效期，认证阶段就被拒绝
-tip = ''
+tip = '账号到了有效期、被管理员锁定或停用'
 keywords = [
     'Your account has expired',
 ]
@@ -88,7 +88,7 @@ keywords = [
 name = '密码过期'
 # 密码必须马上修改的提示（工具没有终端、改不了，所以连接会被拒绝）。
 # 同一件事在目标机不同阶段会给两种提示，第一组和第二组各写一份。
-tip = ''
+tip = '密码已到期，目标机要求先改密码才允许登录——而工具没有交互终端，改不了'
 keywords = [
     'You are required to change your password immediately',
 ]
@@ -106,7 +106,7 @@ keywords = [
 [[categories]]
 name = '连接超时'
 # 连接迟迟没有响应
-tip = ''
+tip = '目标机没开机或防火墙丢包、IP 或端口写错、目标机负载过高没及时响应、中间设备拦截'
 keywords = [
     'i/o timeout',
 ]
@@ -114,7 +114,7 @@ keywords = [
 [[categories]]
 name = '资源耗尽'
 # 本机打开的文件太多（并发太高时可能出现）
-tip = ''
+tip = '本机打开的文件句柄用完了（并发偏高时容易撞上）、本机 ulimit 偏小'
 keywords = [
     'too many open files',
 ]
@@ -122,7 +122,7 @@ keywords = [
 [[categories]]
 name = '执行超时'
 # 命令跑太久，超过配置里的执行超时
-tip = ''
+tip = '命令本身耗时超过配置的超时、命令卡在等输入、目标机负载过高跑不完'
 keywords = [
     '命令执行超时',
 ]
@@ -130,7 +130,7 @@ keywords = [
 [[categories]]
 name = '任务已取消'
 # 执行过程中被中断（Ctrl+C）
-tip = ''
+tip = '执行过程中被 Ctrl+C，或被上层任务中断'
 keywords = [
     'context canceled',
 ]
@@ -149,7 +149,7 @@ keywords = [
 [[categories]]
 name = '拒绝网络连接'
 # 目标机端口没开，或者被防火墙/安全组拒绝、重置
-tip = ''
+tip = '端口没开、sshd 没起、防火墙或安全组拒绝、端口写错（如把 22 写成 2222）'
 keywords = [
     'connection refused',
     'connection reset',
@@ -196,7 +196,7 @@ keywords = [
 name = '权限不足'
 # 登录用户没有操作权限（读写文件、执行命令等）。
 # 必须排在「身份验证失败」之后——上面那类已经把"认证被拒"的情形先认掉了
-tip = ''
+tip = '登录用户对目标路径没有读写权限、命令需要 root 而当前是登录用户、目标文件属主是别人'
 keywords = [
     'permission denied',
 ]
@@ -204,7 +204,7 @@ keywords = [
 [[categories]]
 name = 'DNS解析失败'
 # 主机名解析不出来（清单里填了域名、或目标机需要反查域名时）
-tip = ''
+tip = '清单里写的是域名而解析不了、本机 DNS 配置有问题、域名拼错'
 keywords = [
     'no such host',
 ]
@@ -212,7 +212,7 @@ keywords = [
 [[categories]]
 name = 'SSH协议错误'
 # 对端不是 SSH 服务，或 SSH 版本谈不拢（如误连到 web 端口）
-tip = ''
+tip = '端口连到了非 SSH 服务（如 web、数据库）、sshd 版本过旧不兼容、中间有设备改写了流量'
 keywords = [
     'unsupported protocol',
     'junk character in version line',
@@ -222,7 +222,7 @@ keywords = [
 [[categories]]
 name = '远程路径不存在'
 # 下载模式：-d 指定的远程路径在目标机上不存在
-tip = ''
+tip = '-d 写的远程路径在目标机上没有、路径拼错、大小写不符'
 keywords = [
     '远程路径不存在',
 ]
@@ -239,7 +239,7 @@ keywords = [
 [[categories]]
 name = '远程文件已存在'
 # 目标机上已经存在同名文件
-tip = ''
+tip = '目标机上已有同名文件、上次执行留下的残留'
 keywords = [
     '文件已存在',
     'file already exists',
@@ -263,7 +263,7 @@ keywords = [
 [[categories]]
 name = 'sudo失败'
 # -m sudo 时，把文件搬到目标位置这一步失败
-tip = ''
+tip = '登录用户不在 sudoers 里、sudo 需要密码而这个是给不了的、目标机限制了 sudo'
 keywords = [
     'sudo mv 失败',
 ]
@@ -271,7 +271,7 @@ keywords = [
 [[categories]]
 name = '本地文件错误'
 # 本机这边的文件问题：不存在、读不了、写不了
-tip = ''
+tip = '本机路径不存在、权限不足、磁盘满、文件被别的程序占用'
 keywords = [
     '打开本地文件失败',
     '创建本地文件失败',
@@ -288,7 +288,7 @@ keywords = [
 [[exit_code_categories]]
 name = '密码过期'
 # 密码到期，目标机不允许执行命令时打印的提示
-tip = ''
+tip = '密码已到期，目标机要求先改密码才允许执行命令'
 keywords = [
     'Password change required but no TTY available',
     'WARNING: Your password has expired.',
@@ -298,7 +298,7 @@ keywords = [
 name = '登录被禁止'
 # 目标机把该账号的登录 shell 设成了 nologin（禁止登录）时打印的提示。
 # 中文、英文都留着——提示语言跟随目标机的系统语言
-tip = ''
+tip = '目标机把该账号的登录 shell 设成了 nologin、账号被管理员停用'
 keywords = [
     '此帐户目前不可用。',
     'This account is currently not available.',
@@ -307,7 +307,7 @@ keywords = [
 [[exit_code_categories]]
 name = '仅允许 SFTP'
 # 目标机限制该账号只能传文件、不能执行命令时打印的提示
-tip = ''
+tip = '目标机限制该账号只能传文件、不能执行命令（常见于备份或中转账号）'
 keywords = [
     'This service allows sftp connections only.',
 ]

@@ -35,59 +35,66 @@ var loopKeywordRe = regexp.MustCompile(`^[^a-zA-Z]*([a-zA-Z]+)`)
 // 错误统一返回给 main 打印。差异见 spec D40（-k 三态）、D29（脚本 CRLF
 // 不再改写本地文件）、ADR-0002（-p 消歧义约束措辞）、D13（内联预检仅 IPv4）。
 func CheckArguments(a *Args) error {
-	// 执行模式互斥（手写校验）
+	// 执行模式互斥（手写校验）。零个与多个分开说——"互斥、只能指定一个"
+	// 对一个都没给是误导：他要做的是"选一个"，不是"删掉多余的"。
 	modeCount := 0
 	for _, v := range []string{a.Command, a.Script, a.Upload, a.Download} {
 		if v != "" {
 			modeCount++
 		}
 	}
-	if modeCount != 1 {
-		return fmt.Errorf("执行模式参数：-c、-s、-u、-d 互斥，只能指定一个")
+	if modeCount == 0 {
+		return fmt.Errorf(
+			"执行模式参数：-c、-s、-u、-d 互斥，只能指定一个\n" +
+				"提示：你没有指定任何模式，请从下面四个里选一个：\n" +
+				"      -c 执行命令   -s 执行脚本   -u 上传文件   -d 下载文件")
+	}
+	if modeCount > 1 {
+		return fmt.Errorf("执行模式参数：-c、-s、-u、-d 互斥，只能指定一个\n提示：一次只能做一件事，请只保留一个模式")
 	}
 
 	// -p
 	if a.Path != "" {
 		if a.Upload != "" {
 			if !strings.HasPrefix(a.Path, "/") {
-				return fmt.Errorf("上传模式：-p 参数指定的上传目录必须是绝对路径，当前值：%s", a.Path)
+				return fmt.Errorf("上传模式：-p 参数指定的上传目录必须是绝对路径，当前值：%s\n提示：服务器上的目录要从 / 写起，例如 -p /opt/app/", a.Path)
 			}
 			if !strings.HasSuffix(a.Path, "/") {
 				// 消歧义约束（ADR-0002）：断言「这是目录」，排除把 -p 当目标文件名的误读
-				return fmt.Errorf("上传模式：-p 必须是以 / 结尾的目录（-p 只表示放到哪个目录，工具不做远端重命名），当前值：%s", a.Path)
+				return fmt.Errorf("上传模式：-p 必须是以 / 结尾的目录，当前值：%s\n提示：-p 只表示\"放到哪个目录\"，工具不会替你改文件名，所以要以 / 收尾", a.Path)
 			}
 		} else if a.Command != "" || a.Script != "" {
-			return fmt.Errorf("-p 参数不能搭配 -c 或 -s 使用，请单独使用 -u 参数指定上传文件或目录后再使用 -c 或 -s")
+			return fmt.Errorf("-p 参数不能搭配 -c 或 -s 使用\n提示：只有上传、下载才用 -p；要跑命令或脚本就去掉它，它会自己挑服务器来跑")
 		}
 	}
 
 	// -d
 	if a.Download != "" {
 		if a.Path == "" {
-			return fmt.Errorf("-d 参数必须搭配 -p 参数使用")
+			return fmt.Errorf("-d 参数必须搭配 -p 参数使用\n提示：-p 写文件要存到本机的哪个目录，例如 -p D:/logs/")
 		}
 		if !strings.HasPrefix(a.Download, "/") {
-			return fmt.Errorf("下载模式：-d 参数指定的远程路径必须是绝对路径，当前值：%s", a.Download)
+			return fmt.Errorf("下载模式：-d 参数指定的远程路径必须是绝对路径，当前值：%s\n提示：服务器上的路径要从 / 写起，例如 /var/log/app", a.Download)
 		}
 		if info, err := os.Stat(a.Path); err != nil || !info.IsDir() {
-			return fmt.Errorf("下载模式：-p 参数指定的本地路径必须是已存在的目录，当前值：%s", a.Path)
+			return fmt.Errorf("下载模式：-p 参数指定的本地路径必须是已存在的目录，当前值：%s\n提示：这个目录要在本机上先建好，工具不会替你建", a.Path)
 		}
 	}
 
 	// -u
 	if a.Upload != "" {
 		if a.Path == "" {
-			return fmt.Errorf("-u 参数必须搭配 -p 参数使用")
+			return fmt.Errorf("-u 参数必须搭配 -p 参数使用\n提示：-p 写文件要放到服务器上的哪个目录，例如 -p /opt/app/")
 		}
 		info, err := os.Lstat(a.Upload)
 		if err != nil {
-			return fmt.Errorf("-u 参数指定的上传文件或目录不存在：%s", a.Upload)
+			return fmt.Errorf("-u 参数指定的上传文件或目录不存在：%s\n提示：-u 后面要写本机上真实存在的文件或目录；不确定路径时，先在文件管理器里定位它", a.Upload)
 		}
 		if info.Mode()&os.ModeSymlink != 0 {
-			return fmt.Errorf("-u 参数指定的上传文件或目录是符号链接，不能上传：%s", a.Upload)
+			return fmt.Errorf("-u 参数指定的上传文件或目录是符号链接，不能上传：%s\n提示：请直接写它指向的真实文件或目录", a.Upload)
 		}
 		if info.IsDir() && !dirHasRealFile(a.Upload) {
-			return fmt.Errorf("-u 参数指定的上传目录及其所有子目录中都没有真正的文件（只有符号链接）：%s", a.Upload)
+			return fmt.Errorf("-u 参数指定的上传目录及其所有子目录中都没有真正的文件（只有符号链接）：%s\n提示：请改上传真实文件所在的目录", a.Upload)
 		}
 	}
 
@@ -99,7 +106,7 @@ func CheckArguments(a *Args) error {
 	// -c
 	if a.Command != "" {
 		if strings.TrimSpace(a.Command) == "" {
-			return fmt.Errorf("-c 参数不能为空，请提供要执行的命令")
+			return fmt.Errorf("-c 参数不能为空，请提供要执行的命令\n提示：-c 后面跟命令原文，例如 -c \"systemctl status sshd\"")
 		}
 		if m := loopKeywordRe.FindStringSubmatch(strings.TrimSpace(a.Command)); m != nil {
 			switch m[1] {
@@ -112,49 +119,48 @@ func CheckArguments(a *Args) error {
 	// -s
 	if a.Script != "" {
 		if info, err := os.Stat(a.Script); err == nil && info.IsDir() {
-			return fmt.Errorf("-s 参数指定的路径是目录，不是脚本文件：%s", a.Script)
+			return fmt.Errorf("-s 参数指定的路径是目录，不是脚本文件：%s\n提示：请指向一个 .sh 或 .py 文件", a.Script)
 		}
 		data, err := os.ReadFile(a.Script)
 		if err != nil {
-			return fmt.Errorf("-s 参数指定的脚本文件不可读：%s", a.Script)
+			return fmt.Errorf("-s 参数指定的脚本文件不可读：%s\n提示：请检查文件是否存在、当前用户有没有读权限", a.Script)
 		}
 		if len(data) == 0 {
-			return fmt.Errorf("-s 参数指定的脚本文件为空：%s", a.Script)
+			return fmt.Errorf("-s 参数指定的脚本文件为空：%s\n提示：请先写入内容再执行", a.Script)
 		}
 		if !strings.HasSuffix(a.Script, ".sh") && !strings.HasSuffix(a.Script, ".py") {
-			return fmt.Errorf("-s 参数指定的脚本文件扩展名必须是 .sh 或 .py，当前值：%s", a.Script)
+			return fmt.Errorf("-s 参数指定的脚本文件扩展名必须是 .sh 或 .py，当前值：%s\n提示：请改后缀，或换一个脚本文件", a.Script)
 		}
 		if bytes.IndexByte(data, 0) >= 0 {
-			return fmt.Errorf("错误: %s 是二进制文件", a.Script)
+			return fmt.Errorf("%s 是二进制文件\n提示：请换一个文本格式的脚本", a.Script)
 		}
 		if !utf8ValidExceptBOM(data) {
-			return fmt.Errorf("错误: %s 不是UTF-8编码", a.Script)
+			return fmt.Errorf("%s 不是 UTF-8 编码\n提示：请把脚本转成 UTF-8 后再执行", a.Script)
 		}
-		// 旧版此处会把 CRLF 覆盖写回本地文件（名为 check 实有写副作用）；
-		// spec D29：不再改写本地文件，改为上传时在内存内转换（M3）。
+		// 脚本内容里的 CRLF 不改写本地文件：上传时在内存内转换。
 	}
 
 	// -f
 	if a.CsvFile != "" {
 		if _, err := os.Stat(a.CsvFile); err != nil {
-			// 文件不存在：首字段是 IPv4 才视为内联清单文本（D13），否则报路径不存在
+			// 文件不存在：首字段是 IPv4 才视为内联清单文本，否则报路径不存在
 			firstField := strings.TrimSpace(strings.Split(a.CsvFile, ",")[0])
 			addr, err := netip.ParseAddr(firstField)
 			if err != nil || !addr.Is4() {
-				return fmt.Errorf("-f 参数指定的文件不存在：%s\n提示：如需内联传入节点，请以 IP 开头（如 192.168.1.1,22,root,密码）", a.CsvFile)
+				return fmt.Errorf("-f 参数指定的文件不存在：%s\n提示：要临时传几台机器，可以直接写一行以 IP 开头的节点信息，例如 192.168.1.1,22,root,密码", a.CsvFile)
 			}
 			a.FIsInline = true
 		} else {
 			a.FIsInline = false
 			data, err := os.ReadFile(a.CsvFile)
 			if err != nil {
-				return fmt.Errorf("-f 参数指定的 CSV 文件不可读：%s", a.CsvFile)
+				return fmt.Errorf("-f 参数指定的 CSV 文件不可读：%s\n提示：请检查文件是否存在、当前用户有没有读权限", a.CsvFile)
 			}
 			if len(data) == 0 {
-				return fmt.Errorf("-f 参数指定的 CSV 文件为空：%s", a.CsvFile)
+				return fmt.Errorf("-f 参数指定的 CSV 文件为空：%s\n提示：一行写一台机器，只写 IP 就能跑（端口、用户名、密码走配置）", a.CsvFile)
 			}
 			if bytes.IndexByte(data[:min(1024, len(data))], 0) >= 0 {
-				return fmt.Errorf("错误: %s 是二进制文件", a.CsvFile)
+				return fmt.Errorf("%s 是二进制文件\n提示：清单要是文本文件（CSV）", a.CsvFile)
 			}
 		}
 	}
@@ -263,7 +269,7 @@ func checkPositiveInt(raw string, val int, invalid bool, flag, what string) erro
 		return nil
 	}
 	if invalid || val <= 0 {
-		return fmt.Errorf("%s 参数格式错误，%s必须是正整数，当前值：%s", flag, what, raw)
+		return fmt.Errorf("%s 参数格式错误，%s必须是正整数，当前值：%s\n提示：给一个正整数（单位见该参数的说明）", flag, what, raw)
 	}
 	return nil
 }

@@ -136,7 +136,7 @@ func buildTasks(a *cli.Args, nodes *nodelist.Nodes) ([]*task, []string, error) {
 		}
 		// 软链接等被过滤的条目不阻断执行，但要让用户知道（-u 走终端提示）
 		if len(collected.Skipped) > 0 {
-			notices = append(notices, fmt.Sprintf("提示：上传源中有 %d 个软链接/快捷方式被过滤（不上传）：%s",
+			notices = append(notices, fmt.Sprintf("[提示] 上传源中有 %d 个软链接/快捷方式被过滤（不上传）：%s",
 				len(collected.Skipped), Summarize(collected.Skipped)))
 		}
 		for i, node := range nodes.Items {
