@@ -26,6 +26,7 @@ import (
 
 	"sshfleet/internal/batch"
 	"sshfleet/internal/common"
+	"sshfleet/internal/config"
 	"sshfleet/internal/log"
 	"sshfleet/internal/result"
 	"sshfleet/internal/ssh"
@@ -382,7 +383,8 @@ func logOutputBlock(fn func(...any), ip, output string) {
 		fn(ip + "  " + truncateLine(ln))
 	}
 	if rest > 0 {
-		fn(fmt.Sprintf("%s  ……其余 %d 行省略（完整内容见 output.txt / output.xlsx）", ip, rest))
+		fn(fmt.Sprintf("%s  ……其余 %d 行省略（完整内容见 %s / %s）", ip, rest,
+			config.BuiltinPaths.Output, config.BuiltinPaths.OutputXlsx))
 	}
 }
 

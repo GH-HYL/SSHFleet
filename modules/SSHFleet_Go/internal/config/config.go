@@ -84,8 +84,8 @@ var BuiltinPaths = Paths{
 	Tool:              "SSHFleetTools.log",
 	Exec:              "SSHFleetExec.log",
 	Asset:             "assets",
-	Output:            "output.txt",
-	OutputXlsx:        "output.xlsx",
+	Output:            "terminal-output.txt",
+	OutputXlsx:        "terminal-output.xlsx",
 	Report:            "report.txt",
 	ResultsXlsx:       "results.xlsx",
 }

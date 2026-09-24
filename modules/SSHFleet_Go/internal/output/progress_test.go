@@ -30,7 +30,7 @@ func TestCommandViewIsSingleLineWithCounts(t *testing.T) {
 	m.applySnapshot(batch.Snapshot{Total: 5, Completed: 3, Succeeded: 2, Failed: 1})
 
 	view := m.render()
-	for _, want := range []string{"执行进度", "已完成: 3/5", "Succ:2", "Fail:1"} {
+	for _, want := range []string{"总进度", "已完成 3/5", "成功 2", "失败 1"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("命令模式界面缺少 %q：\n%s", want, view)
 		}
@@ -54,7 +54,7 @@ func TestTransferViewListsActiveNodesOnly(t *testing.T) {
 	m.syncBars()
 
 	view := m.render()
-	for _, want := range []string{"上传进度", "节点进度", "10.0.0.2", "Total:4"} {
+	for _, want := range []string{"上传进度", "节点进度", "10.0.0.2", "共 4 个文件"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("传输模式界面缺少 %q：\n%s", want, view)
 		}

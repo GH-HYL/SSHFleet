@@ -348,11 +348,11 @@ func (m progressModel) render() string {
 
 // commandView 命令模式：单行到位。
 func (m progressModel) commandView() string {
-	return fmt.Sprintf("%s%s  %s  已完成: %d/%d  %s  %s %s",
-		indent, styleTitle.Render("执行进度"), m.barView(m.totalBar, m.progress()),
+	return fmt.Sprintf("%s%s  %s  已完成 %d/%d  %s  %s  %s",
+		indent, styleTitle.Render("总进度"), m.barView(m.totalBar, m.progress()),
 		m.completed, m.total, styleDim.Render(elapsedText(time.Since(m.start))),
-		styleOK.Render(fmt.Sprintf("Succ:%d", m.succeeded)),
-		styleFail.Render(fmt.Sprintf("Fail:%d", m.failed)))
+		styleOK.Render(fmt.Sprintf("成功 %d", m.succeeded)),
+		styleFail.Render(fmt.Sprintf("失败 %d", m.failed)))
 }
 
 // transferView 传输模式：总进度 + 节点进度 + 分隔线 + 逐节点条。
@@ -368,11 +368,11 @@ func (m progressModel) transferView() string {
 		styleDim.Render(FormatSpeed(m.totalSpeed)),
 		common.FormatBytes(m.bytesDone), common.FormatBytes(m.bytesTotal))
 
-	fmt.Fprintf(&b, "%s%s  %s  %s  %d/%d  %s %s\n",
+	fmt.Fprintf(&b, "%s%s  %s  %s  %d/%d  %s  %s\n",
 		indent, styleTitle.Render("节点进度"), m.barView(m.nodeBar, m.nodeProgress()),
 		styleDim.Render(elapsedText(time.Since(m.start))), m.completed, m.total,
-		styleOK.Render(fmt.Sprintf("Succ:%d", m.succeeded)),
-		styleFail.Render(fmt.Sprintf("Fail:%d", m.failed)))
+		styleOK.Render(fmt.Sprintf("成功 %d", m.succeeded)),
+		styleFail.Render(fmt.Sprintf("失败 %d", m.failed)))
 
 	fmt.Fprintf(&b, "%s\n", styleSep.Render(indent+strings.Repeat("─", separatorWidth)))
 
@@ -380,9 +380,10 @@ func (m progressModel) transferView() string {
 		if !n.hasBar {
 			continue
 		}
-		fmt.Fprintf(&b, "%s%s  %s  %s  Total:%d Succ:%d Fail:%d\n",
+		fmt.Fprintf(&b, "%s%s  %s  %s  %s\n",
 			indent, m.barView(n.bar, nodePercent(*n)), styleDim.Render(FormatSpeed(n.speed)),
-			styleDim.Render(n.ip), n.totalFiles, n.successFiles, n.failedFiles)
+			styleDim.Render(n.ip),
+			fmt.Sprintf("共 %d 个文件  成功 %d  失败 %d", n.totalFiles, n.successFiles, n.failedFiles))
 	}
 	return strings.TrimRight(b.String(), "\n")
 }

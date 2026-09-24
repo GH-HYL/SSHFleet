@@ -38,7 +38,6 @@ func WriteReport(archiveDir string, stats *result.Stats, a *cli.Args, cfg *confi
 	b.WriteString("=============================执行结果统计报告=============================\n")
 	fmt.Fprintf(&b, "执行开始时间： %s\n", stats.GlobalStartTime.Format("2006-01-02 15:04:05.000000"))
 	fmt.Fprintf(&b, "执行结束时间： %s\n", stats.GlobalStopTime.Format("2006-01-02 15:04:05.000000"))
-	fmt.Fprintf(&b, "执行耗时： %.2f  秒\n", stats.GlobalCostTime)
 	fmt.Fprintf(&b, "\n【执行命令】 \n  %s\n", DisplayCommand(argv))
 
 	b.WriteString("\n【执行参数】\n")
@@ -61,10 +60,10 @@ func WriteReport(archiveDir string, stats *result.Stats, a *cli.Args, cfg *confi
 		fmt.Fprintf(&b, "  本地路径： %s\n", a.Path)
 	}
 
-	fmt.Fprintf(&b, "  CSV文件路径： %s\n", common.MaskInlineListIf(a.CsvFile))
+	fmt.Fprintf(&b, "  节点清单： %s\n", common.MaskInlineListIf(a.CsvFile))
 	fmt.Fprintf(&b, "  节点数量： %d\n", stats.NodesTotal)
 	if a.Command != "" || a.Script != "" {
-		fmt.Fprintf(&b, "  并发数值： %d\n", a.Number)
+		fmt.Fprintf(&b, "  并发数： %d\n", a.Number)
 	}
 	if a.ConnectTimeout != 0 {
 		fmt.Fprintf(&b, "  连接超时： %ds\n", a.ConnectTimeout)
@@ -80,8 +79,8 @@ func WriteReport(archiveDir string, stats *result.Stats, a *cli.Args, cfg *confi
 
 	b.WriteString("\n【结果统计】\n")
 	fmt.Fprintf(&b, "  总耗时： %.2f  秒\n", stats.GlobalCostTime)
-	fmt.Fprintf(&b, "  节点总数: %d  完成总数：%d  总数校验：%s\n", stats.NodesTotal, stats.ResultsTotal, stats.Verify)
-	fmt.Fprintf(&b, "  成功: %d    失败: %d\n", stats.SuccessCounts, stats.FailCounts)
+	fmt.Fprintf(&b, "  节点总数：%d  完成总数：%d  总数校验：%s\n", stats.NodesTotal, stats.ResultsTotal, stats.Verify)
+	fmt.Fprintf(&b, "  成功：%d    失败：%d\n", stats.SuccessCounts, stats.FailCounts)
 	if len(stats.SortedFailCategories) > 0 {
 		parts := make([]string, 0, len(stats.SortedFailCategories))
 		for _, c := range stats.SortedFailCategories {
@@ -98,7 +97,7 @@ func WriteReport(archiveDir string, stats *result.Stats, a *cli.Args, cfg *confi
 		}
 	}
 
-	b.WriteString("\n【IP清单统计】\n")
+	b.WriteString("\n【节点清单统计】\n")
 	// 失败分类按 IP 数量升序排列（对位旧报告）
 	catKeys := make([]string, 0, len(stats.CategoryIPMap))
 	for k := range stats.CategoryIPMap {
