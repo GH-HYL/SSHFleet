@@ -140,7 +140,7 @@ func buildTasks(a *cli.Args, nodes *nodelist.Nodes) ([]*task, []string, error) {
 				len(collected.Skipped), Summarize(collected.Skipped)))
 		}
 		for i, node := range nodes.Items {
-			tasks = append(tasks, &task{seq: i, node: node, files: collected.Files, skipped: collected.Skipped, remote: a.Path, useSudo: a.Mode == "sudo"})
+			tasks = append(tasks, &task{seq: i, node: node, files: collected.Files, skipped: collected.Skipped, remote: a.Path, useSudo: a.Sudo})
 		}
 	case a.Download != "":
 		// 本地落地目录转绝对路径（对位旧 Python builder）
@@ -149,7 +149,7 @@ func buildTasks(a *cli.Args, nodes *nodelist.Nodes) ([]*task, []string, error) {
 			return nil, nil, err
 		}
 		for i, node := range nodes.Items {
-			tasks = append(tasks, &task{seq: i, node: node, remote: a.Download, local: local, useSudo: a.Mode == "sudo"})
+			tasks = append(tasks, &task{seq: i, node: node, remote: a.Download, local: local, useSudo: a.Sudo})
 		}
 	default: // 命令 / 脚本
 		var body, interpreter string
@@ -164,7 +164,7 @@ func buildTasks(a *cli.Args, nodes *nodelist.Nodes) ([]*task, []string, error) {
 				interpreter = "python3"
 			}
 		}
-		command, stdin := ssh.BuildCommand(a.Command, body, interpreter, a.NoBash, a.Mode == "sudo")
+		command, stdin := ssh.BuildCommand(a.Command, body, interpreter, a.NoBash, a.Sudo)
 		for i, node := range nodes.Items {
 			tasks = append(tasks, &task{seq: i, node: node, command: command, stdin: stdin})
 		}
@@ -215,7 +215,7 @@ func commandDescription(a *cli.Args, tasks []*task) []string {
 		ScriptBody:  body,
 		Interpreter: interpreter,
 		NoBash:      a.NoBash,
-		AsRoot:      a.Mode == "sudo",
+		AsRoot:      a.Sudo,
 	})
 	if text == "" {
 		return nil

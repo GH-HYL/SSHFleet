@@ -55,6 +55,54 @@ func optionsBlock(text string) []string {
 	return block
 }
 
+// isTitleLine 组标题行：缩进与选项行不同（更浅），且不是选项。
+func isTitleLine(ln string) bool {
+	t := strings.TrimSpace(ln)
+	if t == "" || strings.HasPrefix(t, "-") {
+		return false
+	}
+	return leadingSpaces(ln) < 4
+}
+
+// leadingSpaces 行首空格数。
+func leadingSpaces(ln string) int { return len(ln) - len(strings.TrimLeft(ln, " ")) }
+
+// optionLinesAndCont 选项行 + 折行续行（去掉组标题与空行）。
+func optionLinesAndCont(text string) []string {
+	var out []string
+	for _, ln := range optionsLines(text) {
+		if strings.TrimSpace(ln) == "" || isTitleLine(ln) {
+			continue
+		}
+		out = append(out, ln)
+	}
+	return out
+}
+
+// optionEntryLines 只取选项行（去掉组标题、空行与折行续行）。
+func optionEntryLines(text string) []string {
+	var out []string
+	for _, ln := range optionLinesAndCont(text) {
+		if strings.HasPrefix(strings.TrimSpace(ln), "-") {
+			out = append(out, ln)
+		}
+	}
+	return out
+}
+
+// helpTitleLines 取组标题行（既不空、也不是选项行的那些）。
+func helpTitleLines(text string) []string {
+	var out []string
+	for _, ln := range optionsLines(text) {
+		t := strings.TrimSpace(ln)
+		if t == "" || strings.HasPrefix(t, "-") {
+			continue
+		}
+		out = append(out, t)
+	}
+	return out
+}
+
 // optionGroupCount 分组数 = 空行数 + 1。
 func optionGroupCount(text string) int {
 	blankRuns, prevBlank, hasOption := 0, true, false
@@ -119,14 +167,14 @@ func TestUsageTextFourColumnsAligned(t *testing.T) {
 	for _, width := range []int{0, 60, 72, 80, 100, 140, 240} {
 		width := width
 		t.Run(fmt.Sprintf("width_%d", width), func(t *testing.T) {
-			block := optionsBlock(usageText(cfg, "9.9.9", width))
+			block := optionLinesAndCont(usageText(cfg, "9.9.9", width))
 			if len(block) == 0 {
 				t.Fatal("选项块为空")
 			}
 			if width <= 0 {
 				rows := 0
 				for _, e := range entries {
-					if !e.blank {
+					if !e.blank && e.group == "" {
 						rows++
 					}
 				}
@@ -159,7 +207,7 @@ func TestUsageTextFourColumnsAligned(t *testing.T) {
 
 			// ② 每个选项都落在自己那几列上
 			for _, e := range entries {
-				if e.blank {
+				if e.blank || e.group != "" {
 					continue
 				}
 				var head string
@@ -187,13 +235,14 @@ func TestUsageTextFourColumnsAligned(t *testing.T) {
 	}
 }
 
-// 无短选项的条目：短选项列留白，长选项仍落在长选项列。
+// 无短选项的条目：短选项列留白，长选项仍落在长选项列；组标题行缩进比选项行更浅。
 func TestUsageTextEntriesWithoutShortOption(t *testing.T) {
 	cfg := helpTestCfg()
 	_, longCol, _, _ := helpColumns(cfg)
+	text := usageText(cfg, "9.9.9", 120)
 	found := false
-	for _, ln := range optionsBlock(usageText(cfg, "9.9.9", 120)) {
-		if displayColumnOf(ln, "--convert-password") == longCol {
+	for _, ln := range optionEntryLines(text) {
+		if displayColumnOf(ln, "--convert-secret") == longCol {
 			found = true
 			if strings.TrimSpace(prefixOf(ln, longCol)) != "" {
 				t.Fatalf("无短选项时短选项列应留白：%q", ln)
@@ -201,7 +250,17 @@ func TestUsageTextEntriesWithoutShortOption(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Fatal("未找到 --convert-password 行")
+		t.Fatal("未找到 --convert-secret 行")
+	}
+
+	// 组标题用更浅的缩进，且不带任何列
+	for _, ln := range optionsLines(text) {
+		if !isTitleLine(ln) {
+			continue
+		}
+		if got := leadingSpaces(ln); got != common.DisplayWidth(helpGroupIndent) {
+			t.Fatalf("组标题应缩进 %d 列，实际 %d 列：%q", common.DisplayWidth(helpGroupIndent), got, ln)
+		}
 	}
 }
 
@@ -209,31 +268,31 @@ func TestUsageTextEntriesWithoutShortOption(t *testing.T) {
 func TestUsageTextWrapsLongDescriptionInOwnColumn(t *testing.T) {
 	cfg := helpTestCfg()
 	_, _, _, descCol := helpColumns(cfg)
-	block := optionsBlock(usageText(cfg, "9.9.9", 100))
+	block := optionLinesAndCont(usageText(cfg, "9.9.9", 100))
 
 	headIdx := -1
 	for i, ln := range block {
-		if strings.Contains(ln, "--convert-password") {
+		if strings.Contains(ln, "--convert-secret") {
 			headIdx = i
 			break
 		}
 	}
 	if headIdx < 0 {
-		t.Fatal("未找到 --convert-password 行")
+		t.Fatal("未找到 --convert-secret 行")
 	}
 	if headIdx+1 >= len(block) {
-		t.Fatalf("100 列下长说明应折行，实际只有 %d 行：%v", len(block), block)
+		t.Fatalf("100 列下长说明应折行，实际只有 %d 行：\n%s", len(block), strings.Join(block, "\n"))
 	}
 
 	// 该选项声明的完整描述（用于核对折行没丢字）
 	var desc string
 	for _, e := range helpEntries(cfg) {
-		if e.long == "--convert-password" {
+		if e.long == "--convert-secret" {
 			desc = e.desc
 		}
 	}
 	if desc == "" {
-		t.Fatal("未取到 --convert-password 的描述")
+		t.Fatal("未取到 --convert-secret 的描述")
 	}
 
 	// 收集它的说明行：首行 + 紧跟的续行（续行以说明列之前的空白开头）
@@ -255,34 +314,71 @@ func TestUsageTextWrapsLongDescriptionInOwnColumn(t *testing.T) {
 	}
 }
 
-// 选项表按用途分组（组间空行），且用法只保留一行。
+// 选项表按用途分五组（每组一行组标题），用法拆成两行，末尾指向手册。
 func TestUsageTextGroupsOptions(t *testing.T) {
 	cfg := helpTestCfg()
 	text := usageText(cfg, "9.9.9", 120)
-	if got := optionGroupCount(text); got != 4 {
-		t.Fatalf("选项应分 4 组，实际 %d 组：\n%s", got, text)
+
+	titles := helpTitleLines(text)
+	want := []string{"模式（四选一）", "清单与目标路径", "执行参数", "密钥与凭据", "密钥管理（不执行批量任务）"}
+	if len(titles) != len(want) {
+		t.Fatalf("应有 %d 个组标题，实际 %d 个：%v", len(want), len(titles), titles)
 	}
-	// 用法只有一行（工具选项不再单列一行）
+	for i, w := range want {
+		if titles[i] != w {
+			t.Fatalf("第 %d 个组标题应为 %q，实际 %q", i+1, w, titles[i])
+		}
+	}
+
+	// 用法两行：批量执行一行、密钥管理一行
 	usageLines := 0
 	for _, ln := range strings.Split(text, "\n") {
 		if strings.HasPrefix(strings.TrimSpace(ln), "cli.test.exe") {
 			usageLines++
 		}
 	}
-	if usageLines != 1 {
-		t.Fatalf("用法应只有一行，实际 %d 行", usageLines)
+	if usageLines != 2 {
+		t.Fatalf("用法应为两行，实际 %d 行", usageLines)
 	}
-	// 已删除的旧段落不应再出现
-	for _, gone := range []string{"长选项与短选项等价", "上传并发说明", "建议并发数"} {
+
+	// 模式那四行不再带标记列（标记只留给默认值那几行）
+	for _, ln := range optionEntryLines(text) {
+		for _, mode := range []string{"--command", "--script", "--upload", "--download"} {
+			if strings.Contains(ln, mode) && strings.Contains(ln, "(命令模式)") {
+				t.Fatalf("模式行不该再有标记列：%q", ln)
+			}
+		}
+	}
+
+	// 已删除的旧段落与旧选项名不应再出现
+	for _, gone := range []string{"长选项与短选项等价", "上传并发说明", "建议并发数", "--disinteractive", "--nobash", "-m --mode", "--file"} {
 		if strings.Contains(text, gone) {
 			t.Fatalf("帮助中不应再有 %q", gone)
 		}
 	}
-	// 示例含生成与转换两条
-	for _, want := range []string{"--gen-key", "--convert-password ~/.MyPW/pw.txt"} {
-		if !strings.Contains(text, want) {
-			t.Fatalf("示例缺少 %q", want)
+
+	// 示例与手册指向
+	for _, wantLine := range []string{"-c \"ls -l\"", "--yes", "-k", "见 docs/manual/"} {
+		if !strings.Contains(text, wantLine) {
+			t.Fatalf("帮助缺少 %q：\n%s", wantLine, text)
 		}
+	}
+}
+
+// --sudo 的标记跟着配置里的值走（这是"不加参数时用的是哪种身份"）。
+func TestUsageTextSudoTagFollowsConfig(t *testing.T) {
+	on := helpTestCfg() // Sudo = true
+	if text := usageText(on, "9.9.9", 120); !strings.Contains(text, "[当前配置: 开]") {
+		t.Fatalf("配置为开时应标 [当前配置: 开]：\n%s", text)
+	}
+	off := helpTestCfg()
+	off.Execution.Sudo = false
+	text := usageText(off, "9.9.9", 120)
+	if !strings.Contains(text, "[当前配置: 关]") {
+		t.Fatalf("配置为关时应标 [当前配置: 关]：\n%s", text)
+	}
+	if strings.Contains(text, "配置是开时用它改回来") {
+		t.Fatalf("配置为关时不该出现「配置是开时用它改回来」：\n%s", text)
 	}
 }
 
@@ -299,15 +395,15 @@ func TestUsageTextShowsVersion(t *testing.T) {
 // 旧版是 `tlog.success(f"参数解析成功,解析结果: {args}")`，{args} 走 argparse.Namespace
 // 的 __repr__，输出形如：
 //
-//	Namespace(c='who -b', s='', u='', d='', f='nodes.csv', p='', m='direct',
-//	          t=None, T=None, n=None, r='v2_cmd', nobash=False, disinteractive=False, k=False)
+//	Namespace(c='who -b', s='', u='', d='', f='nodes.csv', p='', sudo=False,
+//	          t=None, T=None, n=None, r='v2_cmd', no_bash=False, yes=False, k=False)
 //
 // 这里逐字段对齐：字段名、空值写法（” 与 None）、布尔写法（True/False）都不能自作主张。
 func TestSummaryMatchesArgparseNamespace(t *testing.T) {
-	a := &Args{Command: "who -b", CsvFile: "nodes.csv", Mode: "direct", Remark: "v2_cmd"}
+	a := &Args{Command: "who -b", CsvFile: "nodes.csv", Remark: "v2_cmd"}
 	got := a.Summary()
-	want := "Namespace(c='who -b', s='', u='', d='', f='nodes.csv', p='', m='direct', " +
-		"t=None, T=None, n=None, r='v2_cmd', nobash=False, disinteractive=False, k=False)"
+	want := "Namespace(c='who -b', s='', u='', d='', f='nodes.csv', p='', sudo=False, " +
+		"t=None, T=None, n=None, r='v2_cmd', no_bash=False, yes=False, k=False)"
 	if got != want {
 		t.Fatalf("解析结果格式不对\n实际：%s\n应为：%s", got, want)
 	}
@@ -356,11 +452,11 @@ func TestSummaryKeyMode(t *testing.T) {
 	}
 }
 
-// 布尔字段用 Python 的 True / False 拼写，与 argparse 一致。
+// 布尔字段用 Python 的 True / False 拼写。
 func TestSummaryBooleanFields(t *testing.T) {
-	a := &Args{Command: "pwd", NoBash: true, Disinteractive: true}
+	a := &Args{Command: "pwd", NoBash: true, Disinteractive: true, Sudo: true, Key: true}
 	got := a.Summary()
-	for _, want := range []string{"nobash=True", "disinteractive=True"} {
+	for _, want := range []string{"no_bash=True", "yes=True", "sudo=True", "k=True"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("应有 %q，实际：%s", want, got)
 		}
@@ -368,7 +464,7 @@ func TestSummaryBooleanFields(t *testing.T) {
 	// 没给时是 False，不是空串、也不是 omits
 	a = &Args{Command: "pwd"}
 	got = a.Summary()
-	for _, want := range []string{"nobash=False", "disinteractive=False"} {
+	for _, want := range []string{"no_bash=False", "yes=False", "sudo=False", "k=False"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("应有 %q，实际：%s", want, got)
 		}
@@ -381,7 +477,7 @@ func TestSummaryHidesInternalState(t *testing.T) {
 	got := a.Summary()
 	for _, unwanted := range []string{
 		"keyChanged", "timeoutInvalid", "numberRaw", "FIsInline",
-		"timeoutRaw", "connectTimeoutRaw", "ModeName",
+		"timeoutRaw", "connectTimeoutRaw", "ModeName", "sudoFlag", "noSudoFlag",
 	} {
 		if strings.Contains(got, unwanted) {
 			t.Fatalf("不该出现内部字段 %q，实际：%s", unwanted, got)

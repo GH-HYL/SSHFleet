@@ -79,7 +79,11 @@ func Confirm(args *cli.Args, nodes *nodelist.Nodes, cfg *config.Config, logger *
 
 // buildInfoTable 构建显示信息的表格数据（行序与旧版一致）。
 func buildInfoTable(args *cli.Args, nodes *nodelist.Nodes) [][2]string {
-	t := [][2]string{{"权限类型", args.Mode}}
+	identity := "direct"
+	if args.Sudo {
+		identity = "sudo"
+	}
+	t := [][2]string{{"权限类型", identity}}
 	switch {
 	case args.Command != "":
 		t = append(t, [2]string{"执行模式", "命令模式"}, [2]string{"执行命令", args.Command}, [2]string{"", ""})

@@ -32,19 +32,21 @@ type Args struct {
 	Download        string // -d
 	CsvFile         string // -f
 	Path            string // -p
-	Mode            string // -m 的原始输入（空 = 没给，按配置走）
 	Sudo            bool   // 本次生效的执行身份：true=root，false=登录用户
 	Timeout         int    // -t（缺省时按模式取配置默认）
 	ConnectTimeout  int    // -T
 	Number          int    // -n
 	Remark          string // -r
 	Key             bool   // -k：写了就用密钥登录（私钥取清单第 5 列，其次配置 key）
-	NoBash          bool   // --nobash
-	Disinteractive  bool   // --disinteractive
+	NoBash          bool   // --no-bash
+	Disinteractive  bool   // --yes
 	GenKey          bool   // --gen-key
 	KeyStatus       bool   // --key-status
-	ConvertPassword string // --convert-password
+	ConvertPassword string // --convert-secret
 	FIsInline       bool   // -f 为内联清单（由 CheckArguments 判定）
+
+	// --sudo / --no-sudo 是否在命令行出现：互斥判定与「密钥管理命令不与批量参数同给」都要用
+	sudoFlag, noSudoFlag bool
 
 	// -t / -T / -n 的原始输入：非法值不在解析期报错，留给 CheckArguments
 	// 按旧版口径报「参数格式错误」。
@@ -97,13 +99,13 @@ func (a *Args) Summary() string {
 		"d=" + orEmpty(a.Download),
 		"f=" + orEmpty(common.MaskInlineListIf(a.CsvFile)),
 		"p=" + orEmpty(a.Path),
-		"m=" + orEmpty(a.Mode),
+		"sudo=" + boolPy(a.Sudo),
 		"t=" + orNone(a.Timeout),
 		"T=" + orNone(a.ConnectTimeout),
 		"n=" + orNone(a.Number),
 		"r=" + orEmpty(a.Remark),
-		"nobash=" + boolPy(a.NoBash),
-		"disinteractive=" + boolPy(a.Disinteractive),
+		"no_bash=" + boolPy(a.NoBash),
+		"yes=" + boolPy(a.Disinteractive),
 		"k=" + keyVal,
 	}
 	if a.KeyStatus {
@@ -126,19 +128,21 @@ func Parse(cfg *config.Config, version string, raw []string) (*Args, error) {
 	fs.SetOutput(io.Discard) // 解析错误与提示全部自撰，不走 pflag 默认输出
 
 	var a Args
+	var sudoFlag, noSudoFlag bool
 	fs.StringVarP(&a.Command, "command", "c", "", "远程在多台服务器上执行一条命令")
 	fs.StringVarP(&a.Script, "script", "s", "", "远程在多台服务器上执行一个本地脚本")
 	fs.StringVarP(&a.Upload, "upload", "u", "", "把本地文件或目录传到服务器")
 	fs.StringVarP(&a.Download, "download", "d", "", "从服务器下载文件或目录到本地")
-	fs.StringVarP(&a.CsvFile, "file", "f", "", "节点清单：CSV 文件路径，或内联一行节点信息")
+	fs.StringVarP(&a.CsvFile, "csv-file", "f", "", "节点清单：CSV 文件路径，或内联一行节点信息")
 	fs.StringVarP(&a.Path, "path", "p", "", "目标路径：上传到服务器的目录 / 下载到的本地目录")
-	fs.StringVarP(&a.Mode, "mode", "m", "", "执行身份: direct=登录用户, sudo=root")
-	fs.StringVarP(&a.timeoutRaw, "timeout", "t", "", "单台执行或传输的超时时间（秒）")
-	fs.StringVarP(&a.connectTimeoutRaw, "connect-timeout", "T", "", "连接每台服务器的超时时间（秒）")
+	fs.BoolVar(&sudoFlag, "sudo", false, "这次以 root 身份执行")
+	fs.BoolVar(&noSudoFlag, "no-sudo", false, "这次以登录用户身份执行")
+	fs.StringVarP(&a.timeoutRaw, "timeout", "t", "", "命令跑完、文件传完的最长等待（秒）")
+	fs.StringVarP(&a.connectTimeoutRaw, "connect-timeout", "T", "", "连上服务器的最长等待（秒）")
 	fs.StringVarP(&a.numberRaw, "number", "n", "", "并发数：同时操作几台服务器")
-	fs.StringVarP(&a.Remark, "remark", "r", "", "本次任务的名称（历史记录文件夹后缀）")
-	fs.BoolVar(&a.NoBash, "nobash", false, "命令模式专用: 不套一层 bash 环境")
-	fs.BoolVar(&a.Disinteractive, "disinteractive", false, "跳过所有确认提示直接执行")
+	fs.StringVarP(&a.Remark, "remark", "r", "", "备注，用作历史记录文件夹名（不填自动生成）")
+	fs.BoolVar(&a.NoBash, "no-bash", false, "命令模式专用: 不套一层 bash 环境")
+	fs.BoolVar(&a.Disinteractive, "yes", false, "跳过所有确认提示直接执行")
 	fs.BoolVarP(&a.Key, "key", "k", false, "用密钥登录：私钥取清单第 5 列，其次配置 account.key")
 	fs.BoolVar(&a.GenKey, "gen-key", false, "生成随机主密钥并持久化到 SSHFLEET_KEY")
 	fs.BoolVar(&a.KeyStatus, "key-status", false, "查看主密钥状态：两处来源、指纹、是否一致与下一步")
@@ -191,16 +195,19 @@ func Parse(cfg *config.Config, version string, raw []string) (*Args, error) {
 	if a.connectTimeoutRaw == "" {
 		a.ConnectTimeout = cfg.Execution.TimeoutConnect
 	}
-	if a.Mode == "" {
-		if cfg.Execution.Sudo {
-			a.Mode = "sudo"
-		} else {
-			a.Mode = "direct"
-		}
-	}
-	a.Sudo = a.Mode == "sudo"
 	if a.numberRaw == "" {
 		a.Number = 0
+	}
+
+	// 执行身份：两个开关互斥，都没给就用配置里的值（`--sudo`/`--no-sudo` 的冲突在 CheckArguments 报错）
+	a.sudoFlag, a.noSudoFlag = sudoFlag, noSudoFlag
+	switch {
+	case sudoFlag:
+		a.Sudo = true
+	case noSudoFlag:
+		a.Sudo = false
+	default:
+		a.Sudo = cfg.Execution.Sudo
 	}
 
 	// 路径参数：中间不能含空格；再做字符串层规范化（顺序与旧版一致）
@@ -298,67 +305,81 @@ func termWidth() int {
 }
 
 // helpEntry 帮助选项表的一行：四列各占一列、互不串行——
-// 短选项 / 长选项 / 方括号小括号标记 / 详细说明（超宽时在本列内折行）。
+// 短选项 / 长选项 / 方括号标记 / 详细说明（超宽时在本列内折行）。
 type helpEntry struct {
 	short string // 无短选项时为空
 	long  string
-	tag   string // (命令模式) / [默认: sudo] 这类标记，无则空
+	tag   string // [默认: 10] / [当前配置: 开] 这类标记，无则空
 	desc  string
-	blank bool // 分组用的空行（不与其它字段同时使用）
+	blank bool   // 分组用的空行
+	group string // 组标题行（只有这一项非空）
 }
 
 // blankRow 选项表的分组空行。
 var blankRow = helpEntry{blank: true}
 
-// opt 构造一行选项（blank 恒 false，不必逐个写字面量字段）。
+// groupRow 选项表的组标题行（纯文字加缩进，不用横线装饰）。
+func groupRow(title string) helpEntry { return helpEntry{group: title} }
+
+// opt 构造一行选项（blank / group 恒为空，不必逐个写字面量字段）。
 func opt(short, long, tag, desc string) helpEntry {
 	return helpEntry{short: short, long: long, tag: tag, desc: desc}
 }
 
 // helpEntries 选项表内容：描述力求简洁、清晰、明确——能省的字省掉，
 // 「必填 / 取值语义 / 默认值」这些影响使用的信息一个不省。
-// 按用途分组：四种模式 / 清单与路径 / 执行参数与登录方式 / 密钥与凭据，组间空行分隔。
+// 五组：模式（四选一）/ 清单与目标路径 / 执行参数 / 密钥与凭据 / 密钥管理，组间空行分隔。
 func helpEntries(cfg *config.Config) []helpEntry {
-	defaultIdentity := "direct"
+	sudoTag, noSudoDesc := "[当前配置: 关]", "这次以登录用户身份执行"
 	if cfg.Execution.Sudo {
-		defaultIdentity = "sudo"
+		sudoTag, noSudoDesc = "[当前配置: 开]", "这次以登录用户身份执行（配置是开时用它改回来）"
 	}
 	return []helpEntry{
-		opt("-c", "--command", "(命令模式)", "在多台服务器上执行一条命令"),
-		opt("-s", "--script", "(脚本模式)", "在多台服务器上执行一个本地脚本"),
-		opt("-u", "--upload", "(上传模式)", "把本地文件或目录上传到服务器"),
-		opt("-d", "--download", "(下载模式)", "从服务器下载文件或目录到本地"),
+		groupRow("模式（四选一）"),
+		opt("-c", "--command", "", "在多台服务器上执行一条命令"),
+		opt("-s", "--script", "", "在多台服务器上执行一个本地脚本"),
+		opt("-u", "--upload", "", "把本地文件或目录上传到服务器"),
+		opt("-d", "--download", "", "从服务器下载文件或目录到本地"),
 
 		blankRow,
 
-		opt("-f", "--file", "", "节点清单：CSV 路径，或直接写一行节点信息（-c/-s/-u/-d 必填）"),
-		opt("-p", "--path", "", "目标路径：上传的远程目录 / 下载的本地目录（-u/-d 必填）"),
+		groupRow("清单与目标路径"),
+		opt("-f", "--csv-file", "", "节点清单：CSV 文件路径，或直接写一行节点信息（必填）"),
+		opt("-p", "--path", "", "目标路径：上传写服务器目录 / 下载写本机目录（上传、下载必填）"),
 
 		blankRow,
 
-		opt("-m", "--mode", fmt.Sprintf("[默认: %s]", defaultIdentity), "执行身份：direct=登录用户，sudo=root"),
-		opt("-t", "--timeout", fmt.Sprintf("[默认: %d/%d]", cfg.Execution.TimeoutExecute, cfg.Execution.TimeoutTransfer), "单台执行 / 传输超时（秒）"),
-		opt("-T", "--connect-timeout", fmt.Sprintf("[默认: %d]", cfg.Execution.TimeoutConnect), "连接超时（秒）"),
-		opt("-n", "--number", "[默认: 全部]", "并发数：同时操作几台（不填=全部并行）"),
-		opt("-r", "--remark", "", "任务名，用作历史记录文件夹后缀（不填自动生成）"),
-		opt("-k", "--key", "(密钥登录)", "不写=只用密码；写了=用清单第 5 列或配置里的私钥"),
-		opt("", "--nobash", "", "命令模式：不套 bash，直接执行原始命令"),
-		opt("", "--disinteractive", "", "跳过所有确认直接执行（批量/自动化常用）"),
+		groupRow("执行参数"),
+		opt("-n", "--number", "[默认: 全部]", "并发数：同时操作几台，不填=全部并行"),
+		opt("-r", "--remark", "", "备注，用作历史记录文件夹名（不填自动生成）"),
+		opt("", "--sudo", sudoTag, "这次以 root 身份执行"),
+		opt("", "--no-sudo", "", noSudoDesc),
+		opt("", "--yes", "", "跳过所有确认直接执行（自动化用，用它之前先手动跑通一次）"),
+		opt("", "--no-bash", "", "命令模式：不套 bash，直接执行原始命令"),
+		opt("-t", "--timeout", fmt.Sprintf("[默认: %d/%d]", cfg.Execution.TimeoutExecute, cfg.Execution.TimeoutTransfer), "命令跑完、文件传完的最长等待（秒）"),
+		opt("-T", "--connect-timeout", fmt.Sprintf("[默认: %d]", cfg.Execution.TimeoutConnect), "连上服务器的最长等待（秒）"),
 
 		blankRow,
 
-		opt("", "--gen-key", "(密钥管理)", "生成主密钥并写入系统环境变量 SSHFLEET_KEY"),
-		opt("", "--key-status", "(密钥管理)", "查看主密钥状态：读到哪把、已存哪把、是否一致、怎么办"),
-		opt("", "--convert-password", "(密钥管理)", "转换凭据文件（跟目标文件路径）：按配置里的 encrypt 开关在明文与密文之间转换；加密需已配置主密钥"),
+		groupRow("密钥与凭据"),
+		opt("-k", "--key", "", "密钥登录：不写=只用密码；写了=用清单或配置里的私钥"),
+
+		blankRow,
+
+		groupRow("密钥管理（不执行批量任务）"),
+		opt("", "--gen-key", "", "生成主密钥（打开加密之后才会用到），密钥存进环境变量 SSHFLEET_KEY"),
+		opt("", "--key-status", "", "查看主密钥状态：读到哪把、已存哪把、是否一致"),
+		opt("", "--convert-secret", "", "转换凭据文件（后面跟要转的文件路径）：按配置里的加密开关，转成明文或密文"),
 	}
 }
 
 // 帮助表的列间留白：短选项与长选项之间只留 1 个空格（贴成一个整体），
 // 其余列之间留 2 个空格。测试按同一组常量核对列位置，避免两边各写一份。
 const (
-	helpIndent = "  "
-	helpOptGap = " "
-	helpGap    = "  "
+	helpGroupIndent = "  "   // 组标题缩进
+	helpIndent      = "    " // 选项行缩进（比组标题深一级，一眼看出谁属于谁）
+	helpOptGap      = " "
+	helpGap         = "  "
 )
 
 // minDescWidth 说明列保底宽度：终端太窄时宁可整行超宽，也不把说明挤成一列一个字。
@@ -372,7 +393,7 @@ func usageText(cfg *config.Config, version string, width int) string {
 
 	wShort, wLong, wTag := 0, 0, 0
 	for _, e := range entries {
-		if e.blank {
+		if e.blank || e.group != "" {
 			continue
 		}
 		wShort = max(wShort, common.DisplayWidth(e.short))
@@ -397,10 +418,15 @@ func usageText(cfg *config.Config, version string, width int) string {
 	b.WriteString("SSHFleet - 批量 SSH 运维工具（命令/脚本执行、文件上传下载）\n")
 	b.WriteString(fmt.Sprintf("版本: v%s\n\n", version))
 	b.WriteString("用法:\n")
-	b.WriteString(helpIndent + fmt.Sprintf("%s ( -c | -s | -u | -d ) ( -f ) ( -p ) [其他可选参数]   批量执行（四种模式四选一）\n\n", name))
-	b.WriteString("选项:\n")
+	b.WriteString(helpGroupIndent + fmt.Sprintf("%s -c | -s | -u | -d 之一，配合 -f 批量执行\n", name))
+	b.WriteString(helpGroupIndent + fmt.Sprintf("%s --gen-key | --key-status | --convert-secret 密钥管理\n\n", name))
+	b.WriteString("选项:\n\n")
 	for _, e := range entries {
-		if e.blank { // 分组空行
+		switch {
+		case e.group != "": // 组标题
+			b.WriteString(helpGroupIndent + e.group + "\n")
+			continue
+		case e.blank: // 分组空行
 			b.WriteString("\n")
 			continue
 		}
@@ -415,11 +441,21 @@ func usageText(cfg *config.Config, version string, width int) string {
 		}
 	}
 	b.WriteString("\n示例:\n")
-	b.WriteString(fmt.Sprintf("  命令模式: %s -f nodes.csv -c \"ls -l\"\n", name))
-	b.WriteString(fmt.Sprintf("  脚本模式: %s -f nodes.csv -s script.sh\n", name))
-	b.WriteString(fmt.Sprintf("  上传模式: %s -f nodes.csv -u /local/path -p /remote/path/\n", name))
-	b.WriteString(fmt.Sprintf("  下载模式: %s -f nodes.csv -d /remote/path -p /local/path\n", name))
-	b.WriteString(fmt.Sprintf("  生成密钥: %s --gen-key\n", name))
-	b.WriteString(fmt.Sprintf("  转换凭据: %s --convert-password ~/.MyPW/pw.txt\n", name))
+	examples := [][2]string{
+		{"执行命令:", fmt.Sprintf("%s -f nodes.csv -c \"ls -l\"", name)},
+		{"执行脚本:", fmt.Sprintf("%s -f nodes.csv -s deploy.sh", name)},
+		{"上传文件:", fmt.Sprintf("%s -f nodes.csv -u D:/dist/app -p /opt/app/", name)},
+		{"下载文件:", fmt.Sprintf("%s -f nodes.csv -d /var/log/app -p D:/logs/", name)},
+		{"用密钥登录:", fmt.Sprintf("%s -f nodes.csv -c \"uptime\" -k", name)},
+		{"不确认执行:", fmt.Sprintf("%s -f nodes.csv -c \"uptime\" --yes", name)},
+	}
+	labelWidth := 0
+	for _, e := range examples {
+		labelWidth = max(labelWidth, common.DisplayWidth(e[0]))
+	}
+	for _, e := range examples {
+		b.WriteString("  " + padTo(e[0], labelWidth) + " " + e[1] + "\n")
+	}
+	b.WriteString("\n更多用法、配置说明、示例：见 docs/manual/\n")
 	return b.String()
 }

@@ -93,7 +93,7 @@ func TestFallbackCategory(t *testing.T) {
 		{"SFTP失败", false},
 		{"执行失败(退出码2)", false},
 		{"部分成功", false},
-		{"错误未分类", false},
+		{"原因未知", false},
 		{unknownErr, true},
 		{"", false},
 	}

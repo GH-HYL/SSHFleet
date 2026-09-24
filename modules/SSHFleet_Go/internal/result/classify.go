@@ -18,7 +18,7 @@ const (
 	// PartialSuccessCategory 传输部分成功（有成功有失败）。
 	PartialSuccessCategory = "部分成功"
 	// Unclassified 完全无信息时的兜底分类。
-	Unclassified = "错误未分类"
+	Unclassified = "原因未知"
 	// fallbackMaxLen 兜底原文的最大长度（超出截断，避免长报文撑爆统计/报表）。
 	fallbackMaxLen = 200
 )

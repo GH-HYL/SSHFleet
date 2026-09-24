@@ -105,7 +105,7 @@ func TestCategoryTipLines(t *testing.T) {
 		t.Fatalf("关键词文件应可加载: %v", err)
 	}
 	cats := []result.CategoryCount{
-		{Category: "握手被断开", Count: 2},      // 配置里写了 tip
+		{Category: "连接被断开", Count: 2},      // 配置里写了 tip
 		{Category: "密码过期", Count: 1},       // 没写 tip → 不出现
 		{Category: "执行失败(退出码1)", Count: 1}, // 内置说明 + 已知退出码含义
 		{Category: "执行失败(退出码3)", Count: 1}, // 内置说明 + 未知退出码（无含义）
@@ -116,7 +116,7 @@ func TestCategoryTipLines(t *testing.T) {
 		t.Fatalf("应出 3 行（没写 tip 的不算），实为 %d 行：%v", len(lines), lines)
 	}
 	// 配置里的 tip 原样跟出（不把文案抄进测试，改配置不用改测试）
-	if want := "握手被断开：" + kw.TipOf("握手被断开"); lines[0] != want {
+	if want := "连接被断开：" + kw.TipOf("连接被断开"); lines[0] != want {
 		t.Errorf("第 1 行应取自配置的 tip：\n  期望 %q\n  实际 %q", want, lines[0])
 	}
 	// 「执行失败(退出码N)」由工具补含义（已知码带含义，未知码只给前半句）
@@ -146,14 +146,14 @@ func TestPrintStatisticsTipSwitch(t *testing.T) {
 	stats := &result.Stats{
 		NodesTotal: 1, ResultsTotal: 1, Verify: "通过", FailCounts: 1,
 		SortedFailCategories: []result.CategoryCount{
-			{Category: "握手被断开", Count: 1},
+			{Category: "连接被断开", Count: 1},
 			{Category: "执行失败(退出码1)", Count: 1},
 		},
 	}
 
 	on := &bytes.Buffer{}
 	PrintStatistics(on, stats, kw, true)
-	if !strings.Contains(on.String(), "提示：") || !strings.Contains(on.String(), "握手被断开：") {
+	if !strings.Contains(on.String(), "提示：") || !strings.Contains(on.String(), "连接被断开：") {
 		t.Errorf("开启时应有提示块：\n%s", on.String())
 	}
 	if strings.Contains(on.String(), "常见退出码") {
