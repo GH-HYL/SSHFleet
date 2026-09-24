@@ -45,6 +45,10 @@ func (i *Interactor) Notice(text string) {
 }
 
 // Prompt 读取一行文本。EOF / 读取出错：打印取消文案并返回 ErrCancelled。
+//
+// **当前没有调用者**：补输入交互已按 L16 从用户可见面整体移除（缺字段一律报错），
+// 交互只剩 Confirm 一条路。这里按 L19 的退役手法保留实现——终端无回显读取这类细节
+// 重写成本不低，留着供日后改回来。
 func (i *Interactor) Prompt(prompt string) (string, error) {
 	fmt.Fprint(i.Out, prompt)
 	line, ok := i.readLine()
@@ -57,6 +61,7 @@ func (i *Interactor) Prompt(prompt string) (string, error) {
 
 // PromptPassword 读取敏感输入，终端上不回显（对位 getpass）；
 // 输入不是终端时降级为普通读取（对位 getpass 的 GetPassWarning 降级）。
+// 保留理由同 Prompt：无调用者，属退役能力。
 func (i *Interactor) PromptPassword(prompt string) (string, error) {
 	if term.IsTerminal(int(os.Stdin.Fd())) {
 		fmt.Fprint(i.Out, prompt)
