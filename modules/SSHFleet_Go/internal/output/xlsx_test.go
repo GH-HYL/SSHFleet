@@ -69,7 +69,7 @@ func TestOutputXlsxLayout(t *testing.T) {
 	if err := WriteOutputXlsx(dir, testResults(), testCfg(), "execute", nil, categoryOf); err != nil {
 		t.Fatal(err)
 	}
-	f := openXlsx(t, filepath.Join(dir, "output.xlsx"))
+	f := openXlsx(t, filepath.Join(dir, config.BuiltinPaths.OutputXlsx))
 	sheet := f.GetSheetName(0)
 	if sheet != "执行日志" {
 		t.Fatalf("工作表名应为「执行日志」，实际 %q", sheet)
@@ -152,7 +152,7 @@ func TestOutputXlsxLayout(t *testing.T) {
 	}
 }
 
-// output.xlsx 的明细行只清非法字符，排版一概不动：行首缩进保留、中间空行照样占一行。
+// terminal-output.xlsx 的明细行只清非法字符，排版一概不动：行首缩进保留、中间空行照样占一行。
 // 整块首尾的空白行由采集侧去掉（output 字段到手即成品），落表时不再重复处理
 // （用户 2026-09-15 裁定的分层）。
 func TestOutputXlsxKeepsOutputStructure(t *testing.T) {
@@ -165,7 +165,7 @@ func TestOutputXlsxKeepsOutputStructure(t *testing.T) {
 	if err := WriteOutputXlsx(dir, results, testCfg(), "execute", nil, func(ssh.Result) string { return "执行成功" }); err != nil {
 		t.Fatal(err)
 	}
-	f := openXlsx(t, filepath.Join(dir, "output.xlsx"))
+	f := openXlsx(t, filepath.Join(dir, config.BuiltinPaths.OutputXlsx))
 	sheet := f.GetSheetName(0)
 
 	// 行序：1 表头 / 2 连接 / 3 执行 / 4–6 output 三行 / 7 分类 / 8 分隔行
@@ -190,16 +190,16 @@ func TestResultsXlsxLayoutAndAutoWidth(t *testing.T) {
 	if sheet != "Results" {
 		t.Fatalf("工作表名应为 Results，实际 %q", sheet)
 	}
-	if got := cellOf(t, f, sheet, "A1"); got != "seq" {
-		t.Fatalf("表头首格应为 seq，实际 %q", got)
+	if got := cellOf(t, f, sheet, "A1"); got != "序号" {
+		t.Fatalf("表头首格应为 序号，实际 %q", got)
 	}
 	if got := cellOf(t, f, sheet, "M2"); got != "执行成功" {
 		t.Fatalf("M 列应为分类，实际 %q", got)
 	}
 
 	// A–M 自适应：宽度 >= 表头/内容宽度；N、O 固定
-	headers := []string{"seq", "ip", "port", "user", "connect_success", "exit_code", "connect_cost_time",
-		"exec_cost_time", "total_bytes", "total_files", "success_files", "failed_files", "分类", "error", "output"}
+	headers := []string{"序号", "IP", "端口", "用户名", "连接成功", "退出码", "连接耗时",
+		"执行耗时", "传输字节", "文件总数", "成功文件数", "失败文件数", "分类", "报错原文", "输出内容"}
 	values := [][]string{
 		{"1", "10.0.0.1", "22", "root", "TRUE", "0", "0.123", "0.456", "", "", "", "", "执行成功", "", "line one\nline two"},
 		{"2", "10.0.0.2", "22", "root", "FALSE", "", "0.5", "0", "", "", "", "", "拒绝网络连接", "dial tcp 10.0.0.2:22: connect: connection refused", ""},
@@ -285,9 +285,9 @@ func TestXlsxStripsIllegalCharsFromEveryField(t *testing.T) {
 	dir := t.TempDir()
 	dirtyOf := func(ssh.Result) string { return dirtyCategory }
 	if err := WriteOutputXlsx(dir, results, testCfg(), "execute", nil, dirtyOf); err != nil {
-		t.Fatalf("含违规字符的输出应能生成 output.xlsx：%v", err)
+		t.Fatalf("含违规字符的输出应能生成 terminal-output.xlsx：%v", err)
 	}
-	f := openXlsx(t, filepath.Join(dir, "output.xlsx"))
+	f := openXlsx(t, filepath.Join(dir, config.BuiltinPaths.OutputXlsx))
 	assertNoIllegalChars(t, f, f.GetSheetName(0), "红色失败", "ok", "兜底原文")
 
 	failResults := &batch.Results{Items: []ssh.Result{{
@@ -296,9 +296,9 @@ func TestXlsxStripsIllegalCharsFromEveryField(t *testing.T) {
 	}}}
 	dir2 := t.TempDir()
 	if err := WriteOutputXlsx(dir2, failResults, testCfg(), "execute", nil, dirtyOf); err != nil {
-		t.Fatalf("含违规字符的错误详情应能生成 output.xlsx：%v", err)
+		t.Fatalf("含违规字符的错误详情应能生成 terminal-output.xlsx：%v", err)
 	}
-	f2 := openXlsx(t, filepath.Join(dir2, "output.xlsx"))
+	f2 := openXlsx(t, filepath.Join(dir2, config.BuiltinPaths.OutputXlsx))
 	assertNoIllegalChars(t, f2, f2.GetSheetName(0), "dial", "failed")
 
 	if err := WriteResultsXlsx(dir, results, testCfg(), "execute", nil, dirtyOf); err != nil {

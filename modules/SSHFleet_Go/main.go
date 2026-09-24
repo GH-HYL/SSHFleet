@@ -323,7 +323,7 @@ func main() {
 	outputPath := filepath.Join(archive.Dir, config.BuiltinPaths.Output)
 	outputFile, err := os.Create(outputPath)
 	if err != nil {
-		logger.Warn(fmt.Sprintf("无法创建 output.txt 文件: %v", err))
+		logger.Warn(fmt.Sprintf("无法创建 %s 文件: %v", config.BuiltinPaths.Output, err))
 	} else {
 		defer func() { _ = outputFile.Close() }()
 	}

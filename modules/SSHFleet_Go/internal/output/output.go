@@ -41,11 +41,11 @@ func Render(
 	if cfg.Enable.OutputToXlsx {
 		if err := WriteOutputXlsx(archive.Dir, results, cfg, mode, kw, categoryOf); err != nil {
 			// 跳过但要留痕：终端一关，只有工具日志能说明「这次的 output.xlsx 为什么没生成」
-			msg := fmt.Sprintf("生成 output.xlsx 失败：%v（本次跳过，不影响执行结果）", err)
+			msg := fmt.Sprintf("生成 %s 失败：%v（本次跳过，不影响执行结果）", config.BuiltinPaths.OutputXlsx, err)
 			fmt.Fprintf(os.Stderr, "%s[ERROR]%s %s\n", ansiRed, ansiReset, msg)
 			logger.Error(msg)
 		} else {
-			logger.Success("生成 output.xlsx 成功")
+			logger.Success(fmt.Sprintf("生成 %s 成功", config.BuiltinPaths.OutputXlsx))
 		}
 	}
 	if cfg.Enable.ResultsToXlsx {

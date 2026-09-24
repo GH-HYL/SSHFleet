@@ -165,7 +165,7 @@ func TestPrintStatisticsTipSwitch(t *testing.T) {
 	if strings.Contains(off.String(), "提示：") {
 		t.Errorf("关闭时不应有提示块：\n%s", off.String())
 	}
-	if !strings.Contains(off.String(), "常见退出码: 1 >> 一般性错误") {
+	if !strings.Contains(off.String(), "常见退出码：1 >> 一般性错误") {
 		t.Errorf("关闭时应保留旧的「常见退出码」行：\n%s", off.String())
 	}
 }

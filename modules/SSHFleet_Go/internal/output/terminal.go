@@ -34,11 +34,11 @@ const (
 var exitCodeHints = map[int]string{
 	1:   "一般性错误",
 	2:   "命令用法错误",
-	126: "命令不可执行(权限不足)",
+	126: "命令不可执行（权限不足）",
 	127: "命令未找到",
-	130: "被中断(SIGINT/Ctrl+C)",
-	137: "被强制杀死(SIGKILL)",
-	143: "被终止(SIGTERM)",
+	130: "被中断（SIGINT / Ctrl+C）",
+	137: "被强制杀死（SIGKILL）",
+	143: "被终止（SIGTERM）",
 	255: "命令执行失败",
 }
 
@@ -204,7 +204,7 @@ func exitCodeHintLine(categories []result.CategoryCount) string {
 	for _, code := range order {
 		parts = append(parts, fmt.Sprintf("%d >> %s", code, exitCodeHints[code]))
 	}
-	return "常见退出码: " + strings.Join(parts, "  ")
+	return "常见退出码：" + strings.Join(parts, "  ")
 }
 
 // exitCodeFailTip 「执行失败(退出码N)」这条分类的固定说明。分类名里带数字，配置文件

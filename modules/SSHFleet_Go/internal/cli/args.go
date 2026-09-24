@@ -73,6 +73,9 @@ func (a *Args) ModeName() string {
 	return ""
 }
 
+// NumberGiven 本次是否显式指定了 -n（没指定即"全部并行"）。
+func (a *Args) NumberGiven() bool { return a.numberRaw != "" }
+
 // Summary 把解析结果打印成旧版 argparse.Namespace 的样子（工具日志用）：
 // 单行 `字段=值` 平铺，字段名用旧版的单字符（c / s / u / d / f / p / m / t / T / n / r
 // / k 与 nobash / disinteractive），未指定的字符串打印成 ”、未指定的数值打印成 None。

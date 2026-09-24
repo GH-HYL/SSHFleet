@@ -272,8 +272,8 @@ func WriteResultsXlsx(archiveDir string, results *batch.Results, cfg *config.Con
 		return err
 	}
 
-	headers := []string{"seq", "ip", "port", "user", "connect_success", "exit_code", "connect_cost_time",
-		"exec_cost_time", "total_bytes", "total_files", "success_files", "failed_files", "分类", "error", "output"}
+	headers := []string{"序号", "IP", "端口", "用户名", "连接成功", "退出码", "连接耗时",
+		"执行耗时", "传输字节", "文件总数", "成功文件数", "失败文件数", "分类", "报错原文", "输出内容"}
 	maxWidths := make([]int, len(headers))
 	for i, h := range headers {
 		cell, _ := excelize.CoordinatesToCellName(i+1, 1)

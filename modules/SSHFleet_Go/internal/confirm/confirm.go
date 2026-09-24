@@ -63,7 +63,7 @@ func Confirm(args *cli.Args, nodes *nodelist.Nodes, cfg *config.Config, logger *
 	}
 
 	fmt.Println("\n" + strings.Repeat("═", 60))
-	confirmed, err := in.Confirm("\n"+colorBrightYellow+"是否执行上述参数？"+colorReset, true)
+	confirmed, err := in.Confirm("\n"+colorBrightYellow+"以上确认无误，开始执行？"+colorReset, true)
 	if err != nil {
 		return err
 	}
@@ -79,11 +79,11 @@ func Confirm(args *cli.Args, nodes *nodelist.Nodes, cfg *config.Config, logger *
 
 // buildInfoTable 构建显示信息的表格数据（行序与旧版一致）。
 func buildInfoTable(args *cli.Args, nodes *nodelist.Nodes) [][2]string {
-	identity := "direct"
+	identity := "登录用户"
 	if args.Sudo {
-		identity = "sudo"
+		identity = "root"
 	}
-	t := [][2]string{{"权限类型", identity}}
+	t := [][2]string{{"执行身份", identity}}
 	switch {
 	case args.Command != "":
 		t = append(t, [2]string{"执行模式", "命令模式"}, [2]string{"执行命令", args.Command}, [2]string{"", ""})
@@ -95,9 +95,9 @@ func buildInfoTable(args *cli.Args, nodes *nodelist.Nodes) [][2]string {
 		t = append(t, [2]string{"执行模式", "下载模式"}, [2]string{"远程路径", args.Download}, [2]string{"本地路径", args.Path}, [2]string{"", ""})
 	}
 	t = append(t,
-		[2]string{"CSV文件路径", common.MaskInlineListIf(args.CsvFile)},
+		[2]string{"节点清单", common.MaskInlineListIf(args.CsvFile)},
 		[2]string{"节点数量", fmt.Sprintf("%d", nodes.Len())},
-		[2]string{"并发数值", fmt.Sprintf("%d", args.Number)},
+		[2]string{"并发数", concurrentText(args)},
 		[2]string{"", ""},
 	)
 	if args.ConnectTimeout != 0 {
@@ -112,9 +112,17 @@ func buildInfoTable(args *cli.Args, nodes *nodelist.Nodes) [][2]string {
 		}
 	}
 	if args.Remark != "" {
-		t = append(t, [2]string{"备注信息", strings.TrimSpace(args.Remark)})
+		t = append(t, [2]string{"备注", strings.TrimSpace(args.Remark)})
 	}
 	return t
+}
+
+// concurrentText 并发数的显示文案：没给 -n 时说明这是"全部并行"。
+func concurrentText(args *cli.Args) string {
+	if args.NumberGiven() {
+		return fmt.Sprintf("%d", args.Number)
+	}
+	return fmt.Sprintf("%d（全部并行）", args.Number)
 }
 
 // printInfoTable 打印信息表格，对齐用 common.DisplayWidth（全角标点按 2 列计，不错位）。
