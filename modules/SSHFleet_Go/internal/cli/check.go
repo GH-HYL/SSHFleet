@@ -194,7 +194,7 @@ func keyTools(a *Args) []string {
 	if a.KeyStatus {
 		names = append(names, "--key-status")
 	}
-	if a.ConvertPassword != "" {
+	if a.ConvertSecret != "" {
 		names = append(names, "--convert-secret")
 	}
 	return names

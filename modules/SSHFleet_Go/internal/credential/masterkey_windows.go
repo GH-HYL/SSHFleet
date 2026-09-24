@@ -63,7 +63,7 @@ func persistKey(key string, regenerated bool, out *strings.Builder) error {
 	}
 	fmt.Fprintf(out, "主密钥已%s，并写入本机（HKCU\\Environment）\n", actionDesc)
 	fmt.Fprintln(out, "请重新打开终端后再使用：当前终端的环境变量仍是旧密钥")
-	fmt.Fprintf(out, "%s注意：在此之前，本次运行读到的仍是旧密钥，执行 --convert-password 会被拦下（避免加密出将来看不开的文件）%s\n",
+	fmt.Fprintf(out, "%s注意：在此之前，本次运行读到的仍是旧密钥，执行 --convert-secret 会被拦下（避免加密出将来看不开的文件）%s\n",
 		colorYellow, colorReset)
 	return nil
 }

@@ -1,6 +1,6 @@
 // Package log 承载主干第 2 步：初始化工具日志。
 //
-// 行为与旧版对齐：日志仅落文件（historys/<paths.tool>），不进终端；
+// 行为与旧版对齐：日志仅落文件（history/SSHFleetTools.log），不进终端；
 // 级别 DEBUG 起；格式 "YYYY-MM-DD HH:mm:ss.SSS - [ LEVEL ] - message"；
 // 50MB 轮转。级别序（对位旧 loguru）：DEBUG < INFO < SUCCESS < WARNING < ERROR。
 package log
@@ -100,13 +100,13 @@ func (lg *Logger) Success(args ...any) { lg.l.Log(LevelSuccess, args...) }
 func (lg *Logger) Warn(args ...any)    { lg.l.Log(LevelWarn, args...) }
 func (lg *Logger) Error(args ...any)   { lg.l.Log(LevelError, args...) }
 
-// Init 创建 historys 目录并初始化工具日志（50MB 轮转，历史文件全保留）。
-func Init(historys, toolFile string) (*Logger, error) {
-	if err := os.MkdirAll(historys, 0o755); err != nil {
+// Init 创建 history 目录并初始化工具日志（50MB 轮转，历史文件全保留）。
+func Init(historyDir, toolFile string) (*Logger, error) {
+	if err := os.MkdirAll(historyDir, 0o755); err != nil {
 		return nil, err
 	}
 	rotate := &lumberjack.Logger{
-		Filename: filepath.Join(historys, toolFile),
+		Filename: filepath.Join(historyDir, toolFile),
 		MaxSize:  50, // MB
 	}
 	core := &fileCore{ws: zapcore.AddSync(rotate)}

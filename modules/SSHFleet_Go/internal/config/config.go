@@ -51,7 +51,7 @@ type Enable struct {
 type Paths struct {
 	ErrorKeywords     string `toml:"error_keywords"`
 	DangerousKeywords string `toml:"dangerous_keywords"`
-	Historys          string `toml:"historys"`
+	Historys          string `toml:"history"`
 	Tool              string `toml:"tool"`
 	Exec              string `toml:"exec"`
 	Asset             string `toml:"asset"`
@@ -78,8 +78,8 @@ type Config struct {
 
 // BuiltinPaths 产物路径与文件名的内置取值（用户不可配）。
 var BuiltinPaths = Paths{
-	ErrorKeywords:     "./config/error_keywords.toml",
-	DangerousKeywords: "./config/dangerous_keywords.toml",
+	ErrorKeywords:     "./config/error_keywords.conf",
+	DangerousKeywords: "./config/dangerous_keywords.conf",
 	Historys:          "history",
 	Tool:              "SSHFleetTools.log",
 	Exec:              "SSHFleetExec.log",

@@ -17,12 +17,12 @@ import (
 type CredCode string
 
 const (
-	CodeMissing     CredCode = "missing"
-	CodeReadError   CredCode = "read_error"
-	CodeEmpty       CredCode = "empty"
+	CodeMissing      CredCode = "missing"
+	CodeReadError    CredCode = "read_error"
+	CodeEmpty        CredCode = "empty"
 	CodeEmptyDecoded CredCode = "empty_decoded"
-	CodeBadPEM      CredCode = "bad_pem"
-	CodeBadCipher   CredCode = "bad_cipher"
+	CodeBadPEM       CredCode = "bad_pem"
+	CodeBadCipher    CredCode = "bad_cipher"
 	CodeLegacyCipher CredCode = "legacy_cipher"
 
 	// 开关方向的两种错配：读到的东西与当前开关要求的形态不符
@@ -177,8 +177,12 @@ func credProblems(credErrs []CredError, path string) []string {
 func CredErrorLabel(code CredCode, path string, detail string) string {
 	var label string
 	switch code {
-	case CodeMissing, CodePathMissing:
-		label = "文件不存在（打开加密时这里填的是凭据文件的绝对路径，不加密时才是密码本身）"
+	case CodePathMissing:
+		// 只出自密码 / 口令类位置（开了加密时那些位置写的应是一个文件路径），故这句解释对得上
+		label = "不存在（打开加密时这里填的是凭据文件的绝对路径，不加密时才是密码本身）"
+	case CodeMissing:
+		// 只出自私钥位置，与加密开关无关，不能套上面那句解释
+		label = "不存在"
 	case CodeReadError:
 		label = "无法读取"
 	case CodeEmpty:
@@ -188,13 +192,13 @@ func CredErrorLabel(code CredCode, path string, detail string) string {
 	case CodeBadPEM:
 		label = "不是有效的PEM格式（缺少 -----BEGIN 头）"
 	case CodeBadCipher:
-		label = "不是有效的密文，或主密钥不匹配（先用 --convert-password 重新转换）"
+		label = "不是有效的密文，或主密钥不匹配（先用 --convert-secret 重新转换）"
 	case CodeLegacyCipher:
 		label = "是旧版加密格式，本版不再支持"
 	case CodeSwitchMismatch:
 		label = "读到的是密文，但当前没开加密；若刚把 encrypt 改成 false，这些位置的写法也要跟着改（改成密码/口令本身）"
 	case CodeNotCiphertext:
-		label = "不是本工具的密文；若刚把 encrypt 改成 true，这些位置的写法也要跟着改（改成密文文件的绝对路径，并用 --convert-password 转换）"
+		label = "不是本工具的密文；若刚把 encrypt 改成 true，这些位置的写法也要跟着改（改成密文文件的绝对路径，并用 --convert-secret 转换）"
 	case CodeBadBase64, CodeMismatchBase64:
 		label = "属于已退役的 base64 档（不应再出现）"
 	default:
@@ -241,7 +245,7 @@ func expandHomeTilde(p string) string {
 	return p
 }
 
-// ReadCredFileContent 凭据文件内容读取（--convert-password 转换场景）：
+// ReadCredFileContent 凭据文件内容读取（--convert-secret 转换场景）：
 // 读盘 + 判空 + 文本/单行防御。
 func ReadCredFileContent(path string) (string, error) {
 	content, err := os.ReadFile(path)

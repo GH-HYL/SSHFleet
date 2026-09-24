@@ -277,7 +277,7 @@ func GenKey(in *common.Interactor) error {
 		}
 		fmt.Fprintln(in.Out, "注意：如果覆盖，用旧密钥加密的凭据文件将永久无法解密")
 		if in.Disinteractive {
-			return fmt.Errorf("检测到已存在主密钥，非交互模式不自动覆盖（覆盖后旧密钥加密的凭据文件将无法解密）。\n如需覆盖：去掉 --disinteractive 后重新执行 --gen-key")
+			return fmt.Errorf("检测到已存在主密钥，非交互模式不自动覆盖（覆盖后旧密钥加密的凭据文件将无法解密）。\n如需覆盖：去掉 --yes 后重新执行 --gen-key")
 		}
 		confirmed, err := in.Confirm("是否确认覆盖？", false)
 		if err != nil {

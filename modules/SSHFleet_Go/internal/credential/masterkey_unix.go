@@ -118,7 +118,7 @@ func persistKey(key string, regenerated bool, out *strings.Builder) error {
 	}
 
 	fmt.Fprintf(out, "请执行 source %s 或重新打开终端后生效\n", rcPath)
-	fmt.Fprintf(out, "%s注意：在此之前，本次运行读到的仍是旧密钥，执行 --convert-password 会被拦下（避免加密出将来看不开的文件）%s\n",
+	fmt.Fprintf(out, "%s注意：在此之前，本次运行读到的仍是旧密钥，执行 --convert-secret 会被拦下（避免加密出将来看不开的文件）%s\n",
 		colorYellow, colorReset)
 	return nil
 }

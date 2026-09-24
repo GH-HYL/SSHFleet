@@ -83,8 +83,8 @@ func versionWithBuildID() string {
 
 // 配置文件位置：基准为当前工作目录。
 const (
-	configPath      = "./config/SSHFleet.conf"     // 实际读取用
-	configPathShown = "config/SSHFleet.conf"       // 文案里显示的形态：不带 ./，它不是路径的一部分
+	configPath      = "./config/SSHFleet.conf" // 实际读取用
+	configPathShown = "config/SSHFleet.conf"   // 文案里显示的形态：不带 ./，它不是路径的一部分
 )
 
 // 危险命令确认提示与 [ERROR] 前缀的配色（对位旧 constants.py / error_handler.py）。
@@ -226,9 +226,9 @@ func main() {
 		fmt.Print(credential.KeyStatusReport())
 		return
 	}
-	if args.ConvertPassword != "" {
+	if args.ConvertSecret != "" {
 		logger.Info("进入凭据转换模式（--convert-secret）")
-		if err := credential.ConvertPassword(args.ConvertPassword, cfg.Account.SecretDir, cfg.Account.Encrypt); err != nil {
+		if err := credential.ConvertSecret(args.ConvertSecret, cfg.Account.SecretDir, cfg.Account.Encrypt); err != nil {
 			fatal("credential", err)
 		}
 		return

@@ -13,7 +13,7 @@ import (
 
 func rulesPath(t *testing.T) string {
 	t.Helper()
-	return filepath.Join("..", "..", "config", "dangerous_keywords.toml")
+	return filepath.Join("..", "..", "config", "dangerous_keywords.conf")
 }
 
 func loadRulesOrFail(t *testing.T) *Rules {
