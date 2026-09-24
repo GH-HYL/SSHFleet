@@ -58,6 +58,10 @@ type Reporter struct {
 	// plain 直通模式：输出不是终端时不启动进度界面，明细与提示直接落 out。
 	// 否则重定向到文件时会混进成千上万条光标控制序列（用户 2026-09-15 裁定）。
 	plain bool
+
+	// quiet 非交互模式（--yes）：运行期提示只进日志、不上屏（L61 的静默总闸门）。
+	// 报错与结果明细不受影响——挡的只有"教学类"那一路。
+	quiet bool
 }
 
 // NewReporter 构造呈现器。
@@ -66,9 +70,10 @@ type Reporter struct {
 //   - total: 节点总数（进度界面的分母，懒创建时用）
 //   - start: 计时起点（主干传 execStart）。进度界面的耗时由它算起，与统计块的
 //     总耗时同源——进度条不再比总耗时少一截（用户 2026-09-15 裁定对齐口径）
+//   - quiet: 非交互模式（--yes）。运行期提示不上屏，只进日志（L61 静默闸门）
 //
 // 分类依据（模式 + 错误关键词）在这里收下，调用方不必再自己拼分类函数。
-func NewReporter(execLog *log.Logger, outputFile io.Writer, mode string, total int, kw *result.Keywords, start time.Time) *Reporter {
+func NewReporter(execLog *log.Logger, outputFile io.Writer, mode string, total int, kw *result.Keywords, start time.Time, quiet bool) *Reporter {
 	r := &Reporter{
 		logger:  execLog,
 		outFile: outputFile,
@@ -78,6 +83,7 @@ func NewReporter(execLog *log.Logger, outputFile io.Writer, mode string, total i
 		start:   start,
 		out:     os.Stdout,
 		plain:   !isTerminal(os.Stdout),
+		quiet:   quiet,
 	}
 	r.classify = func(res ssh.Result) string {
 		return result.Classify(result.Case{
@@ -94,7 +100,10 @@ func NewReporter(execLog *log.Logger, outputFile io.Writer, mode string, total i
 
 // Notice 采集期提示（目前仅上传源中被过滤的链接）：终端 + 执行期日志。
 func (r *Reporter) Notice(msg string) {
-	r.printAbove(msg)
+	// 非交互模式：提示只留日志痕迹，不上屏（L61 的静默总闸门）
+	if !r.quiet {
+		r.printAbove(msg)
+	}
 	if r.logger != nil {
 		r.logger.Info(msg)
 	}

@@ -40,7 +40,15 @@ func NewInteractor(disinteractive bool) *Interactor {
 // Notice 非交互性提示（校验重试提示、清单清洗说明等）：只往注入的输出流写，
 // 不读输入。存在这条通道，是为了让「提示」与「提问」都走同一个出口——
 // 提示直接写 os.Stdout 会让调用方无法在测试里捕获它们。
+// Notice 输出一条运行期提示（非报错、不阻塞执行的那种）。
+//
+// **非交互模式（--yes）下静默**：它就是 L61 所说的「静默总闸门」——既然是"跳过所有
+// 确认直接执行"，教学类提示就不该再来刷屏。注意这只关掉终端输出，报错（阻塞类）
+// 走的是 fatal，不受影响。
 func (i *Interactor) Notice(text string) {
+	if i.Disinteractive {
+		return
+	}
 	fmt.Fprint(i.Out, text)
 }
 
