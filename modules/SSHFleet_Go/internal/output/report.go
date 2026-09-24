@@ -38,7 +38,9 @@ func WriteReport(archiveDir string, stats *result.Stats, a *cli.Args, cfg *confi
 	b.WriteString("=============================执行结果统计报告=============================\n")
 	fmt.Fprintf(&b, "执行开始时间： %s\n", stats.GlobalStartTime.Format("2006-01-02 15:04:05.000000"))
 	fmt.Fprintf(&b, "执行结束时间： %s\n", stats.GlobalStopTime.Format("2006-01-02 15:04:05.000000"))
-	fmt.Fprintf(&b, "\n【执行命令】 \n  %s\n", DisplayCommand(argv))
+	// 命令行先脱敏再落盘：这条是整条 argv，内联清单（-f 1.2.3.4,22,root,密码）会整段带进来。
+	// 报告属归档产物，按 L13 不得留下明文凭据——宁可放弃"照抄重跑"，也不能把密码写进文件。
+	fmt.Fprintf(&b, "\n【执行命令】 \n  %s\n", DisplayCommand(common.MaskCommandLine(argv)))
 
 	b.WriteString("\n【执行参数】\n")
 	// 模式名由 cli.Args.ModeName 单点判定，此处只做「模式 → 报告段落」的映射。
