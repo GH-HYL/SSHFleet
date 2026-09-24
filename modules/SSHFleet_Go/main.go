@@ -228,7 +228,7 @@ func main() {
 	}
 	if args.ConvertSecret != "" {
 		logger.Info("进入凭据转换模式（--convert-secret）")
-		if err := credential.ConvertSecret(args.ConvertSecret, cfg.Account.SecretDir, cfg.Account.Encrypt); err != nil {
+		if err := credential.ConvertSecret(args.ConvertSecret, cfg.Credential.SecretDir, cfg.Credential.Encrypt); err != nil {
 			fatal("credential", err)
 		}
 		return
@@ -237,7 +237,7 @@ func main() {
 	// ---- 步骤 4.5：主密钥预检查 ---------------------------------------
 	// 「生成密钥后忘了 source / 重开终端」是最高频的坑：与其等他用凭据时撞一句
 	// 看不懂的报错，不如开工前就把现状与下一步说清。不加密时不做这件事——用不到主密钥。
-	if cfg.Account.Encrypt {
+	if cfg.Credential.Encrypt {
 		if note := credential.PrecheckKey(); note != "" {
 			state, _ := credential.InspectKey()
 			logger.Warn(fmt.Sprintf("主密钥预检查未通过（%s）", state))

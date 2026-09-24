@@ -75,7 +75,7 @@ func resolveCredPath(raw, secretDir string) (string, error) {
 	if err != nil {
 		if errors.Is(err, ErrRelativeNoSecretDir) {
 			return "", fmt.Errorf(
-				"凭据路径 '%s' 为相对路径，但 account.secret_dir 未配置，无法拼接\n出路：① 改写绝对路径 ② 在配置中设置 account.secret_dir", strings.TrimSpace(raw))
+				"凭据路径 '%s' 为相对路径，但 credential.secret_dir 未配置，无法拼接\n出路：① 改写绝对路径 ② 在配置中设置 credential.secret_dir", strings.TrimSpace(raw))
 		}
 		return "", err
 	}

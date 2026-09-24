@@ -14,7 +14,7 @@ SSHFleet 工程领域上下文（单一上下文布局）。
 | 节点信息（node info） | 单台目标主机的连接要素：`ip` / `port` / `user` / `password` / `key` / `key_password`。后三项的实际含义随 `encrypt` 开关变化 |
 | 凭据（credential） | 密码、私钥、私钥口令三类认证材料。清单第 4 / 5 / 6 列分别对应其内容或文件路径 |
 | 凭据目录（secret dir） | 由配置 `secret_dir` 指定的目录。**清单**里书写相对路径的凭据文件拼接至该目录；**配置**里的凭据路径必须写绝对路径，不参与拼接 |
-| 加密开关（encrypt switch） | 配置字段 `account.encrypt`（布尔）。`false`＝凭据位置写密码/口令本身；`true`＝凭据位置写密文文件的绝对路径。它一次决定四处写法：`password`、`key_password` 与清单第 4、6 列 |
+| 加密开关（encrypt switch） | 配置字段 `credential.encrypt`（布尔）。`false`＝凭据位置写密码/口令本身；`true`＝凭据位置写密文文件的绝对路径。它一次决定四处写法：`password`、`key_password` 与清单第 4、6 列 |
 | 主密钥（master key） | 随机密钥。持久化于登录 shell 的 rc 文件（`~/.bashrc` / `~/.zshrc`）或 Windows 注册表，运行期经环境变量 `SSHFLEET_KEY` 读取。打开加密时解密凭据文件的唯一依据，与凭据文件分处不同存储位置，**不可跨机器或跨用户搬移** |
 | 凭据转换（credential conversion） | 按配置里的 `encrypt` 开关，把凭据文件**就地**转换成该开关要求的那种形态（明文 ⇄ 密文）。私钥 PEM 不参与转换 |
 | 密钥登录（key login） | 命令行开关 `-k` / `--key`（布尔）。不写＝只用密码；写了＝用密钥，私钥取「清单第 5 列 → 配置 `key`」。私钥口令与私钥**同源**取用（第 5 列配的私钥配第 6 列的口令，配置里的私钥配配置里的口令） |
