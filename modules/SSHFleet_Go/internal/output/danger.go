@@ -11,7 +11,7 @@ import (
 // 警告框尺寸（对位旧 dangerous.py：框内宽度 = 顶部 ═ 的数量）。
 const (
 	dangerInnerWidth = 56
-	// dangerFieldLimit 字段值（来源/内容/分类）的显示宽度上限。
+	// dangerFieldLimit 字段值（来源/内容/规则）的显示宽度上限。
 	// 按**显示宽度**而非字符数截断——旧版按字符数截断，中文会占 2 列，
 	// 46 个中文字符即 92 列，直接把框线撑歪（用户 2026-09-15 反馈）。
 	dangerFieldLimit = 46
@@ -81,7 +81,9 @@ func dangerBox(report *dangercheck.Report, forbidden bool) string {
 			line("║"+pad("    内容: "+trimToWidth(m.Content, dangerFieldLimit))+"║"),
 			line("║"+pad("    规则: "+trimToWidth(m.RuleName, dangerFieldLimit))+"║"),
 			line("║"+pad("    级别: "+riskLevelText(m.RiskLevel))+"║"),
-			line("╠"+bar+"╢"),
+			// 右端用 ╣（双竖 + 左横）而不是 ╢（单竖 + 左双横）：框的左右边框都是
+			// 双线，分隔行两端也得是双线，否则右边界在每一块结尾处断成单线，看着像框破了。
+			line("╠"+bar+"╣"),
 		)
 	}
 	lines = append(lines,
