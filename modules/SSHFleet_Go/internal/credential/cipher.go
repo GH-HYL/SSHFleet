@@ -120,23 +120,6 @@ func compactB64(text string) string {
 	return b.String()
 }
 
-// 旧 0x01 格式的布局常量：仅剩结构识别在用（0x01 密文不再解密支持）。
-const (
-	legacyV1Version = 0x01
-	legacyV1Nonce   = 16
-	legacyV1Mac     = 32
-)
-
-// looksEncryptedV1 结构判断：是否旧 0x01 加密格式（仅看结构，不解密）。
-// 保留仅用于给旧密文一个明确的「不再支持」报错，而不是含混的「解密失败」。
-func looksEncryptedV1(text string) bool {
-	raw, err := decodeStrictB64(text)
-	if err != nil {
-		return false
-	}
-	return len(raw) >= 1+legacyV1Nonce+legacyV1Mac && raw[0] == legacyV1Version
-}
-
 // looksEncryptedV2 结构判断：是否本工具的密文格式。
 func looksEncryptedV2(text string) bool {
 	raw, err := decodeStrictB64(text)
@@ -167,7 +150,7 @@ func isProbablyBase64Text(text string) bool {
 
 // ContentFormat 凭据内容预分类：encrypted / base64 / plain（base64 档已退役，保留同上）。
 func ContentFormat(text string) string {
-	if looksEncryptedV1(text) || looksEncryptedV2(text) {
+	if looksEncryptedV2(text) {
 		return "encrypted"
 	}
 	if isProbablyBase64Text(text) {
