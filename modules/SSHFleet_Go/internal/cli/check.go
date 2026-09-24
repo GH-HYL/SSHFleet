@@ -67,7 +67,7 @@ func CheckArguments(a *Args) error {
 				return fmt.Errorf("上传模式：-p 必须是以 / 结尾的目录，当前值：%s\n提示：-p 只表示\"放到哪个目录\"，工具不会替你改文件名，所以要以 / 收尾", a.Path)
 			}
 		} else if a.Command != "" || a.Script != "" {
-			return fmt.Errorf("-p 参数不能搭配 -c 或 -s 使用\n提示：只有上传、下载才用 -p；要跑命令或脚本就去掉它，它会自己挑服务器来跑")
+			return fmt.Errorf("-p 参数不能搭配 -c 或 -s 使用\n提示：只有上传、下载才用 -p；命令与脚本模式不需要它")
 		}
 	}
 
@@ -91,7 +91,7 @@ func CheckArguments(a *Args) error {
 		}
 		info, err := os.Lstat(a.Upload)
 		if err != nil {
-			return fmt.Errorf("-u 参数指定的上传文件或目录不存在：%s\n提示：-u 后面要写本机上真实存在的文件或目录；不确定路径时，先在文件管理器里定位它", a.Upload)
+			return fmt.Errorf("-u 参数指定的上传文件或目录不存在：%s\n提示：-u 后面要写本机上真实存在的文件或目录", a.Upload)
 		}
 		if info.Mode()&os.ModeSymlink != 0 {
 			return fmt.Errorf("-u 参数指定的上传文件或目录是符号链接，不能上传：%s\n提示：请直接写它指向的真实文件或目录", a.Upload)
