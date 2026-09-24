@@ -37,7 +37,7 @@ func Confirm(args *cli.Args, nodes *nodelist.Nodes, cfg *config.Config, logger *
 
 	// 非交互模式：不出参数屏、不提问，但上传并发建议照旧生效（Confirm 直接返回已确认）
 	if in.Disinteractive {
-		if _, err := suggestUploadConcurrency(args, cfg, in); err != nil {
+		if _, err := suggestUploadConcurrency(args, cfg, in, nodes.Len()); err != nil {
 			return err
 		}
 		fmt.Printf("%s [非交互模式] 跳过执行参数确认环节，直接执行%s\n\n", colorYellow, colorReset)
@@ -56,7 +56,7 @@ func Confirm(args *cli.Args, nodes *nodelist.Nodes, cfg *config.Config, logger *
 	// 免得"参数屏说 3、实际跑 10"；没采纳说明值没变，不必重显。
 	// 重显的这一遍不再标"（全部并行）"——这个数是刚确认过的，不是"不指定"的默认。
 	if args.Upload != "" {
-		changed, err := suggestUploadConcurrency(args, cfg, in)
+		changed, err := suggestUploadConcurrency(args, cfg, in, nodes.Len())
 		if err != nil {
 			return err
 		}
@@ -172,15 +172,21 @@ func printInfoTable(table [][2]string, highlight string) {
 //   - > large_file: 串行（并发=1）
 //   - 两者之间: medium_parallel
 //
-// 文案给全「依据 / 建议值 / 现状值」三样——只报一个建议数，用户不知道它从哪来、
-// 不采纳会怎样，等于让他盲选。批量 SSH 是高风险操作，关键参数必须显式确认。
-func suggestUploadConcurrency(args *cli.Args, cfg *config.Config, in *common.Interactor) (bool, error) {
+// 建议值先按节点数封顶：只有 1 台时"同时传 10 个"无从谈起。封顶后与当前值相同
+// 就直接闭嘴——同一个数没什么可建议的（2026-09-24 作者定）。
+func suggestUploadConcurrency(args *cli.Args, cfg *config.Config, in *common.Interactor, nodeCount int) (bool, error) {
 	if args.Upload == "" || cfg == nil {
 		return false, nil
 	}
 	size := calculateUploadSize(args.Upload)
 	allowed := checkConcurrencyThreshold(size, cfg)
 	if allowed == 0 {
+		return false, nil
+	}
+	if allowed > nodeCount {
+		allowed = nodeCount
+	}
+	if allowed == args.Number {
 		return false, nil
 	}
 	fmt.Printf("%s上传总大小 %s，按配置里的阈值建议同时传 %d 个（当前是 %d 个）。%s\n",

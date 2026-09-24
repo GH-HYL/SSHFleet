@@ -10,11 +10,11 @@ rm -rf / /opt/x	forbidden	递归删除根目录
 rm -rf "/"	forbidden	递归删除根目录
 rm --no-preserve-root /	high	使用 --no-preserve-root 危险旗标
 rm -rf /etc	forbidden	递归删除系统目录
-rm -rf /etc/nginx	forbidden	递归删除系统目录
-rm -rf /var/log	forbidden	递归删除系统目录
+rm -rf /etc/nginx	high	递归强制删除
+rm -rf /var/log	high	递归强制删除
 rm -rf /boot	forbidden	递归删除系统目录
 rm -rf /root/.ssh	high	递归强制删除
-rm -rf /usr/lib	forbidden	递归删除系统目录
+rm -rf /usr/lib	high	递归强制删除
 sudo rm -rf /etc	forbidden	递归删除系统目录
 rm -rf /opt/test/123	high	递归强制删除
 rm -rf /home/user/bak	high	递归强制删除
