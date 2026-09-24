@@ -26,24 +26,24 @@ var ErrHelp = errors.New("help printed")
 
 // Args 是主干各步骤共用的命令行参数载体（纯数据）。
 type Args struct {
-	Command         string // -c
-	Script          string // -s
-	Upload          string // -u
-	Download        string // -d
-	CsvFile         string // -f
-	Path            string // -p
-	Sudo            bool   // 本次生效的执行身份：true=root，false=登录用户
-	Timeout         int    // -t（缺省时按模式取配置默认）
-	ConnectTimeout  int    // -T
-	Number          int    // -n
-	Remark          string // -r
-	Key             bool   // -k：写了就用密钥登录（私钥取清单第 5 列，其次配置 key）
-	NoBash          bool   // --no-bash
-	Disinteractive  bool   // --yes
-	GenKey          bool   // --gen-key
-	KeyStatus       bool   // --key-status
-	ConvertPassword string // --convert-secret
-	FIsInline       bool   // -f 为内联清单（由 CheckArguments 判定）
+	Command        string // -c
+	Script         string // -s
+	Upload         string // -u
+	Download       string // -d
+	CsvFile        string // -f
+	Path           string // -p
+	Sudo           bool   // 本次生效的执行身份：true=root，false=登录用户
+	Timeout        int    // -t（缺省时按模式取配置默认）
+	ConnectTimeout int    // -T
+	Number         int    // -n
+	Remark         string // -r
+	Key            bool   // -k：写了就用密钥登录（私钥取清单第 5 列，其次配置 key）
+	NoBash         bool   // --no-bash
+	Disinteractive bool   // --yes
+	GenKey         bool   // --gen-key
+	KeyStatus      bool   // --key-status
+	ConvertSecret  string // --convert-secret
+	FIsInline      bool   // -f 为内联清单（由 CheckArguments 判定）
 
 	// --sudo / --no-sudo 是否在命令行出现：互斥判定与「密钥管理命令不与批量参数同给」都要用
 	sudoFlag, noSudoFlag bool
@@ -77,8 +77,8 @@ func (a *Args) ModeName() string {
 func (a *Args) NumberGiven() bool { return a.numberRaw != "" }
 
 // Summary 把解析结果打印成旧版 argparse.Namespace 的样子（工具日志用）：
-// 单行 `字段=值` 平铺，字段名用旧版的单字符（c / s / u / d / f / p / m / t / T / n / r
-// / k 与 nobash / disinteractive），未指定的字符串打印成 ”、未指定的数值打印成 None。
+// 单行 `字段=值` 平铺，字段名跟着当前选项名走（c / s / u / d / f / p / sudo / t / T / n / r
+// / k 与 no_bash / yes），未指定的字符串打印成 ”、未指定的数值打印成 None。
 //
 // 不复刻的只有两处：旧版把内联清单也塞进 f（靠 f_is_inline 二次判断），这里 f 只装
 // 清单原文、内联与否由 FIsInline 单独报；旧版没有 --key-status，故它排在最后。
@@ -149,7 +149,7 @@ func Parse(cfg *config.Config, version string, raw []string) (*Args, error) {
 	fs.BoolVarP(&a.Key, "key", "k", false, "用密钥登录：私钥取清单第 5 列，其次配置 account.key")
 	fs.BoolVar(&a.GenKey, "gen-key", false, "生成随机主密钥并持久化到 SSHFLEET_KEY")
 	fs.BoolVar(&a.KeyStatus, "key-status", false, "查看主密钥状态：两处来源、指纹、是否一致与下一步")
-	fs.StringVar(&a.ConvertPassword, "convert-password", "", "转换凭据文件（跟目标文件路径）")
+	fs.StringVar(&a.ConvertSecret, "convert-secret", "", "转换凭据文件（跟目标文件路径）")
 
 	// 未提供任何参数：打印帮助后以 0 退出（与旧版一致，发生在配置加载之后）
 	if len(raw) == 0 {

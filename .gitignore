@@ -32,7 +32,7 @@
 !modules/
 !modules/**
 
-# 构建脚本（build-windows.bat / build-linux.sh）为个人使用工具，不进版本控制——
+# 构建脚本（build-windows.bat）为个人使用工具，不进版本控制——
 # 他人按 README 的 go build 自行编译即可
 
 # 以下几类在 modules/ 里天然存在、但都不进版本控制。
@@ -55,7 +55,7 @@ modules/build/
 #   test/                         本地测试语料与样本
 #   build/  release/              构建中间产物与发布产物
 #   build-windows.bat             构建脚本（个人使用，不进版本控制）
-#   build-linux.sh                构建脚本（个人使用，不进版本控制）
+#   build-linux.sh                构建脚本（个人使用，不进版本控制；已废弃，打包已并入 .bat）
 #   根目录临时脚本（.bat 等）      按需补白名单
 #
 # 另有「过程文档」刻意不纳入追踪（白名单已天然排除，此处仅作说明）：
@@ -63,4 +63,4 @@ modules/build/
 #   docs/agents/                    给 agent 的约定文件（随工作区使用，不进对外仓库）
 #                                  → 注意 AGENTS.md 里指向它们的引用，对外仓库中会失效
 #
-# 另：modules/ 下按上述规则排除 historys/ 与 *_bak*/，其余一律追踪。
+# 另：modules/ 下按上述规则排除 history/ 与 *_bak*/，其余一律追踪。

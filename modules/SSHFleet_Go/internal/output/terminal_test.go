@@ -100,13 +100,13 @@ func TestResultLinePassesOutputThrough(t *testing.T) {
 // 「提示：」块（2026-09-16）：内容取自配置文件里各分类的 tip 字段；
 // 只有「执行失败(退出码N)」由工具按退出码补含义（分类名带数字，配置里写不了）。
 func TestCategoryTipLines(t *testing.T) {
-	kw, err := result.LoadKeywords(filepath.Join("..", "..", "config", "error_keywords.toml"))
+	kw, err := result.LoadKeywords(filepath.Join("..", "..", "config", "error_keywords.conf"))
 	if err != nil {
 		t.Fatalf("关键词文件应可加载: %v", err)
 	}
 	cats := []result.CategoryCount{
 		{Category: "连接被断开", Count: 2},      // 配置里写了 tip
-		{Category: "这个分类不在配置里", Count: 1}, // 查不到 tip → 不出现
+		{Category: "这个分类不在配置里", Count: 1},  // 查不到 tip → 不出现
 		{Category: "执行失败(退出码1)", Count: 1}, // 内置说明 + 已知退出码含义
 		{Category: "执行失败(退出码3)", Count: 1}, // 内置说明 + 未知退出码（无含义）
 	}
@@ -138,7 +138,8 @@ func TestCategoryTipLines(t *testing.T) {
 
 // 开关语义：开启时出「提示：」块、不再单独出「常见退出码」；
 // 关闭时退回旧行为（只出「常见退出码」）。
-func TestPrintStatisticsTipSwitch(t *testing.T) {	kw, err := result.LoadKeywords(filepath.Join("..", "..", "config", "error_keywords.toml"))
+func TestPrintStatisticsTipSwitch(t *testing.T) {
+	kw, err := result.LoadKeywords(filepath.Join("..", "..", "config", "error_keywords.conf"))
 	if err != nil {
 		t.Fatalf("关键词文件应可加载: %v", err)
 	}
@@ -172,7 +173,7 @@ func TestPrintStatisticsTipSwitch(t *testing.T) {	kw, err := result.LoadKeywords
 // 出现未归类的分类时，末尾要给出"怎么把它归到类里"的引导——
 // 用户反复看到同一个原因却不知道能自己加分类，是这份统计最大的浪费。
 func TestPrintStatisticsUnclassifiedGuide(t *testing.T) {
-	kw, err := result.LoadKeywords(filepath.Join("..", "..", "config", "error_keywords.toml"))
+	kw, err := result.LoadKeywords(filepath.Join("..", "..", "config", "error_keywords.conf"))
 	if err != nil {
 		t.Fatalf("关键词文件应可加载: %v", err)
 	}

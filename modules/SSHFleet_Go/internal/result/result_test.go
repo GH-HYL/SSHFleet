@@ -28,7 +28,7 @@ type corpusFile struct {
 
 func loadKeywords(t *testing.T) *Keywords {
 	t.Helper()
-	kw, err := LoadKeywords(filepath.Join("..", "..", "config", "error_keywords.toml"))
+	kw, err := LoadKeywords(filepath.Join("..", "..", "config", "error_keywords.conf"))
 	if err != nil {
 		t.Fatalf("关键词文件应可加载: %v", err)
 	}

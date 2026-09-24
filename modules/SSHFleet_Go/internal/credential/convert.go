@@ -1,4 +1,4 @@
-// --convert-password 入口：把凭据文件在「明文」与「密文」之间转换。
+// --convert-secret 入口：把凭据文件在「明文」与「密文」之间转换。
 // 方向由配置里的加密开关决定：encrypt = true 转成密文，false 转成明文。
 package credential
 
@@ -9,10 +9,10 @@ import (
 	"strings"
 )
 
-// ConvertPassword 处理 --convert-password。
+// ConvertSecret 处理 --convert-secret。
 //
 // 路径解析：去空白 → ~ 展开 → 绝对原样 → 相对拼 secret_dir；secret_dir 未配置 → 明确报错。
-func ConvertPassword(rawPath, secretDir string, encrypted bool) error {
+func ConvertSecret(rawPath, secretDir string, encrypted bool) error {
 	path, err := resolveCredPath(rawPath, secretDir)
 	if err != nil {
 		return err
@@ -74,7 +74,7 @@ func convertToPlain(path, content string) error {
 	return writeAndEcho(path, plaintext, "密文", "明文")
 }
 
-// resolveCredPath 解析 --convert-password 传入的路径（走 ResolveSecretPath 单点）；
+// resolveCredPath 解析 --convert-secret 传入的路径（走 ResolveSecretPath 单点）；
 // 拼出的文件须存在。
 func resolveCredPath(raw, secretDir string) (string, error) {
 	p, err := ResolveSecretPath(raw, secretDir)
