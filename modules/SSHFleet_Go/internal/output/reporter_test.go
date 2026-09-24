@@ -23,6 +23,12 @@ import (
 // newTestReporter 造一个接住三个去向的呈现器：output.txt 与执行期日志都落到临时目录。
 func newTestReporter(t *testing.T, mode string, total int) (*Reporter, *bytes.Buffer, string) {
 	t.Helper()
+	return newTestReporterQuiet(t, mode, total, false)
+}
+
+// newTestReporterQuiet 同上，但可指定非交互模式（--yes 的静默闸门）。
+func newTestReporterQuiet(t *testing.T, mode string, total int, quiet bool) (*Reporter, *bytes.Buffer, string) {
+	t.Helper()
 	dir := t.TempDir()
 
 	execLogPath := filepath.Join(dir, "SSHFleet.log")
@@ -33,7 +39,54 @@ func newTestReporter(t *testing.T, mode string, total int) (*Reporter, *bytes.Bu
 	t.Cleanup(func() { _ = execLog.Close() })
 
 	outBuf := &bytes.Buffer{}
-	return NewReporter(execLog, outBuf, mode, total, nil, time.Now()), outBuf, execLogPath
+	return NewReporter(execLog, outBuf, mode, total, nil, time.Now(), quiet), outBuf, execLogPath
+}
+
+// 非交互模式（--yes）下运行期提示只进日志、不上屏（L61 的静默总闸门）。
+// 挡的只有"教学类"那一路——报错与结果明细照旧。
+func TestNoticeQuietInNonInteractiveMode(t *testing.T) {
+	// 非交互：终端那一路整个没有输出
+	r, _, logPath := newTestReporterQuiet(t, "upload", 1, true)
+	r.out = tempOut(t)
+	r.Notice("提示：源里的软链接被过滤\n")
+	if got := readTempOut(t, r.out); got != "" {
+		t.Fatalf("非交互模式下提示不该上屏，实际输出：%q", got)
+	}
+	if !strings.Contains(readExecLog(t, logPath), "软链接被过滤") {
+		t.Fatal("非交互模式下提示仍应进执行日志，否则事后无从追查")
+	}
+
+	// 交互模式照旧上屏
+	r2, _, _ := newTestReporter(t, "upload", 1)
+	r2.out = tempOut(t)
+	r2.Notice("提示：源里的软链接被过滤\n")
+	if got := readTempOut(t, r2.out); !strings.Contains(got, "软链接被过滤") {
+		t.Fatalf("交互模式下提示应照常上屏，实际输出：%q", got)
+	}
+}
+
+// tempOut 造一个可读回的"终端"文件（printAbove 默认写 os.Stdout，测试要把它换掉）。
+func tempOut(t *testing.T) *os.File {
+	t.Helper()
+	f, err := os.CreateTemp(t.TempDir(), "stdout-*.txt")
+	if err != nil {
+		t.Fatalf("创建临时输出文件失败：%v", err)
+	}
+	t.Cleanup(func() { _ = f.Close() })
+	return f
+}
+
+// readTempOut 读回 tempOut 写完的内容。
+func readTempOut(t *testing.T, f *os.File) string {
+	t.Helper()
+	if err := f.Sync(); err != nil {
+		t.Fatalf("刷新临时输出失败：%v", err)
+	}
+	data, err := os.ReadFile(f.Name())
+	if err != nil {
+		t.Fatalf("读回临时输出失败：%v", err)
+	}
+	return string(data)
 }
 
 // readExecLog 读执行期日志全文（呈现器写完即可读，Logger 每次写都直接落盘）。

@@ -169,10 +169,11 @@ func TestResolvePortNoInteraction(t *testing.T) {
 	}
 }
 
-// 表头识别提示同样走注入的输出流。
+// 表头识别提示走注入的输出流（交互模式）。
+// 非交互模式下这类提示会被静默闸门挡掉，那一路由 common 的测试覆盖。
 func TestCSVHeaderNoticeGoesToInteractor(t *testing.T) {
 	csv := "ip,port,user,password\n10.0.0.1,22,root,pw.txt\n"
-	in, out := newTestInteractor("", true)
+	in, out := newTestInteractor("", false)
 
 	rows, err := readCSVRows(csv, true, in)
 	if err != nil {
