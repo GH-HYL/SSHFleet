@@ -14,11 +14,11 @@ import (
 	"sshfleet/internal/config"
 )
 
-// CheckConfigFiles 检查批量执行所需的配置引用文件是否齐全。
-// 与旧版差异：配置文件本体已在主干第 1 步加载（缺失即报错），此处只查两份规则文件。
-func CheckConfigFiles(cfg *config.Config) error {
+// CheckConfigFiles 检查批量执行所需的规则文件是否齐全。
+// 配置文件本体已在主干第 1 步加载（缺失即报错），此处只查两份规则文件。
+func CheckConfigFiles() error {
 	var missing []string
-	for _, f := range []string{cfg.Paths.DangerousKeywords, cfg.Paths.ErrorKeywords} {
+	for _, f := range []string{config.BuiltinPaths.DangerousKeywords, config.BuiltinPaths.ErrorKeywords} {
 		if _, err := os.Stat(f); err != nil {
 			missing = append(missing, f)
 		}
@@ -164,12 +164,7 @@ func CheckArguments(a *Args) error {
 		return err
 	}
 
-	// -k（D40：仅 universal 态校验文件存在；default 态交给 M2 凭据预检）
-	if a.KeyMode() == KeyModeUniversal {
-		if info, err := os.Stat(a.Key); err != nil || info.IsDir() {
-			return fmt.Errorf("-k 指向的秘钥文件不存在，请检查路径：%s", a.Key)
-		}
-	}
+	// -k 只表示"用密钥登录"，没有路径参数可查；私钥是否可用交给凭据预检（M2）
 
 	// -t
 	if err := checkPositiveInt(a.timeoutRaw, a.Timeout, a.timeoutInvalid, "-t", "命令或传输超时时间"); err != nil {

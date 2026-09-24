@@ -1,7 +1,6 @@
 // Package cli 承载主干第 3 步（解析命令行）与第 5 步的合规检查部分。
 //
-// 与旧实现的差异（spec D24 / D26 / D40）：平级选项维持原样，不引子命令、
-// 不引 cobra；互斥手写校验、提示文案自撰；-k 三态语义准确（见 KeyMode）。
+// 平级选项，不引子命令、不引 cobra；互斥手写校验、提示文案自撰。
 package cli
 
 import (
@@ -25,19 +24,7 @@ import (
 // ErrHelp 表示已打印帮助、应以 0 退出（无任何参数或 -h/-–help）。
 var ErrHelp = errors.New("help printed")
 
-// keyModeSentinel 裸 -k 的哨兵值。只在 KeyMode() 一处解读，其余代码不得比较它。
-const keyModeSentinel = "default"
-
-// KeyMode 密钥三态（CONTEXT.md「密钥三态」）。
-type KeyMode int
-
-const (
-	KeyModeOff       KeyMode = iota // 未指定 -k，强制空密钥
-	KeyModeDefault                  // 仅 -k：逐节点按「清单 > 配置」解析密钥
-	KeyModeUniversal                // -k 带路径：所有节点统一使用命令行私钥
-)
-
-// Args 是主干各步骤共用的命令行参数载体（纯数据 + 三态解读）。
+// Args 是主干各步骤共用的命令行参数载体（纯数据）。
 type Args struct {
 	Command         string // -c
 	Script          string // -s
@@ -45,37 +32,24 @@ type Args struct {
 	Download        string // -d
 	CsvFile         string // -f
 	Path            string // -p
-	Mode            string // -m
+	Mode            string // -m 的原始输入（空 = 没给，按配置走）
+	Sudo            bool   // 本次生效的执行身份：true=root，false=登录用户
 	Timeout         int    // -t（缺省时按模式取配置默认）
 	ConnectTimeout  int    // -T
 	Number          int    // -n
 	Remark          string // -r
+	Key             bool   // -k：写了就用密钥登录（私钥取清单第 5 列，其次配置 key）
 	NoBash          bool   // --nobash
 	Disinteractive  bool   // --disinteractive
-	Key             string // -k（含哨兵值）
 	GenKey          bool   // --gen-key
 	KeyStatus       bool   // --key-status
 	ConvertPassword string // --convert-password
 	FIsInline       bool   // -f 为内联清单（由 CheckArguments 判定）
 
-	// -k 是否在命令行出现（三态之 off 与 default 的分界）
-	keyChanged bool
-
 	// -t / -T / -n 的原始输入：非法值不在解析期报错，留给 CheckArguments
 	// 按旧版口径报「参数格式错误」。
 	timeoutRaw, connectTimeoutRaw, numberRaw             string
 	timeoutInvalid, connectTimeoutInvalid, numberInvalid bool
-}
-
-// KeyMode 返回本次运行的密钥三态。
-func (a *Args) KeyMode() KeyMode {
-	if !a.keyChanged {
-		return KeyModeOff
-	}
-	if a.Key == keyModeSentinel {
-		return KeyModeDefault
-	}
-	return KeyModeUniversal
 }
 
 // ModeName 返回本次运行的模式名（command / script / upload / download）。
@@ -99,13 +73,10 @@ func (a *Args) ModeName() string {
 
 // Summary 把解析结果打印成旧版 argparse.Namespace 的样子（工具日志用）：
 // 单行 `字段=值` 平铺，字段名用旧版的单字符（c / s / u / d / f / p / m / t / T / n / r
-// / k 与 nobash / disinteractive），未指定的字符串打印成 ”、未指定的数值打印成 None，
-// 与旧版 `tlog.success(f"参数解析成功,解析结果: {args}")` 的输出逐字段对齐。
+// / k 与 nobash / disinteractive），未指定的字符串打印成 ”、未指定的数值打印成 None。
 //
 // 不复刻的只有两处：旧版把内联清单也塞进 f（靠 f_is_inline 二次判断），这里 f 只装
 // 清单原文、内联与否由 FIsInline 单独报；旧版没有 --key-status，故它排在最后。
-//
-// 日志与用户入口共用同一套字段名——旧日志里看到 c='who -b'，现在也还是这七个字符。
 func (a *Args) Summary() string {
 	// 未指定：字符串与 '' 同形，数值与 None 同形（对位 argparse 的默认值）
 	orEmpty := func(s string) string { return "'" + s + "'" }
@@ -117,17 +88,14 @@ func (a *Args) Summary() string {
 		}
 		return strconv.Itoa(v)
 	}
-	keyVal := orEmpty(a.Key)
-	if a.KeyMode() == KeyModeDefault {
-		keyVal = orEmpty(keyModeSentinel) // 裸 -k：旧版 argparse 的 const='no_value'
-	}
+	keyVal := boolPy(a.Key)
 
 	fields := []string{
 		"c=" + orEmpty(a.Command),
 		"s=" + orEmpty(a.Script),
 		"u=" + orEmpty(a.Upload),
 		"d=" + orEmpty(a.Download),
-		"f=" + orEmpty(a.CsvFile),
+		"f=" + orEmpty(common.MaskInlineListIf(a.CsvFile)),
 		"p=" + orEmpty(a.Path),
 		"m=" + orEmpty(a.Mode),
 		"t=" + orNone(a.Timeout),
@@ -171,7 +139,7 @@ func Parse(cfg *config.Config, version string, raw []string) (*Args, error) {
 	fs.StringVarP(&a.Remark, "remark", "r", "", "本次任务的名称（历史记录文件夹后缀）")
 	fs.BoolVar(&a.NoBash, "nobash", false, "命令模式专用: 不套一层 bash 环境")
 	fs.BoolVar(&a.Disinteractive, "disinteractive", false, "跳过所有确认提示直接执行")
-	fs.StringVarP(&a.Key, "key", "k", "", "不指定=纯密码; 仅 -k=清单/配置默认密钥; -k 路径=统一私钥")
+	fs.BoolVarP(&a.Key, "key", "k", false, "用密钥登录：私钥取清单第 5 列，其次配置 account.key")
 	fs.BoolVar(&a.GenKey, "gen-key", false, "生成随机主密钥并持久化到 SSHFLEET_KEY")
 	fs.BoolVar(&a.KeyStatus, "key-status", false, "查看主密钥状态：两处来源、指纹、是否一致与下一步")
 	fs.StringVar(&a.ConvertPassword, "convert-password", "", "转换凭据文件（跟目标文件路径）")
@@ -182,15 +150,12 @@ func Parse(cfg *config.Config, version string, raw []string) (*Args, error) {
 		return nil, ErrHelp
 	}
 
-	if err := fs.Parse(normalizeKeyFlag(raw)); err != nil {
+	if err := fs.Parse(raw); err != nil {
 		if errors.Is(err, pflag.ErrHelp) {
 			Usage(cfg, version)
 			return nil, ErrHelp
 		}
 		return nil, fmt.Errorf("%v（使用 -h 查看帮助）", err)
-	}
-	if kf := fs.Lookup("key"); kf != nil {
-		a.keyChanged = kf.Changed
 	}
 
 	// 多出来的位置参数：一律报错。
@@ -227,8 +192,13 @@ func Parse(cfg *config.Config, version string, raw []string) (*Args, error) {
 		a.ConnectTimeout = cfg.Execution.TimeoutConnect
 	}
 	if a.Mode == "" {
-		a.Mode = cfg.Execution.Mode
+		if cfg.Execution.Sudo {
+			a.Mode = "sudo"
+		} else {
+			a.Mode = "direct"
+		}
 	}
+	a.Sudo = a.Mode == "sudo"
 	if a.numberRaw == "" {
 		a.Number = 0
 	}
@@ -246,22 +216,6 @@ func Parse(cfg *config.Config, version string, raw []string) (*Args, error) {
 
 	a.Remark = defaultRemark(&a)
 	return &a, nil
-}
-
-// normalizeKeyFlag 裸 -k 预处理：后随参数空缺或为另一选项时，改写为哨兵形式。
-// 带路径的 `-k <path>`（空格或连写）保持原样，交给 pflag 原生消费。
-// pflag 的 NoOptDefVal 恒优先于消费下一参数，会吞掉 `-k <path>` 空格形式，
-// 故不能用（见 spec 依赖清单备注）。
-func normalizeKeyFlag(raw []string) []string {
-	out := make([]string, 0, len(raw))
-	for i := 0; i < len(raw); i++ {
-		if raw[i] == "-k" && (i+1 >= len(raw) || strings.HasPrefix(raw[i+1], "-")) {
-			out = append(out, "-k="+keyModeSentinel)
-			continue
-		}
-		out = append(out, raw[i])
-	}
-	return out
 }
 
 func toInt(raw string) (int, bool) {
@@ -365,6 +319,10 @@ func opt(short, long, tag, desc string) helpEntry {
 // 「必填 / 取值语义 / 默认值」这些影响使用的信息一个不省。
 // 按用途分组：四种模式 / 清单与路径 / 执行参数与登录方式 / 密钥与凭据，组间空行分隔。
 func helpEntries(cfg *config.Config) []helpEntry {
+	defaultIdentity := "direct"
+	if cfg.Execution.Sudo {
+		defaultIdentity = "sudo"
+	}
 	return []helpEntry{
 		opt("-c", "--command", "(命令模式)", "在多台服务器上执行一条命令"),
 		opt("-s", "--script", "(脚本模式)", "在多台服务器上执行一个本地脚本"),
@@ -378,12 +336,12 @@ func helpEntries(cfg *config.Config) []helpEntry {
 
 		blankRow,
 
-		opt("-m", "--mode", fmt.Sprintf("[默认: %s]", cfg.Execution.Mode), "执行身份：direct=登录用户，sudo=root"),
+		opt("-m", "--mode", fmt.Sprintf("[默认: %s]", defaultIdentity), "执行身份：direct=登录用户，sudo=root"),
 		opt("-t", "--timeout", fmt.Sprintf("[默认: %d/%d]", cfg.Execution.TimeoutExecute, cfg.Execution.TimeoutTransfer), "单台执行 / 传输超时（秒）"),
 		opt("-T", "--connect-timeout", fmt.Sprintf("[默认: %d]", cfg.Execution.TimeoutConnect), "连接超时（秒）"),
 		opt("-n", "--number", "[默认: 全部]", "并发数：同时操作几台（不填=全部并行）"),
 		opt("-r", "--remark", "", "任务名，用作历史记录文件夹后缀（不填自动生成）"),
-		opt("-k", "--key", "(密钥登录)", "不指定=只用密码；仅 -k=用清单/配置的密钥；-k 路径=统一私钥"),
+		opt("-k", "--key", "(密钥登录)", "不写=只用密码；写了=用清单第 5 列或配置里的私钥"),
 		opt("", "--nobash", "", "命令模式：不套 bash，直接执行原始命令"),
 		opt("", "--disinteractive", "", "跳过所有确认直接执行（批量/自动化常用）"),
 
@@ -391,7 +349,7 @@ func helpEntries(cfg *config.Config) []helpEntry {
 
 		opt("", "--gen-key", "(密钥管理)", "生成主密钥并写入系统环境变量 SSHFLEET_KEY"),
 		opt("", "--key-status", "(密钥管理)", "查看主密钥状态：读到哪把、已存哪把、是否一致、怎么办"),
-		opt("", "--convert-password", "(密钥管理)", "转换凭据文件（跟目标文件路径）：自动识别 明文/base64/加密 并按配置等级互转；加解密需已配置主密钥"),
+		opt("", "--convert-password", "(密钥管理)", "转换凭据文件（跟目标文件路径）：按配置里的 encrypt 开关在明文与密文之间转换；加密需已配置主密钥"),
 	}
 }
 

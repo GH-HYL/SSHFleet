@@ -14,7 +14,7 @@ import (
 
 func helpTestCfg() *config.Config {
 	cfg := &config.Config{}
-	cfg.Execution.Mode = "sudo"
+	cfg.Execution.Sudo = true
 	cfg.Execution.TimeoutExecute = 60
 	cfg.Execution.TimeoutTransfer = 300
 	cfg.Execution.TimeoutConnect = 10
@@ -300,14 +300,14 @@ func TestUsageTextShowsVersion(t *testing.T) {
 // 的 __repr__，输出形如：
 //
 //	Namespace(c='who -b', s='', u='', d='', f='nodes.csv', p='', m='direct',
-//	          t=None, T=None, n=None, r='v2_cmd', nobash=False, disinteractive=False, k='')
+//	          t=None, T=None, n=None, r='v2_cmd', nobash=False, disinteractive=False, k=False)
 //
 // 这里逐字段对齐：字段名、空值写法（” 与 None）、布尔写法（True/False）都不能自作主张。
 func TestSummaryMatchesArgparseNamespace(t *testing.T) {
 	a := &Args{Command: "who -b", CsvFile: "nodes.csv", Mode: "direct", Remark: "v2_cmd"}
 	got := a.Summary()
 	want := "Namespace(c='who -b', s='', u='', d='', f='nodes.csv', p='', m='direct', " +
-		"t=None, T=None, n=None, r='v2_cmd', nobash=False, disinteractive=False, k='')"
+		"t=None, T=None, n=None, r='v2_cmd', nobash=False, disinteractive=False, k=False)"
 	if got != want {
 		t.Fatalf("解析结果格式不对\n实际：%s\n应为：%s", got, want)
 	}
@@ -337,16 +337,15 @@ func TestSummaryTimeoutFilledByDefault(t *testing.T) {
 	}
 }
 
-// 密钥三态在 k= 里如实体现：未指定 ”、裸 -k 为哨兵、带路径为路径本身。
+// -k 只有两态，在 k= 里如实体现：没写 False，写了 True。
 func TestSummaryKeyMode(t *testing.T) {
 	cases := []struct {
 		name string
 		a    *Args
 		want string
 	}{
-		{"未指定", &Args{Command: "pwd"}, "k=''"},
-		{"裸 -k", &Args{Command: "pwd", Key: keyModeSentinel, keyChanged: true}, "k='default'"},
-		{"带路径", &Args{Command: "pwd", Key: "/x/id_rsa", keyChanged: true}, "k='/x/id_rsa'"},
+		{"未指定", &Args{Command: "pwd"}, "k=False"},
+		{"写了 -k", &Args{Command: "pwd", Key: true}, "k=True"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -382,7 +381,7 @@ func TestSummaryHidesInternalState(t *testing.T) {
 	got := a.Summary()
 	for _, unwanted := range []string{
 		"keyChanged", "timeoutInvalid", "numberRaw", "FIsInline",
-		"timeoutRaw", "connectTimeoutRaw", "ModeName", "KeyMode",
+		"timeoutRaw", "connectTimeoutRaw", "ModeName",
 	} {
 		if strings.Contains(got, unwanted) {
 			t.Fatalf("不该出现内部字段 %q，实际：%s", unwanted, got)

@@ -97,11 +97,11 @@ func DecryptV2(token, masterKey string) (string, error) {
 	return string(plain), nil
 }
 
-// ---- 结构识别（与旧 classify/looks_encrypted/is_probably_base64_text 对齐） ----
+// ---- 结构识别（只认密文形态；内容不做任何"猜格式"） ----
 
 var b64CharsetRe = regexp.MustCompile(`^[A-Za-z0-9+/]+={0,2}$`)
 
-// decodeStrictB64 去空白后严格 base64 解码（对位 Python validate=True）。
+// decodeStrictB64 去空白后严格 base64 解码。
 func decodeStrictB64(text string) ([]byte, error) {
 	compact := compactB64(text)
 	if len(compact)%4 != 0 {
@@ -120,7 +120,7 @@ func compactB64(text string) string {
 	return b.String()
 }
 
-// 旧 0x01 格式的布局常量：仅剩结构识别在用（2026-09-14 裁定移除 0x01 解密支持）。
+// 旧 0x01 格式的布局常量：仅剩结构识别在用（0x01 密文不再解密支持）。
 const (
 	legacyV1Version = 0x01
 	legacyV1Nonce   = 16
@@ -137,7 +137,7 @@ func looksEncryptedV1(text string) bool {
 	return len(raw) >= 1+legacyV1Nonce+legacyV1Mac && raw[0] == legacyV1Version
 }
 
-// looksEncryptedV2 结构判断：是否新 0x02 加密格式。
+// looksEncryptedV2 结构判断：是否本工具的密文格式。
 func looksEncryptedV2(text string) bool {
 	raw, err := decodeStrictB64(text)
 	if err != nil {
@@ -146,6 +146,9 @@ func looksEncryptedV2(text string) bool {
 	return len(raw) >= 1+v2NonceSize+v2TagSize && raw[0] == cipherV2
 }
 
+// 以下两个函数属于**已退役的 base64 档**，保留只是为了日后反悔时能改回来，
+// 当前没有任何调用路径，也不算兼容层——凭据只有「明文」与「密文」两态。
+//
 // isProbablyBase64Text 规范 base64 判定：重编码一致性回验，避免恰好合法的明文误判。
 func isProbablyBase64Text(text string) bool {
 	compact := compactB64(text)
@@ -162,8 +165,7 @@ func isProbablyBase64Text(text string) bool {
 	return base64.StdEncoding.EncodeToString(raw) == compact
 }
 
-// ContentFormat 凭据内容预分类（无需密钥）：encrypted / base64 / plain。
-// 判定顺序关键：加密 token 本身是合法 base64，必须优先判 encrypted。
+// ContentFormat 凭据内容预分类：encrypted / base64 / plain（base64 档已退役，保留同上）。
 func ContentFormat(text string) string {
 	if looksEncryptedV1(text) || looksEncryptedV2(text) {
 		return "encrypted"

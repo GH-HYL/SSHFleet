@@ -1,6 +1,8 @@
 // Package credential 承载主干第 4 步（工具模式分流）与凭据读写：
-// 三等级凭据、主密钥（SSHFLEET_KEY）、--convert-password 与 0x02 AEAD 加密
-// （spec D15/D30/D31；2026-09-14 裁定移除 0x01 旧密文兼容，见 D14 修订注）。
+// 凭据两态（明文 / 加密）、主密钥（SSHFLEET_KEY）、凭据转换与 0x02 AEAD 加密。
+//
+// 凭据的取值含义随加密开关变，与配置字段同一条规则（见 config.Account）：
+// 不加密时是密码 / 口令本身，加密时是凭据文件的绝对路径。
 package credential
 
 import (
@@ -9,23 +11,28 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"unicode/utf8"
 )
 
-// CredCode 凭据错误码（自定义字符串类型 + 常量，spec 实现途径 8：拼错编译不过）。
+// CredCode 凭据错误码（自定义字符串类型 + 常量：拼错编译不过）。
 type CredCode string
 
 const (
-	CodeMissing           CredCode = "missing"
-	CodeReadError         CredCode = "read_error"
-	CodeEmpty             CredCode = "empty"
-	CodeBadBase64         CredCode = "bad_base64"
-	CodeEmptyDecoded      CredCode = "empty_decoded"
-	CodeBadPEM            CredCode = "bad_pem"
-	CodeBadCipher         CredCode = "bad_cipher"
-	CodeLegacyCipher      CredCode = "legacy_cipher"
-	CodeMismatchEncrypted CredCode = "mismatch_encrypted"
-	CodeMismatchBase64    CredCode = "mismatch_base64"
+	CodeMissing     CredCode = "missing"
+	CodeReadError   CredCode = "read_error"
+	CodeEmpty       CredCode = "empty"
+	CodeEmptyDecoded CredCode = "empty_decoded"
+	CodeBadPEM      CredCode = "bad_pem"
+	CodeBadCipher   CredCode = "bad_cipher"
+	CodeLegacyCipher CredCode = "legacy_cipher"
+
+	// 开关方向的两种错配：读到的东西与当前开关要求的形态不符
+	CodeSwitchMismatch CredCode = "switch_mismatch" // 没开加密却读到密文
+	CodeNotCiphertext  CredCode = "not_ciphertext"  // 开了加密却不是密文
+	CodePathMissing    CredCode = "path_missing"    // 开了加密但那个文件不存在
+
+	// 以下两个错误码属于已退役的 base64 档，只为让保留的实现仍能编译，不再有产生路径
+	CodeBadBase64      CredCode = "bad_base64"
+	CodeMismatchBase64 CredCode = "mismatch_base64"
 )
 
 // CredError 错误码 + 细节。
@@ -34,88 +41,76 @@ type CredError struct {
 	Detail string
 }
 
-// checkFmtLevel 凭据内容格式 × 密码安全等级的错配诊断（全工具单一事实来源）。
-// encrypted 仅等级3匹配；base64 仅等级2匹配（等级3要求加密格式，报 bad_cipher）；plain 仅等级1匹配。
-func checkFmtLevel(fmtStr string, level int) (CredCode, bool) {
-	switch {
-	case fmtStr == "encrypted" && level != 3:
-		return CodeMismatchEncrypted, true
-	case fmtStr == "base64" && level == 1:
-		return CodeMismatchBase64, true
-	case fmtStr == "base64" && level == 3:
-		return CodeBadCipher, true
-	case fmtStr == "plain" && level == 2:
-		return CodeBadBase64, true
-	case fmtStr == "plain" && level == 3:
-		return CodeBadCipher, true
-	}
-	return "", false
-}
-
-// decodeCredential 按密码安全等级把凭据内容还原为明文（不读盘）。
-// 返回 (明文, 错误码, 错误细节, 致命错误)。明文与错误互斥；
-// 等级 3 且内容确为加密格式时才拉取主密钥（懒获取，对位旧 get_master_key_or_exit 时机）。
-// 旧 0x01 密文不再解密：识别为 legacy_cipher，给「不再支持」的明确报错（2026-09-14 裁定）。
-func decodeCredential(content string, level int) (string, CredCode, string, error) {
-	fmtStr := ContentFormat(content)
-	if code, bad := checkFmtLevel(fmtStr, level); bad {
-		return "", code, "", nil
-	}
-	switch level {
-	case 1:
-		return content, "", "", nil
-	case 3:
+// decodeCredential 把凭据内容还原为明文（不读盘）。
+// 返回 (明文, 错误码, 错误细节, 致命错误)；明文与错误码互斥。
+func decodeCredential(content string, encrypted bool) (string, CredCode, string, error) {
+	if !encrypted {
+		// 不加密：内容就是密码本身。读到密文说明加密开关刚被改过，这是唯一要拦的情况。
 		if looksEncryptedV1(content) {
 			return "", CodeLegacyCipher, "", nil
 		}
-		masterKey, fatalErr := GetMasterKey()
-		if fatalErr != nil {
-			return "", "", "", fatalErr
+		if looksEncryptedV2(content) {
+			return "", CodeSwitchMismatch, "", nil
 		}
-		plain, err := DecryptV2(content, masterKey)
-		if err != nil {
-			return "", CodeBadCipher, err.Error(), nil
-		}
-		return plain, "", "", nil
-	default: // level 2
-		raw, err := decodeStrictB64(content)
-		if err != nil {
-			return "", CodeBadBase64, "", nil
-		}
-		if !utf8.Valid(raw) {
-			return "", CodeBadBase64, "", nil
-		}
-		return string(raw), "", "", nil
+		return content, "", "", nil
 	}
+
+	// 加密：内容必须是本工具的密文，别的一概拒绝
+	if looksEncryptedV1(content) {
+		return "", CodeLegacyCipher, "", nil
+	}
+	if !looksEncryptedV2(content) {
+		return "", CodeNotCiphertext, "", nil
+	}
+	masterKey, fatalErr := GetMasterKey()
+	if fatalErr != nil {
+		return "", "", "", fatalErr
+	}
+	plain, err := DecryptV2(content, masterKey)
+	if err != nil {
+		return "", CodeBadCipher, err.Error(), nil
+	}
+	return plain, "", "", nil
 }
 
-// ReadCredential 密码/口令类凭据的一条龙读取：读盘 → 判空 → 格式分类 → 等级匹配 → 解码/解密 → 出文案。
-// requireNonempty 对位密码类校验（口令类不判空）。旧版 (path, level) 解码缓存不移植：
-// 解码发生在预检、结果直接进节点数据（spec 实现层差异）。
+// ReadCredential 密码 / 口令类凭据的一条龙读取：取值 →（加密时读盘解密）→ 判空 → 出文案。
+// requireNonempty 对位密码类校验（口令类不判空）。
 // 返回 (明文, 问题文案列表, 致命错误)；列表空 = 通过。
-// 文案每条已含路径，调用方只需拼上自己的前缀（行号 / IP / 列名），不必了解错误码。
-func ReadCredential(path string, level int, requireNonempty bool) (string, []string, error) {
-	plain, credErrs, fatalErr := readCredentialCore(path, level, requireNonempty)
+// 文案每条已含来源，调用方只需拼上自己的前缀（行号 / IP / 列名）。
+func ReadCredential(value string, encrypted bool, requireNonempty bool) (string, []string, error) {
+	plain, credErrs, fatalErr := readCredentialCore(value, encrypted, requireNonempty)
 	if fatalErr != nil {
 		return "", nil, fatalErr
 	}
-	return plain, credProblems(credErrs, path), nil
+	return plain, credProblems(credErrs, value), nil
 }
 
 // readCredentialCore 结构化读取核心（包内 seam）：错误保持错误码形态，文案统一由 ReadCredential 组装。
-func readCredentialCore(path string, level int, requireNonempty bool) (string, []CredError, error) {
-	if _, err := os.Stat(path); err != nil {
-		return "", []CredError{{CodeMissing, ""}}, nil
+func readCredentialCore(value string, encrypted bool, requireNonempty bool) (string, []CredError, error) {
+	text := strings.TrimSpace(value)
+
+	if !encrypted {
+		if text == "" {
+			return "", []CredError{{CodeEmpty, ""}}, nil
+		}
+		plain, code, detail, fatalErr := decodeCredential(text, false)
+		if fatalErr != nil {
+			return "", nil, fatalErr
+		}
+		if code != "" {
+			return "", []CredError{{code, detail}}, nil
+		}
+		return plain, nil, nil
 	}
-	content, err := os.ReadFile(path)
+
+	if _, err := os.Stat(text); err != nil {
+		return "", []CredError{{CodePathMissing, ""}}, nil
+	}
+	content, err := os.ReadFile(text)
 	if err != nil {
 		return "", []CredError{{CodeReadError, err.Error()}}, nil
 	}
-	text := strings.TrimSpace(string(content))
-	if text == "" {
-		return "", []CredError{{CodeEmpty, ""}}, nil
-	}
-	plain, code, detail, fatalErr := decodeCredential(text, level)
+	plain, code, detail, fatalErr := decodeCredential(strings.TrimSpace(string(content)), true)
 	if fatalErr != nil {
 		return "", nil, fatalErr
 	}
@@ -182,26 +177,26 @@ func credProblems(credErrs []CredError, path string) []string {
 func CredErrorLabel(code CredCode, path string, detail string) string {
 	var label string
 	switch code {
-	case CodeMissing:
-		label = "不存在"
+	case CodeMissing, CodePathMissing:
+		label = "文件不存在（打开加密时这里填的是凭据文件的绝对路径，不加密时才是密码本身）"
 	case CodeReadError:
 		label = "无法读取"
 	case CodeEmpty:
 		label = "内容为空"
-	case CodeBadBase64:
-		label = "不是有效的Base64编码"
 	case CodeEmptyDecoded:
-		label = "解码后内容为空"
+		label = "解密后内容为空"
 	case CodeBadPEM:
 		label = "不是有效的PEM格式（缺少 -----BEGIN 头）"
 	case CodeBadCipher:
-		label = "不是有效的加密格式或主密钥不匹配（请先用 --convert-password 转换该文件）"
+		label = "不是有效的密文，或主密钥不匹配（先用 --convert-password 重新转换）"
 	case CodeLegacyCipher:
-		label = "是旧版 0x01 加密格式（5.0.0 起不再支持，请重新录入密码后按当前等级重新转换）"
-	case CodeMismatchEncrypted:
-		label = "文件是本工具等级3（加密）格式，与当前密码安全等级不匹配"
-	case CodeMismatchBase64:
-		label = "文件是等级2（base64）格式，与当前密码安全等级不匹配"
+		label = "是旧版加密格式，本版不再支持"
+	case CodeSwitchMismatch:
+		label = "读到的是密文，但当前没开加密；若刚把 encrypt 改成 false，这些位置的写法也要跟着改（改成密码/口令本身）"
+	case CodeNotCiphertext:
+		label = "不是本工具的密文；若刚把 encrypt 改成 true，这些位置的写法也要跟着改（改成密文文件的绝对路径，并用 --convert-password 转换）"
+	case CodeBadBase64, CodeMismatchBase64:
+		label = "属于已退役的 base64 档（不应再出现）"
 	default:
 		label = fmt.Sprintf("未知凭据错误(%s)", code)
 	}
@@ -247,7 +242,7 @@ func expandHomeTilde(p string) string {
 }
 
 // ReadCredFileContent 凭据文件内容读取（--convert-password 转换场景）：
-// 读盘 + 判空 + 文本/单行防御（对位旧 read_cred_file_content）。
+// 读盘 + 判空 + 文本/单行防御。
 func ReadCredFileContent(path string) (string, error) {
 	content, err := os.ReadFile(path)
 	if err != nil {
@@ -260,9 +255,9 @@ func ReadCredFileContent(path string) (string, error) {
 	if strings.ContainsRune(text, 0) {
 		return "", fmt.Errorf("凭据文件含二进制数据，不是文本格式，无法转换：%s", path)
 	}
-	// 防御：明文凭据应为单行；多行 base64 / 加密格式（去空白后合法存储形态）放行
+	// 防御：明文凭据应为单行；密文（去空白后仍是合法存储形态）放行
 	if strings.ContainsAny(text, "\n\r") {
-		if !(isProbablyBase64Text(text) || looksEncryptedV1(text) || looksEncryptedV2(text)) {
+		if !looksEncryptedV1(text) && !looksEncryptedV2(text) {
 			return "", fmt.Errorf("凭据文件有多行内容，但密码应为单行，请检查是否误粘贴：%s", path)
 		}
 	}

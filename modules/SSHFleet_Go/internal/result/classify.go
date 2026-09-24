@@ -28,7 +28,6 @@ type Case struct {
 	ExitCode     *int
 	Error        string
 	Output       string
-	AuthFailure  string // 认证失败分类（spec D44）：私钥与密码都尝试且都失败时由 ssh 层给出
 	Mode         string // execute / upload / download
 	SuccessFiles int
 	FailedFiles  int
@@ -51,11 +50,6 @@ func Classify(c Case, kw *Keywords) string {
 			return hit
 		}
 		return "执行失败(退出码" + itoa(*c.ExitCode) + ")"
-	}
-
-	// 认证失败分类（D44）：显式字段优先于关键词推断
-	if c.AuthFailure != "" {
-		return c.AuthFailure
 	}
 
 	// 传输模式部分成功优先：有成功有失败是结构性状态，先于失败原因展示

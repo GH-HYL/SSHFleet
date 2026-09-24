@@ -86,7 +86,6 @@ func Statistics(results *batch.Results, nodes *nodelist.Nodes, a *cli.Args, kw *
 			ExitCode:     r.ExitCode,
 			Error:        strOf(r.Error),
 			Output:       r.Output,
-			AuthFailure:  strOf(r.AuthFailure),
 			Mode:         mode,
 			SuccessFiles: r.SuccessFiles,
 			FailedFiles:  r.FailedFiles,

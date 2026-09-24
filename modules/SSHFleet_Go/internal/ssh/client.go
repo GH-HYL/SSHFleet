@@ -29,11 +29,6 @@ type Client struct {
 	// 账号过期、密码必须修改、/etc/nologin 通知等都只在这里出现——x/crypto 在没有
 	// BannerCallback 时会把它整包丢弃，所以必须自己接住（ADR-0005）。
 	banner string
-
-	// keyFallback 私钥解析失败、已退回密码认证（旧引擎会把这件事记进日志：
-	// 「密钥解析失败，回退到密码认证」）。留着它，登录方式才能如实说明——
-	// 否则「密钥坏了但密码能上」这件事不会有人知道，直到密码也失效那天。
-	keyFallback bool
 }
 
 func NewClient(cfg *Config) *Client { return &Client{cfg: cfg} }
@@ -96,8 +91,9 @@ func (c *Client) Close() error {
 	return nil
 }
 
-// buildAuthMethods 认证方法列表：密钥优先；密钥解析失败且配了密码才回退密码
-// （直接沿用旧 Go 实现的语义）。
+// buildAuthMethods 认证方法列表：密钥就只走密钥，密码就只走密码。
+// 密钥解析失败即失败——不回退密码：配了密钥却在背后偷偷用密码登录，
+// 会让人以为密钥是好的，直到密码也失效那天才发现。
 func (c *Client) buildAuthMethods() ([]ssh.AuthMethod, error) {
 	var methods []ssh.AuthMethod
 
@@ -113,15 +109,17 @@ func (c *Client) buildAuthMethods() ([]ssh.AuthMethod, error) {
 			signer, err = ssh.ParsePrivateKey(keyBytes)
 		}
 		if err != nil {
-			if c.cfg.Password == "" {
-				return nil, fmt.Errorf("解析密钥失败 - %w", err)
+			var missing *ssh.PassphraseMissingError
+			if errors.As(err, &missing) {
+				return nil, fmt.Errorf(
+					"这把私钥有口令，但没给口令\n"+
+						"原因：%v\n"+
+						"提示：在清单第 6 列填口令，或在配置 account.key_password 配一个默认口令", err)
 			}
-			// 密钥解析失败但配了密码：回退密码认证（旧行为，不算「两种都试过」）
-			c.keyFallback = true
-		} else {
-			methods = append(methods, ssh.PublicKeys(signer))
-			c.publicKeyOffered = true
+			return nil, fmt.Errorf("解析密钥失败 - %w", err)
 		}
+		methods = append(methods, ssh.PublicKeys(signer))
+		c.publicKeyOffered = true
 	}
 
 	if c.cfg.Password != "" {
@@ -159,32 +157,11 @@ func isCleanSuccess(r *Result) bool {
 	return r.ConnectSuccess && r.ExitCode != nil && *r.ExitCode == 0 && r.FailedFiles == 0
 }
 
-// classifyAuthFailure 认证失败分类：私钥与密码都试过且都失败时返回分类文案，其余返回 nil。
-// 说明：x/crypto/ssh 客户端在认证全失败时只给字符串
-// `ssh: unable to authenticate, attempted methods [...]`（*ssh.ServerAuthError 是服务端类型），
-// 故只能按该特征串判定。
-func (c *Client) classifyAuthFailure(err error) *string {
-	if err == nil || !c.publicKeyOffered || c.cfg.Password == "" {
-		return nil
-	}
-	if strings.Contains(err.Error(), "unable to authenticate") {
-		return strPtr("密钥与密码均失败")
-	}
-	return nil
-}
-
 // authMethodDesc 认证方式描述（执行期日志的「登录方式」）。
-// 私钥解析失败而退回密码时如实说明——这条信息只在解析那一刻存在，
-// 事后从配置里看不出「明明配了密钥，为什么实际走的是密码」。
 func (c *Client) authMethodDesc() string {
-	if c.keyFallback {
-		return "密码（密钥解析失败，已回退）"
-	}
 	hasKey := c.cfg.KeyContent != ""
 	hasPwd := c.cfg.Password != ""
 	switch {
-	case hasKey && hasPwd:
-		return "密钥/密码"
 	case hasKey:
 		return "密钥"
 	case hasPwd:

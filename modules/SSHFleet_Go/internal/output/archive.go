@@ -1,17 +1,18 @@
-// 归档（对位旧 logger.create_exec_log_dir + archive.py + 软链接）：
+// 归档：history/<YYYY-MM-DD_HH-MM-SS>_<模式>[_备注]/  ← 本次执行的全部产物
 //
-//	historys/<YYYY-MM-DD_HH-MM-SS>_<模式>[_备注]/  ← 本次执行的全部产物
-//	├── <paths.exec>      执行日志（本次运行的节点级明细）
-//	├── <paths.output>    终端输出（txt）
-//	├── <paths.report>    统计报告
-//	├── <paths.output_xlsx> / <paths.results_xlsx>   开关控制
-//	└── <paths.asset>/    资源备份（清单与脚本，spec D38：不含上传文件）
+//	├── SSHFleetExec.log     执行日志（本次运行的节点级明细）
+//	├── output.txt           终端输出（txt）
+//	├── report.txt           统计报告
+//	├── output.xlsx / results.xlsx   开关控制
+//	└── assets/              清单与脚本的备份（清单为脱敏副本，不含上传文件）
 //
-// 工具日志不在这里，它是 historys/<paths.tool> 单一滚动文件（spec D36 / M5-3 裁定）。
+// 工具日志不在这里，它是 history/SSHFleetTools.log 单一滚动文件。
 package output
 
 import (
+	"encoding/csv"
 	"fmt"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"sort"
@@ -19,6 +20,7 @@ import (
 	"time"
 
 	"sshfleet/internal/cli"
+	"sshfleet/internal/common"
 	"sshfleet/internal/config"
 )
 
@@ -39,12 +41,15 @@ func CreateArchive(cfg *config.Config, a *cli.Args) (*Archive, error) {
 	return &Archive{Dir: dir}, nil
 }
 
-// BackupAssets 把清单与脚本复制到 assets/（spec D38：不备份上传文件）。
+// BackupAssets 把清单与脚本复制到 assets/（不备份上传文件）。
+//
+// 清单存的是**脱敏副本**：明文密码就写在清单第 4 列，原样复制等于把凭据又存了一份。
+// 脚本没有凭据，原样复制。
 func (ar *Archive) BackupAssets(cfg *config.Config, a *cli.Args) error {
 	if ar == nil {
 		return nil
 	}
-	assetsDir := filepath.Join(ar.Dir, cfg.Paths.Asset)
+	assetsDir := filepath.Join(ar.Dir, config.BuiltinPaths.Asset)
 	if err := os.MkdirAll(assetsDir, 0o755); err != nil {
 		return err
 	}
@@ -67,19 +72,79 @@ func (ar *Archive) BackupAssets(cfg *config.Config, a *cli.Args) error {
 	}
 	// 内联清单没有文件可备份（-f 为内联文本时跳过）
 	if !a.FIsInline {
-		if err := copyFile(a.CsvFile); err != nil {
+		if err := copyCredentialList(a.CsvFile, assetsDir); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
+// copyCredentialList 把清单按脱敏副本写入 assets：每条记录的第 4 列（密码）与第 6 列
+// （私钥口令）换成「前 2 + **** + 后 2」，其余字段与注释行原样保留。
+func copyCredentialList(src, assetsDir string) error {
+	if src == "" {
+		return nil
+	}
+	info, err := os.Stat(src)
+	if err != nil || info.IsDir() {
+		return nil
+	}
+	data, err := os.ReadFile(src)
+	if err != nil {
+		return err
+	}
+
+	var out strings.Builder
+	for _, line := range strings.Split(strings.ReplaceAll(string(data), "\r\n", "\n"), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			out.WriteString(line + "\n")
+			continue
+		}
+		fields, perr := splitCSVLine(line)
+		if perr != nil || len(fields) < 4 || !isIPv4Literal(fields[0]) {
+			out.WriteString(line + "\n") // 表头、注释、异常行一律原样
+			continue
+		}
+		for _, idx := range []int{3, 5} {
+			if idx < len(fields) && strings.TrimSpace(fields[idx]) != "" {
+				fields[idx] = common.MaskSecret(fields[idx])
+			}
+		}
+		out.WriteString(joinCSVLine(fields))
+	}
+	return os.WriteFile(filepath.Join(assetsDir, filepath.Base(src)), []byte(out.String()), info.Mode().Perm())
+}
+
+// splitCSVLine 按 CSV 规则拆一行（容忍引号内的逗号）。
+func splitCSVLine(line string) ([]string, error) {
+	r := csv.NewReader(strings.NewReader(line))
+	r.FieldsPerRecord = -1
+	r.LazyQuotes = true
+	return r.Read()
+}
+
+// isIPv4Literal 首列是不是 IPv4 字面量（清单的每一行都以 IP 开头，表头不是）。
+func isIPv4Literal(s string) bool {
+	addr, err := netip.ParseAddr(strings.TrimSpace(s))
+	return err == nil && addr.Is4()
+}
+
+// joinCSVLine 按 CSV 规则拼一行。
+func joinCSVLine(fields []string) string {
+	var b strings.Builder
+	w := csv.NewWriter(&b)
+	_ = w.Write(fields)
+	w.Flush()
+	return b.String()
+}
+
 // CreateLatestHistoryLink 在当前目录建 latest_history 目录链接，指向最新归档目录。
 // POSIX 用软链接，Windows 用目录联接（junction）——两者的取舍与限制见 createDirLink。
 func CreateLatestHistoryLink(cfg *config.Config) error {
-	entries, err := os.ReadDir(cfg.Paths.Historys)
+	entries, err := os.ReadDir(config.BuiltinPaths.Historys)
 	if err != nil {
-		return fmt.Errorf("读取历史记录目录失败：%s\n原因：%v", cfg.Paths.Historys, err)
+		return fmt.Errorf("读取历史记录目录失败：%s\n原因：%v", config.BuiltinPaths.Historys, err)
 	}
 	var dirs []string
 	for _, e := range entries {
@@ -93,7 +158,7 @@ func CreateLatestHistoryLink(cfg *config.Config) error {
 	}
 	// 目录名以时间开头，字典序即时间序
 	sort.Strings(dirs)
-	latest := absoluteOrSelf(filepath.Join(cfg.Paths.Historys, dirs[len(dirs)-1]))
+	latest := absoluteOrSelf(filepath.Join(config.BuiltinPaths.Historys, dirs[len(dirs)-1]))
 
 	const linkName = "latest_history"
 	if _, linked := linkTarget(linkName); linked {
@@ -143,5 +208,5 @@ func archiveDirName(cfg *config.Config, a *cli.Args) (string, error) {
 	if remark := strings.TrimSpace(a.Remark); remark != "" {
 		name += "_" + remark
 	}
-	return filepath.Join(cfg.Paths.Historys, name), nil
+	return filepath.Join(config.BuiltinPaths.Historys, name), nil
 }

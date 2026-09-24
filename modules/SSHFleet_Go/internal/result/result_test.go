@@ -105,18 +105,13 @@ func TestFallbackCategory(t *testing.T) {
 }
 
 // TestAuthFailureTakesPrecedence 认证失败分类优先于关键词推断（spec D44）。
-func TestAuthFailureTakesPrecedence(t *testing.T) {
+// 仅公钥被拒 → 归「密钥不匹配」（关键词推断，不依赖任何显式分类字段）。
+func TestAuthFailureKeywordPath(t *testing.T) {
 	kw := loadKeywords(t)
 	noPwd := "ssh: handshake failed: ssh: unable to authenticate, attempted methods [none publickey], no supported methods remain"
 
-	// 落在关键词上时是按关键词分类（仅公钥被拒 → 密钥不匹配）
 	if got := Classify(Case{Error: noPwd, Mode: "execute"}, kw); got != "密钥不匹配" {
 		t.Fatalf("仅公钥被拒应归「密钥不匹配」，实为 %q", got)
-	}
-	// 带上认证失败分类字段时，分类字段优先
-	got := Classify(Case{Error: noPwd, AuthFailure: "密钥与密码均失败", Mode: "execute"}, kw)
-	if got != "密钥与密码均失败" {
-		t.Fatalf("认证失败分类应优先，实为 %q", got)
 	}
 }
 

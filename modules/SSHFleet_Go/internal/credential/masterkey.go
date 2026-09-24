@@ -19,7 +19,7 @@ import (
 // 与本机持久值（下次运行会读的）。两者不一致时，用「环境里那把旧密钥」加密出来的文件
 // 重开终端后就解不开了；而用户看到的只会是一句含糊的「主密钥不匹配」。故：
 //   - 读密钥时若不一致 → 打一次警告，把两处指纹与出路说清（每进程一次，避免逐节点刷屏）
-//   - 加密（写等级3 密文）前若不一致 → **直接拦下**（不可逆，不给侥幸空间）
+//   - 加密（写密文）前若不一致 → **直接拦下**（不可逆，不给侥幸空间）
 
 const envName = "SSHFLEET_KEY"
 
@@ -120,7 +120,7 @@ func GetMasterKey() (string, error) {
 	return key, nil
 }
 
-// GuardEncrypt 加密（写等级 3 密文）前的硬保护：两处密钥不一致时直接拦下。
+// GuardEncrypt 加密（写密文）前的硬保护：两处密钥不一致时直接拦下。
 // 加密方向必须拦——用旧密钥加密出的文件重开终端后就解不开了，属不可逆风险。
 func GuardEncrypt() error {
 	note := KeyDivergenceNote()
@@ -226,7 +226,7 @@ func KeyStatusReport() string {
 	case KeyStateOK:
 		b.WriteString("主密钥状态：正常（当前终端读到的与已保存的一致）\n")
 		b.WriteString(sourceLines(src))
-		b.WriteString("  下一步：无。等级 3（加密）凭据可正常读写了。\n")
+		b.WriteString("  下一步：无。加密的凭据可正常读写了。\n")
 	case KeyStateDiverged:
 		b.WriteString(colorYellow + "主密钥状态：不一致" + colorReset + "\n")
 		b.WriteString(sourceLines(src))
@@ -246,7 +246,7 @@ func KeyStatusReport() string {
 	case KeyStateUnset:
 		b.WriteString("主密钥状态：未设置\n")
 		b.WriteString(sourceLines(src))
-		b.WriteString("  下一步：先生成主密钥——SSHFleet --gen-key（等级 3 加密凭据需要它）\n")
+		b.WriteString("  下一步：先生成主密钥——SSHFleet --gen-key（加密凭据需要它）\n")
 	}
 	return b.String()
 }
