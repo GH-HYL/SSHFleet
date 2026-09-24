@@ -115,7 +115,7 @@ func Load(path string) (*Config, error) {
 	// 已移除的段 / 键：给一句能照做的说明，不要混进"未识别字段"里
 	if md.IsDefined("paths") {
 		return nil, fmt.Errorf(
-			"配置里的 [paths] 段已移除：产物的目录名与文件名改由程序内置，不再开放配置\n" +
+			"配置里不允许出现 [paths] 段\n" +
 				"提示：把 [paths] 整段删掉即可，其余字段不用动")
 	}
 
