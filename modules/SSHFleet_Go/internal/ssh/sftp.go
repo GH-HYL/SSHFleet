@@ -58,7 +58,9 @@ func (c *Client) UploadFiles(ctx context.Context, files []LocalFile, skipped []s
 	// 远程目标路径检查：必须存在且是目录
 	fi, err := sftpClient.Stat(remotePath)
 	if err != nil {
-		result.Error = strPtr(fmt.Sprintf("远程目标路径不存在: %s", remotePath))
+		// 措辞与下载侧（下方"远程路径不存在"）及失败分类同名——分类按报错原文
+		// 匹配关键字，两处各写一套就会有一条永远归不了类。
+		result.Error = strPtr(fmt.Sprintf("远程路径不存在: %s", remotePath))
 		return result
 	}
 	if !fi.IsDir() {

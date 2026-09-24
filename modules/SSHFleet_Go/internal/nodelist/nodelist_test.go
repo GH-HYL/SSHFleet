@@ -218,6 +218,29 @@ func TestReadCSVRowsSkipsCommentsAndBlanks(t *testing.T) {
 	}
 }
 
+// UTF-8 BOM 落在首行首列，不清掉会连累 IP 校验：多行清单把首行当表头扔掉
+// （静默丢一台），单行清单整份解析为空。中文 Windows 上 Excel 另存的
+// "CSV UTF-8" 默认就带这个头。
+func TestReadCSVRowsStripsBOM(t *testing.T) {
+	in, _ := newTestInteractor("", true)
+
+	rows, err := readCSVRows("\ufeff10.0.0.1,22,root,pw\n10.0.0.2,22,root,pw\n", true, in)
+	if err != nil {
+		t.Fatalf("带 BOM 的清单不应报错：%v", err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("带 BOM 不应丢行，应剩 2 行，实际 %d 行：%v", len(rows), rows)
+	}
+	if rows[0][0] != "10.0.0.1" {
+		t.Fatalf("首行首列的 BOM 应被剥掉，实际 %q", rows[0][0])
+	}
+
+	// 单行带 BOM：同样要能解析出节点
+	if rows, err := readCSVRows("\ufeff10.0.0.1,22,root,pw\n", true, in); err != nil || len(rows) != 1 {
+		t.Fatalf("单行带 BOM 应解析出 1 台，实际 %v（%v）", rows, err)
+	}
+}
+
 // 端口校验：只接受纯数字，越界与带符号都要拒。
 func TestResolvePortValidation(t *testing.T) {
 	cases := []struct {

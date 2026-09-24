@@ -41,6 +41,10 @@ func readCSVRows(csvPath string, isInline bool, in *common.Interactor) ([][]stri
 		if len(row) == 0 {
 			continue
 		}
+		// UTF-8 BOM 只出现在文件开头，落在首行首列。不清掉它，IP 校验会把首行
+		// 当表头扔掉（单行清单则整份解析为空）——中文 Windows 上 Excel 另存的
+		// "CSV UTF-8" 默认就带这个头。脚本侧对 BOM 的容忍口径见 check.go。
+		row[0] = strings.TrimPrefix(row[0], "\ufeff")
 		if strings.HasPrefix(row[0], "#") && strings.TrimSpace(row[0]) != "" {
 			continue
 		}
