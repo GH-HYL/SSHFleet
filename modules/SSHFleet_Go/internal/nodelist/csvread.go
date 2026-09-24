@@ -2,6 +2,7 @@ package nodelist
 
 import (
 	"encoding/csv"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -35,6 +36,18 @@ func readCSVRows(csvPath string, isInline bool, in *common.Interactor) ([][]stri
 			break
 		}
 		if err != nil {
+			// CSV 语法错（引号不配对最常见）属"工具使用错误"：Go 的原文是行话，
+			// 用户只需要知道哪一行、引号要成对。其余（读文件失败等）属环境侧，报事实即可。
+			var parseErr *csv.ParseError
+			if errors.As(err, &parseErr) {
+				where := "内联节点信息的"
+				if !isInline {
+					where = fmt.Sprintf("%s 的", csvPath)
+				}
+				return nil, fmt.Errorf(
+					"读取节点清单失败：%s第 %d 行格式读不了——CSV 的双引号要成对出现\n"+
+						"提示：值里要用引号时，把里面的引号写成两个", where, parseErr.Line)
+			}
 			return nil, fmt.Errorf("读取内容时发生错误: %v", err)
 		}
 		// 跳过空行和注释行（对位旧逻辑：row 为空，或首列以 # 开头且非空）

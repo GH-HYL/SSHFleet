@@ -125,6 +125,37 @@ func boolPy(v bool) string {
 	return "False"
 }
 
+// translateFlagError 把 pflag 的报错翻成中文。
+// 这些全属"工具使用错误"（L49）：第一行就要让人看懂错在哪，而 pflag 的原文是
+// Go 的行话（unknown flag / flag needs an argument），对英语不好的人是第二重门槛。
+// 只翻"原因"那句，末尾的"使用 -h 查看帮助"由调用方统一追加。
+// 命中的三类覆盖了本工具旗标集能产生的全部解析错误——字符串旗标什么值都收、
+// 不会解析失败，取值非法只可能出在布尔旗标上；其余原样透传。
+func translateFlagError(err error) error {
+	var notExist *pflag.NotExistError
+	if errors.As(err, &notExist) {
+		if short := notExist.GetSpecifiedShortnames(); short != "" {
+			return fmt.Errorf("不认识的选项：-%s", short)
+		}
+		return fmt.Errorf("不认识的选项：--%s", notExist.GetSpecifiedName())
+	}
+
+	var required *pflag.ValueRequiredError
+	if errors.As(err, &required) {
+		if short := required.GetSpecifiedShortnames(); short != "" {
+			return fmt.Errorf("选项 -%s 缺少值", short)
+		}
+		return fmt.Errorf("选项 --%s 缺少值", required.GetSpecifiedName())
+	}
+
+	var invalid *pflag.InvalidValueError
+	if errors.As(err, &invalid) {
+		return fmt.Errorf("选项 --%s 的值只能是 true 或 false，当前值：%s",
+			invalid.GetFlag().Name, invalid.GetValue())
+	}
+	return err
+}
+
 // Parse 解析命令行并补默认值。raw 是 os.Args[1:]，version 是入口定义的版本号（帮助显示用）。
 func Parse(cfg *config.Config, version string, raw []string) (*Args, error) {
 	fs := pflag.NewFlagSet("SSHFleet", pflag.ContinueOnError)
@@ -162,7 +193,7 @@ func Parse(cfg *config.Config, version string, raw []string) (*Args, error) {
 			Usage(cfg, version)
 			return nil, ErrHelp
 		}
-		return nil, fmt.Errorf("%v（使用 -h 查看帮助）", err)
+		return nil, fmt.Errorf("%v（使用 -h 查看帮助）", translateFlagError(err))
 	}
 
 	// 多出来的位置参数：一律报错。
