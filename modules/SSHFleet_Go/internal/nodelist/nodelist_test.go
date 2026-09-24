@@ -32,7 +32,7 @@ func testArgsCfg(t *testing.T, argv ...string) (*cli.Args, *config.Config) {
 	cfg := &config.Config{}
 	cfg.Account.Port = 22
 	cfg.Account.User = "root"
-	cfg.Account.Encrypt = false
+	cfg.Credential.Encrypt = false
 	cfg.Execution.Sudo = false
 	cfg.Execution.TimeoutConnect = 10
 	cfg.Execution.TimeoutExecute = 60

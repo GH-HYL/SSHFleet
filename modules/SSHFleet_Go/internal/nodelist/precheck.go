@@ -21,7 +21,7 @@ import (
 // 同一凭据在一次预检内只读一次：清单多行常共用同一个密码文件，逐行读会重复读盘解密 N 次，
 // 并在内存里留下 N 份相同明文；命中缓存的行直接复用首次结果。
 func precheckCredentials(rows [][]string, args *cli.Args, cfg *config.Config) (*precheckResult, error) {
-	encrypted := cfg.Account.Encrypt
+	encrypted := cfg.Credential.Encrypt
 
 	pre := &precheckResult{rows: make([]rowCreds, len(rows))}
 	cache := newCredCache()
@@ -39,11 +39,11 @@ func precheckCredentials(rows [][]string, args *cli.Args, cfg *config.Config) (*
 		if args.Key {
 			key = keyRaw
 			if key == "" {
-				key = cfg.Account.Key
+				key = cfg.Credential.Key
 				rc.keyFromConfig = key != ""
 			}
 			if key == "" {
-				errs = append(errs, fmt.Sprintf("行 %d (IP: %s): 用了 -k，但没有找到可用的私钥——在第 5 列写私钥路径，或把统一私钥配到配置 account.key", idx+1, row[0]))
+				errs = append(errs, fmt.Sprintf("行 %d (IP: %s): 用了 -k，但没有找到可用的私钥——在第 5 列写私钥路径，或把统一私钥配到配置 credential.key", idx+1, row[0]))
 				pre.rows[idx] = rc
 				continue
 			}
@@ -55,7 +55,7 @@ func precheckCredentials(rows [][]string, args *cli.Args, cfg *config.Config) (*
 
 		// 密码列：取值 + 校验
 		if passwordRaw != "" {
-			plain, problems, fatalErr := cache.password(credentialValueSpec(passwordRaw, encrypted, cfg.Account.SecretDir), encrypted, true)
+			plain, problems, fatalErr := cache.password(credentialValueSpec(passwordRaw, encrypted, cfg.Credential.SecretDir), encrypted, true)
 			if fatalErr != nil {
 				return nil, fatalErr
 			}
@@ -72,7 +72,7 @@ func precheckCredentials(rows [][]string, args *cli.Args, cfg *config.Config) (*
 
 		// 私钥内容：PEM 校验 + 内容捕获
 		if key != "" {
-			kpath, rerr := resolveCredentialPath(key, cfg.Account.SecretDir)
+			kpath, rerr := resolveCredentialPath(key, cfg.Credential.SecretDir)
 			if rerr != nil {
 				return nil, rerr
 			}
@@ -94,7 +94,7 @@ func precheckCredentials(rows [][]string, args *cli.Args, cfg *config.Config) (*
 			if !rc.keyFromConfig {
 				passRaw := strings.TrimSpace(row[5])
 				if passRaw != "" {
-					plain, _, fatalErr := cache.password(credentialValueSpec(passRaw, encrypted, cfg.Account.SecretDir), encrypted, false)
+					plain, _, fatalErr := cache.password(credentialValueSpec(passRaw, encrypted, cfg.Credential.SecretDir), encrypted, false)
 					if fatalErr != nil {
 						return nil, fatalErr
 					}
@@ -122,8 +122,8 @@ func precheckCredentials(rows [][]string, args *cli.Args, cfg *config.Config) (*
 	}
 
 	// 配置私钥口令：只配给「私钥取自配置」的节点；无此类节点则不取值
-	if pre.anyNodeUsesConfigKey && cfg.Account.KeyPassword != "" {
-		plain, problems, fatalErr := cache.password(cfg.Account.KeyPassword, encrypted, true)
+	if pre.anyNodeUsesConfigKey && cfg.Credential.KeyPassword != "" {
+		plain, problems, fatalErr := cache.password(cfg.Credential.KeyPassword, encrypted, true)
 		if fatalErr != nil {
 			return nil, fatalErr
 		}

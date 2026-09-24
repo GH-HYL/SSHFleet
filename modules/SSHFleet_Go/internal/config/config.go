@@ -15,13 +15,17 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
-// Account 账号与凭据。password / key_password 的**值语义随 Encrypt 变**：
+// Account 登录账号。
+type Account struct {
+	Port     int    `toml:"port"`
+	User     string `toml:"user"`
+	Password string `toml:"password"`
+}
+
+// Credential 凭据。password / key_password 的**值语义随 Encrypt 变**：
 //   - Encrypt = false：值是密码 / 口令**本身**
 //   - Encrypt = true：值是凭据文件的**绝对路径**
-type Account struct {
-	Port        int    `toml:"port"`
-	User        string `toml:"user"`
-	Password    string `toml:"password"`
+type Credential struct {
 	Encrypt     bool   `toml:"encrypt"`
 	Key         string `toml:"key"`
 	KeyPassword string `toml:"key_password"`
@@ -70,10 +74,11 @@ type Upload struct {
 
 // Config 配置文件全集。
 type Config struct {
-	Account   Account   `toml:"account"`
-	Execution Execution `toml:"execution"`
-	Enable    Enable    `toml:"enable"`
-	Upload    Upload    `toml:"upload"`
+	Account    Account    `toml:"account"`
+	Credential Credential `toml:"credential"`
+	Execution  Execution  `toml:"execution"`
+	Enable     Enable     `toml:"enable"`
+	Upload     Upload     `toml:"upload"`
 }
 
 // BuiltinPaths 产物路径与文件名的内置取值（用户不可配）。
@@ -146,10 +151,10 @@ func validate(cfg *Config, md toml.MetaData) error {
 		{"account.port", definedStr(md, "account", "port")},
 		{"account.user", definedStr(md, "account", "user")},
 		{"account.password", definedStr(md, "account", "password")},
-		{"account.encrypt", definedStr(md, "account", "encrypt")},
-		{"account.key", definedStr(md, "account", "key")},
-		{"account.key_password", definedStr(md, "account", "key_password")},
-		{"account.secret_dir", definedStr(md, "account", "secret_dir")},
+		{"credential.encrypt", definedStr(md, "credential", "encrypt")},
+		{"credential.key", definedStr(md, "credential", "key")},
+		{"credential.key_password", definedStr(md, "credential", "key_password")},
+		{"credential.secret_dir", definedStr(md, "credential", "secret_dir")},
 		{"execution.sudo", definedStr(md, "execution", "sudo")},
 		{"execution.timeout_connect", definedStr(md, "execution", "timeout_connect")},
 		{"execution.timeout_execute", definedStr(md, "execution", "timeout_execute")},
@@ -211,23 +216,23 @@ func definedStr(md toml.MetaData, path ...string) string {
 //	password / key_password 只在打开加密时是路径；不加密时是密码 / 口令本身，原样保留
 func resolveCredentialPaths(cfg *Config) error {
 	var err error
-	if cfg.Account.SecretDir, err = normalizeConfigPath("secret_dir", cfg.Account.SecretDir); err != nil {
+	if cfg.Credential.SecretDir, err = normalizeConfigPath("credential.secret_dir", cfg.Credential.SecretDir); err != nil {
 		return err
 	}
-	if cfg.Account.Key, err = normalizeConfigPath("key", cfg.Account.Key); err != nil {
+	if cfg.Credential.Key, err = normalizeConfigPath("credential.key", cfg.Credential.Key); err != nil {
 		return err
 	}
-	if cfg.Account.Encrypt {
-		if cfg.Account.Password, err = normalizeConfigPath("password", cfg.Account.Password); err != nil {
+	if cfg.Credential.Encrypt {
+		if cfg.Account.Password, err = normalizeConfigPath("account.password", cfg.Account.Password); err != nil {
 			return err
 		}
-		if cfg.Account.KeyPassword, err = normalizeConfigPath("key_password", cfg.Account.KeyPassword); err != nil {
+		if cfg.Credential.KeyPassword, err = normalizeConfigPath("credential.key_password", cfg.Credential.KeyPassword); err != nil {
 			return err
 		}
 		return nil
 	}
 	cfg.Account.Password = strings.TrimSpace(cfg.Account.Password)
-	cfg.Account.KeyPassword = strings.TrimSpace(cfg.Account.KeyPassword)
+	cfg.Credential.KeyPassword = strings.TrimSpace(cfg.Credential.KeyPassword)
 	return nil
 }
 
@@ -244,7 +249,7 @@ func normalizeConfigPath(name, raw string) (string, error) {
 	}
 	if strings.HasPrefix(p, "~") || !filepath.IsAbs(p) {
 		return "", fmt.Errorf(
-			"account.%s 必须是绝对路径，当前值：%s\n"+
+			"%s 必须是绝对路径，当前值：%s\n"+
 				"原因：配置里的凭据路径一律写全路径；相对路径与 ~ 只在清单里能用\n"+
 				"提示：像 D:/Keys/id_rsa 或 /home/ops/.keys/id_rsa 这样写", name, raw)
 	}

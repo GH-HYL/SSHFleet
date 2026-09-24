@@ -113,7 +113,7 @@ func (c *Client) buildAuthMethods() ([]ssh.AuthMethod, error) {
 			if errors.As(err, &missing) {
 				return nil, fmt.Errorf(
 					"这把私钥有口令，没有给口令\n" +
-						"提示：在第 6 列写口令，或把默认口令配到配置文件 account.key_password")
+						"提示：在第 6 列写口令，或把默认口令配到配置文件 credential.key_password")
 			}
 			return nil, fmt.Errorf("解析密钥失败 - %w", err)
 		}
