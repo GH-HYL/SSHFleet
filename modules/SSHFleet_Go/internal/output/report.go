@@ -80,7 +80,7 @@ func WriteReport(archiveDir string, stats *result.Stats, a *cli.Args, cfg *confi
 	}
 
 	b.WriteString("\n【结果统计】\n")
-	fmt.Fprintf(&b, "  总耗时： %.2f  秒\n", stats.GlobalCostTime)
+	fmt.Fprintf(&b, "  总耗时：%.2f 秒\n", stats.GlobalCostTime)
 	fmt.Fprintf(&b, "  节点总数：%d  完成总数：%d  总数校验：%s\n", stats.NodesTotal, stats.ResultsTotal, stats.Verify)
 	fmt.Fprintf(&b, "  成功：%d    失败：%d\n", stats.SuccessCounts, stats.FailCounts)
 	if len(stats.SortedFailCategories) > 0 {

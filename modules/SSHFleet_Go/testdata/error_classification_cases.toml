@@ -11,14 +11,14 @@ failed_files = 1
 expected = "权限不足"
 
 [[cases]]
-name = "预处理失败 exit_code=1"
+name = "预处理失败 exit_code=1（预检的退出码 1 进了结果，按报错原文归类）"
 exit_code = 1
 error = "远程路径不存在: /var/log/x"
 output = ""
 mode = "download"
 success_files = 0
 failed_files = 0
-expected = "执行失败(退出码1)"
+expected = "远程路径不存在"
 
 [[cases]]
 name = "传输成功 exit_code=0"

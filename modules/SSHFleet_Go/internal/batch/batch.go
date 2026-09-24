@@ -158,7 +158,9 @@ func buildTasks(a *cli.Args, nodes *nodelist.Nodes) ([]*task, []string, error) {
 			if err != nil {
 				return nil, nil, fmt.Errorf("读取脚本文件失败：%s\n原因：%v", a.Script, err)
 			}
-			body = strings.TrimSpace(string(data))
+			// UTF-8 BOM 不剥的话会跟着内容进远端 bash：第一行变成带 BOM 的命令，
+			// bash 报 "No such file or directory"、那一行废掉（清单侧同口径，见 nodelist.csvread）。
+			body = strings.TrimSpace(strings.TrimPrefix(string(data), "\ufeff"))
 			interpreter = "bash"
 			if path.Ext(a.Script) == ".py" {
 				interpreter = "python3"
