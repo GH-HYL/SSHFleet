@@ -28,11 +28,12 @@ func dangerBox(report *dangercheck.Report, forbidden bool) string {
 	//
 	// 装饰符刻意用**不带变体选择符**的 U+26A0（⚠）而非 emoji 版（⚠️）：带上
 	// U+FE0F 之后，终端有的按文本呈现画 1 列、有的按 emoji 画 2 列，宽度不可预期，
-	// 框线必歪（用户 2026-09-15 反馈「两个感叹号没对齐」）。
+	// 框线必歪（用户 2026-09-15 反馈「两个感叹号没对齐」）。禁止级同样要宽度确定：
+	// 用 ✕（U+2715，Emoji 属性为 No、显示宽度 1），不用 🚫 那个宽度不稳的 emoji。
 	title := "⚠  发现危险命令  ⚠"
-	footer := "是否继续执行？这可能会带来安全风险！"
+	footer := "这条命令有风险，请确认你确实要执行它"
 	if forbidden {
-		title = "🚫  发现禁止命令  🚫"
+		title = "✕  发现禁止命令  ✕"
 		footer = "此命令被禁止执行，程序将立即退出！"
 	}
 
@@ -78,8 +79,8 @@ func dangerBox(report *dangercheck.Report, forbidden bool) string {
 			line("║"+pad("    来源: "+trimToWidth(source, dangerFieldLimit))+"║"),
 			line("║"+pad(fmt.Sprintf("    行号: %d", m.Line))+"║"),
 			line("║"+pad("    内容: "+trimToWidth(m.Content, dangerFieldLimit))+"║"),
-			line("║"+pad("    分类: "+trimToWidth(m.RuleName, dangerFieldLimit))+"║"),
-			line("║"+pad("    级别: "+strings.ToUpper(m.RiskLevel))+"║"),
+			line("║"+pad("    规则: "+trimToWidth(m.RuleName, dangerFieldLimit))+"║"),
+			line("║"+pad("    级别: "+riskLevelText(m.RiskLevel))+"║"),
 			line("╠"+bar+"╢"),
 		)
 	}
@@ -97,4 +98,21 @@ func PrintDangerWarning(report *dangercheck.Report, forbidden bool) {
 		return
 	}
 	fmt.Fprintln(os.Stdout, "\n"+box)
+}
+
+// riskLevelText 风险级别的中文名。
+// 规则文件里存的是英文枚举（forbidden / high / medium / low），屏幕上给中文——
+// 级别的取值要用户一眼看懂，命名规则留英文，两处各司其职。
+func riskLevelText(level string) string {
+	switch level {
+	case "forbidden":
+		return "禁止"
+	case "high":
+		return "高"
+	case "medium":
+		return "中"
+	case "low":
+		return "低"
+	}
+	return level
 }
