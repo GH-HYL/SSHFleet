@@ -77,6 +77,10 @@ func TestCheckAnswerCSVFile(t *testing.T) {
 	if a.Answers[0].Value != "3" || a.Answers[1].Value != "1" || a.Answers[2].Value != "2" {
 		t.Fatalf("条目顺序不对：%+v", a.Answers)
 	}
+	// 文件来源记进 AnswerFiles（归档备份用），内联值不记
+	if len(a.AnswerFiles) != 1 || a.AnswerFiles[0] != file {
+		t.Fatalf("应记录文件来源 %s，实际：%v", file, a.AnswerFiles)
+	}
 }
 
 // 记事本存的 CSV 默认带 UTF-8 BOM：留着会让首行的 # 注释判断失效、整行被当数据。

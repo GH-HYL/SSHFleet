@@ -351,7 +351,7 @@ SSHFleet -f nodes.csv -s deploy.sh --yes
         ├── terminal-output.xlsx          # 终端输出（Excel）
         ├── report.txt                    # 汇总报告
         ├── results.xlsx                  # 结果明细（Excel）
-        └── assets/                       # 资源备份（本次用到的清单与脚本）
+        └── assets/                       # 资源备份（本次用到的清单、脚本与代填文件）
 ```
 
 目录名里的模式为 `command` / `script` / `upload` / `download`；`-r 备注` 可让目录名更好认（如 `-r 发布v2`）。

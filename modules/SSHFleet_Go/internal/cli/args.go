@@ -50,7 +50,9 @@ type Args struct {
 	// 来源判定与门控只做一次，执行侧直接用。
 	Answer  []string         // -a 的原始值（内联，或一个 CSV 文件路径），可重复
 	Answers []ssh.Answer     // -a 解析后的代填表（顺序即命令行给出顺序）
-	Match   ssh.MatchOptions // [interactive] 的匹配口径：管触发词与中止词
+	// AnswerFiles 是 -a 里文件来源的路径（顺序同命令行、不含内联值），归档备份用。
+	AnswerFiles []string
+	Match       ssh.MatchOptions // [interactive] 的匹配口径：管触发词与中止词
 
 	// --sudo / --no-sudo 是否在命令行出现：互斥判定与「密钥管理命令不与批量参数同给」都要用
 	sudoFlag, noSudoFlag bool
