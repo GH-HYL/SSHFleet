@@ -11,6 +11,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"sshfleet/internal/common"
 	"sshfleet/internal/config"
 )
 
@@ -150,18 +151,17 @@ func CheckArguments(a *Args) error {
 		return err
 	}
 
-	// -f
+	// -f：来源（文件 / 内联文本）已由 Parse 判定，这里按来源分流——
+	// 内联文本要看首字段像不像节点，文件要能读、且不是二进制。
 	if a.CsvFile != "" {
-		if _, err := os.Stat(a.CsvFile); err != nil {
-			// 文件不存在：首字段是 IPv4 才视为内联清单文本，否则报路径不存在
+		if a.FIsInline {
+			// 首字段是 IPv4 才算内联清单文本，否则多半是把路径打错了
 			firstField := strings.TrimSpace(strings.Split(a.CsvFile, ",")[0])
 			addr, err := netip.ParseAddr(firstField)
 			if err != nil || !addr.Is4() {
 				return fmt.Errorf("-f 参数指定的文件不存在：%s\n提示：要临时传几台机器，可以直接写一行以 IP 开头的节点信息，例如 192.168.1.1,22,root,密码", a.CsvFile)
 			}
-			a.FIsInline = true
 		} else {
-			a.FIsInline = false
 			data, err := os.ReadFile(a.CsvFile)
 			if err != nil {
 				return fmt.Errorf("-f 参数指定的 CSV 文件不可读：%s\n提示：请检查文件是否存在、当前用户有没有读权限", a.CsvFile)
@@ -169,7 +169,7 @@ func CheckArguments(a *Args) error {
 			if len(data) == 0 {
 				return fmt.Errorf("-f 参数指定的 CSV 文件为空：%s\n提示：一行写一台机器，只写 IP 就能跑（端口、用户名、密码走配置）", a.CsvFile)
 			}
-			if bytes.IndexByte(data[:min(1024, len(data))], 0) >= 0 {
+			if common.IsBinaryContent(data) {
 				return fmt.Errorf("%s 是二进制文件\n提示：清单要是文本文件（CSV）", a.CsvFile)
 			}
 		}

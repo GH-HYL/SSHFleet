@@ -71,11 +71,9 @@ func (ar *Archive) BackupAssets(cfg *config.Config, a *cli.Args) error {
 	if err := copyFile(a.Script); err != nil {
 		return err
 	}
-	// 代填文件（-a 的文件来源）：可能有多份，全部原样备份
-	for _, f := range a.AnswerFiles {
-		if err := copyFile(f); err != nil {
-			return err
-		}
+	// 代填文件（-a 给的是文件路径时）：与清单、脚本一样原样备份一份
+	if err := copyFile(a.AnswerFile); err != nil {
+		return err
 	}
 	// 内联清单没有文件可备份（-f 为内联文本时跳过）
 	if !a.FIsInline {
