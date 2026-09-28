@@ -62,6 +62,10 @@ func checkAnswerExclusive(a *Args) error {
 // readAnswerValue 一条 -a 的值 → 若干代填与文件路径（内联时路径为空串）。
 // 来源判定照 -f 的形状判定：先看路径存不存在，不存在再按形态判——
 // 含逗号即内联，不含逗号报「文件不存在」。
+//
+// 内联值完全照 CSV 的行格式：值里的 `\n`（反斜杠+n，命令行引号内原样传到工具）
+// 与真实换行都是行分隔，一行一条代填；空行与 # 开头跳过，与 CSV 文件同口径。
+// 故内容与触发词里不能出现 `\n` 字面量——需要时改用 CSV 文件。
 func readAnswerValue(raw string) ([]ssh.Answer, string, error) {
 	if _, err := os.Stat(raw); err == nil {
 		entries, err := readAnswerFile(raw)
@@ -74,11 +78,35 @@ func readAnswerValue(raw string) ([]ssh.Answer, string, error) {
 		return nil, "", fmt.Errorf("-a 参数指定的文件不存在：%s\n"+
 			"提示：直接写代填内容就用逗号分隔：代填内容,触发词,触发词", raw)
 	}
-	entry, err := parseAnswerLine(raw)
-	if err != nil {
-		return nil, "", fmt.Errorf("-a 参数的值不合规：%s\n原因：%v", raw, err)
+	rows := splitAnswerRows(raw)
+	entries := make([]ssh.Answer, 0, len(rows))
+	for _, row := range rows {
+		entry, err := parseAnswerLine(row)
+		if err != nil {
+			return nil, "", fmt.Errorf("-a 参数的值不合规：%s\n原因：%v", row, err)
+		}
+		entries = append(entries, entry)
 	}
-	return []ssh.Answer{entry}, "", nil
+	if len(entries) == 0 {
+		return nil, "", fmt.Errorf("-a 参数没有可用的代填条目：%s\n"+
+			"提示：值按 \\n 分行、一行一条，空行与 # 开头会被跳过", raw)
+	}
+	return entries, "", nil
+}
+
+// splitAnswerRows 把内联值拆成行：先把字面 `\n` 换成真实换行，再按行切，跳过空行与 # 行。
+func splitAnswerRows(raw string) []string {
+	normalized := strings.ReplaceAll(raw, `\n`, "\n")
+	lines := strings.Split(normalized, "\n")
+	rows := make([]string, 0, len(lines))
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		rows = append(rows, trimmed)
+	}
+	return rows
 }
 
 // readAnswerFile 读代填文件：一行一条，与内联同构（第 1 列代填内容、第 2 列起触发词、
