@@ -4,7 +4,7 @@
 //	├── output.txt           终端输出（txt）
 //	├── report.txt           统计报告
 //	├── output.xlsx / results.xlsx   开关控制
-//	└── assets/              清单与脚本的备份（清单为脱敏副本，不含上传文件）
+//	└── assets/              清单、脚本与代填文件的备份（清单为脱敏副本，不含上传文件）
 //
 // 工具日志不在这里，它是 history/SSHFleetTools.log 单一滚动文件。
 package output
@@ -41,10 +41,11 @@ func CreateArchive(cfg *config.Config, a *cli.Args) (*Archive, error) {
 	return &Archive{Dir: dir}, nil
 }
 
-// BackupAssets 把清单与脚本复制到 assets/（不备份上传文件）。
+// BackupAssets 把清单、脚本与代填文件（-a 的文件来源）复制到 assets/（不备份上传文件）。
 //
 // 清单存的是**脱敏副本**：明文密码就写在清单第 4 列，原样复制等于把凭据又存了一份。
-// 脚本没有凭据，原样复制。
+// 脚本没有凭据，原样复制。代填文件原样复制——代填内容按已定的「留痕优先」口径明文记录，
+// 与 report、工具日志同一口径。
 func (ar *Archive) BackupAssets(cfg *config.Config, a *cli.Args) error {
 	if ar == nil {
 		return nil
@@ -69,6 +70,12 @@ func (ar *Archive) BackupAssets(cfg *config.Config, a *cli.Args) error {
 	}
 	if err := copyFile(a.Script); err != nil {
 		return err
+	}
+	// 代填文件（-a 的文件来源）：可能有多份，全部原样备份
+	for _, f := range a.AnswerFiles {
+		if err := copyFile(f); err != nil {
+			return err
+		}
 	}
 	// 内联清单没有文件可备份（-f 为内联文本时跳过）
 	if !a.FIsInline {

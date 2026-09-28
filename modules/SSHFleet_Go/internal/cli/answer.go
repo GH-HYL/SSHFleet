@@ -30,9 +30,12 @@ func checkAnswer(a *Args, scriptText []byte) error {
 		return err
 	}
 	for _, raw := range a.Answer {
-		entries, err := readAnswerValue(raw)
+		entries, file, err := readAnswerValue(raw)
 		if err != nil {
 			return err
+		}
+		if file != "" {
+			a.AnswerFiles = append(a.AnswerFiles, file)
 		}
 		a.Answers = append(a.Answers, entries...)
 	}
@@ -56,21 +59,26 @@ func checkAnswerExclusive(a *Args) error {
 	return nil
 }
 
-// readAnswerValue 一条 -a 的值 → 若干代填。来源判定照 -f 的形状判定：
-// 先看路径存不存在，不存在再按形态判——含逗号即内联，不含逗号报「文件不存在」。
-func readAnswerValue(raw string) ([]ssh.Answer, error) {
+// readAnswerValue 一条 -a 的值 → 若干代填与文件路径（内联时路径为空串）。
+// 来源判定照 -f 的形状判定：先看路径存不存在，不存在再按形态判——
+// 含逗号即内联，不含逗号报「文件不存在」。
+func readAnswerValue(raw string) ([]ssh.Answer, string, error) {
 	if _, err := os.Stat(raw); err == nil {
-		return readAnswerFile(raw)
+		entries, err := readAnswerFile(raw)
+		if err != nil {
+			return nil, "", err
+		}
+		return entries, raw, nil
 	}
 	if !strings.Contains(raw, ",") {
-		return nil, fmt.Errorf("-a 参数指定的文件不存在：%s\n"+
+		return nil, "", fmt.Errorf("-a 参数指定的文件不存在：%s\n"+
 			"提示：直接写代填内容就用逗号分隔：代填内容,触发词,触发词", raw)
 	}
 	entry, err := parseAnswerLine(raw)
 	if err != nil {
-		return nil, fmt.Errorf("-a 参数的值不合规：%s\n原因：%v", raw, err)
+		return nil, "", fmt.Errorf("-a 参数的值不合规：%s\n原因：%v", raw, err)
 	}
-	return []ssh.Answer{entry}, nil
+	return []ssh.Answer{entry}, "", nil
 }
 
 // readAnswerFile 读代填文件：一行一条，与内联同构（第 1 列代填内容、第 2 列起触发词、
