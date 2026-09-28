@@ -28,6 +28,43 @@ func TestCheckAnswerInline(t *testing.T) {
 	}
 }
 
+// 值里的 \n（字面量）是行分隔符：一条一行，完全照 CSV 的行格式；空行与 # 行跳过。
+func TestCheckAnswerInlineMultiline(t *testing.T) {
+	a := &Args{Command: "sh x.sh", Answer: []string{`1,请选择架构\n#注释\n\n2,请选择包格式`}}
+	if err := checkAnswer(a, nil); err != nil {
+		t.Fatalf("多行内联值应解析通过：%v", err)
+	}
+	if len(a.Answers) != 2 {
+		t.Fatalf("应解析出 2 条代填，实际 %d 条：%+v", len(a.Answers), a.Answers)
+	}
+	if a.Answers[0].Value != "1" || a.Answers[1].Value != "2" {
+		t.Fatalf("行序即条目序：%+v", a.Answers)
+	}
+	if len(a.AnswerFiles) != 0 {
+		t.Fatalf("内联值不应记进 AnswerFiles：%v", a.AnswerFiles)
+	}
+}
+
+// 真实换行与字面 \n 等价（有些 shell 会把真实换行放进引号里传进来）。
+func TestCheckAnswerInlineRealNewline(t *testing.T) {
+	a := &Args{Command: "sh x.sh", Answer: []string{"1,请选择架构\n2,请选择包格式"}}
+	if err := checkAnswer(a, nil); err != nil {
+		t.Fatalf("真实换行应与 \\n 等价：%v", err)
+	}
+	if len(a.Answers) != 2 {
+		t.Fatalf("应解析出 2 条代填，实际 %d 条", len(a.Answers))
+	}
+}
+
+// 所有行都被跳过（空行 / # 行）：报没有可用条目，不静默跑空表。
+func TestCheckAnswerInlineAllRowsSkipped(t *testing.T) {
+	a := &Args{Command: "sh x.sh", Answer: []string{`#全是注释,a,b\n\n`}}
+	err := checkAnswer(a, nil)
+	if err == nil || !strings.Contains(err.Error(), "没有可用的代填条目") {
+		t.Fatalf("应报没有可用的代填条目，实际：%v", err)
+	}
+}
+
 // 第一段留空是合法写法：代表只发一个回车。
 func TestCheckAnswerEmptyValueMeansEmptyLine(t *testing.T) {
 	a := &Args{Command: "sh x.sh", Answer: []string{",继续"}}

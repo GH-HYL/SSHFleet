@@ -416,7 +416,7 @@ func helpEntries(cfg *config.Config) []helpEntry {
 		opt("", "--sudo", sudoTag, "这次以 root 身份执行"),
 		opt("", "--no-sudo", "", noSudoDesc),
 		opt("", "--yes", "", "跳过所有确认直接执行（自动化用，用它之前先手动跑通一次）"),
-		opt("-a", "--answer", "", "代填：看到触发词就自动填内容（值形如「代填内容,触发词,触发词」），也可给 CSV 文件的路径（每行一条）"),
+		opt("-a", "--answer", "", "代填：看到触发词就自动填内容（值形如「代填内容,触发词,触发词」，多条用 \\n 分行），也可给 CSV 文件的路径（每行一条）"),
 		opt("", "--no-bash", "", "命令模式：不套 bash，直接执行原始命令"),
 		opt("-t", "--timeout", fmt.Sprintf("[默认: %d/%d]", cfg.Execution.TimeoutExecute, cfg.Execution.TimeoutTransfer), "命令跑完、文件传完的最长等待（秒）"),
 		opt("-T", "--connect-timeout", fmt.Sprintf("[默认: %d]", cfg.Execution.TimeoutConnect), "连上服务器的最长等待（秒）"),
@@ -506,7 +506,7 @@ func usageText(cfg *config.Config, version string, width int) string {
 	examples := [][2]string{
 		{"执行命令:", fmt.Sprintf("%s -f nodes.csv -c \"ls -l\"", name)},
 		{"执行脚本:", fmt.Sprintf("%s -f nodes.csv -s deploy.sh", name)},
-		{"代填执行:", fmt.Sprintf("%s -f nodes.csv -s deploy.sh -a \"1,请选择架构\"", name)},
+		{"代填执行:", fmt.Sprintf("%s -f nodes.csv -s deploy.sh -a \"1,请选择架构\\ndeb,请选择包格式\"", name)},
 		{"上传文件:", fmt.Sprintf("%s -f nodes.csv -u ./dist/app -p /opt/app/", name)},
 		{"下载文件:", fmt.Sprintf("%s -f nodes.csv -d /var/log/app -p ./logs/", name)},
 		{"用密钥登录:", fmt.Sprintf("%s -f nodes.csv -c \"uptime\" -k", name)},
