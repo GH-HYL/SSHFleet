@@ -403,20 +403,20 @@ func TestSummaryMatchesArgparseNamespace(t *testing.T) {
 	a := &Args{Command: "who -b", CsvFile: "nodes.csv", Remark: "v2_cmd"}
 	got := a.Summary()
 	want := "Namespace(c='who -b', s='', u='', d='', f='nodes.csv', p='', sudo=False, " +
-		"t=None, T=None, n=None, r='v2_cmd', no_bash=False, yes=False, k=False, answer=[])"
+		"t=None, T=None, n=None, r='v2_cmd', no_bash=False, yes=False, k=False, answer='')"
 	if got != want {
 		t.Fatalf("解析结果格式不对\n实际：%s\n应为：%s", got, want)
 	}
 }
 
-// -a 在日志里如实报出：给了几条就报几条（值原文），没给是空列表。
+// -a 在日志里如实报出：给了就报值原文，没给是空串。
 func TestSummaryAnswerField(t *testing.T) {
 	a := &Args{Command: "pwd"}
-	if got := a.Summary(); !strings.Contains(got, "answer=[]") {
-		t.Fatalf("没给 -a 时应报空列表，实际：%s", got)
+	if got := a.Summary(); !strings.Contains(got, "answer=''") {
+		t.Fatalf("没给 -a 时应报空串，实际：%s", got)
 	}
-	a = &Args{Command: "pwd", Answer: []string{"1,请选择架构", "2,包格式"}}
-	if got := a.Summary(); !strings.Contains(got, "answer=['1,请选择架构', '2,包格式']") {
+	a = &Args{Command: "pwd", Answer: "1,请选择架构"}
+	if got := a.Summary(); !strings.Contains(got, "answer='1,请选择架构'") {
 		t.Fatalf("应报出 -a 的原始写法，实际：%s", got)
 	}
 }

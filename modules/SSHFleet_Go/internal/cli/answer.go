@@ -1,18 +1,24 @@
 package cli
 
 import (
+	"encoding/csv"
+	"errors"
 	"fmt"
 	"os"
 	"path"
 	"strings"
 
+	"sshfleet/internal/common"
 	"sshfleet/internal/ssh"
 )
 
 // -a（代填）的取值处理：来源判定、解析、门控、互斥与长度检查，都在参数合规检查阶段一次做完。
 //
-// 与 -f 的 FIsInline 同一手法：来源（内联 / 文件）在本阶段判一次、结果存进 Args，
-// 执行侧直接用——不两处各判一次。
+// 取值形态与 -f 完全同构：给一个 CSV 文件路径，或直接写同样格式的内联文本
+// （命令行里用 `\n` 分行）。解析走 common.ReadCSVRows——与清单同一份实现，
+// `#` 注释行、空行、BOM、双引号、变长列的口径全部一致，没有第二套规则。
+//
+// 列语义是代填自己的：第 1 列是代填内容，第 2 列起是触发词，列数自适应。
 
 // answerLimit 最终下发行的字节上限（写死，不开放配置）。
 //
@@ -23,26 +29,103 @@ const answerLimit = 122880
 // checkAnswer 校验 -a 的值并解析成代填表（写进 a.Answers）。
 // scriptText 是 -s 已读到的脚本文件内容（命令模式传 nil）；长度检查要用它算下发行。
 func checkAnswer(a *Args, scriptText []byte) error {
-	if len(a.Answer) == 0 {
+	if a.Answer == "" {
 		return nil
 	}
 	if err := checkAnswerExclusive(a); err != nil {
 		return err
 	}
-	for _, raw := range a.Answer {
-		entries, file, err := readAnswerValue(raw)
-		if err != nil {
-			return err
-		}
-		if file != "" {
-			a.AnswerFiles = append(a.AnswerFiles, file)
-		}
-		a.Answers = append(a.Answers, entries...)
+
+	src := resolveSource(a.Answer)
+	// 门控：一条代填至少要有两列（内容 + 触发词），所以内联值一定含逗号。
+	// 不含逗号又不是已有文件，多半是路径打错了——照 -f 的同一形状报「文件不存在」。
+	if !src.IsFile && !strings.Contains(src.Raw, ",") {
+		return fmt.Errorf("-a 参数指定的文件不存在：%s\n"+
+			"提示：直接写代填内容就用逗号分隔：代填内容,触发词,触发词", src.Raw)
 	}
+
+	text, err := answerText(src)
+	if err != nil {
+		return err
+	}
+	if src.IsFile {
+		a.AnswerFile = src.Path // 归档备份用
+	}
+	rows, err := common.ReadCSVRows(text)
+	if err != nil {
+		return answerReadError(src, err)
+	}
+
+	entries := make([]ssh.Answer, 0, len(rows))
+	for _, row := range rows {
+		entry, err := parseAnswerRow(row.Fields)
+		if err != nil {
+			return answerLineError(src, row, err)
+		}
+		entries = append(entries, entry)
+	}
+	if len(entries) == 0 {
+		return answerEmptyError(src)
+	}
+
+	a.Answers = entries
 	if err := validateAnswers(a.Answers, a.Match); err != nil {
 		return err
 	}
 	return checkAnswerLength(a, scriptText)
+}
+
+// answerText 按来源取到要解析的文本。
+//
+// 内联值先把字面 `\n` 补成真实换行——命令行里传不进换行，这是唯一的补齐动作；
+// 补完之后与文件内容走完全同一条解析路径。
+func answerText(src source) (string, error) {
+	if !src.IsFile {
+		return common.ExpandEscapedNewlines(src.Raw), nil
+	}
+	data, err := os.ReadFile(src.Path)
+	if err != nil {
+		return "", fmt.Errorf("-a 参数指定的文件不可读：%s\n提示：请检查文件是否存在、当前用户有没有读权限", src.Path)
+	}
+	if common.IsBinaryContent(data) {
+		return "", fmt.Errorf("%s 是二进制文件\n提示：代填要写成文本（CSV）", src.Path)
+	}
+	return string(data), nil
+}
+
+// answerReadError CSV 语法错的文案。Go 的原文是行话，用户只需要知道哪一行、
+// 引号要成对（与清单侧同口径，见 nodelist/csvread.go）。
+func answerReadError(src source, err error) error {
+	var parseErr *csv.ParseError
+	if !errors.As(err, &parseErr) {
+		return fmt.Errorf("读取代填失败：%v", err)
+	}
+	if src.IsFile {
+		return fmt.Errorf("读取代填失败：代填文件 %s 第 %d 行格式读不了——CSV 的双引号要成对出现\n"+
+			"提示：值里要用引号时，把里面的引号写成两个", src.Path, parseErr.Line)
+	}
+	return fmt.Errorf("读取代填失败：第 %d 行格式读不了——CSV 的双引号要成对出现\n"+
+		"提示：值里要用引号时，把里面的引号写成两个", parseErr.Line)
+}
+
+// answerLineError 某一条代填不合规。行号是文本里的行号——空行与注释行照样数，
+// 报出来的号照着文本就能找到。原因另起一行：外层的报错前缀已经是「原因：」。
+func answerLineError(src source, row common.CSVRow, err error) error {
+	rowText := strings.Join(row.Fields, ",")
+	if src.IsFile {
+		return fmt.Errorf("代填文件 %s 第 %d 行不合规：%s\n%v", src.Path, row.Line, rowText, err)
+	}
+	return fmt.Errorf("-a 的值第 %d 行不合规：%s\n%v", row.Line, rowText, err)
+}
+
+// answerEmptyError 一份取值里一条代填都没有：报出来，不静默跑空表。
+func answerEmptyError(src source) error {
+	if src.IsFile {
+		return fmt.Errorf("代填文件 %s 里没有一条代填\n"+
+			"提示：一行一条，第 1 列是代填内容、第 2 列起是触发词；空行与 # 开头会被跳过", src.Path)
+	}
+	return fmt.Errorf("-a 的值里没有一条代填\n" +
+		"提示：一行一条，第 1 列是代填内容、第 2 列起是触发词；空行与 # 开头会被跳过")
 }
 
 // checkAnswerExclusive -a 与几个开关互斥：冲突的是「同一条会话该长什么样」，明确报错并说明原因。
@@ -50,7 +133,7 @@ func checkAnswerExclusive(a *Args) error {
 	switch {
 	case a.NoBash:
 		return fmt.Errorf("-a 不能和 --no-bash 一起用\n" +
-			"原因：--no-bash 要求命令原样下发，代填要接管会话（分配终端、正文另走命令行承载），同一个会话满足不了两种要求")
+			"原因：--no-bash 要求命令原样下发，代填要接管会话，同一个会话满足不了两种要求")
 	case a.Upload != "":
 		return fmt.Errorf("-a 不能和 -u 一起用\n提示：代填是给命令、脚本的交互用的，上传时没有命令在跑")
 	case a.Download != "":
@@ -59,96 +142,14 @@ func checkAnswerExclusive(a *Args) error {
 	return nil
 }
 
-// readAnswerValue 一条 -a 的值 → 若干代填与文件路径（内联时路径为空串）。
-// 来源判定照 -f 的形状判定：先看路径存不存在，不存在再按形态判——
-// 含逗号即内联，不含逗号报「文件不存在」。
+// parseAnswerRow 解析一条代填：第 1 段是代填内容，其余各段是触发词，列数自适应
+// （有几个触发词就是几列）。
 //
-// 内联值完全照 CSV 的行格式：值里的 `\n`（反斜杠+n，命令行引号内原样传到工具）
-// 与真实换行都是行分隔，一行一条代填；空行与 # 开头跳过，与 CSV 文件同口径。
-// 故内容与触发词里不能出现 `\n` 字面量——需要时改用 CSV 文件。
-func readAnswerValue(raw string) ([]ssh.Answer, string, error) {
-	if _, err := os.Stat(raw); err == nil {
-		entries, err := readAnswerFile(raw)
-		if err != nil {
-			return nil, "", err
-		}
-		return entries, raw, nil
-	}
-	if !strings.Contains(raw, ",") {
-		return nil, "", fmt.Errorf("-a 参数指定的文件不存在：%s\n"+
-			"提示：直接写代填内容就用逗号分隔：代填内容,触发词,触发词", raw)
-	}
-	rows := splitAnswerRows(raw)
-	entries := make([]ssh.Answer, 0, len(rows))
-	for _, row := range rows {
-		entry, err := parseAnswerLine(row)
-		if err != nil {
-			return nil, "", fmt.Errorf("-a 参数的值不合规：%s\n原因：%v", row, err)
-		}
-		entries = append(entries, entry)
-	}
-	if len(entries) == 0 {
-		return nil, "", fmt.Errorf("-a 参数没有可用的代填条目：%s\n"+
-			"提示：值按 \\n 分行、一行一条，空行与 # 开头会被跳过", raw)
-	}
-	return entries, "", nil
-}
-
-// splitAnswerRows 把内联值拆成行：先把字面 `\n` 换成真实换行，再按行切，跳过空行与 # 行。
-func splitAnswerRows(raw string) []string {
-	normalized := strings.ReplaceAll(raw, `\n`, "\n")
-	lines := strings.Split(normalized, "\n")
-	rows := make([]string, 0, len(lines))
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
-			continue
-		}
-		rows = append(rows, trimmed)
-	}
-	return rows
-}
-
-// readAnswerFile 读代填文件：一行一条，与内联同构（第 1 列代填内容、第 2 列起触发词、
-// 列数自适应，有几个触发词就几列）；空行与 # 开头跳过；可与内联混用。
-//
-// 不复用节点清单的读取器：那是按节点为单位的，第 1 列必须是 IP。
-func readAnswerFile(file string) ([]ssh.Answer, error) {
-	data, err := os.ReadFile(file)
-	if err != nil {
-		return nil, fmt.Errorf("-a 参数指定的文件不可读：%s\n提示：请检查文件是否存在、当前用户有没有读权限", file)
-	}
-	// 剥 UTF-8 BOM：Windows 记事本存 CSV 默认带它，留着会让首行的 # 注释判断失效
-	// （清单侧同口径，见 nodelist.csvread）。
-	text := strings.TrimPrefix(string(data), "\ufeff")
-	var out []ssh.Answer
-	for i, line := range strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		entry, err := parseAnswerLine(line)
-		if err != nil {
-			return nil, fmt.Errorf("代填文件第 %d 行不合规：%s\n原因：%v", i+1, line, err)
-		}
-		out = append(out, entry)
-	}
-	if len(out) == 0 {
-		return nil, fmt.Errorf("-a 参数指定的文件里没有一条代填：%s\n提示：一行一条，写法与内联相同：代填内容,触发词,触发词", file)
-	}
-	return out, nil
-}
-
-// parseAnswerLine 解析一条代填：逗号分隔，第 1 段是代填内容，其余各段是触发词。
-//
-// 「代填内容与触发词都不能含逗号」不必单独校验——逗号就是分隔符，它一定被拆走；
-// 这条规则是给用户看的（帮助与使用手册）：写了逗号会**被当成多个触发词**，而不是报错。
 // 第 1 段留空是合法写法：代表只发一个回车。
-func parseAnswerLine(line string) (ssh.Answer, error) {
-	parts := strings.Split(line, ",")
-	entry := ssh.Answer{Value: parts[0], Triggers: parts[1:]}
+func parseAnswerRow(fields []string) (ssh.Answer, error) {
+	entry := ssh.Answer{Value: fields[0], Triggers: fields[1:]}
 	if len(entry.Triggers) == 0 {
-		return ssh.Answer{}, fmt.Errorf("缺少触发词（代填内容与触发词之间用逗号分隔）")
+		return ssh.Answer{}, fmt.Errorf("只有一列：缺触发词（第 1 列是代填内容，第 2 列起是触发词）")
 	}
 	for _, trigger := range entry.Triggers {
 		if strings.TrimSpace(trigger) == "" {

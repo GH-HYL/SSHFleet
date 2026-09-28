@@ -44,15 +44,15 @@ type Args struct {
 	GenKey         bool   // --gen-key
 	KeyStatus      bool   // --key-status
 	ConvertSecret  string // --convert-secret
-	FIsInline      bool   // -f 为内联清单（由 CheckArguments 判定）
+	FIsInline      bool   // -f 为内联清单文本（不是文件路径）；由 Parse 判定
 
 	// -a 与 [interactive]：原始值在 Parse 里装好，解析结果由 CheckArguments 填——
 	// 来源判定与门控只做一次，执行侧直接用。
-	Answer  []string         // -a 的原始值（内联，或一个 CSV 文件路径），可重复
-	Answers []ssh.Answer     // -a 解析后的代填表（顺序即命令行给出顺序）
-	// AnswerFiles 是 -a 里文件来源的路径（顺序同命令行、不含内联值），归档备份用。
-	AnswerFiles []string
-	Match       ssh.MatchOptions // [interactive] 的匹配口径：管触发词与中止词
+	Answer  string       // -a 的原始值（内联文本，或一个 CSV 文件路径）
+	Answers []ssh.Answer // -a 解析后的代填表（顺序即文本里的行序）
+	// AnswerFile 是 -a 取值为文件时的路径（内联时为空），归档备份用。
+	AnswerFile string
+	Match      ssh.MatchOptions // [interactive] 的匹配口径：管触发词与中止词
 
 	// --sudo / --no-sudo 是否在命令行出现：互斥判定与「密钥管理命令不与批量参数同给」都要用
 	sudoFlag, noSudoFlag bool
@@ -119,24 +119,12 @@ func (a *Args) Summary() string {
 		"no_bash=" + boolPy(a.NoBash),
 		"yes=" + boolPy(a.Disinteractive),
 		"k=" + keyVal,
-		"answer=" + answerList(a.Answer),
+		"answer=" + orEmpty(a.Answer),
 	}
 	if a.KeyStatus {
 		fields = append(fields, "key_status=True")
 	}
 	return "Namespace(" + strings.Join(fields, ", ") + ")"
-}
-
-// answerList -a 的日志形态（值原文，逗号分隔的那一串）：给了就是 ['1,请选择架构']，没给就是 []。
-//
-// 取原始值而不是解析后的代填表：这行日志记的是「命令行写了什么」，而它打在参数合规检查
-// 之前——那时代填表还没解析出来（展开后的明细在报告里，见 report.go）。
-func answerList(values []string) string {
-	items := make([]string, 0, len(values))
-	for _, v := range values {
-		items = append(items, "'"+v+"'")
-	}
-	return "[" + strings.Join(items, ", ") + "]"
 }
 
 // boolPy 把 Go 布尔打印成 Python 的 True / False（拼写不同，别混用）。
@@ -199,8 +187,7 @@ func Parse(cfg *config.Config, version string, raw []string) (*Args, error) {
 	fs.StringVarP(&a.Remark, "remark", "r", "", "备注，用作历史记录文件夹名（不填自动生成）")
 	fs.BoolVar(&a.NoBash, "no-bash", false, "命令模式专用: 不套一层 bash 环境")
 	fs.BoolVar(&a.Disinteractive, "yes", false, "跳过所有确认提示直接执行")
-	// -a 必须用 StringArray，不能用 StringSlice：后者会先按逗号把值拆开，逗号就永远传不进来
-	fs.StringArrayVarP(&a.Answer, "answer", "a", nil, "代填：看到触发词就自动填内容")
+	fs.StringVarP(&a.Answer, "answer", "a", "", "代填：看到触发词就自动填内容")
 	fs.BoolVarP(&a.Key, "key", "k", false, "用密钥登录：私钥取清单第 5 列，其次配置 account.key")
 	fs.BoolVar(&a.GenKey, "gen-key", false, "生成随机主密钥并持久化到 SSHFLEET_KEY")
 	fs.BoolVar(&a.KeyStatus, "key-status", false, "查看主密钥状态：两处来源、指纹、是否一致与下一步")
@@ -271,13 +258,26 @@ func Parse(cfg *config.Config, version string, raw []string) (*Args, error) {
 	// 匹配口径取自配置（[interactive]）：执行侧从 Args 取，不再回头读配置
 	a.Match = ssh.MatchOptions{Regex: cfg.Interactive.Regex, CaseSensitive: cfg.Interactive.CaseSensitive}
 
-	// 路径参数：中间不能含空格；再做字符串层规范化（顺序与旧版一致）
-	for _, val := range []*string{&a.Script, &a.CsvFile, &a.Upload, &a.Path, &a.Download} {
+	// -f 的值也可以是内联清单文本（不是路径）：先定来源。是文本就原样留着——
+	// 空格禁令与路径规范化都只管路径，而 `\`→`/` 会把文本里的 `\n` 分行符弄坏。
+	if a.CsvFile != "" {
+		src := resolveSource(a.CsvFile)
+		a.FIsInline = !src.IsFile
+		if src.IsFile {
+			if err := pathWithoutSpace(src.Path); err != nil {
+				return nil, err
+			}
+			a.CsvFile = normalizePath(src.Path)
+		}
+	}
+
+	// 其余路径参数：中间不能含空格；再做字符串层规范化（顺序与旧版一致）。
+	for _, val := range []*string{&a.Script, &a.Upload, &a.Path, &a.Download} {
 		if *val == "" {
 			continue
 		}
-		if strings.Contains(strings.TrimSpace(*val), " ") {
-			return nil, fmt.Errorf("路径参数中间不能包含空格\n提示：路径里有空格时用引号包起来，例如 -u \"D:/my dir/app\"")
+		if err := pathWithoutSpace(*val); err != nil {
+			return nil, err
 		}
 		*val = normalizePath(*val)
 	}
@@ -295,6 +295,14 @@ func toInt(raw string) (int, bool) {
 		return 0, true
 	}
 	return v, false
+}
+
+// pathWithoutSpace 路径参数中间不能含空格（含空格说明引号漏了，或参数打错了）。
+func pathWithoutSpace(p string) error {
+	if strings.Contains(strings.TrimSpace(p), " ") {
+		return fmt.Errorf("路径参数中间不能包含空格\n提示：路径里有空格时用引号包起来，例如 -u \"D:/my dir/app\"")
+	}
+	return nil
 }
 
 // normalizePath 字符串层面的路径规范化（对位旧 args_normalize_path）：
