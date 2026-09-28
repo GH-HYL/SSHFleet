@@ -64,6 +64,11 @@ func WriteReport(archiveDir string, stats *result.Stats, a *cli.Args, cfg *confi
 
 	fmt.Fprintf(&b, "  节点清单： %s\n", common.MaskInlineListIf(a.CsvFile))
 	fmt.Fprintf(&b, "  节点数量： %d\n", stats.NodesTotal)
+	// -a 明细：每条一行、含全部触发词，顺序同命令行。全量明文（内容 + 触发词）——
+	// 用户 2026-09-28 裁定接受留痕优先。
+	for i, entry := range a.Answers {
+		fmt.Fprintf(&b, "  代填 %d： %s\n", i+1, entry.Describe())
+	}
 	if a.Command != "" || a.Script != "" {
 		fmt.Fprintf(&b, "  并发数： %d\n", a.Number)
 	}
@@ -86,7 +91,7 @@ func WriteReport(archiveDir string, stats *result.Stats, a *cli.Args, cfg *confi
 	if len(stats.SortedFailCategories) > 0 {
 		parts := make([]string, 0, len(stats.SortedFailCategories))
 		for _, c := range stats.SortedFailCategories {
-			parts = append(parts, fmt.Sprintf("%s：%d", c.Category, c.Count))
+			parts = append(parts, fmt.Sprintf("%s ×%d", c.Category, c.Count))
 		}
 		fmt.Fprintf(&b, "  失败分类统计 -→  %s\n", strings.Join(parts, "  "))
 		if cfg.Enable.ShowCategoryTips {
