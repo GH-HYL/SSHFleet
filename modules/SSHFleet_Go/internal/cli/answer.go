@@ -147,9 +147,12 @@ func checkAnswerLength(a *Args, scriptText []byte) error {
 	if len(line) <= answerLimit {
 		return nil
 	}
-	return fmt.Errorf("-a 参数下发的命令太长：%d 字节，上限 %d 字节\n"+
-		"原因：正文要 base64 编入命令行，受 Linux 单个参数的长度上限约束\n"+
-		"提示：把大块内容改走上传模式，或拆成多条短命令", len(line), answerLimit)
+	body := len(a.Command)
+	if a.Script != "" {
+		body = len(scriptText)
+	}
+	return fmt.Errorf("-a 参数下发的命令太长：正文 %d 字节，下发 %d 字节，上限 %d 字节\n"+
+		"提示：长度受工具限制，请核减脚本内容", body, len(line), answerLimit)
 }
 
 // answerInputOf 由命令行参数拼交互分支的入场值（正文取自脚本文件内容）。
