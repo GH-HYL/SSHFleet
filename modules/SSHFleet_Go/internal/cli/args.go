@@ -17,6 +17,7 @@ import (
 
 	"sshfleet/internal/common"
 	"sshfleet/internal/config"
+	"sshfleet/internal/ssh"
 
 	"github.com/spf13/pflag"
 )
@@ -44,6 +45,12 @@ type Args struct {
 	KeyStatus      bool   // --key-status
 	ConvertSecret  string // --convert-secret
 	FIsInline      bool   // -f 为内联清单（由 CheckArguments 判定）
+
+	// -a 与 [interactive]：原始值在 Parse 里装好，解析结果由 CheckArguments 填——
+	// 来源判定与门控只做一次，执行侧直接用。
+	Answer  []string         // -a 的原始值（内联，或一个 CSV 文件路径），可重复
+	Answers []ssh.Answer     // -a 解析后的代填表（顺序即命令行给出顺序）
+	Match   ssh.MatchOptions // [interactive] 的匹配口径：管触发词与中止词
 
 	// --sudo / --no-sudo 是否在命令行出现：互斥判定与「密钥管理命令不与批量参数同给」都要用
 	sudoFlag, noSudoFlag bool
@@ -81,7 +88,7 @@ func (a *Args) NumberGiven() bool { return a.numberRaw != "" }
 // / k 与 no_bash / yes），未指定的字符串打印成 ”、未指定的数值打印成 None。
 //
 // 不复刻的只有两处：旧版把内联清单也塞进 f（靠 f_is_inline 二次判断），这里 f 只装
-// 清单原文、内联与否由 FIsInline 单独报；旧版没有 --key-status，故它排在最后。
+// 清单原文、内联与否由 FIsInline 单独报；旧版没有 --key-status 与 -a，故它俩排在后面。
 func (a *Args) Summary() string {
 	// 未指定：字符串与 '' 同形，数值与 None 同形（对位 argparse 的默认值）
 	orEmpty := func(s string) string { return "'" + s + "'" }
@@ -110,11 +117,24 @@ func (a *Args) Summary() string {
 		"no_bash=" + boolPy(a.NoBash),
 		"yes=" + boolPy(a.Disinteractive),
 		"k=" + keyVal,
+		"answer=" + answerList(a.Answer),
 	}
 	if a.KeyStatus {
 		fields = append(fields, "key_status=True")
 	}
 	return "Namespace(" + strings.Join(fields, ", ") + ")"
+}
+
+// answerList -a 的日志形态（值原文，逗号分隔的那一串）：给了就是 ['1,请选择架构']，没给就是 []。
+//
+// 取原始值而不是解析后的代填表：这行日志记的是「命令行写了什么」，而它打在参数合规检查
+// 之前——那时代填表还没解析出来（展开后的明细在报告里，见 report.go）。
+func answerList(values []string) string {
+	items := make([]string, 0, len(values))
+	for _, v := range values {
+		items = append(items, "'"+v+"'")
+	}
+	return "[" + strings.Join(items, ", ") + "]"
 }
 
 // boolPy 把 Go 布尔打印成 Python 的 True / False（拼写不同，别混用）。
@@ -177,6 +197,8 @@ func Parse(cfg *config.Config, version string, raw []string) (*Args, error) {
 	fs.StringVarP(&a.Remark, "remark", "r", "", "备注，用作历史记录文件夹名（不填自动生成）")
 	fs.BoolVar(&a.NoBash, "no-bash", false, "命令模式专用: 不套一层 bash 环境")
 	fs.BoolVar(&a.Disinteractive, "yes", false, "跳过所有确认提示直接执行")
+	// -a 必须用 StringArray，不能用 StringSlice：后者会先按逗号把值拆开，逗号就永远传不进来
+	fs.StringArrayVarP(&a.Answer, "answer", "a", nil, "代填：看到触发词就自动填内容")
 	fs.BoolVarP(&a.Key, "key", "k", false, "用密钥登录：私钥取清单第 5 列，其次配置 account.key")
 	fs.BoolVar(&a.GenKey, "gen-key", false, "生成随机主密钥并持久化到 SSHFLEET_KEY")
 	fs.BoolVar(&a.KeyStatus, "key-status", false, "查看主密钥状态：两处来源、指纹、是否一致与下一步")
@@ -243,6 +265,9 @@ func Parse(cfg *config.Config, version string, raw []string) (*Args, error) {
 	default:
 		a.Sudo = cfg.Execution.Sudo
 	}
+
+	// 匹配口径取自配置（[interactive]）：执行侧从 Args 取，不再回头读配置
+	a.Match = ssh.MatchOptions{Regex: cfg.Interactive.Regex, CaseSensitive: cfg.Interactive.CaseSensitive}
 
 	// 路径参数：中间不能含空格；再做字符串层规范化（顺序与旧版一致）
 	for _, val := range []*string{&a.Script, &a.CsvFile, &a.Upload, &a.Path, &a.Download} {
@@ -389,6 +414,7 @@ func helpEntries(cfg *config.Config) []helpEntry {
 		opt("", "--sudo", sudoTag, "这次以 root 身份执行"),
 		opt("", "--no-sudo", "", noSudoDesc),
 		opt("", "--yes", "", "跳过所有确认直接执行（自动化用，用它之前先手动跑通一次）"),
+		opt("-a", "--answer", "", "代填：看到触发词就自动填内容（值形如「代填内容,触发词,触发词」），也可给 CSV 文件的路径（每行一条）"),
 		opt("", "--no-bash", "", "命令模式：不套 bash，直接执行原始命令"),
 		opt("-t", "--timeout", fmt.Sprintf("[默认: %d/%d]", cfg.Execution.TimeoutExecute, cfg.Execution.TimeoutTransfer), "命令跑完、文件传完的最长等待（秒）"),
 		opt("-T", "--connect-timeout", fmt.Sprintf("[默认: %d]", cfg.Execution.TimeoutConnect), "连上服务器的最长等待（秒）"),
@@ -478,6 +504,7 @@ func usageText(cfg *config.Config, version string, width int) string {
 	examples := [][2]string{
 		{"执行命令:", fmt.Sprintf("%s -f nodes.csv -c \"ls -l\"", name)},
 		{"执行脚本:", fmt.Sprintf("%s -f nodes.csv -s deploy.sh", name)},
+		{"代填执行:", fmt.Sprintf("%s -f nodes.csv -s deploy.sh -a \"1,请选择架构\"", name)},
 		{"上传文件:", fmt.Sprintf("%s -f nodes.csv -u ./dist/app -p /opt/app/", name)},
 		{"下载文件:", fmt.Sprintf("%s -f nodes.csv -d /var/log/app -p ./logs/", name)},
 		{"用密钥登录:", fmt.Sprintf("%s -f nodes.csv -c \"uptime\" -k", name)},

@@ -139,7 +139,9 @@ func PrintStatistics(out io.Writer, stats *result.Stats, kw *result.Keywords, sh
 	if len(stats.SortedFailCategories) > 0 {
 		var known, fallback []string
 		for _, c := range stats.SortedFailCategories {
-			item := fmt.Sprintf("%s%s：%s%d", ansiYellow, c.Category, ansiReset, c.Count)
+			// `分类名 ×5`：× 紧贴数字，一眼看出是"个数"——避免与分类名内嵌的数字
+			//（如「执行失败(退出码1)」）混淆
+			item := fmt.Sprintf("%s%s ×%s%d", ansiYellow, c.Category, ansiReset, c.Count)
 			if result.IsFallbackCategory(c.Category, kw) {
 				fallback = append(fallback, item)
 			} else {

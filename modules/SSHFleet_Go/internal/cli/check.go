@@ -120,6 +120,7 @@ func CheckArguments(a *Args) error {
 	}
 
 	// -s
+	var scriptText []byte // -a 的长度检查要用同一份正文算下发行，不再读一次文件
 	if a.Script != "" {
 		if info, err := os.Stat(a.Script); err == nil && info.IsDir() {
 			return fmt.Errorf("-s 参数指定的路径是目录，不是脚本文件：%s\n提示：请指向一个 .sh 或 .py 文件", a.Script)
@@ -141,6 +142,12 @@ func CheckArguments(a *Args) error {
 			return fmt.Errorf("%s 不是 UTF-8 编码\n提示：请把脚本转成 UTF-8 后再执行", a.Script)
 		}
 		// 脚本内容里的 CRLF 不改写本地文件：上传时在内存内转换。
+		scriptText = data
+	}
+
+	// -a（代填）：来源判定、解析、门控、互斥与长度检查都在这里做完
+	if err := checkAnswer(a, scriptText); err != nil {
+		return err
 	}
 
 	// -f

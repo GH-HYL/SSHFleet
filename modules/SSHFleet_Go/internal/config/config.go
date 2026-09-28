@@ -65,6 +65,12 @@ type Paths struct {
 	ResultsXlsx       string `toml:"results_xlsx"`
 }
 
+// Interactive 远端交互代填的匹配口径。两个开关同时管触发词与中止词。
+type Interactive struct {
+	Regex         bool `toml:"regex"`
+	CaseSensitive bool `toml:"case_sensitive"`
+}
+
 // Upload 上传并发策略的三个阈值（单位字节）。
 type Upload struct {
 	SmallFile      int `toml:"small_file"`
@@ -74,11 +80,12 @@ type Upload struct {
 
 // Config 配置文件全集。
 type Config struct {
-	Account    Account    `toml:"account"`
-	Credential Credential `toml:"credential"`
-	Execution  Execution  `toml:"execution"`
-	Enable     Enable     `toml:"enable"`
-	Upload     Upload     `toml:"upload"`
+	Account     Account     `toml:"account"`
+	Credential  Credential  `toml:"credential"`
+	Execution   Execution   `toml:"execution"`
+	Enable      Enable      `toml:"enable"`
+	Interactive Interactive `toml:"interactive"`
+	Upload      Upload      `toml:"upload"`
 }
 
 // BuiltinPaths 产物路径与文件名的内置取值（用户不可配）。
@@ -162,6 +169,8 @@ func validate(cfg *Config, md toml.MetaData) error {
 		{"enable.output_to_xlsx", definedStr(md, "enable", "output_to_xlsx")},
 		{"enable.results_to_xlsx", definedStr(md, "enable", "results_to_xlsx")},
 		{"enable.show_category_tips", definedStr(md, "enable", "show_category_tips")},
+		{"interactive.regex", definedStr(md, "interactive", "regex")},
+		{"interactive.case_sensitive", definedStr(md, "interactive", "case_sensitive")},
 		{"upload.small_file", definedStr(md, "upload", "small_file")},
 		{"upload.large_file", definedStr(md, "upload", "large_file")},
 		{"upload.medium_parallel", definedStr(md, "upload", "medium_parallel")},

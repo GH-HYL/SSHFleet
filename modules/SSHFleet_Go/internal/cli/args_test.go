@@ -90,15 +90,15 @@ func optionEntryLines(text string) []string {
 	return out
 }
 
-// helpTitleLines 取组标题行（既不空、也不是选项行的那些）。
+// helpTitleLines 取组标题行（既不空、也不是选项行、也不是折行续行）。
+// 续行的缩进与选项行不同（落在说明列内，比组标题深），故复用 isTitleLine 的判据。
 func helpTitleLines(text string) []string {
 	var out []string
 	for _, ln := range optionsLines(text) {
-		t := strings.TrimSpace(ln)
-		if t == "" || strings.HasPrefix(t, "-") {
+		if !isTitleLine(ln) {
 			continue
 		}
-		out = append(out, t)
+		out = append(out, strings.TrimSpace(ln))
 	}
 	return out
 }
@@ -403,9 +403,21 @@ func TestSummaryMatchesArgparseNamespace(t *testing.T) {
 	a := &Args{Command: "who -b", CsvFile: "nodes.csv", Remark: "v2_cmd"}
 	got := a.Summary()
 	want := "Namespace(c='who -b', s='', u='', d='', f='nodes.csv', p='', sudo=False, " +
-		"t=None, T=None, n=None, r='v2_cmd', no_bash=False, yes=False, k=False)"
+		"t=None, T=None, n=None, r='v2_cmd', no_bash=False, yes=False, k=False, answer=[])"
 	if got != want {
 		t.Fatalf("解析结果格式不对\n实际：%s\n应为：%s", got, want)
+	}
+}
+
+// -a 在日志里如实报出：给了几条就报几条（值原文），没给是空列表。
+func TestSummaryAnswerField(t *testing.T) {
+	a := &Args{Command: "pwd"}
+	if got := a.Summary(); !strings.Contains(got, "answer=[]") {
+		t.Fatalf("没给 -a 时应报空列表，实际：%s", got)
+	}
+	a = &Args{Command: "pwd", Answer: []string{"1,请选择架构", "2,包格式"}}
+	if got := a.Summary(); !strings.Contains(got, "answer=['1,请选择架构', '2,包格式']") {
+		t.Fatalf("应报出 -a 的原始写法，实际：%s", got)
 	}
 }
 

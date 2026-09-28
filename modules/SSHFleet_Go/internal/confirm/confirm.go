@@ -111,6 +111,7 @@ func buildInfoTable(args *cli.Args, nodes *nodelist.Nodes, allParallel bool) [][
 	case args.Download != "":
 		t = append(t, [2]string{"执行模式", "下载模式"}, [2]string{"远程路径", args.Download}, [2]string{"本地路径", args.Path}, [2]string{"", ""})
 	}
+	t = append(t, answerRows(args)...)
 	t = append(t,
 		[2]string{"节点清单", common.MaskInlineListIf(args.CsvFile)},
 		[2]string{"节点数量", fmt.Sprintf("%d", nodes.Len())},
@@ -132,6 +133,16 @@ func buildInfoTable(args *cli.Args, nodes *nodelist.Nodes, allParallel bool) [][
 		t = append(t, [2]string{"备注", strings.TrimSpace(args.Remark)})
 	}
 	return t
+}
+
+// answerRows 参数屏里的代填行：每条一行，含代填内容与它的全部触发词（顺序同命令行）。
+// 代填会直接改远端行为，按下确认之前得看得见这次配了什么。
+func answerRows(args *cli.Args) [][2]string {
+	rows := make([][2]string, 0, len(args.Answers))
+	for i, entry := range args.Answers {
+		rows = append(rows, [2]string{fmt.Sprintf("代填 %d", i+1), entry.Describe()})
+	}
+	return rows
 }
 
 // concurrentText 并发数的显示文案：不指定 -n 时说明这是"全部并行"。
