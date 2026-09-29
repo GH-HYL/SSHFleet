@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"sshfleet/internal/ssh"
+	"sshfleet/internal/verdict"
 )
 
 // emitInterval 聚合快照的渲染节流间隔（各节点自身进度已按 500ms 节流，
@@ -108,7 +109,7 @@ func (ag *Aggregator) OnResult(r ssh.Result) {
 	node.FailedFiles = r.FailedFiles
 
 	ag.completed++
-	if r.ExitCode != nil && *r.ExitCode == 0 {
+	if r.Verdict == verdict.Success {
 		ag.succeeded++
 	} else {
 		ag.failed++

@@ -13,6 +13,7 @@ import (
 	"sshfleet/internal/config"
 	"sshfleet/internal/result"
 	"sshfleet/internal/ssh"
+	"sshfleet/internal/verdict"
 )
 
 // DisplayCommand 把 argv（含程序名）还原成能**照抄重跑**的一条命令行。
@@ -32,7 +33,7 @@ func DisplayCommand(argv []string) string {
 }
 
 // WriteReport 生成 <归档目录>/<paths.report>。kw 用来取分类的提示语（配置里维护）。
-func WriteReport(archiveDir string, stats *result.Stats, a *cli.Args, cfg *config.Config, argv []string, kw *result.Keywords) error {
+func WriteReport(archiveDir string, stats *result.Stats, a *cli.Args, cfg *config.Config, argv []string, kw *verdict.Keywords) error {
 	var b strings.Builder
 
 	b.WriteString("=============================执行结果统计报告=============================\n")

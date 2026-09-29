@@ -25,7 +25,7 @@ const tmpRoot = "/tmp/.SSHFleet_tmp/"
 // （`-u` 输入后即可知，无需连服务器），这里只把它写进 Output 明细留痕（spec D51）。
 func (c *Client) UploadFiles(ctx context.Context, files []LocalFile, skipped []string, remotePath string, useSudo bool, seq int, onProgress func(Progress)) *Result {
 	result := c.newResult(seq)
-	defer c.applyBanner(result) // 服务端提示并入报错原文（ADR-0005）
+	defer c.captureBanner(result) // 服务端提示无条件写独立字段（D34）
 	result.TotalFiles = len(files)
 
 	if !c.connectFor(ctx, result) {
@@ -95,6 +95,7 @@ func (c *Client) UploadFiles(ctx context.Context, files []LocalFile, skipped []s
 		select {
 		case <-ctx.Done():
 			result.Error = strPtr("上传被取消")
+			result.Canceled = true
 			result.SuccessFiles, result.FailedFiles = success, failed
 			result.TotalBytes, result.ExecCostTime = uploadedBytes, costTotal
 			result.Output = buildTransferOutput(len(files), success, failed, lines)
@@ -164,10 +165,7 @@ func (c *Client) UploadFiles(ctx context.Context, files []LocalFile, skipped []s
 	}
 
 	result.Output = buildTransferOutput(len(files), success, failed, lines)
-	// 退出码语义：传输阶段不是命令执行，失败时不设退出码；仅全部成功置 0
-	if failed == 0 {
-		result.ExitCode = intPtr(0)
-	}
+	// 传输不是命令执行：不写任何退出码，成败由结果判定按 FailedFiles 等事实给
 	result.ExecCostTime = costTotal
 	result.TotalBytes = uploadedBytes
 	result.TotalFiles = len(files)
@@ -180,7 +178,7 @@ func (c *Client) UploadFiles(ctx context.Context, files []LocalFile, skipped []s
 // 目录模式下按 IP 建子目录、保留远程相对路径；符号链接跳过不计失败。
 func (c *Client) DownloadFiles(ctx context.Context, remotePath, localPath string, useSudo bool, seq int, onProgress func(Progress)) *Result {
 	result := c.newResult(seq)
-	defer c.applyBanner(result) // 服务端提示并入报错原文（ADR-0005）
+	defer c.captureBanner(result) // 服务端提示无条件写独立字段（D34）
 
 	if !c.connectFor(ctx, result) {
 		return result
@@ -202,7 +200,9 @@ func (c *Client) DownloadFiles(ctx context.Context, remotePath, localPath string
 		checkCmd = fmt.Sprintf("sudo test -e '%s'", escapeShellArg(remotePath))
 	}
 	if err := c.runCommand(checkCmd); err != nil {
-		result.ExitCode = extractExitCode(err)
+		// 预检查是中间步骤（D30）：它自己的退出码进 Steps，不顶成结果退出码——
+		// 判定据此走第一组、按报错原文归类（D27 消掉第二组同名补丁的根据就在这）
+		result.Steps = append(result.Steps, StepResult{Name: "test -e", ExitCode: extractExitCode(err)})
 		result.Error = strPtr(fmt.Sprintf("远程路径不存在: %s", remotePath))
 		return result
 	}
@@ -244,7 +244,8 @@ func (c *Client) DownloadFiles(ctx context.Context, remotePath, localPath string
 		}
 		output, err := c.runCommandCapture(findCmd)
 		if err != nil {
-			result.ExitCode = extractExitCode(err)
+			// 枚举也是中间步骤：退出码进 Steps，理由同上
+			result.Steps = append(result.Steps, StepResult{Name: "find", ExitCode: extractExitCode(err)})
 			result.Error = strPtr(fmt.Sprintf("获取远程文件列表失败: %v", err))
 			return result
 		}
@@ -304,6 +305,7 @@ func (c *Client) DownloadFiles(ctx context.Context, remotePath, localPath string
 		select {
 		case <-ctx.Done():
 			result.Error = strPtr("下载被取消")
+			result.Canceled = true
 			result.SuccessFiles, result.FailedFiles = success, failed
 			result.TotalBytes, result.TotalFiles, result.ExecCostTime = downloadedBytes, totalFiles, costTotal
 			result.Output = buildTransferOutput(totalFiles, success, failed, lines)
@@ -357,10 +359,8 @@ func (c *Client) DownloadFiles(ctx context.Context, remotePath, localPath string
 	}
 
 	result.Output = buildTransferOutput(totalFiles, success, failed, lines)
-	// 全传输成功 = 至少成功 1 个文件且 0 失败；「一个都没传」的情况已在枚举阶段拦下
-	if success > 0 && failed == 0 {
-		result.ExitCode = intPtr(0)
-	}
+	// 传输不是命令执行：不写任何退出码；「至少成功 1 个且 0 失败才算成功」由结果判定按
+	// SuccessFiles / FailedFiles 给（「一个都没传」的情况已在枚举阶段拦下）
 	result.ExecCostTime = costTotal
 	result.TotalBytes = downloadedBytes
 	result.TotalFiles = totalFiles

@@ -1,5 +1,8 @@
 # 错误分类回归语料（自旧工程 test/test_error_classification.py 程序化抽取，含变量引用解析）
-# 字段语义同 classify 的入参；expected 为期望分类名；exit_code 省略即 nil
+# 字段语义：执行侧写下的事实（结果结构体的事实区子集 + 模式）；expected 为期望分类名；
+# exit_code 省略即 nil（2026-09-29 起执行侧不再写结果退出码，exit_code 表达的是目的命令
+# 的 CommandExitCode；传输模式的用例不再带 exit_code——传输没有命令）。
+# banner = 认证阶段服务端提示原文（独立字段，判定时并入匹配文本）。
 
 [[cases]]
 name = "下载传输失败 permission denied"
@@ -11,8 +14,7 @@ failed_files = 1
 expected = "权限不足"
 
 [[cases]]
-name = "预处理失败 exit_code=1（预检的退出码 1 进了结果，按报错原文归类）"
-exit_code = 1
+name = "预处理失败（预检退出码进 Steps，结果退出码为空，按报错原文归类）"
 error = "远程路径不存在: /var/log/x"
 output = ""
 mode = "download"
@@ -21,8 +23,7 @@ failed_files = 0
 expected = "远程路径不存在"
 
 [[cases]]
-name = "传输成功 exit_code=0"
-exit_code = 0
+name = "传输成功"
 error = ""
 output = "total_files=1, success_files=1, failed_files=0"
 mode = "download"
@@ -187,7 +188,6 @@ expected = "远端没有文件"
 
 [[cases]]
 name = "成功+跳过 → 传输成功"
-exit_code = 0
 error = ""
 output = ""
 mode = "download"
@@ -215,7 +215,8 @@ expected = "身份验证失败"
 
 # ---- 2026-09-16 新增：会话被拒与认证阶段被拒（判据见 config/keywords_error.conf 第二块）----
 # 会话被拒时命令根本没执行，退出码来自拒绝方（nologin / sudo / sshd 会话）：命中判据即
-# 按原因分类，退出码字段本身照旧保留（ADR-0004）。
+# 按原因分类，退出码字段本身照旧保留（原 ADR-0004 口径；2026-09-29 起选组依据改为
+# 「目的命令有没有给出退出码」，结论不变）。
 
 [[cases]]
 name = "密码过期（会话被拒，退出码 1）"
@@ -228,8 +229,9 @@ failed_files = 0
 expected = "密码过期"
 
 [[cases]]
-name = "密码过期（认证阶段的服务端提示并入 error）"
-error = "建立连接失败 - ssh: handshake failed: EOF\nYou are required to change your password immediately (administrator enforced)."
+name = "密码过期（认证阶段的服务端提示独立成字段）"
+banner = "You are required to change your password immediately (administrator enforced)."
+error = "建立连接失败 - ssh: handshake failed: EOF"
 output = ""
 mode = "execute"
 success_files = 0
@@ -238,7 +240,8 @@ expected = "密码过期"
 
 [[cases]]
 name = "账号过期（服务端提示）"
-error = "建立连接失败 - ssh: handshake failed: EOF\nYour account has expired; please contact your system administrator."
+banner = "Your account has expired; please contact your system administrator."
+error = "建立连接失败 - ssh: handshake failed: EOF"
 output = ""
 mode = "execute"
 success_files = 0

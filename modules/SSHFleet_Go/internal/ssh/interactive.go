@@ -116,12 +116,16 @@ func DescribeInteractive(a DescribeInteractiveInput) string {
 
 // RunInteractive 执行命令/脚本，并按代填表自动回应远端的索要输入。
 //
-// 与 RunCommand 复用同一套收尾：newResult / connectFor / applyBanner / lockedBuffer /
+// 与 RunCommand 复用同一套收尾：newResult / connectFor / captureBanner / lockedBuffer /
 // trimOuterBlankLines / extractExitCode；超时与中断的契约也照抄（超时返回
 // 「命令执行超时(%v)」、外部取消返回 parent.Err()）。
+//
+// 只写事实字段，不写结论：未命中进 AnswersMissed、中止词原文进 AbortLine、
+// 表已空仍超时置 AnswersExhausted——成败与分类由结果判定产生，这里不再抹退出码、
+// 不再拼"触发词未命中：…"之类的结论文案。
 func (c *Client) RunInteractive(ctx context.Context, in InteractiveInput, seq int) *Result {
 	result := c.newResult(seq)
-	defer c.applyBanner(result)
+	defer c.captureBanner(result)
 
 	if !c.connectFor(ctx, result) {
 		return result
@@ -169,38 +173,35 @@ func (c *Client) RunInteractive(ctx context.Context, in InteractiveInput, seq in
 	hook.Flush()
 	result.Output = trimOuterBlankLines(out.String())
 
+	// 事实：会话起没起、怎么收的场、目的命令的退出码
+	result.SessionBegun = outcome.begun
+	result.TimedOut = outcome.timedOut
+	result.Canceled = outcome.canceled
 	switch {
-	case outcome.err != nil:
+	case outcome.err == nil:
+		code := 0
+		result.CommandExitCode = &code
+	case !outcome.timedOut && !outcome.canceled:
 		if code := extractExitCode(outcome.err); code != nil {
-			result.ExitCode = code
+			result.CommandExitCode = code
 		} else {
 			result.Error = strPtr(outcome.err.Error())
 		}
 	default:
-		code := 0
-		result.ExitCode = &code
+		result.Error = strPtr(outcome.err.Error())
 	}
 
-	// 收尾静态判定：命令已开始、没被中断、也没被中止词终止时，仍有代填没送出即为未命中。
-	// 中断有自己的分类（任务已取消），中止词命中过的也不判——否则即时归因会被兜底分类盖掉。
+	// 事实：代填的收尾三态。中止词优先（命中过的场次不判未命中，否则即时归因会被盖掉）；
+	// 中断有自己的去处（任务已取消），也不判未命中。
 	missed := hook.pending()
-	if outcome.begun && !outcome.canceled && outcome.abortLine == "" {
-		switch {
-		case len(missed) > 0:
-			result.Error = strPtr(missText(in.Answers, missed))
-			result.ExitCode = nil
-		case outcome.timedOut:
-			// 表已送空仍超时：工具分不出「脚本卡在没配触发词的提示上」与「任务本身耗时长」，
-			// 但「表已空」是确定的事实——补进超时文案，判据文件另有一条分类接住它。
-			result.Error = strPtr(fmt.Sprintf("%s；本次代填 %d 条已全部送出", outcome.err, len(in.Answers)))
-		}
-	}
-
-	// 中止词命中的节点：error 写命中的原文行、退出码置 nil → 分类「密码过期」。
-	// 排在未命中判定之后，两条不会同时成立（上面已排除 abortLine 非空的情形）。
+	result.AnswersMissed = missed
 	if outcome.abortLine != "" {
-		result.Error = strPtr(outcome.abortLine)
-		result.ExitCode = nil
+		result.AbortLine = outcome.abortLine
+	} else if outcome.begun && !outcome.canceled && len(missed) == 0 &&
+		outcome.timedOut && len(in.Answers) > 0 {
+		// 表已送空仍超时：工具分不出「脚本卡在没配触发词的提示上」与「任务本身耗时长」，
+		// 但「表已空」是确定的事实——判定按它给「代填用尽后超时」。
+		result.AnswersExhausted = true
 	}
 	return result
 }
@@ -282,19 +283,6 @@ func (c *Client) driveSession(parent context.Context, d sessionDriver, command s
 // runInteractiveSession 代填的会话驱动：把写侧钩子接上共用驱动。
 func (c *Client) runInteractiveSession(parent context.Context, session *ssh.Session, hook *outputHook, send chan<- string, command string) interactiveOutcome {
 	return c.driveSession(parent, sessionDriver{session: session, events: hook.events, send: send}, command)
-}
-
-// missText 触发词未命中的收尾文案：带未命中的序号与触发词原文——诊断时要看的就是它。
-// 脚本是顺序提问的，所以序号里最小的那个就是第一个出错点。
-func missText(answers []Answer, missed []int) string {
-	nums := make([]string, 0, len(missed))
-	words := make([]string, 0, len(missed))
-	for _, n := range missed {
-		nums = append(nums, strconv.Itoa(n))
-		words = append(words, `"`+strings.Join(answers[n-1].Triggers, "、")+`"`)
-	}
-	return fmt.Sprintf("触发词未命中：第 %s 条（%s）未匹配到任何输出",
-		strings.Join(nums, "、"), strings.Join(words, "、"))
 }
 
 // 写侧钩子发出的事件：命中一条代填该送的内容 / 中止词命中。

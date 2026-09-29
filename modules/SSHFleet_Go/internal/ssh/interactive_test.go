@@ -75,15 +75,8 @@ func TestOutputHookAbortWins(t *testing.T) {
 	}
 }
 
-// 未命中序号取自匹配器的待送出条目；文案与方向稿逐字一致。
-func TestMissText(t *testing.T) {
-	answers := []Answer{{Value: "1", Triggers: []string{"架构"}}, {Value: "2", Triggers: []string{"deb/rpm"}}}
-	got := missText(answers, []int{1, 2})
-	want := `触发词未命中：第 1、2 条（"架构"、"deb/rpm"）未匹配到任何输出`
-	if got != want {
-		t.Fatalf("未命中文案不对\n实际：%s\n应为：%s", got, want)
-	}
-}
+// （原 TestMissText 已随「未命中不再拼文案」一起删除：未命中现在是结构事实
+// AnswersMissed，成败与分类由结果判定产生，执行侧不再生成结论文案。）
 
 // 下发行形态：正文 base64 编入命令行、作内层解释器的 -c 参数，最外层只有一层单引号。
 func TestInteractiveCommandForm(t *testing.T) {

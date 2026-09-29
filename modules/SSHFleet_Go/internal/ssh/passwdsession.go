@@ -16,9 +16,6 @@ import (
 // 命令跑完 shell 自己退出，也不会留一个还在等输入的登录 shell。
 const passwdCommand = ":"
 
-// passwdNotExpired 整场没出现过期信号时的收尾文案（未过期机器）。
-const passwdNotExpired = "密码未过期，跳过改密"
-
 // 兜底文案：三种「拿不到远端原因」的形态共用「改密没有完成」这个前缀——判据文件按它
 // 一起归到「改密未完成」，tip 指的就是该往哪儿查。它们不是原因分类，是"原因没认出来"。
 const (
@@ -51,19 +48,12 @@ type PasswdInput struct {
 // 与代填交互分支复用同一套底层（PTY 尺寸、写侧钩子、Start + 事件循环、超时与中断契约），
 // 但**不带中止词**——「密码过期」那几个词在改密里是入场信号，带上中止词会在第 0 秒把
 // 自己的会话杀掉（方向与代填恰好相反）。
+//
+// 只写事实字段，不写结论：过期信号、早收场、超时中断都进各自的事实格；下发的 `:` 是
+// 中间步骤（D33），它的退出码进 Steps——成败与分类（含「密码未过期」）由结果判定产生。
 func (c *Client) RunPasswdChange(ctx context.Context, in PasswdInput, seq int) *Result {
 	result := c.newResult(seq)
-	// 服务端提示并入报错原文（ADR-0005），但**改密对话走起来之后就不并了**：
-	// banner 那句「You are required to change your password immediately」是改密的前提，
-	// 不是失败原因（它就是改密的入场信号）——混进 error 会让分类被「密码过期」抢走，
-	// 也把「报错原文」列占满（2026-09-29 实测）。会话没走起来的那些情形（账号过期、
-	// 登录被禁、连不上）banner 仍是唯一的原因来源，照旧并入。
-	var hook *passwdHook
-	defer func() {
-		if hook == nil || !hook.sawEnter() {
-			c.applyBanner(result)
-		}
-	}()
+	defer c.captureBanner(result) // 服务端提示无条件写独立字段（D34）；是否参与匹配由判定按模式决定
 
 	if !c.connectFor(ctx, result) {
 		return result
@@ -90,7 +80,7 @@ func (c *Client) RunPasswdChange(ctx context.Context, in PasswdInput, seq int) *
 	}
 
 	out := &lockedBuffer{}
-	hook = newPasswdHook(out, in, c.cfg.Password)
+	hook := newPasswdHook(out, in, c.cfg.Password)
 	session.Stdout = hook
 	session.Stderr = hook
 
@@ -113,40 +103,40 @@ func (c *Client) RunPasswdChange(ctx context.Context, in PasswdInput, seq int) *
 	note := scrubPasswdSecrets(hook.replyTail(), c.cfg.Password, in.NewPassword)
 	result.Output = scrubPasswdSecrets(trimOuterBlankLines(out.String()), c.cfg.Password, in.NewPassword)
 
-	// 早收场（远端重问）、卡住（收下密码后不回应）、超时：先判这三种，它们的退出码一律置 nil。
-	// 顺序要紧：超时同样在 outcome.err 上带一个错误值，而那个值只是「命令执行超时(60s)」，
-	// 先走下面的 switch 就会把远端说的原因盖掉（2026-09-29 实测踩到）。
-	if outcome.aborted || outcome.timedOut {
-		result.Error = strPtr(passwdNote(note, hook, outcome))
-		return result
+	// 事实：会话起没起、怎么收的场、改密对话走到哪一步。下发的 `:` 是中间步骤，
+	// 它的退出码进 Steps（D33）——CommandExitCode 恒为 nil，改密没有"目的命令"。
+	result.SessionBegun = outcome.begun
+	result.TimedOut = outcome.timedOut
+	result.Canceled = outcome.canceled
+	result.PasswdEarlyClose = outcome.aborted
+	result.EnterSignalSeen = hook.sawEnter()
+	switch {
+	case outcome.err == nil:
+		result.Steps = append(result.Steps, StepResult{Name: passwdCommand, ExitCode: intPtr(0)})
+	default:
+		if code := extractExitCode(outcome.err); code != nil {
+			// passwd 自己以非 0 收场：那个码只说明「没改成」，原因在它的输出里——
+			// 归 Steps 留痕，不顶成结果退出码（否则判定会给出「执行失败(退出码N)」，
+			// 把远端说的原因整个盖掉，2026-09-29 修）。
+			result.Steps = append(result.Steps, StepResult{Name: passwdCommand, ExitCode: code})
+		}
 	}
 
-	switch {
-	case outcome.err != nil:
+	// 失败原因（报错原文，不是结论）：远端当场说了原因就用它的原话，分类靠判据表；
+	// 超时 / 早收场与「passwd 非 0 收场」共用一份兜底文案。连接层 / 会话层的错误
+	//（连不上、会话建不起来、命令没能开始）没有可读的远端输出，保留原文。
+	// 顺序要紧：超时同样在 outcome.err 上带一个错误值，而那个值只是「命令执行超时(60s)」，
+	// 先走非超时分支就会把远端说的原因盖掉（2026-09-29 实测踩到）。
+	if outcome.aborted || outcome.timedOut {
+		result.Error = strPtr(passwdNote(note, hook, outcome))
+	} else if outcome.err != nil {
 		if code := extractExitCode(outcome.err); code != nil {
-			// passwd 自己以非 0 收场：那个码只说明「没改成」，原因在它的输出里，而
-			// 改密本就与退出码无关（下发的 `:` 是条空命令）。所以不保留退出码，统一
-			// 把原因写进 error，分类交给判据文件的关键词去分——留着退出码的话，工具
-			// 会按退出码给出「执行失败(退出码N)」，把远端说的原因整个盖掉（2026-09-29 修）。
 			result.Error = strPtr(passwdNote(note, hook, outcome))
 		} else {
 			// 连接层 / 会话层的错误（连不上、会话建不起来、命令没能开始）：没有可读的
 			// 远端输出，保留原文——盖成「改密没有完成」只会把真原因丢掉。
 			result.Error = strPtr(outcome.err.Error())
 		}
-		return result
-	default:
-		code := 0
-		result.ExitCode = &code
-	}
-
-	// 收尾判定：整场没出现过入场信号 = 这台机器不需要改密。
-	// 只在命令已下发、没被中断、且以退出码 0 正常收场时判——超时、连接失败、命令未能开始时
-	// 要保留真实原因，不能被这句话盖掉。
-	if !hook.sawEnter() && outcome.begun && !outcome.canceled &&
-		result.ExitCode != nil && *result.ExitCode == 0 {
-		result.Error = strPtr(passwdNotExpired)
-		result.ExitCode = nil
 	}
 	return result
 }
