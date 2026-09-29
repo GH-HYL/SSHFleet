@@ -288,7 +288,7 @@ func main() {
 		fatal("result", err)
 	}
 	// 改密专用配置：提示词表给执行侧认路，失败分类给判据表加在最前面
-	passwdCfg, err := config.LoadPasswdConfig(config.BuiltinPaths.Passwd)
+	passwdCfg, err := config.LoadPasswdConfig(config.BuiltinPaths.PasswdKeywords)
 	if err != nil {
 		fatal("config", err)
 	}

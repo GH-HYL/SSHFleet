@@ -22,7 +22,7 @@ func CheckConfigFiles() error {
 	for _, f := range []string{
 		config.BuiltinPaths.DangerousKeywords,
 		config.BuiltinPaths.ErrorKeywords,
-		config.BuiltinPaths.Passwd,
+		config.BuiltinPaths.PasswdKeywords,
 	} {
 		if _, err := os.Stat(f); err != nil {
 			missing = append(missing, f)

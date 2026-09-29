@@ -55,7 +55,7 @@ type Enable struct {
 type Paths struct {
 	ErrorKeywords     string `toml:"error_keywords"`
 	DangerousKeywords string `toml:"dangerous_keywords"`
-	Passwd            string `toml:"passwd"`
+	PasswdKeywords    string `toml:"passwd_keywords"`
 	Historys          string `toml:"history"`
 	Tool              string `toml:"tool"`
 	Exec              string `toml:"exec"`
@@ -93,7 +93,7 @@ type Config struct {
 var BuiltinPaths = Paths{
 	ErrorKeywords:     "./config/error_keywords.conf",
 	DangerousKeywords: "./config/dangerous_keywords.conf",
-	Passwd:            "./config/passwd.conf",
+	PasswdKeywords:    "./config/passwd_keywords.conf",
 	Historys:          "history",
 	Tool:              "SSHFleetTools.log",
 	Exec:              "SSHFleetExec.log",
