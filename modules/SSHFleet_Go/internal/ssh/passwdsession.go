@@ -22,8 +22,11 @@ const passwdNotExpired = "密码未过期，跳过改密"
 // 兜底文案：三种「拿不到远端原因」的形态共用「改密没有完成」这个前缀——判据文件按它
 // 一起归到「改密未完成」，tip 指的就是该往哪儿查。它们不是原因分类，是"原因没认出来"。
 const (
-	// passwdNoPrompt 一句都没喂出去：远端的提示措辞不在提示词表里。
+	// passwdNoPrompt 一句都没喂出去、也没等到点：远端的提示措辞不在提示词表里。
 	passwdNoPrompt = "改密没有完成：远端的提示没认出来（提示词表里没有那句话的措辞）"
+	// passwdQuiet 等到超时也一句都没喂出去：要么提示措辞不在表里，要么远端一直没出声
+	//（连接hang住、sshd 有去无回都算）。两种都拿不到远端的原因，只能都点出来。
+	passwdQuiet = "改密没有完成：等到超时也没喂出一句——远端的提示措辞不在提示词表里，或它一直没出声"
 	// passwdGaveUp 远端反复重问，工具的答案已经喂满。
 	passwdGaveUp = "改密没有完成：远端反复重问，工具的答案已经给完了"
 	// passwdStalled 收下密码后一直没回应——多半卡在读写密码文件上（2026-09-29 实测：
@@ -156,7 +159,10 @@ func (c *Client) RunPasswdChange(ctx context.Context, in PasswdInput, seq int) *
 // 往前找会捡到警告行与对话开场白，那些不是原因。
 func passwdNote(note string, hook *passwdHook, outcome interactiveOutcome) string {
 	if !hook.fedAny() {
-		return passwdNoPrompt // 一句都没喂出去：对话压根没起来，没有可读的原因
+		if outcome.timedOut {
+			return passwdQuiet // 等到点也没喂出去：措辞没认出来与远端没出声都混在这里
+		}
+		return passwdNoPrompt // 对话压根没起来，没有可读的原因
 	}
 	if reason := passwdReason(note); reason != "" {
 		return reason

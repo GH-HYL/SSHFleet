@@ -540,3 +540,24 @@ func TestSummaryKeepsRawValue(t *testing.T) {
 		t.Fatalf("命令应原样打印，实际：%s", got)
 	}
 }
+
+// 改密模式不传 -t 时取 timeout_execute 默认值：改密超时全靠 -t 兜底，缺了默认值
+// ExecTimeout 就是 0，会话刚建立即被本地计时掐断（2026-09-29 实测）。显式指定不覆盖。
+func TestParsePasswdModeDefaultsTimeout(t *testing.T) {
+	cfg := helpTestCfg()
+	args := []string{"-f", "172.28.118.49,22,root,pw", "--change-password", "N3wpw#2026"}
+	a, err := Parse(cfg, "test", args)
+	if err != nil {
+		t.Fatalf("Parse 报错：%v", err)
+	}
+	if a.Timeout != cfg.Execution.TimeoutExecute {
+		t.Fatalf("改密模式应取 timeout_execute 默认值：%d，实际：%d", cfg.Execution.TimeoutExecute, a.Timeout)
+	}
+	a, err = Parse(cfg, "test", append(args, "-t", "5"))
+	if err != nil {
+		t.Fatalf("Parse 报错：%v", err)
+	}
+	if a.Timeout != 5 {
+		t.Fatalf("显式 -t 不该被默认值覆盖：应为 5，实际：%d", a.Timeout)
+	}
+}

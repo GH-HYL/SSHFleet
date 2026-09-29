@@ -252,6 +252,12 @@ func Parse(cfg *config.Config, version string, raw []string) (*Args, error) {
 		if a.timeoutRaw == "" {
 			a.Timeout = cfg.Execution.TimeoutTransfer
 		}
+	case a.ChangePassword != "":
+		// 改密不传 -t 时按 timeout_execute 收场：超时是改密唯一的兜底（spec 第五节），
+		// 缺了它 ExecTimeout 为 0，会话刚建立就被本地计时掐断（2026-09-29 实测）。
+		if a.timeoutRaw == "" {
+			a.Timeout = cfg.Execution.TimeoutExecute
+		}
 	}
 	if a.connectTimeoutRaw == "" {
 		a.ConnectTimeout = cfg.Execution.TimeoutConnect
