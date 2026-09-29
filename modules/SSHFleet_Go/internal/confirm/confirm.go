@@ -110,6 +110,9 @@ func buildInfoTable(args *cli.Args, nodes *nodelist.Nodes, allParallel bool) [][
 		t = append(t, [2]string{"执行模式", "上传模式"}, [2]string{"本地路径", args.Upload}, [2]string{"远程路径", args.Path}, [2]string{"", ""})
 	case args.Download != "":
 		t = append(t, [2]string{"执行模式", "下载模式"}, [2]string{"远程路径", args.Download}, [2]string{"本地路径", args.Path}, [2]string{"", ""})
+	case args.ChangePassword != "":
+		// 新密码是明确知道身份的凭据：按下确认之前看得见形态，但只看得到脱敏形态
+		t = append(t, [2]string{"执行模式", "改密模式"}, [2]string{"新密码", common.MaskSecret(args.ChangePassword)}, [2]string{"", ""})
 	}
 	t = append(t, answerRows(args)...)
 	t = append(t,

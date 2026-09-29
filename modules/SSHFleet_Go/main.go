@@ -27,12 +27,13 @@ import (
 	"sshfleet/internal/nodelist"
 	"sshfleet/internal/output"
 	"sshfleet/internal/result"
+	"sshfleet/internal/ssh"
 )
 
 // 版本号：单一出处（显示在帮助信息首行下方，经 cli.Parse 传入 Usage）。
 // 与 CHANGELOG 顶部当天段落的段头**同一个号**——开段、抬号时在同一次提交里同步改，
 // 两处不一致即为错误。同一天的改动共用一个号，不因改动多而另起号。
-const appVersion = "7.0.0"
+const appVersion = "7.1.0"
 
 // versionWithBuildID 版本号拼上**构建标识**：git 短提交号（仓库内编译时由 go build
 // 自动注入 vcs.revision；工作区有未提交改动时加 -dirty）+ HEAD 提交时间。
@@ -263,6 +264,10 @@ func main() {
 	if err != nil {
 		fatal("result", err)
 	}
+	prompts, err := ssh.LoadPasswdPrompts(config.BuiltinPaths.PasswdPrompts)
+	if err != nil {
+		fatal("ssh", err)
+	}
 	dangerReport, err := dangercheck.Check(args, dangerRules)
 	if err != nil {
 		fatal("dangercheck", fmt.Errorf("危险关键词内容检查未通过\n原因：%v", err))
@@ -355,10 +360,16 @@ func main() {
 	// （呈现器只做呈现，不控制生命周期——主干与退出权仍在本函数手里。）
 	reporter := output.NewReporter(execLog, outputFile, mode, nodes.Len(), errorKeywords, execStart, in.Disinteractive)
 	// batch 的运行期日志（开始执行任务）写执行期日志——此刻已轮转，不再进工具日志
-	// 交互分支（-a）的中止词：关键词取判据文件「密码过期」分类（两块并集，见 CONTEXT）。
+	// 「密码过期」分类的关键词，两条路共用：代填拿它当中止词，改密拿它当入场信号。
 	// 在这里抽出来递给 batch——那层不能反向引用 result（result 依赖它）。
-	abortKeywords := errorKeywords.KeywordsOf("密码过期")
-	execResults, err := batch.Run(execCtx, args, cfg, nodes, execLog, abortKeywords, batch.Hooks{
+	expiredKeywords := errorKeywords.KeywordsOf("密码过期")
+	// 入场信号为空 = 整场不喂、每台机器都干等到超时：这种配置要在开工前拦住
+	if args.ChangePassword != "" && len(expiredKeywords) == 0 {
+		fatal("ssh", fmt.Errorf("改密缺少入场信号\n"+
+			"原因：判据文件里「密码过期」分类没有关键词，工具认不出哪台机器要改密\n"+
+			"提示：该分类在 config/error_keywords.conf，别删它"))
+	}
+	execResults, err := batch.Run(execCtx, args, cfg, nodes, execLog, prompts, expiredKeywords, batch.Hooks{
 		OnNotice:   reporter.Notice,
 		OnProgress: reporter.Progress,
 		OnResult:   reporter.Result,

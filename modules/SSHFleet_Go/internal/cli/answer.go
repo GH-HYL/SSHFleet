@@ -133,7 +133,7 @@ func checkAnswerExclusive(a *Args) error {
 	switch {
 	case a.NoBash:
 		return fmt.Errorf("-a 不能和 --no-bash 一起用\n" +
-			"原因：--no-bash 要求命令原样下发，代填要接管会话，同一个会话满足不了两种要求")
+			"--no-bash 要求命令原样下发，代填要接管会话，同一个会话满足不了两种要求")
 	case a.Upload != "":
 		return fmt.Errorf("-a 不能和 -u 一起用\n提示：代填是给命令、脚本的交互用的，上传时没有命令在跑")
 	case a.Download != "":

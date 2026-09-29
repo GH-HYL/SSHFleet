@@ -16,18 +16,22 @@ import (
 )
 
 // CheckConfigFiles 检查批量执行所需的规则文件是否齐全。
-// 配置文件本体已在主干第 1 步加载（缺失即报错），此处只查两份规则文件。
+// 配置文件本体已在主干第 1 步加载（缺失即报错），此处只查三份规则文件。
 func CheckConfigFiles() error {
 	var missing []string
-	for _, f := range []string{config.BuiltinPaths.DangerousKeywords, config.BuiltinPaths.ErrorKeywords} {
+	for _, f := range []string{
+		config.BuiltinPaths.DangerousKeywords,
+		config.BuiltinPaths.ErrorKeywords,
+		config.BuiltinPaths.PasswdPrompts,
+	} {
 		if _, err := os.Stat(f); err != nil {
 			missing = append(missing, f)
 		}
 	}
 	if len(missing) > 0 {
-		// 标签不能用「配置文件缺失」——查的是两份规则文件，用户会跑去翻配置。
+		// 标签不能用「配置文件缺失」——查的是规则文件，用户会跑去翻配置。
 		// 半角冒号也一并改全角（同一份输出里的标点要一致）。
-		return fmt.Errorf("规则文件缺失：%s\n提示：这两份文件随发布包提供，不要删；从压缩包里重新解压一份覆盖回 config/ 即可",
+		return fmt.Errorf("规则文件缺失：%s\n提示：这几份文件随发布包提供，不要删；从压缩包里重新解压一份覆盖回 config/ 即可",
 			strings.Join(missing, "、"))
 	}
 	return nil
@@ -42,19 +46,24 @@ func CheckArguments(a *Args) error {
 	// 执行模式互斥（手写校验）。零个与多个分开说——"互斥、只能指定一个"
 	// 对一个都没给是误导：他要做的是"选一个"，不是"删掉多余的"。
 	modeCount := 0
-	for _, v := range []string{a.Command, a.Script, a.Upload, a.Download} {
+	for _, v := range []string{a.Command, a.Script, a.Upload, a.Download, a.ChangePassword} {
 		if v != "" {
 			modeCount++
 		}
 	}
 	if modeCount == 0 {
 		return fmt.Errorf(
-			"执行模式参数：-c、-s、-u、-d 互斥，只能指定一个\n" +
-				"提示：你没有指定任何模式，请从下面四个里选一个：\n" +
-				"      -c 执行命令   -s 执行脚本   -u 上传文件   -d 下载文件")
+			"执行模式参数：-c、-s、-u、-d、--change-password 互斥，只能指定一个\n" +
+				"提示：你没有指定任何模式，请从下面五个里选一个：\n" +
+				"      -c 执行命令   -s 执行脚本   -u 上传文件   -d 下载文件   --change-password 批量改密")
 	}
 	if modeCount > 1 {
-		return fmt.Errorf("执行模式参数：-c、-s、-u、-d 互斥，只能指定一个\n提示：一次只能做一件事，请只保留一个模式")
+		return fmt.Errorf("执行模式参数：-c、-s、-u、-d、--change-password 互斥，只能指定一个\n提示：一次只能做一件事，请只保留一个模式")
+	}
+
+	// --change-password：互斥与取值（放这里，早于下面那些"只为某个模式服务"的校验）
+	if err := checkPasswdChange(a); err != nil {
+		return err
 	}
 
 	// -p
@@ -214,7 +223,7 @@ func keyTools(a *Args) []string {
 // `--yes` 不算：它对密钥管理命令也有意义（跳过覆盖确认），且不指向任何节点。
 func batchParamsGiven(a *Args) []string {
 	var given []string
-	for _, m := range [][2]string{{"-c", a.Command}, {"-s", a.Script}, {"-u", a.Upload}, {"-d", a.Download}} {
+	for _, m := range [][2]string{{"-c", a.Command}, {"-s", a.Script}, {"-u", a.Upload}, {"-d", a.Download}, {"--change-password", a.ChangePassword}} {
 		if m[1] != "" {
 			given = append(given, m[0])
 		}

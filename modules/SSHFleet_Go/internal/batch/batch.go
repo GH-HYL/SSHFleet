@@ -39,6 +39,9 @@ type task struct {
 
 	// interactive 非空即走交互分支（给了 -a）：正文经命令行承载、会话 stdin 让给代填
 	interactive *ssh.InteractiveInput
+
+	// passwd 非空即走改密分支（给了 --change-password）：会话里按提示词表喂入
+	passwd *ssh.PasswdInput
 }
 
 // RenderFunc 进度渲染函数（由 main 从 internal/output 注入）。
@@ -56,10 +59,12 @@ type Hooks struct {
 // Run 主干第 8 步入口：构建任务 → 并发执行 → 聚合进度 → 返回结果。
 // logger 是执行期日志（此时工具日志已轮转至此），运行期事件写入这里而非工具日志。
 //
-// abortKeywords 是交互分支（-a）的中止词：关键词取自错误分类判据文件「密码过期」分类，
-// 由 main 抽出后传下来——本包不能反向引用 result（result 依赖本包），只能收一串关键词。
-func Run(ctx context.Context, a *cli.Args, cfg *config.Config, nodes *nodelist.Nodes, logger *log.Logger, abortKeywords []string, hooks Hooks) (*Results, error) {
-	tasks, notices, err := buildTasks(a, nodes, abortKeywords)
+// prompts 是改密的提示词表（用户可调的规则文件，由 main 加载后传下来）。
+// expiredKeywords 是判据文件「密码过期」分类的关键词，两条路都在用它：代填把它当**中止词**
+// （命中即终止会话），改密把它当**入场信号**（命中才开始喂）。由 main 抽出后传下来——
+// 本包不能反向引用 result（result 依赖本包），只能收一串关键词。
+func Run(ctx context.Context, a *cli.Args, cfg *config.Config, nodes *nodelist.Nodes, logger *log.Logger, prompts *ssh.PasswdPrompts, expiredKeywords []string, hooks Hooks) (*Results, error) {
+	tasks, notices, err := buildTasks(a, nodes, prompts, expiredKeywords)
 	if err != nil {
 		return nil, err
 	}
@@ -111,6 +116,8 @@ func Run(ctx context.Context, a *cli.Args, cfg *config.Config, nodes *nodelist.N
 			res = client.UploadFiles(ctx, t.files, t.skipped, t.remote, t.useSudo, t.seq, onProgress)
 		case a.Download != "":
 			res = client.DownloadFiles(ctx, t.remote, t.local, t.useSudo, t.seq, onProgress)
+		case t.passwd != nil:
+			res = client.RunPasswdChange(ctx, *t.passwd, t.seq)
 		case t.interactive != nil:
 			res = client.RunInteractive(ctx, *t.interactive, t.seq)
 		default:
@@ -127,11 +134,24 @@ func Run(ctx context.Context, a *cli.Args, cfg *config.Config, nodes *nodelist.N
 
 // buildTasks 按模式构建任务；需要读取本地资源的错误在此一次性暴露（尚未建连）。
 // 第二个返回值是采集期提示（如上传源中被过滤的软链接数量与名称）。
-func buildTasks(a *cli.Args, nodes *nodelist.Nodes, abortKeywords []string) ([]*task, []string, error) {
+func buildTasks(a *cli.Args, nodes *nodelist.Nodes, prompts *ssh.PasswdPrompts, expiredKeywords []string) ([]*task, []string, error) {
 	tasks := make([]*task, 0, nodes.Len())
 	var notices []string
 
 	switch {
+	case a.ChangePassword != "":
+		// 改密：全场一份入场值——新密码全局同一个，提示词表与匹配口径也全场同一套。
+		// 当前密码不在这里传：它就是每台机器自己的登录密码，客户端配置里已经有了。
+		// 过期信号在这里是入场信号，不是中止词（改密会话不带中止词）。
+		in := ssh.PasswdInput{
+			NewPassword:   a.NewPassword,
+			Prompts:       prompts,
+			EnterKeywords: expiredKeywords,
+			Match:         a.Match,
+		}
+		for i, node := range nodes.Items {
+			tasks = append(tasks, &task{seq: i, node: node, passwd: &in})
+		}
 	case a.Upload != "":
 		// 上传源转绝对路径（对位旧 Python builder 的 os.path.abspath）
 		src, err := filepath.Abs(a.Upload)
@@ -183,7 +203,7 @@ func buildTasks(a *cli.Args, nodes *nodelist.Nodes, abortKeywords []string) ([]*
 				AsRoot:        a.Sudo,
 				Answers:       a.Answers,
 				Match:         a.Match,
-				AbortKeywords: abortKeywords,
+				AbortKeywords: expiredKeywords,
 			}
 			command := ssh.InteractiveCommand(in)
 			for i, node := range nodes.Items {
@@ -211,6 +231,8 @@ func execModeName(a *cli.Args) string {
 		return "上传"
 	case "download":
 		return "下载"
+	case "passwd":
+		return "改密"
 	}
 	return "未知"
 }
