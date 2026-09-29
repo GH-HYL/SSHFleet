@@ -13,6 +13,7 @@ import (
 	"sshfleet/internal/log"
 	"sshfleet/internal/result"
 	"sshfleet/internal/ssh"
+	"sshfleet/internal/verdict"
 )
 
 // 运行期呈现器（结果的三去向 + 分类）回归。
@@ -107,7 +108,7 @@ func TestReporterResultWritesBothSinks(t *testing.T) {
 	r, outFile, execLogPath := newTestReporter(t, "execute", 2)
 
 	res := ssh.Result{
-		Seq: 0, IP: "10.0.0.1", ConnectSuccess: true, ExitCode: intp(0),
+		Seq: 0, IP: "10.0.0.1", ConnectSuccess: true, Verdict: verdict.Success,
 		ConnectCostTime: 0.123, ExecCostTime: 0.456, Output: "hello\n",
 	}
 	r.Result(res)
@@ -140,8 +141,10 @@ func TestReporterConnectFailure(t *testing.T) {
 	r, outFile, execLogPath := newTestReporter(t, "execute", 1)
 
 	res := ssh.Result{
-		Seq: 0, IP: "10.0.0.2", ConnectSuccess: false, ConnectCostTime: 0.5,
-		Error: ptr("dial tcp 10.0.0.2:22: connect: connection refused"),
+		Seq: 0, IP: "10.0.0.2", ConnectSuccess: false, Verdict: verdict.Other,
+		Category: "dial tcp 10.0.0.2:22: connect: connection refused",
+		ConnectCostTime: 0.5,
+		Error:           ptr("dial tcp 10.0.0.2:22: connect: connection refused"),
 	}
 	r.Result(res)
 
@@ -168,13 +171,13 @@ func TestReporterTransferMode(t *testing.T) {
 	r, outFile, execLogPath := newTestReporter(t, "upload", 1)
 
 	res := ssh.Result{
-		Seq: 0, IP: "10.0.0.3", ConnectSuccess: true, ExitCode: intp(0),
+		Seq: 0, IP: "10.0.0.3", ConnectSuccess: true, Verdict: verdict.Success,
 		ConnectCostTime: 0.1, ExecCostTime: 0.2,
 		TotalFiles: 3, SuccessFiles: 3, FailedFiles: 0,
 	}
 	r.Result(res)
 
-	if got := r.Category(res); got != result.SuccessCategoryTransport {
+	if got := displayCategory(res, "upload"); got != result.SuccessCategoryTransport {
 		t.Fatalf("传输模式成功分类应为 %q，实际 %q", result.SuccessCategoryTransport, got)
 	}
 	logText := readExecLog(t, execLogPath)
@@ -308,7 +311,7 @@ func TestReporterLogsFailureEvidence(t *testing.T) {
 	// 3) 成功节点不写输出明细（`cat 大文件` 这类命令不能把日志撑爆）
 	r3, _, logPath3 := newTestReporter(t, "execute", 1)
 	r3.Result(ssh.Result{
-		Seq: 0, IP: "10.0.0.11", ConnectSuccess: true, ExitCode: intp(0),
+		Seq: 0, IP: "10.0.0.11", ConnectSuccess: true, Verdict: verdict.Success,
 		ConnectCostTime: 0.1, ExecCostTime: 0.2, Output: "line1\nline2\nline3",
 	})
 	if strings.Contains(readExecLog(t, logPath3), "输出明细") {

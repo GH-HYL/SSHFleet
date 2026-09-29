@@ -1,11 +1,11 @@
-// 错误分类判据（TOML，保序）：两块表，触发条件互斥——
+// 错误分类判据（TOML，保序）：两块表，选组依据见 verdict.Judge（result-verdict spec 4.3）——
 //
-//	[[categories]]            仅当退出码为 nil（命令未执行）时参与匹配
-//	[[exit_code_categories]]  仅当退出码非 0 时参与匹配（命中即覆盖退出码分类，ADR-0004）
+//	[[categories]]            第一组：目的那条命令没有给出退出码时用（连不上、传输失败、改密……）
+//	[[exit_code_categories]]  第二组：目的那条命令自己以非 0 收场时用（会话被拒 / 命令自身失败）
 //
 // 块内自上而下遍历，取第一个命中的分类。通配符只有星号 *（"任意长度的内容"），
 // 其余符号按普通字符处理。判据写什么、按什么口径取舍，见 config/keywords_error.conf 头部说明。
-package result
+package verdict
 
 import (
 	"fmt"
@@ -23,10 +23,10 @@ type Category struct {
 	Tip      string   `toml:"tip"`
 }
 
-// Keywords 加载后的判据表：两块，触发条件互斥。
+// Keywords 加载后的判据表：两块，选组依据是"目的命令有没有给出退出码"（4.3）。
 type Keywords struct {
-	items     []Category // 第一块：退出码为 nil 时用
-	exitItems []Category // 第二块：退出码非 0 时用
+	items     []Category // 第一组
+	exitItems []Category // 第二组
 }
 
 type keywordsFile struct {
@@ -36,8 +36,8 @@ type keywordsFile struct {
 
 // LoadKeywords 读取错误分类判据文件。
 //
-// 第一块不可为空——连它都没有等于没有分类能力；第二块可为空，空即"没有任何分类
-// 能在退出码非 0 时覆盖它"，此时退出码分类照旧（ADR-0004）。
+// 第一组不可为空——连它都没有等于没有分类能力；第二组可为空，空即"没有任何分类
+// 能在目的命令给出非 0 退出码时接住它"，此时按退出码兜底分类照旧。
 func LoadKeywords(path string) (*Keywords, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -116,7 +116,7 @@ func (k *Keywords) all() []Category {
 }
 
 // Has 分类名是否存在。**必须覆盖两块**：IsFallbackCategory 靠它区分"已知分类"
-// 与"判据未命中时的兜底原文"，漏掉第二块会把覆盖出来的分类误判成兜底原文。
+// 与"判据未命中时的兜底原文"，漏掉第二组会把选组出来的分类误判成兜底原文。
 func (k *Keywords) Has(name string) bool {
 	for _, c := range k.items {
 		if c.Name == name {
@@ -166,21 +166,17 @@ func (k *Keywords) TipOf(name string) string {
 	return ""
 }
 
-// match 第一块匹配（退出码为 nil 时用），返回第一个命中的分类；未命中返回空串。
+// matchText 按组匹配文本（选组由 Judge 按 4.3 的判据决定，本函数不做选组）：
+// second 为 true 查第二组，否则查第一组。返回第一个命中的分类；未命中返回空串。
 // 判据表可能为 nil（调用方允许不加载判据），此时一律不命中。
-func (k *Keywords) match(text string) string {
+func (k *Keywords) matchText(second bool, text string) string {
 	if k == nil {
 		return ""
+	}
+	if second {
+		return matchIn(k.exitItems, text)
 	}
 	return matchIn(k.items, text)
-}
-
-// matchExitCode 第二块匹配（退出码非 0 时用）：命中即覆盖退出码分类（ADR-0004）。
-func (k *Keywords) matchExitCode(text string) string {
-	if k == nil {
-		return ""
-	}
-	return matchIn(k.exitItems, text)
 }
 
 // matchIn 块内匹配：自上而下遍历分类，取第一个命中的。

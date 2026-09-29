@@ -28,6 +28,7 @@ import (
 	"sshfleet/internal/output"
 	"sshfleet/internal/result"
 	"sshfleet/internal/ssh"
+	"sshfleet/internal/verdict"
 )
 
 // 版本号：单一出处（显示在帮助信息首行下方，经 cli.Parse 传入 Usage）。
@@ -189,10 +190,10 @@ func passwdPromptsOf(c *config.PasswdConfig) *ssh.PasswdPrompts {
 }
 
 // passwdCategoriesOf 把改密配置里的失败分类转成判据表的形态。
-func passwdCategoriesOf(c *config.PasswdConfig) []result.Category {
-	cats := make([]result.Category, 0, len(c.Categories))
+func passwdCategoriesOf(c *config.PasswdConfig) []verdict.Category {
+	cats := make([]verdict.Category, 0, len(c.Categories))
 	for _, x := range c.Categories {
-		cats = append(cats, result.Category{Name: x.Name, Keywords: x.Keywords, Tip: x.Tip})
+		cats = append(cats, verdict.Category{Name: x.Name, Keywords: x.Keywords, Tip: x.Tip})
 	}
 	return cats
 }
@@ -283,9 +284,9 @@ func main() {
 	if err != nil {
 		fatal("dangercheck", fmt.Errorf("危险关键词内容检查未通过\n原因：%v", err))
 	}
-	errorKeywords, err := result.LoadKeywords(config.BuiltinPaths.ErrorKeywords)
+	errorKeywords, err := verdict.LoadKeywords(config.BuiltinPaths.ErrorKeywords)
 	if err != nil {
-		fatal("result", err)
+		fatal("verdict", err)
 	}
 	// 改密专用配置：提示词表给执行侧认路，失败分类给判据表加在最前面
 	passwdCfg, err := config.LoadPasswdConfig(config.BuiltinPaths.PasswdKeywords)
@@ -385,17 +386,13 @@ func main() {
 	// 懒创建、上打提示都收在 output 的呈现器里；main 只构造并接上 batch 的三个事件。
 	// （呈现器只做呈现，不控制生命周期——主干与退出权仍在本函数手里。）
 	reporter := output.NewReporter(execLog, outputFile, mode, nodes.Len(), errorKeywords, execStart, in.Disinteractive)
-	// batch 的运行期日志（开始执行任务）写执行期日志——此刻已轮转，不再进工具日志
-	// 「密码过期」分类的关键词，两条路共用：代填拿它当中止词，改密拿它当入场信号。
-	// 在这里抽出来递给 batch——那层不能反向引用 result（result 依赖它）。
-	expiredKeywords := errorKeywords.KeywordsOf("密码过期")
-	// 入场信号为空 = 整场不喂、每台机器都干等到超时：这种配置要在开工前拦住
-	if args.ChangePassword != "" && len(expiredKeywords) == 0 {
+	// 改密的入场信号为空 = 整场不喂、每台机器都干等到超时：这种配置要在开工前拦住
+	if args.ChangePassword != "" && len(errorKeywords.KeywordsOf("密码过期")) == 0 {
 		fatal("ssh", fmt.Errorf("改密缺少入场信号\n"+
 			"原因：判据文件里「密码过期」分类没有关键词，工具认不出哪台机器要改密\n"+
 			"提示：该分类在 config/keywords_error.conf，别删它"))
 	}
-	execResults, err := batch.Run(execCtx, args, cfg, nodes, execLog, prompts, expiredKeywords, batch.Hooks{
+	execResults, err := batch.Run(execCtx, args, cfg, nodes, execLog, prompts, errorKeywords, batch.Hooks{
 		OnNotice:   reporter.Notice,
 		OnProgress: reporter.Progress,
 		OnResult:   reporter.Result,
@@ -403,7 +400,7 @@ func main() {
 	reporter.Stop()
 	logger.Info(fmt.Sprintf("执行期日志已写完，切回工具日志：%s", execLogPath))
 
-	// 汇总本轮连接与成败（写入执行期日志的收尾行）
+	// 汇总本轮连接与成败（写入执行期日志的收尾行）。成败读判定写好的结论。
 	var connOK, connFail, okCount, failCount int
 	for _, r := range execResults.Items {
 		if r.ConnectSuccess {
@@ -411,7 +408,7 @@ func main() {
 		} else {
 			connFail++
 		}
-		if r.ExitCode != nil && *r.ExitCode == 0 {
+		if r.Verdict == verdict.Success {
 			okCount++
 		} else {
 			failCount++
@@ -430,12 +427,12 @@ func main() {
 		logger.Warn("收到中断信号，执行已停止")
 	}
 	// ---- 步骤 9：结果统计 + 错误分类 -----------------------------------
-	stats := result.Statistics(execResults, nodes, args, errorKeywords, execStart, time.Now())
+	stats := result.Statistics(execResults.Items, nodes, args, execStart, time.Now())
 	logger.Success("计算统计结果信息成功")
 	output.PrintStatistics(os.Stdout, stats, errorKeywords, cfg.Enable.ShowCategoryTips)
 
 	// ---- 步骤 10：呈现 / 报告 / xlsx / 归档 -----------------------------
-	if err := output.Render(archive, stats, execResults, args, cfg, errorKeywords, os.Args, reporter.Category, logger); err != nil {
+	if err := output.Render(archive, stats, execResults, args, cfg, errorKeywords, os.Args, logger); err != nil {
 		fatal("output", err)
 	}
 

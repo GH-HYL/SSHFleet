@@ -10,20 +10,20 @@ import (
 	"sshfleet/internal/config"
 	"sshfleet/internal/log"
 	"sshfleet/internal/result"
-	"sshfleet/internal/ssh"
+	"sshfleet/internal/verdict"
 )
 
 // Render 主干第 10 步：xlsx 导出 + 报告 + 资源备份 + 最新历史软链接。
 // 终端统计打印由 main 在调用本函数前完成（顺序对位旧实现：统计 → 报告 → 资源 → xlsx）。
+// 成败与分类读判定写好的结论（kw 只供统计提示与兜底判定用）。
 func Render(
 	archive *Archive,
 	stats *result.Stats,
 	results *batch.Results,
 	a *cli.Args,
 	cfg *config.Config,
-	kw *result.Keywords,
+	kw *verdict.Keywords,
 	argv []string,
-	categoryOf func(ssh.Result) string,
 	logger *log.Logger,
 ) error {
 	mode := result.ModeOf(a)
@@ -39,7 +39,7 @@ func Render(
 	logger.Success("保存执行资源文件成功")
 
 	if cfg.Enable.OutputToXlsx {
-		if err := WriteOutputXlsx(archive.Dir, results, cfg, mode, kw, categoryOf); err != nil {
+		if err := WriteOutputXlsx(archive.Dir, results, cfg, mode); err != nil {
 			// 跳过但要留痕：终端一关，只有工具日志能说明「这次的 output.xlsx 为什么没生成」
 			msg := fmt.Sprintf("生成 %s 失败：%v（本次跳过，不影响执行结果）", config.BuiltinPaths.OutputXlsx, err)
 			fmt.Fprintf(os.Stderr, "%s[ERROR]%s %s\n", ansiRed, ansiReset, msg)
@@ -49,7 +49,7 @@ func Render(
 		}
 	}
 	if cfg.Enable.ResultsToXlsx {
-		if err := WriteResultsXlsx(archive.Dir, results, cfg, mode, kw, categoryOf); err != nil {
+		if err := WriteResultsXlsx(archive.Dir, results, cfg, mode); err != nil {
 			msg := fmt.Sprintf("生成 results.xlsx 失败：%v（本次跳过，不影响执行结果）", err)
 			fmt.Fprintf(os.Stderr, "%s[ERROR]%s %s\n", ansiRed, ansiReset, msg)
 			logger.Error(msg)

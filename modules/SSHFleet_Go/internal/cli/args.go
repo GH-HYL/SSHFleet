@@ -70,25 +70,40 @@ type Args struct {
 	timeoutInvalid, connectTimeoutInvalid, numberInvalid bool
 }
 
-// ModeName 返回本次运行的模式名（passwd / command / script / upload / download）。
-// 五个值互斥，判定次序不影响结果（参数合规检查已保证只有一个非空）；都没给时返回空串
-// （正常流程走不到，空串只作防御）。
+// Mode 执行模式（五选一）。结果判定按它选成功规则（result-verdict spec D32）。
+// 定义成类型而不是裸 string，是为了让"模式"在函数签名里可辨认；各处
+// 「模式 → 文案」的映射表仍留在原地，合并属 ADR-0003 重开的独立议题，不在本轮。
+type Mode string
+
+const (
+	ModePasswd   Mode = "passwd"
+	ModeCommand  Mode = "command"
+	ModeScript   Mode = "script"
+	ModeUpload   Mode = "upload"
+	ModeDownload Mode = "download"
+	// ModeNone 都没给（正常流程走不到；参数合规检查已保证五者必有其一，只作防御）
+	ModeNone Mode = ""
+)
+
+// ModeName 返回本次运行的模式（passwd / command / script / upload / download）。
+// 五个值互斥，判定次序不影响结果（参数合规检查已保证只有一个非空）；都没给时返回
+// ModeNone（正常流程走不到，只作防御）。
 //
 // 全工具单一判据点：归档目录名、报告、日志文案此前各自重判一遍同一组字段。
-func (a *Args) ModeName() string {
+func (a *Args) ModeName() Mode {
 	switch {
 	case a.ChangePassword != "":
-		return "passwd"
+		return ModePasswd
 	case a.Command != "":
-		return "command"
+		return ModeCommand
 	case a.Script != "":
-		return "script"
+		return ModeScript
 	case a.Upload != "":
-		return "upload"
+		return ModeUpload
 	case a.Download != "":
-		return "download"
+		return ModeDownload
 	}
-	return ""
+	return ModeNone
 }
 
 // NumberGiven 本次是否显式指定了 -n（没指定即"全部并行"）。

@@ -61,9 +61,12 @@ func (c *Client) connectFor(ctx context.Context, result *Result) bool {
 // RunCommand 连接并执行一条命令/脚本（stdin 为空表示不喂输入）。
 // 超时与中断：执行超时经 context.WithTimeout 表达（spec M3 差异，
 // 旧实现是 select + time.After 建一个不会被取消的 timer）。
+//
+// 只写事实字段，不写结论（成败与分类由结果判定产生）：退出码进 CommandExitCode
+//（目的那条命令，D33），结果退出码 ExitCode 一个字都不写。
 func (c *Client) RunCommand(ctx context.Context, command, stdin string, seq int) *Result {
 	result := c.newResult(seq)
-	defer c.applyBanner(result) // 服务端提示并入报错原文（ADR-0005）
+	defer c.captureBanner(result) // 服务端提示无条件写独立字段（D34）
 
 	if !c.connectFor(ctx, result) {
 		return result
@@ -94,19 +97,29 @@ func (c *Client) RunCommand(ctx context.Context, command, stdin string, seq int)
 	}
 
 	execStart := time.Now()
-	err = c.runWithTimeoutAndCancel(ctx, session, command)
+	err, timedOut, canceled := c.runWithTimeoutAndCancel(ctx, session, command)
 	result.ExecCostTime = time.Since(execStart).Seconds()
 	result.Output = trimOuterBlankLines(out.String())
 
-	if err != nil {
+	// SessionBegun 判据：拿到退出码、干净收场、或超时/中断（三者都只在命令已在跑时发生）。
+	// 都不是（如远端拒了命令本身）即未下发。
+	switch {
+	case err == nil:
+		code := 0
+		result.CommandExitCode = &code
+		result.SessionBegun = true
+	case !timedOut && !canceled:
 		if code := extractExitCode(err); code != nil {
-			result.ExitCode = code
+			result.CommandExitCode = code
+			result.SessionBegun = true
 		} else {
 			result.Error = strPtr(err.Error())
 		}
-	} else {
-		code := 0
-		result.ExitCode = &code
+	default:
+		result.Error = strPtr(err.Error())
+		result.TimedOut = timedOut
+		result.Canceled = canceled
+		result.SessionBegun = true
 	}
 	return result
 }
@@ -137,7 +150,9 @@ func trimOuterBlankLines(s string) string {
 }
 
 // runWithTimeoutAndCancel 执行超时（context.WithTimeout + defer cancel）与外部中断。
-func (c *Client) runWithTimeoutAndCancel(parent context.Context, session *ssh.Session, command string) error {
+// 后两个返回值把"到点收场 / 外部中断"报给调用方写进事实字段（TimedOut / Canceled）——
+// 这两个事实不该再靠辨认报错文案反推。
+func (c *Client) runWithTimeoutAndCancel(parent context.Context, session *ssh.Session, command string) (err error, timedOut bool, canceled bool) {
 	ctx, cancel := context.WithTimeout(parent, c.cfg.ExecTimeout)
 	defer cancel()
 
@@ -145,14 +160,14 @@ func (c *Client) runWithTimeoutAndCancel(parent context.Context, session *ssh.Se
 	go func() { done <- session.Run(command) }()
 
 	select {
-	case err := <-done:
-		return err
+	case err = <-done:
+		return err, false, false
 	case <-ctx.Done():
 		_ = session.Close()
 		if parent.Err() != nil {
-			return parent.Err() // 外部取消（中断 / 上级超时）
+			return parent.Err(), false, true // 外部取消（中断 / 上级超时）
 		}
-		return fmt.Errorf("命令执行超时(%v)", c.cfg.ExecTimeout)
+		return fmt.Errorf("命令执行超时(%v)", c.cfg.ExecTimeout), true, false
 	}
 }
 

@@ -131,29 +131,14 @@ func (c *Client) buildAuthMethods() ([]ssh.AuthMethod, error) {
 	return methods, nil
 }
 
-// applyBanner 把认证阶段的服务端提示并入结果的报错原文（ADR-0005）。
+// captureBanner 把认证阶段的服务端提示写进结果的独立字段（无条件写，D34）。
 //
-// 为什么并入原文而不是单开字段：分类判据全都在原文上做匹配，提示进了原文就自然
-// 参与匹配，不必为它再改判据表、统计、终端、报告与 xlsx 的字段口径。
-//
-// 为什么不追加到"干净成功"的行：提示可能只是 MOTD / 法务声明这类公告，把它写进
-// 正常行的报错列会造成误读。失败的、部分失败的行才追加。
-func (c *Client) applyBanner(result *Result) {
-	tip := strings.TrimSpace(c.banner)
-	if tip == "" || isCleanSuccess(result) {
-		return
-	}
-	if result.Error == nil || *result.Error == "" {
-		result.Error = strPtr(tip)
-		return
-	}
-	*result.Error = *result.Error + "\n" + tip
-}
-
-// isCleanSuccess 干净成功：连接成功、退出码为 0、且没有失败文件（传输模式）。
-// 注意不能只看报错字段——命令模式成功时退出码为 0，与报错字段无关。
-func isCleanSuccess(r *Result) bool {
-	return r.ConnectSuccess && r.ExitCode != nil && *r.ExitCode == 0 && r.FailedFiles == 0
+// 为什么不再追加进 Error（推翻 ADR-0005 的并入方案）：往已写好的字段追加就是"改已写的值"，
+// 与"执行侧只写事实、不许改"冲突；且提示独立成字段后，判定按自己的文本源
+// （ServerBanner + Error + Output）显式带上它，呈现层只在失败行合成显示——
+// 正常行不再有"公告写进报错列"的担忧，原来那个"干净成功不并"的门槛（isCleanSuccess）随之删除。
+func (c *Client) captureBanner(result *Result) {
+	result.ServerBanner = strings.TrimSpace(c.banner)
 }
 
 // authMethodDesc 认证方式描述（执行期日志的「登录方式」）。

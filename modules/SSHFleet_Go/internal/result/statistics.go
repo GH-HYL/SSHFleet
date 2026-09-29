@@ -1,5 +1,7 @@
 // 结果统计（对位旧 statistics.py）：成功/失败计数、总数校验、失败分类排序、
 // 按分类收集 IP、成功分类按模式确定、全局耗时。
+//
+// 成败与分类读的是结果判定（internal/verdict）写好的结论，本包不再自行判定。
 package result
 
 import (
@@ -8,9 +10,18 @@ import (
 	"strings"
 	"time"
 
-	"sshfleet/internal/batch"
 	"sshfleet/internal/cli"
 	"sshfleet/internal/nodelist"
+	"sshfleet/internal/ssh"
+	"sshfleet/internal/verdict"
+)
+
+// 成功分类的中文名（D2：判定只给成败，中文由统计/呈现侧按模式给）。
+const (
+	// SuccessCategoryExecute 命令模式的成功分类。
+	SuccessCategoryExecute = "执行成功"
+	// SuccessCategoryTransport 传输模式（上传/下载）的成功分类。
+	SuccessCategoryTransport = "传输成功"
 )
 
 // CategoryCount 分类及其数量。
@@ -38,20 +49,21 @@ type Stats struct {
 
 // ModeOf 由命令行参数确定执行类别（execute / upload / download）。
 // 命令与脚本同归 execute——统计与展示只分「执行 / 上传 / 下载」三类。
-// 四类模式名本身由 cli.Args.ModeName 单点判定，此处只做归并。
+// 模式本身由 cli.Args.ModeName 单点判定，此处只做归并。
 func ModeOf(a *cli.Args) string {
 	switch a.ModeName() {
-	case "upload":
+	case cli.ModeUpload:
 		return "upload"
-	case "download":
+	case cli.ModeDownload:
 		return "download"
 	default:
 		return "execute"
 	}
 }
 
-// Statistics 计算结果统计信息。
-func Statistics(results *batch.Results, nodes *nodelist.Nodes, a *cli.Args, kw *Keywords, start, stop time.Time) *Stats {
+// Statistics 计算结果统计信息。items 是判定完毕的结果切片（判定在 batch 的
+// worker 协程里已做完，这里只读结论）。
+func Statistics(items []ssh.Result, nodes *nodelist.Nodes, a *cli.Args, start, stop time.Time) *Stats {
 	mode := ModeOf(a)
 	successCategory := SuccessCategoryExecute
 	if mode != "execute" {
@@ -59,7 +71,7 @@ func Statistics(results *batch.Results, nodes *nodelist.Nodes, a *cli.Args, kw *
 	}
 
 	stats := &Stats{
-		ResultsTotal:    results.Len(),
+		ResultsTotal:    len(items),
 		NodesTotal:      nodes.Len(),
 		CategoryIPMap:   map[string][]string{},
 		SuccessCategory: successCategory,
@@ -74,22 +86,14 @@ func Statistics(results *batch.Results, nodes *nodelist.Nodes, a *cli.Args, kw *
 	}
 
 	counts := map[string]int{}
-	for _, r := range results.Items {
-		exitBool := r.ExitCode != nil && *r.ExitCode == 0
-		if exitBool {
+	for _, r := range items {
+		category := r.Category
+		if r.Verdict == verdict.Success {
 			stats.SuccessCounts++
+			category = successCategory
 		} else {
 			stats.FailCounts++
 		}
-
-		category := Classify(Case{
-			ExitCode:     r.ExitCode,
-			Error:        strOf(r.Error),
-			Output:       r.Output,
-			Mode:         mode,
-			SuccessFiles: r.SuccessFiles,
-			FailedFiles:  r.FailedFiles,
-		}, kw)
 
 		counts[category]++
 		stats.CategoryIPMap[category] = append(stats.CategoryIPMap[category], r.IP)
@@ -136,11 +140,4 @@ func ipLess(a, b string) bool {
 		}
 	}
 	return len(as) < len(bs)
-}
-
-func strOf(p *string) string {
-	if p == nil {
-		return ""
-	}
-	return *p
 }

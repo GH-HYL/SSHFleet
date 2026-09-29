@@ -13,6 +13,7 @@ import (
 	"sshfleet/internal/config"
 	"sshfleet/internal/result"
 	"sshfleet/internal/ssh"
+	"sshfleet/internal/verdict"
 )
 
 // ANSI 颜色片段（对位 rich 的配色）。原先定义在 progress.go，进度界面改用
@@ -76,6 +77,18 @@ func FormatSpeed(bytesPerSec float64) string {
 	}
 }
 
+// displayCategory 单条结果展示用的分类名（终端明细 / xlsx 分类列同一口径）：
+// 成功行按模式给中文（执行成功 / 传输成功，D2），失败行用判定给出的分类。
+func displayCategory(res ssh.Result, mode string) string {
+	if res.Verdict == verdict.Success {
+		if mode == "upload" || mode == "download" {
+			return result.SuccessCategoryTransport
+		}
+		return result.SuccessCategoryExecute
+	}
+	return res.Category
+}
+
 // ResultLine 单条结果的明细文本（对位旧 format_result_line）。
 // 字段顺序（用户 2026-09-15 裁定）：连接 → 执行/错误 → 分类 → output 内容 → 分隔线。
 // 分类提到执行下面（一眼看出结果定性），output 原文放最下面（长文本不夹在状态行中间）。
@@ -87,16 +100,12 @@ func ResultLine(r ssh.Result, mode string, category string) string {
 
 	if r.ConnectSuccess {
 		status := "失败"
-		if r.ExitCode != nil && *r.ExitCode == 0 {
+		if r.Verdict == verdict.Success {
 			status = "成功"
 		}
 		lines = append(lines, fmt.Sprintf("【%s】 %s: %s - %.3fs", r.IP, ActionName(mode), status, r.ExecCostTime))
 	} else {
-		errMsg := "未知错误"
-		if r.Error != nil && *r.Error != "" {
-			errMsg = *r.Error
-		}
-		lines = append(lines, fmt.Sprintf("【%s】 错误: %s", r.IP, errMsg))
+		lines = append(lines, fmt.Sprintf("【%s】 错误: %s", r.IP, errText(r, "未知错误")))
 	}
 
 	lines = append(lines, fmt.Sprintf("【%s】 分类: %s", r.IP, category))
@@ -115,7 +124,7 @@ func ResultLine(r ssh.Result, mode string, category string) string {
 // 配色对位旧 terminal.py：标签青 / 校验红 / 成功绿 / 失败红 / 分类黄 / 失败分类统计红 / 提示黄。
 // showTips 为配置开关 enable.show_category_tips：开启时在统计块末尾给出「提示：」块；
 // 关闭时退回旧行为（只给一行「常见退出码」）。
-func PrintStatistics(out io.Writer, stats *result.Stats, kw *result.Keywords, showTips bool) {
+func PrintStatistics(out io.Writer, stats *result.Stats, kw *verdict.Keywords, showTips bool) {
 	bar := strings.Repeat("═", 60)
 	fmt.Fprintln(out, bar)
 	fmt.Fprintf(out, "  总耗时：%.2f 秒\n", stats.GlobalCostTime)
@@ -142,7 +151,7 @@ func PrintStatistics(out io.Writer, stats *result.Stats, kw *result.Keywords, sh
 			// `分类名 ×5`：× 紧贴数字，一眼看出是"个数"——避免与分类名内嵌的数字
 			//（如「执行失败(退出码1)」）混淆
 			item := fmt.Sprintf("%s%s ×%s%d", ansiYellow, c.Category, ansiReset, c.Count)
-			if result.IsFallbackCategory(c.Category, kw) {
+			if verdict.IsFallbackCategory(c.Category, kw) {
 				fallback = append(fallback, item)
 			} else {
 				known = append(known, item)
@@ -225,7 +234,7 @@ const exitCodeFailTip = "命令自身失败，或命令没跑起来被拒（未�
 
 // categoryTipLines 汇总「提示：」块的内容：本次出现过的失败分类里，写了解释（配置文件里
 // 的 tip 字段）的各出一行「分类名：解释」。按传入顺序（已按台数降序）输出。
-func categoryTipLines(categories []result.CategoryCount, kw *result.Keywords) []string {
+func categoryTipLines(categories []result.CategoryCount, kw *verdict.Keywords) []string {
 	out := make([]string, 0, len(categories))
 	for _, c := range categories {
 		tip := kw.TipOf(c.Category)

@@ -28,8 +28,8 @@ import (
 	"sshfleet/internal/common"
 	"sshfleet/internal/config"
 	"sshfleet/internal/log"
-	"sshfleet/internal/result"
 	"sshfleet/internal/ssh"
+	"sshfleet/internal/verdict"
 )
 
 // Reporter 执行期呈现器：接住 batch 的三个事件（采集提示 / 进度 / 单节点结果），
@@ -41,13 +41,12 @@ import (
 //   - Notice / Progress / Result 三个方法与 batch.Hooks 的三个字段一一对应，可直接赋值
 //   - 用完后调 Stop 收尾（进度界面落回界面下方），此后不应再收到事件
 type Reporter struct {
-	logger   *log.Logger
-	outFile  io.Writer
-	mode     string
-	keyword  *result.Keywords
-	total    int
-	start    time.Time
-	classify func(ssh.Result) string
+	logger  *log.Logger
+	outFile io.Writer
+	mode    string
+	keyword *verdict.Keywords
+	total   int
+	start   time.Time
 
 	// out 进度界面与运行期提示的去向（默认 os.Stdout）。抽成字段是为了可测：
 	// 测试里能把它换成临时文件，强制走一遍 bubbletea 那条路径。
@@ -72,9 +71,10 @@ type Reporter struct {
 //     总耗时同源——进度条不再比总耗时少一截（用户 2026-09-15 裁定对齐口径）
 //   - quiet: 非交互模式（--yes）。运行期提示不上屏，只进日志（L61 静默闸门）
 //
-// 分类依据（模式 + 错误关键词）在这里收下，调用方不必再自己拼分类函数。
-func NewReporter(execLog *log.Logger, outputFile io.Writer, mode string, total int, kw *result.Keywords, start time.Time, quiet bool) *Reporter {
-	r := &Reporter{
+// kw 是判据表（统计块的提示与兜底判定用）。成败与分类不在这里定——结果到手时
+// 判定已在 batch 的 worker 协程里做完，呈现层只读结论。
+func NewReporter(execLog *log.Logger, outputFile io.Writer, mode string, total int, kw *verdict.Keywords, start time.Time, quiet bool) *Reporter {
+	return &Reporter{
 		logger:  execLog,
 		outFile: outputFile,
 		mode:    mode,
@@ -85,17 +85,6 @@ func NewReporter(execLog *log.Logger, outputFile io.Writer, mode string, total i
 		plain:   !isTerminal(os.Stdout),
 		quiet:   quiet,
 	}
-	r.classify = func(res ssh.Result) string {
-		return result.Classify(result.Case{
-			ExitCode:     res.ExitCode,
-			Error:        deref(res.Error),
-			Output:       res.Output,
-			Mode:         mode,
-			SuccessFiles: res.SuccessFiles,
-			FailedFiles:  res.FailedFiles,
-		}, kw)
-	}
-	return r
 }
 
 // Notice 采集期提示（目前仅上传源中被过滤的链接）：终端 + 执行期日志。
@@ -119,9 +108,9 @@ func (r *Reporter) Progress(s batch.Snapshot) {
 }
 
 // Result 单节点结果：写 output.txt（各模式）+ 命令模式打终端明细 + 写执行期日志。
+// 成败与分类读判定写好的结论；展示分类（成功行的中文名）按模式合成。
 func (r *Reporter) Result(res ssh.Result) {
-	category := r.classify(res)
-	line := ResultLine(res, r.mode, category)
+	line := ResultLine(res, r.mode, displayCategory(res, r.mode))
 
 	// output.txt 只落文件：终端明细改经 printAbove（进度界面上方），
 	// 与进度条各占一块区域、互不覆盖。
@@ -132,12 +121,8 @@ func (r *Reporter) Result(res ssh.Result) {
 	if r.mode == "execute" {
 		r.printAbove(line)
 	}
-	r.logNode(res, category)
+	r.logNode(res, displayCategory(res, r.mode))
 }
-
-// Category 单条结果的分类名（xlsx 导出等收尾环节按同一口径取用，
-// 避免调用方自己再拼一份分类适配）。
-func (r *Reporter) Category(res ssh.Result) string { return r.classify(res) }
 
 // Stop 收尾：先让进度界面渲染一帧「终帧」（各条按目标值定格），再退出、
 // 光标落回界面下方，后续输出不再覆盖它。幂等。
@@ -229,7 +214,7 @@ func (r *Reporter) logNode(res ssh.Result, category string) {
 	// 成功节点：合成一行就走。
 	// 目标机常是 1000+ 台，每个节点铺开三行会把日志刷满；正常路径只需要
 	// 「哪台跑了、多快」。失败节点才展开细节（下方逐条写、不合并）。
-	if !isFailedResult(res) {
+	if res.Verdict == verdict.Success {
 		el.Success(ip + "成功：" + r.successDetail(res))
 		return
 	}
@@ -243,7 +228,8 @@ func (r *Reporter) logNode(res ssh.Result, category string) {
 		logMultiline(el.Error, ip, "连接失败"+joinNotes(userNote(res.User))+"：", errText(res, "未知错误"))
 	}
 
-	// 二级：执行结果（命令看退出码，传输看成功/失败文件数与字节数）
+	// 二级：执行结果（成败读判定结论；失败行把定论退出码带上——
+	// 「退出码 0 却计入失败」是判定与退出码解绑的活证，照实显示）
 	if res.ConnectSuccess {
 		switch r.mode {
 		case "upload", "download":
@@ -259,7 +245,7 @@ func (r *Reporter) logNode(res ssh.Result, category string) {
 			write(fmt.Sprintf("%s%s完成：成功 %d/%d 个文件%s，共 %s，耗时 %.3fs",
 				ip, action, res.SuccessFiles, res.TotalFiles, note, common.FormatBytes(res.TotalBytes), res.ExecCostTime))
 		default:
-			if res.ExitCode != nil && *res.ExitCode == 0 {
+			if res.Verdict == verdict.Success {
 				el.Success(fmt.Sprintf("%s命令执行成功，退出码 0，耗时 %.3fs", ip, res.ExecCostTime))
 			} else {
 				code := "无"
@@ -273,13 +259,14 @@ func (r *Reporter) logNode(res ssh.Result, category string) {
 
 	// 三级：失败原因原文。连接失败已在上面写过；这里补「连上了却没跑成」的原因
 	//（创建会话失败 / 命令执行超时 / 远程路径不存在 / 逐文件失败……）。
-	if res.ConnectSuccess && res.Error != nil && *res.Error != "" {
-		logMultiline(el.Error, ip, "错误详情：", *res.Error)
+	// 文本 = 报错原文 + 服务端提示合成（D34），与旧版"提示并进报错原文"的形态一致。
+	if res.ConnectSuccess && errText(res, "") != "" {
+		logMultiline(el.Error, ip, "错误详情：", errText(res, ""))
 	}
 
 	// 四级：输出明细。只在失败节点记——成功节点的输出可能是整份文件内容。
 	// 与「错误详情」逐字相同的输出不再重复写一遍（传输模式下只有一个文件失败就是这种）。
-	if isFailedResult(res) && res.Output != "" && !sameAsError(res) {
+	if res.Output != "" && !sameAsError(res) {
 		logOutputBlock(el.Warn, ip, res.Output)
 	}
 
@@ -303,9 +290,22 @@ func (r *Reporter) successDetail(res ssh.Result) string {
 }
 
 // errText 取结果里的报错原文（nil 或空时给 fallback）。
+// 文本 = 报错原文 + 服务端提示合成（D34）：判定把提示独立成字段后，呈现层在这里
+// 合回一处，与旧版"提示并进报错原文"的可见形态一致。只在失败行调用——
+// 正常行不显示服务端提示（MOTD / 法务声明这类公告不该出现在成功的行里）。
 func errText(res ssh.Result, fallback string) string {
-	if res.Error != nil && *res.Error != "" {
-		return *res.Error
+	errStr := deref(res.Error)
+	banner := strings.TrimSpace(res.ServerBanner)
+	switch {
+	case banner == "":
+		if errStr != "" {
+			return errStr
+		}
+	case errStr == "":
+		return banner
+	default:
+		// 顺序沿用 ADR-0005 时代：报错在前、提示换行追加在后
+		return errStr + "\n" + banner
 	}
 	return fallback
 }
@@ -339,24 +339,13 @@ func joinNotes(parts ...string) string {
 	return "，" + strings.Join(kept, "，")
 }
 
-// isFailedResult 该结果是否算失败（决定要不要把输出明细写进日志）。
-// 连接失败、有失败文件、退出码非 0 或缺席、带报错原文，任一成立即为失败。
-func isFailedResult(res ssh.Result) bool {
-	if !res.ConnectSuccess || res.FailedFiles > 0 {
-		return true
-	}
-	if res.ExitCode == nil || *res.ExitCode != 0 {
-		return true
-	}
-	return res.Error != nil && *res.Error != ""
-}
-
 // sameAsError 输出明细与报错原文是否逐字相同（相同则不必再写一遍明细）。
 func sameAsError(res ssh.Result) bool {
-	if res.Error == nil || res.Output == "" {
+	errStr := errText(res, "")
+	if errStr == "" || res.Output == "" {
 		return false
 	}
-	return strings.Join(splitLines(res.Output), "\n") == strings.Join(splitLines(*res.Error), "\n")
+	return strings.Join(splitLines(res.Output), "\n") == strings.Join(splitLines(errStr), "\n")
 }
 
 // logMultiline 把可能含多行的报错原文按行写入日志：首行接在 head 后面，

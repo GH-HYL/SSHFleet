@@ -11,8 +11,7 @@ import (
 
 	"sshfleet/internal/batch"
 	"sshfleet/internal/config"
-	"sshfleet/internal/result"
-	"sshfleet/internal/ssh"
+	"sshfleet/internal/verdict"
 )
 
 // ---- 内容清理（对位旧 text_utils.clean_for_excel）----
@@ -130,7 +129,8 @@ func newResultsStyles(f *excelize.File) (*xlsxStyles, error) {
 //
 // 明细行只经 cleanForExcel 清非法字符（决定「文本能不能写进 XML」），排版一概不动：
 // 行首缩进、中间空行都原样写入。output 字段的首尾空白行在采集侧已去掉，此处不重复处理。
-func WriteOutputXlsx(archiveDir string, results *batch.Results, cfg *config.Config, mode string, kw *result.Keywords, categoryOf func(ssh.Result) string) error {
+// 成败与分类读判定写好的结论，展示分类按模式合成。
+func WriteOutputXlsx(archiveDir string, results *batch.Results, cfg *config.Config, mode string) error {
 	if results.Len() == 0 {
 		return nil
 	}
@@ -175,7 +175,7 @@ func WriteOutputXlsx(archiveDir string, results *batch.Results, cfg *config.Conf
 		}
 
 		status := "失败"
-		if r.ExitCode != nil && *r.ExitCode == 0 {
+		if r.Verdict == verdict.Success {
 			status = "成功"
 		}
 		if err := put(r.IP, fmt.Sprintf("%s: %s - %.3fs", ActionName(mode), status, r.ExecCostTime), ""); err != nil {
@@ -184,9 +184,11 @@ func WriteOutputXlsx(archiveDir string, results *batch.Results, cfg *config.Conf
 
 		// 连接失败：补一行错误详情（旧版没这行，错误原文只能从 results.xlsx 的 error 列看到；
 		// 用户 2026-09-15 要求保留，便于只开 output.xlsx 时也能定位原因）
-		if !r.ConnectSuccess && r.Error != nil && *r.Error != "" {
-			if err := put(r.IP, "错误", *r.Error); err != nil {
-				return err
+		if !r.ConnectSuccess {
+			if text := errText(r, ""); text != "" {
+				if err := put(r.IP, "错误", text); err != nil {
+					return err
+				}
 			}
 		}
 
@@ -216,7 +218,7 @@ func WriteOutputXlsx(archiveDir string, results *batch.Results, cfg *config.Conf
 			}
 		}
 
-		if err := put(r.IP, "分类: "+categoryOf(r), ""); err != nil {
+		if err := put(r.IP, "分类: "+displayCategory(r, mode), ""); err != nil {
 			return err
 		}
 
@@ -256,7 +258,8 @@ const (
 // WriteResultsXlsx 生成 <归档目录>/<paths.results_xlsx>：结果逐条固化为一行（表头取字段名）。
 // 对位旧 format_dict_list_to_xlsx：表头带细边框、数据单元格带细边框、自动筛选；
 // A–M 列（不含自由文本的 N/O）按内容做一次「最合适的列宽」（用户 2026-09-15 要求）。
-func WriteResultsXlsx(archiveDir string, results *batch.Results, cfg *config.Config, mode string, kw *result.Keywords, categoryOf func(ssh.Result) string) error {
+// 退出码列取判定给的定论退出码；报错原文列只在失败行填（正常行不显示服务端提示，D34）。
+func WriteResultsXlsx(archiveDir string, results *batch.Results, cfg *config.Config, mode string) error {
 	if results.Len() == 0 {
 		return nil
 	}
@@ -291,15 +294,15 @@ func WriteResultsXlsx(archiveDir string, results *batch.Results, cfg *config.Con
 		if r.ExitCode != nil {
 			exit = fmt.Sprintf("%d", *r.ExitCode)
 		}
-		errText := ""
-		if r.Error != nil {
-			errText = *r.Error
+		errColumn := ""
+		if r.Verdict != verdict.Success {
+			errColumn = errText(r, "")
 		}
 		values := []any{
 			r.Seq, r.IP, r.Port, r.User, r.ConnectSuccess, exit,
 			r.ConnectCostTime, r.ExecCostTime, r.TotalBytes, r.TotalFiles,
-			r.SuccessFiles, r.FailedFiles, categoryOf(r),
-			cleanForExcel(errText), cleanForExcel(r.Output),
+			r.SuccessFiles, r.FailedFiles, displayCategory(r, mode),
+			cleanForExcel(errColumn), cleanForExcel(r.Output),
 		}
 		for i, v := range values {
 			cell, _ := excelize.CoordinatesToCellName(i+1, idx+2)

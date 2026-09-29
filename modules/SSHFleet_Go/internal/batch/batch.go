@@ -18,6 +18,7 @@ import (
 	"sshfleet/internal/log"
 	"sshfleet/internal/nodelist"
 	"sshfleet/internal/ssh"
+	"sshfleet/internal/verdict"
 )
 
 // Results 本轮执行的节点结果集合（按 Seq 保序）。
@@ -60,11 +61,11 @@ type Hooks struct {
 // logger 是执行期日志（此时工具日志已轮转至此），运行期事件写入这里而非工具日志。
 //
 // prompts 是改密的提示词表（用户可调的规则文件，由 main 加载后传下来）。
-// expiredKeywords 是判据文件「密码过期」分类的关键词，两条路都在用它：代填把它当**中止词**
-// （命中即终止会话），改密把它当**入场信号**（命中才开始喂）。由 main 抽出后传下来——
-// 本包不能反向引用 result（result 依赖本包），只能收一串关键词。
-func Run(ctx context.Context, a *cli.Args, cfg *config.Config, nodes *nodelist.Nodes, logger *log.Logger, prompts *ssh.PasswdPrompts, expiredKeywords []string, hooks Hooks) (*Results, error) {
-	tasks, notices, err := buildTasks(a, nodes, prompts, expiredKeywords)
+// kw 是错误分类判据表，两处在用：代填拿「密码过期」当**中止词**、改密拿它当**入场信号**
+// （构建任务时从表里抽出）；每个节点的结果判定（verdict.Judge）也在 worker 协程里
+// 用它做完再交给通道（D9）——main 不必再手工抽关键词传下来。
+func Run(ctx context.Context, a *cli.Args, cfg *config.Config, nodes *nodelist.Nodes, logger *log.Logger, prompts *ssh.PasswdPrompts, kw *verdict.Keywords, hooks Hooks) (*Results, error) {
+	tasks, notices, err := buildTasks(a, nodes, prompts, kw)
 	if err != nil {
 		return nil, err
 	}
@@ -106,6 +107,7 @@ func Run(ctx context.Context, a *cli.Args, cfg *config.Config, nodes *nodelist.N
 		}
 	}
 
+	mode := a.ModeName()
 	work := func(ctx context.Context, t *task) ssh.Result {
 		client := ssh.NewClient(newConfig(t.node))
 		onProgress := func(p ssh.Progress) { agg.OnProgress(p) }
@@ -123,6 +125,9 @@ func Run(ctx context.Context, a *cli.Args, cfg *config.Config, nodes *nodelist.N
 		default:
 			res = client.RunCommand(ctx, t.command, t.stdin, t.seq)
 		}
+		// 判定在 worker 协程里做完再交给通道（D9）：下游（进度聚合 / 结果流水 /
+		// 统计 / 呈现）拿到的都是带结论的完整结果。
+		verdict.Judge(res, mode, kw)
 		agg.OnResult(*res)
 		return *res
 	}
@@ -134,9 +139,11 @@ func Run(ctx context.Context, a *cli.Args, cfg *config.Config, nodes *nodelist.N
 
 // buildTasks 按模式构建任务；需要读取本地资源的错误在此一次性暴露（尚未建连）。
 // 第二个返回值是采集期提示（如上传源中被过滤的软链接数量与名称）。
-func buildTasks(a *cli.Args, nodes *nodelist.Nodes, prompts *ssh.PasswdPrompts, expiredKeywords []string) ([]*task, []string, error) {
+func buildTasks(a *cli.Args, nodes *nodelist.Nodes, prompts *ssh.PasswdPrompts, kw *verdict.Keywords) ([]*task, []string, error) {
 	tasks := make([]*task, 0, nodes.Len())
 	var notices []string
+	// 「密码过期」分类的关键词，两条路共用：代填拿它当中止词，改密拿它当入场信号。
+	expiredKeywords := kw.KeywordsOf("密码过期")
 
 	switch {
 	case a.ChangePassword != "":
