@@ -50,14 +50,14 @@ func newPasswdMatcher(prompts *PasswdPrompts, enterKeywords []string, opts Match
 	return m
 }
 
-// feed 追加新到的字节，返回本次该喂的值（按出现先后）。
-func (m *passwdMatcher) feed(chunk string) []PasswdValue {
-	if m.exhausted() {
-		return nil
-	}
+// feed 追加新到的字节，返回本次该喂的值（按出现先后）以及「无话可给」这件事。
+//
+// 第二个返回值：**某条已经喂满的提示又出现了**——它在问，而我们给不出新的答案。
+// 调用方应当立刻收场，不干等 `-t`（2026-09-29 实测：新密码被目标机的密码规则反复拒掉时，
+// 远端会一直重问，工具白等到 `-t` 到点）。
+func (m *passwdMatcher) feed(chunk string) (values []PasswdValue, stuck bool) {
 	m.tail += chunk
 
-	var values []PasswdValue
 	for {
 		hit, ok := m.next()
 		if !ok {
@@ -71,10 +71,25 @@ func (m *passwdMatcher) feed(chunk string) []PasswdValue {
 		m.rules[hit.step].left--
 		values = append(values, m.rules[hit.step].value)
 	}
+	// 顺序要紧：先判「又问了一遍」，再清尾部——清了就看不见它了
+	stuck = m.askedAgain()
 	if m.exhausted() {
 		m.tail = "" // 全表喂满：尾部与游标都不再需要（输出本身已由采集缓冲完整留存）
 	}
-	return values
+	return values, stuck
+}
+
+// askedAgain 游标之后是否出现了已经喂满的那几条提示。
+func (m *passwdMatcher) askedAgain() bool {
+	for i := range m.rules {
+		if m.rules[i].left > 0 {
+			continue
+		}
+		if _, _, _, ok := m.rules[i].rule.find(m.tail, m.opts); ok {
+			return true
+		}
+	}
+	return false
 }
 
 // next 在游标之后找最先出现的一处命中。
