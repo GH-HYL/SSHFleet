@@ -38,29 +38,33 @@ func Render(
 	}
 	logger.Success("保存执行资源文件成功")
 
-	if cfg.Enable.OutputToXlsx {
-		if err := WriteOutputXlsx(archive.Dir, results, cfg, mode); err != nil {
-			// 跳过但要留痕：终端一关，只有工具日志能说明「这次的 output.xlsx 为什么没生成」
-			msg := fmt.Sprintf("生成 %s 失败：%v（本次跳过，不影响执行结果）", config.BuiltinPaths.OutputXlsx, err)
-			fmt.Fprintf(os.Stderr, "%s[ERROR]%s %s\n", ansiRed, ansiReset, msg)
-			logger.Error(msg)
-		} else {
-			logger.Success(fmt.Sprintf("生成 %s 成功", config.BuiltinPaths.OutputXlsx))
-		}
-	}
-	if cfg.Enable.ResultsToXlsx {
-		if err := WriteResultsXlsx(archive.Dir, results, cfg, mode); err != nil {
-			msg := fmt.Sprintf("生成 results.xlsx 失败：%v（本次跳过，不影响执行结果）", err)
-			fmt.Fprintf(os.Stderr, "%s[ERROR]%s %s\n", ansiRed, ansiReset, msg)
-			logger.Error(msg)
-		} else {
-			logger.Success("生成 results.xlsx 成功")
-		}
-	}
+	// 两张 xlsx 的收尾同构（生成、失败只留痕不中断、成功报一句），共用一个出口；
+	// 文件名统一取 config.BuiltinPaths，不写硬编码。
+	writeXlsx(cfg.Enable.OutputToXlsx, config.BuiltinPaths.OutputXlsx, logger, func() error {
+		return WriteOutputXlsx(archive.Dir, results, cfg, mode)
+	})
+	writeXlsx(cfg.Enable.ResultsToXlsx, config.BuiltinPaths.ResultsXlsx, logger, func() error {
+		return WriteResultsXlsx(archive.Dir, results, cfg, mode)
+	})
 
 	if err := CreateLatestHistoryLink(cfg); err != nil {
 		fmt.Fprintf(os.Stderr, "%s[警告]%s %v\n", ansiYellow, ansiReset, err)
 		logger.Warn(fmt.Sprintf("创建最新历史记录链接失败：%v", err))
 	}
 	return nil
+}
+
+// writeXlsx 一张 xlsx 的生成收尾：开关关闭即跳过；失败只留痕不中断——终端一关，
+// 只有工具日志能说明「这次的 xlsx 为什么没生成」。
+func writeXlsx(enabled bool, name string, logger *log.Logger, write func() error) {
+	if !enabled {
+		return
+	}
+	if err := write(); err != nil {
+		msg := fmt.Sprintf("生成 %s 失败：%v（本次跳过，不影响执行结果）", name, err)
+		fmt.Fprintf(os.Stderr, "%s[ERROR]%s %s\n", ansiRed, ansiReset, msg)
+		logger.Error(msg)
+		return
+	}
+	logger.Success(fmt.Sprintf("生成 %s 成功", name))
 }
