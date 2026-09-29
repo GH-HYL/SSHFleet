@@ -80,6 +80,19 @@ func validateCategories(items []Category, label string) error {
 	return nil
 }
 
+// PrependCategories 在判据表最前面插入一组分类（改密专用分类走这里进来）。
+//
+// 插在最前面，因为改密的机器本来就带着「密码过期」那句服务端提示，而那批关键词在通用表
+// 中间——不插到前面就会被抢走分类（2026-09-29 实测，见 config/passwd.conf 头部说明）。
+func (k *Keywords) PrependCategories(items []Category) {
+	if k == nil || len(items) == 0 {
+		return
+	}
+	merged := make([]Category, 0, len(items)+len(k.items))
+	merged = append(merged, items...)
+	k.items = append(merged, k.items...)
+}
+
 // Names 分类名列表（保序，两块并集、同名去重；测试与展示用）。
 func (k *Keywords) Names() []string {
 	out := make([]string, 0, len(k.items)+len(k.exitItems))

@@ -174,6 +174,29 @@ func errorText(p *string) string {
 	return *p
 }
 
+// passwdPromptsOf 把改密配置里的提示词表转成执行侧的形态。
+// 配置层与执行侧各持一份结构：前者管文件解析与校验，后者只管匹配，互不牵连。
+func passwdPromptsOf(c *config.PasswdConfig) *ssh.PasswdPrompts {
+	steps := make([]ssh.PasswdStep, 0, len(c.Steps))
+	for _, s := range c.Steps {
+		steps = append(steps, ssh.PasswdStep{
+			Keywords: s.Keywords,
+			Value:    ssh.PasswdValue(s.Value),
+			Max:      s.Max,
+		})
+	}
+	return &ssh.PasswdPrompts{Steps: steps}
+}
+
+// passwdCategoriesOf 把改密配置里的失败分类转成判据表的形态。
+func passwdCategoriesOf(c *config.PasswdConfig) []result.Category {
+	cats := make([]result.Category, 0, len(c.Categories))
+	for _, x := range c.Categories {
+		cats = append(cats, result.Category{Name: x.Name, Keywords: x.Keywords, Tip: x.Tip})
+	}
+	return cats
+}
+
 func main() {
 	// ---- 步骤 1：加载配置 --------------------------------------------
 	cfg, err := config.Load(configPath)
@@ -264,10 +287,13 @@ func main() {
 	if err != nil {
 		fatal("result", err)
 	}
-	prompts, err := ssh.LoadPasswdPrompts(config.BuiltinPaths.PasswdPrompts)
+	// 改密专用配置：提示词表给执行侧认路，失败分类给判据表加在最前面
+	passwdCfg, err := config.LoadPasswdConfig(config.BuiltinPaths.Passwd)
 	if err != nil {
-		fatal("ssh", err)
+		fatal("config", err)
 	}
+	errorKeywords.PrependCategories(passwdCategoriesOf(passwdCfg))
+	prompts := passwdPromptsOf(passwdCfg)
 	dangerReport, err := dangercheck.Check(args, dangerRules)
 	if err != nil {
 		fatal("dangercheck", fmt.Errorf("危险关键词内容检查未通过\n原因：%v", err))

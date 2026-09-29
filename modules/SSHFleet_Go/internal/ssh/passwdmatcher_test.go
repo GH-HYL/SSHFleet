@@ -1,7 +1,6 @@
 package ssh
 
 import (
-	"os"
 	"strings"
 	"testing"
 )
@@ -19,6 +18,13 @@ func testPrompts() *PasswdPrompts {
 }
 
 var testEnterKeywords = []string{"password has expired", "密码已过期"}
+
+// 喂入预算 = 各条 max 之和（送信通道容量按它给，保证钩子永不阻塞）。
+func TestStepBudget(t *testing.T) {
+	if got := testPrompts().stepBudget(); got != 9 {
+		t.Fatalf("预算应为 1+4+4=9，实际 %d", got)
+	}
+}
 
 func TestPasswdMatcherFeedsAfterEnterSignal(t *testing.T) {
 	m := newPasswdMatcher(testPrompts(), testEnterKeywords, MatchOptions{})
@@ -138,57 +144,6 @@ func TestPasswdMatcherMatchOptions(t *testing.T) {
 	}
 }
 
-// 提示词表加载：字段缺一即报错。
-func TestLoadPasswdPrompts(t *testing.T) {
-	write := func(t *testing.T, body string) string {
-		t.Helper()
-		path := t.TempDir() + "/passwd_prompts.conf"
-		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		return path
-	}
-
-	ok := write(t, "[[step]]\nkeywords = ['新的密码']\nvalue = 'new'\nmax = 2\n")
-	prompts, err := LoadPasswdPrompts(ok)
-	if err != nil {
-		t.Fatalf("应加载成功：%v", err)
-	}
-	if len(prompts.Steps) != 1 || prompts.Steps[0].Max != 2 || prompts.Steps[0].Value != PasswdValueNew {
-		t.Fatalf("解析结果不对：%+v", prompts.Steps)
-	}
-	if prompts.stepBudget() != 2 {
-		t.Fatalf("喂入预算应为 2，实际 %d", prompts.stepBudget())
-	}
-
-	bad := map[string]string{
-		"一条 step 都没有":   ``,
-		"缺 keywords":    "[[step]]\nvalue = 'new'\nmax = 1\n",
-		"value 写错":      "[[step]]\nkeywords = ['x']\nvalue = 'newest'\nmax = 1\n",
-		"max 为 0":       "[[step]]\nkeywords = ['x']\nvalue = 'new'\nmax = 0\n",
-		"keywords 里有空项": "[[step]]\nkeywords = ['x', ' ']\nvalue = 'new'\nmax = 1\n",
-		"多写了个不认识的字段":    "[[step]]\nkeywords = ['x']\nvalue = 'new'\nmax = 1\nwat = 1\n",
-	}
-	for name, body := range bad {
-		if _, err := LoadPasswdPrompts(write(t, body)); err == nil {
-			t.Fatalf("%s 时应报错", name)
-		}
-	}
-}
-
-// 报错文案要指得出是哪一条。
-func TestLoadPasswdPromptsNamesTheStep(t *testing.T) {
-	path := t.TempDir() + "/passwd_prompts.conf"
-	body := "[[step]]\nkeywords = ['x']\nvalue = 'new'\nmax = 1\n\n[[step]]\nkeywords = ['y']\nvalue = 'oops'\nmax = 1\n"
-	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	_, err := LoadPasswdPrompts(path)
-	if err == nil || !strings.Contains(err.Error(), "第 2 条") {
-		t.Fatalf("应报出第 2 条，实际：%v", err)
-	}
-}
-
 // 喂进去的凭据要从采集输出里抹掉：远端回显关闭的时机不由我们定（实测漏过一次）。
 func TestScrubPasswdSecrets(t *testing.T) {
 	text := "WARNING: Your password has expired.\n<口令已移除>\npasswd：已成功更新密码\n"
@@ -208,15 +163,24 @@ func TestScrubPasswdSecrets(t *testing.T) {
 
 // 失败原因取「远端最后说的那句非提问行」，分类交给判据文件的关键词。
 func TestPasswdReason(t *testing.T) {
-	out := "WARNING: Your password has expired.\n" +
-		"更改 fleettest 的密码。\n" +
-		"当前的密码： \n新的密码： \n重新输入新的密码： \n" +
-		"密码未被更改。\n新的密码： \n"
-	if got := passwdReason(out); got != "密码未被更改。" {
-		t.Fatalf("应取到 passwd 的解释行，实际：%q", got)
+	// 回应段里夹着提问行：提问不算原因
+	if got := passwdReason("密码未被更改。\n新的密码： \n"); got != "密码未被更改。" {
+		t.Fatalf("应取到回应句，实际：%q", got)
 	}
-	// 只有提问行（远端还在等）时取不到原因
-	if got := passwdReason("新的密码： \n重新输入新的密码： \n\n"); got != "" {
+
+	// 根因与结论分两句说时都要带上（写不进 /etc/shadow 的真实形态）
+	got := passwdReason("****\npasswd：认证令牌操作错误\npasswd：密码未更改\n")
+	want := "passwd：认证令牌操作错误\npasswd：密码未更改"
+	if got != want {
+		t.Fatalf("根因那句不该丢\n实际：%q\n应为：%q", got, want)
+	}
+
+	// 只剩密码回显（远端压根没回应）：取不到原因，脱敏占位行不能当成"它说话了"
+	if got := passwdReason("\n****\n"); got != "" {
+		t.Fatalf("只有回显时应取不到，实际：%q", got)
+	}
+	// 只有提问行（远端还在等）时同样取不到
+	if got := passwdReason("新的密码： \n重新输入新的密码： \n"); got != "" {
 		t.Fatalf("只有提问行时应取不到，实际：%q", got)
 	}
 	// 英文提问同样以冒号收尾
