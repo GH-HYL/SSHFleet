@@ -5,7 +5,7 @@ package ssh
 // 值不在这张表里——当前密码取清单里那台机器的登录密码，新密码取命令行参数。
 // 表只回答两件事：哪一段文字是提问，这一问该喂哪个值。
 //
-// 表的来源与校验不在这里：它由 `config.LoadPasswdConfig` 从 `config/passwd.conf` 读出来
+// 表的来源与校验不在这里：它由 `config.LoadPasswdConfig` 从 `config/passwd_keywords.conf` 读出来
 //（同一个文件里还装着失败分类，那份给 result 用），见 `internal/config/passwd.go`。
 // 本包只消费——`PasswdPrompts` 由装配层从配置填好再传进来。
 
