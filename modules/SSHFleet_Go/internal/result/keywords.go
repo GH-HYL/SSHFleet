@@ -4,7 +4,7 @@
 //	[[exit_code_categories]]  仅当退出码非 0 时参与匹配（命中即覆盖退出码分类，ADR-0004）
 //
 // 块内自上而下遍历，取第一个命中的分类。通配符只有星号 *（"任意长度的内容"），
-// 其余符号按普通字符处理。判据写什么、按什么口径取舍，见 config/error_keywords.toml 头部说明。
+// 其余符号按普通字符处理。判据写什么、按什么口径取舍，见 config/keywords_error.conf 头部说明。
 package result
 
 import (

@@ -100,7 +100,7 @@ func TestResultLinePassesOutputThrough(t *testing.T) {
 // 「提示：」块（2026-09-16）：内容取自配置文件里各分类的 tip 字段；
 // 只有「执行失败(退出码N)」由工具按退出码补含义（分类名带数字，配置里写不了）。
 func TestCategoryTipLines(t *testing.T) {
-	kw, err := result.LoadKeywords(filepath.Join("..", "..", "config", "error_keywords.conf"))
+	kw, err := result.LoadKeywords(filepath.Join("..", "..", "config", "keywords_error.conf"))
 	if err != nil {
 		t.Fatalf("关键词文件应可加载: %v", err)
 	}
@@ -139,7 +139,7 @@ func TestCategoryTipLines(t *testing.T) {
 // 开关语义：开启时出「提示：」块、不再单独出「常见退出码」；
 // 关闭时退回旧行为（只出「常见退出码」）。
 func TestPrintStatisticsTipSwitch(t *testing.T) {
-	kw, err := result.LoadKeywords(filepath.Join("..", "..", "config", "error_keywords.conf"))
+	kw, err := result.LoadKeywords(filepath.Join("..", "..", "config", "keywords_error.conf"))
 	if err != nil {
 		t.Fatalf("关键词文件应可加载: %v", err)
 	}
@@ -173,7 +173,7 @@ func TestPrintStatisticsTipSwitch(t *testing.T) {
 // 出现未归类的分类时，末尾要给出"怎么把它归到类里"的引导——
 // 用户反复看到同一个原因却不知道能自己加分类，是这份统计最大的浪费。
 func TestPrintStatisticsUnclassifiedGuide(t *testing.T) {
-	kw, err := result.LoadKeywords(filepath.Join("..", "..", "config", "error_keywords.conf"))
+	kw, err := result.LoadKeywords(filepath.Join("..", "..", "config", "keywords_error.conf"))
 	if err != nil {
 		t.Fatalf("关键词文件应可加载: %v", err)
 	}
@@ -186,7 +186,7 @@ func TestPrintStatisticsUnclassifiedGuide(t *testing.T) {
 	out := &bytes.Buffer{}
 	PrintStatistics(out, stats, kw, true)
 	got := out.String()
-	for _, want := range []string{"未归类 1 类", "上方直接显示的是报错原文", "error_keywords", "之后就会单独归为一类"} {
+	for _, want := range []string{"未归类 1 类", "上方直接显示的是报错原文", "keywords_error", "之后就会单独归为一类"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("未归类引导缺少 %q：\n%s", want, got)
 		}
