@@ -41,7 +41,7 @@ SSHFleet 工程领域上下文（单一上下文布局）。
 | 触发词未命中（trigger miss） | 执行结束时仍有代填没被送出。正常结束与超时都算；用户主动中断不算——中断归「任务已取消」 |
 | 代填用尽后超时（answers exhausted timeout） | 代填全部送出后，脚本再无输出直到执行超时。工具分不出「卡在一个没配触发词的提示上」与「任务本身耗时长」，只记「表已空」这个事实 |
 | 中止词（abort keyword） | 交互分支内置的保险判据：关键词取错误分类判据文件「密码过期」分类（两块并集），匹配口径随 `[interactive]` 开关。命中即终止会话、按命中原文归类为「密码过期」；不参与代填匹配、不占代填条目。「密码过期」分类名是约定，改名或删除即失效 |
-| 批量改密（change-password） | 独立执行模式 `--change-password`（无短选项）：把清单机器的过期密码改成同一枚新密码。提示词表是 `config/passwd_prompts.conf`；判定以退出码为准，无验证步骤。见 `docs/issues/remote-password-change/spec.md` |
+| 批量改密（change-password） | 独立执行模式 `--change-password`（无短选项）：把清单机器的过期密码改成同一枚新密码。提示词表与失败分类都在 `config/passwd.conf`；失败按远端原话归类，无验证步骤。见 `docs/issues/remote-password-change/spec.md` |
 
 ---
 
