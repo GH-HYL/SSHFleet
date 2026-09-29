@@ -60,6 +60,10 @@ func WriteReport(archiveDir string, stats *result.Stats, a *cli.Args, cfg *confi
 		b.WriteString("  执行模式： 下载模式\n")
 		fmt.Fprintf(&b, "  远程路径： %s\n", a.Download)
 		fmt.Fprintf(&b, "  本地路径： %s\n", a.Path)
+	case "passwd":
+		b.WriteString("  执行模式： 改密模式\n")
+		// 新密码是明确知道身份的凭据：报告属归档产物，只留脱敏形态
+		fmt.Fprintf(&b, "  新密码： %s\n", common.MaskSecret(a.ChangePassword))
 	}
 
 	fmt.Fprintf(&b, "  节点清单： %s\n", common.MaskInlineListIf(a.CsvFile))

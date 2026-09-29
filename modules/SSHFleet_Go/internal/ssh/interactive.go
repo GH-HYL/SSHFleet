@@ -7,7 +7,6 @@ import (
 	"io"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"golang.org/x/crypto/ssh"
@@ -215,23 +214,32 @@ type interactiveOutcome struct {
 	abortLine string // 中止词命中的原文行（空 = 未命中）
 }
 
-// runInteractiveSession 边跑边代填：Start + 事件循环 + Wait。
+// sessionDriver 会话驱动要的三件：会话本体、事件源、送信通道。
+type sessionDriver struct {
+	session *ssh.Session
+	events  <-chan hookEvent
+	send    chan<- string
+}
+
+// driveSession 边跑边喂：Start + 事件循环 + Wait。代填与改密共用这一份。
 //
 // 必须用 Start：Run 等价于 Start + Wait，会占住调用方直到命令结束，没有机会边跑边填。
 // 超时与中断自带一份与 runWithTimeoutAndCancel 等价的包装（既有函数一行不改）。
-func (c *Client) runInteractiveSession(parent context.Context, session *ssh.Session, hook *outputHook, send chan<- string, command string) interactiveOutcome {
+//
+// 事件只有两种：该喂什么（eventSend）、中止词命中（eventAbort，只有代填会发）。
+func (c *Client) driveSession(parent context.Context, d sessionDriver, command string) interactiveOutcome {
 	ctx, cancel := context.WithTimeout(parent, c.cfg.ExecTimeout)
 	defer cancel()
 
 	started := make(chan struct{})
 	done := make(chan error, 1)
 	go func() {
-		if err := session.Start(command); err != nil {
+		if err := d.session.Start(command); err != nil {
 			done <- err // 命令未能开始：交由调用方保留错误原文
 			return
 		}
 		close(started)
-		done <- session.Wait()
+		done <- d.session.Wait()
 	}()
 
 	var out interactiveOutcome
@@ -241,13 +249,13 @@ func (c *Client) runInteractiveSession(parent context.Context, session *ssh.Sess
 			started = nil // 已下发，不再关注（nil 通道恒阻塞）
 			out.begun = true
 
-		case ev := <-hook.events:
+		case ev := <-d.events:
 			switch ev.kind {
 			case eventSend:
-				send <- ev.text
+				d.send <- ev.text
 			case eventAbort:
 				out.abortLine = ev.text
-				_ = session.Close() // 立即终止该节点会话
+				_ = d.session.Close() // 立即终止该节点会话
 				return out
 			}
 
@@ -256,7 +264,7 @@ func (c *Client) runInteractiveSession(parent context.Context, session *ssh.Sess
 			return out
 
 		case <-ctx.Done():
-			_ = session.Close()
+			_ = d.session.Close()
 			if parent.Err() != nil {
 				out.err = parent.Err() // 外部取消（中断 / 上级超时）
 				out.canceled = true
@@ -267,6 +275,11 @@ func (c *Client) runInteractiveSession(parent context.Context, session *ssh.Sess
 			return out
 		}
 	}
+}
+
+// runInteractiveSession 代填的会话驱动：把写侧钩子接上共用驱动。
+func (c *Client) runInteractiveSession(parent context.Context, session *ssh.Session, hook *outputHook, send chan<- string, command string) interactiveOutcome {
+	return c.driveSession(parent, sessionDriver{session: session, events: hook.events, send: send}, command)
 }
 
 // missText 触发词未命中的收尾文案：带未命中的序号与触发词原文——诊断时要看的就是它。
@@ -293,15 +306,12 @@ type hookEvent struct {
 	text string
 }
 
-// outputHook 写侧钩子：x/crypto 的复制协程把远端输出推到这里（stdout 与 stderr 同一个）。
+// outputHook 代填的写侧钩子：x/crypto 的复制协程把远端输出推到这里（stdout 与 stderr 同一个）。
 //
-// 按序做三件：去行尾 \r → 写进 lockedBuffer（Output 字段与普通路径同源）→ 喂匹配器。
-// 去 \r 放在入口——缓冲与匹配器必须看到同一份字节，游标才有意义。
+// 采集整备（去行尾 `\r` → 落 lockedBuffer）交给 outputTap，本结构只管代填的匹配语义。
 // 只判定、只发信号：送内容与关会话都由调用方那侧收口（跨协程关 channel 的风险没必要冒）。
 type outputHook struct {
-	mu      sync.Mutex
-	out     *lockedBuffer
-	held    string // 待定的行尾 \r：与紧跟的 \n 可能被切在相邻两块里
+	tap     *outputTap
 	values  []string
 	answers *cursorMatcher
 	abort   *cursorMatcher
@@ -316,7 +326,6 @@ func newOutputHook(out *lockedBuffer, in InteractiveInput) *outputHook {
 		values = append(values, a.Value)
 	}
 	h := &outputHook{
-		out:     out,
 		values:  values,
 		answers: newCursorMatcher(rules, in.Match),
 		events:  make(chan hookEvent, len(in.Answers)+2), // 容量够放下全部命中，钩子永不阻塞
@@ -324,50 +333,19 @@ func newOutputHook(out *lockedBuffer, in InteractiveInput) *outputHook {
 	if len(in.AbortKeywords) > 0 {
 		h.abort = newCursorMatcher([][]string{in.AbortKeywords}, in.Match)
 	}
+	h.tap = newOutputTap(out, h.match)
 	return h
 }
 
-// Write 采集侧整备 + 匹配（stdout 与 stderr 由两个复制协程推来，故带锁）。
-func (h *outputHook) Write(p []byte) (int, error) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
+func (h *outputHook) Write(p []byte) (int, error) { return h.tap.Write(p) }
 
-	chunk := h.held + string(p)
-	h.held = ""
-	// 末尾的 \r 先留着：它后面可能跟一个 \n（被切在下一块里），去不去要等下一块到齐
-	if strings.HasSuffix(chunk, "\r") {
-		chunk, h.held = chunk[:len(chunk)-1], "\r"
-	}
-	h.emit(strings.ReplaceAll(chunk, "\r\n", "\n"))
-	return len(p), nil
-}
-
-// Flush 把待定的 \r 交给缓冲与匹配器（会话结束后调用一次）。
-func (h *outputHook) Flush() {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	if h.held == "" {
-		return
-	}
-	chunk := h.held
-	h.held = ""
-	h.emit(chunk)
-}
+func (h *outputHook) Flush() { h.tap.Flush() }
 
 // pending 还没送出的代填条目序号（1 起）——收尾判定用，与钩子的写侧共用同一把锁。
 func (h *outputHook) pending() []int {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	return h.answers.pending()
-}
-
-// emit 同一份字节先落缓冲、再喂匹配器。
-func (h *outputHook) emit(chunk string) {
-	if chunk == "" {
-		return
-	}
-	_, _ = h.out.Write([]byte(chunk))
-	h.match(chunk)
+	var out []int
+	h.tap.locked(func() { out = h.answers.pending() })
+	return out
 }
 
 // match 判定命中并发信号。中止词优先：命中即终止，同块里的代填不再送出。

@@ -67,11 +67,23 @@ func MaskInlineListIf(s string) string {
 	return s
 }
 
-// MaskCommandLine 把命令行里的内联清单脱敏（逐个 argv 判断，含 `-f=IP,...` 这种写法）。
+// MaskCommandLine 把命令行里带凭据的取值脱敏：内联清单（含 `-f=IP,...` 写法），
+// 以及 `--change-password` 的值（含 `--change-password=密码` 写法——明文密文都脱）。
+//
+// 这里按**旗标名**认，不靠形状猜：新密码是明确知道身份的凭据，形态上没有特征可认。
 func MaskCommandLine(argv []string) []string {
 	out := make([]string, len(argv))
+	maskNext := false
 	for i, a := range argv {
 		switch {
+		case maskNext:
+			out[i] = MaskSecret(a)
+			maskNext = false
+		case a == "--change-password":
+			out[i] = a
+			maskNext = true
+		case strings.HasPrefix(a, "--change-password="):
+			out[i] = "--change-password=" + MaskSecret(a[len("--change-password="):])
 		case LooksLikeInlineList(a):
 			out[i] = MaskInlineList(a)
 		case strings.HasPrefix(a, "-f=") && LooksLikeInlineList(a[3:]):

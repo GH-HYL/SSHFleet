@@ -41,6 +41,10 @@ type Args struct {
 	Key            bool   // -k：写了就用密钥登录（私钥取清单第 5 列，其次配置 key）
 	NoBash         bool   // --no-bash
 	Disinteractive bool   // --yes
+	// --change-password 与它的解析结果：值随 encrypt 开关是明文密码或密文文件路径，
+	// 解析出的明文由 CheckArguments 填进 NewPassword（执行侧只用后者）。
+	ChangePassword string
+	NewPassword    string
 	GenKey         bool   // --gen-key
 	KeyStatus      bool   // --key-status
 	ConvertSecret  string // --convert-secret
@@ -57,19 +61,24 @@ type Args struct {
 	// --sudo / --no-sudo 是否在命令行出现：互斥判定与「密钥管理命令不与批量参数同给」都要用
 	sudoFlag, noSudoFlag bool
 
+	// credentialEncrypted 是配置里的加密开关：--change-password 的取值按它解释。
+	credentialEncrypted bool
+
 	// -t / -T / -n 的原始输入：非法值不在解析期报错，留给 CheckArguments
 	// 按旧版口径报「参数格式错误」。
 	timeoutRaw, connectTimeoutRaw, numberRaw             string
 	timeoutInvalid, connectTimeoutInvalid, numberInvalid bool
 }
 
-// ModeName 返回本次运行的模式名（command / script / upload / download）。
-// 四个值以 command > script > upload > download 的优先级判定；都没给时返回空串
-// （正常流程走不到——参数合规检查已保证四者必有一个，空串只作防御）。
+// ModeName 返回本次运行的模式名（passwd / command / script / upload / download）。
+// 五个值互斥，判定次序不影响结果（参数合规检查已保证只有一个非空）；都没给时返回空串
+// （正常流程走不到，空串只作防御）。
 //
 // 全工具单一判据点：归档目录名、报告、日志文案此前各自重判一遍同一组字段。
 func (a *Args) ModeName() string {
 	switch {
+	case a.ChangePassword != "":
+		return "passwd"
 	case a.Command != "":
 		return "command"
 	case a.Script != "":
@@ -121,6 +130,12 @@ func (a *Args) Summary() string {
 		"k=" + keyVal,
 		"answer=" + orEmpty(a.Answer),
 	}
+	// 新密码是明确知道身份的凭据：明文密文都脱敏，不给"照抄重跑"留口子
+	changePassword := "''"
+	if a.ChangePassword != "" {
+		changePassword = "'" + common.MaskSecret(a.ChangePassword) + "'"
+	}
+	fields = append(fields, "change_password="+changePassword)
 	if a.KeyStatus {
 		fields = append(fields, "key_status=True")
 	}
@@ -187,6 +202,7 @@ func Parse(cfg *config.Config, version string, raw []string) (*Args, error) {
 	fs.StringVarP(&a.Remark, "remark", "r", "", "备注，用作历史记录文件夹名（不填自动生成）")
 	fs.BoolVar(&a.NoBash, "no-bash", false, "命令模式专用: 不套一层 bash 环境")
 	fs.BoolVar(&a.Disinteractive, "yes", false, "跳过所有确认提示直接执行")
+	fs.StringVar(&a.ChangePassword, "change-password", "", "批量改密：把清单里密码过期的账号改成同一个新密码")
 	fs.StringVarP(&a.Answer, "answer", "a", "", "代填：看到触发词就自动填内容")
 	fs.BoolVarP(&a.Key, "key", "k", false, "用密钥登录：私钥取清单第 5 列，其次配置 account.key")
 	fs.BoolVar(&a.GenKey, "gen-key", false, "生成随机主密钥并持久化到 SSHFLEET_KEY")
@@ -257,6 +273,8 @@ func Parse(cfg *config.Config, version string, raw []string) (*Args, error) {
 
 	// 匹配口径取自配置（[interactive]）：执行侧从 Args 取，不再回头读配置
 	a.Match = ssh.MatchOptions{Regex: cfg.Interactive.Regex, CaseSensitive: cfg.Interactive.CaseSensitive}
+	// 凭据加密开关：--change-password 的取值按它解释（明文 / 密文文件路径）
+	a.credentialEncrypted = cfg.Credential.Encrypt
 
 	// -f 的值也可以是内联清单文本（不是路径）：先定来源。是文本就原样留着——
 	// 空格禁令与路径规范化都只管路径，而 `\`→`/` 会把文本里的 `\n` 分行符弄坏。
@@ -404,11 +422,12 @@ func helpEntries(cfg *config.Config) []helpEntry {
 		sudoTag, noSudoDesc = "[当前配置: 开]", "这次以登录用户身份执行（配置是开时用它改回来）"
 	}
 	return []helpEntry{
-		groupRow("模式（四选一）"),
+		groupRow("模式（五选一）"),
 		opt("-c", "--command", "", "在多台服务器上执行一条命令"),
 		opt("-s", "--script", "", "在多台服务器上执行一个本地脚本"),
 		opt("-u", "--upload", "", "把本地文件或目录上传到服务器"),
 		opt("-d", "--download", "", "从服务器下载文件或目录到本地"),
+		opt("", "--change-password", "", "批量改密：把清单里密码过期的账号改成同一个新密码"),
 
 		blankRow,
 
@@ -488,7 +507,7 @@ func usageText(cfg *config.Config, version string, width int) string {
 	b.WriteString("SSHFleet - 批量 SSH 运维工具（命令/脚本执行、文件上传下载）\n")
 	b.WriteString(fmt.Sprintf("版本: v%s\n\n", version))
 	b.WriteString("用法:\n")
-	b.WriteString(helpGroupIndent + fmt.Sprintf("%s -c | -s | -u | -d 之一，配合 -f 批量执行\n", name))
+	b.WriteString(helpGroupIndent + fmt.Sprintf("%s -c | -s | -u | -d | --change-password 之一，配合 -f 批量执行\n", name))
 	b.WriteString(helpGroupIndent + fmt.Sprintf("%s --gen-key | --key-status | --convert-secret 密钥管理\n\n", name))
 	b.WriteString("选项:\n\n")
 	for _, e := range entries {
@@ -515,6 +534,7 @@ func usageText(cfg *config.Config, version string, width int) string {
 		{"执行命令:", fmt.Sprintf("%s -f nodes.csv -c \"ls -l\"", name)},
 		{"执行脚本:", fmt.Sprintf("%s -f nodes.csv -s deploy.sh", name)},
 		{"代填执行:", fmt.Sprintf("%s -f nodes.csv -s deploy.sh -a \"1,请选择架构\\ndeb,请选择包格式\"", name)},
+		{"批量改密:", fmt.Sprintf("%s -f nodes.csv --change-password \"新密码\"", name)},
 		{"上传文件:", fmt.Sprintf("%s -f nodes.csv -u ./dist/app -p /opt/app/", name)},
 		{"下载文件:", fmt.Sprintf("%s -f nodes.csv -d /var/log/app -p ./logs/", name)},
 		{"用密钥登录:", fmt.Sprintf("%s -f nodes.csv -c \"uptime\" -k", name)},

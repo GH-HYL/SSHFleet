@@ -320,7 +320,7 @@ func TestUsageTextGroupsOptions(t *testing.T) {
 	text := usageText(cfg, "9.9.9", 120)
 
 	titles := helpTitleLines(text)
-	want := []string{"模式（四选一）", "清单与目标路径", "执行参数", "密钥与凭据", "密钥管理（不执行批量任务）"}
+	want := []string{"模式（五选一）", "清单与目标路径", "执行参数", "密钥与凭据", "密钥管理（不执行批量任务）"}
 	if len(titles) != len(want) {
 		t.Fatalf("应有 %d 个组标题，实际 %d 个：%v", len(want), len(titles), titles)
 	}
@@ -403,7 +403,7 @@ func TestSummaryMatchesArgparseNamespace(t *testing.T) {
 	a := &Args{Command: "who -b", CsvFile: "nodes.csv", Remark: "v2_cmd"}
 	got := a.Summary()
 	want := "Namespace(c='who -b', s='', u='', d='', f='nodes.csv', p='', sudo=False, " +
-		"t=None, T=None, n=None, r='v2_cmd', no_bash=False, yes=False, k=False, answer='')"
+		"t=None, T=None, n=None, r='v2_cmd', no_bash=False, yes=False, k=False, answer='', change_password='')"
 	if got != want {
 		t.Fatalf("解析结果格式不对\n实际：%s\n应为：%s", got, want)
 	}
