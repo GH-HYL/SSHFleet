@@ -211,7 +211,8 @@ type interactiveOutcome struct {
 	begun     bool   // 命令是否真的下发成功（收尾判定的前提）
 	canceled  bool   // 外部取消（中断）
 	timedOut  bool   // 到点收场（-t）
-	abortLine string // 中止词命中的原文行（空 = 未命中）
+	aborted   bool   // 被中止过：代填的中止词命中，或改密的「无话可给」
+	abortLine string // 代填中止词命中的原文行（改密不收 text，故这里为空——判「有没有中止」看 aborted）
 }
 
 // sessionDriver 会话驱动要的三件：会话本体、事件源、送信通道。
@@ -254,6 +255,7 @@ func (c *Client) driveSession(parent context.Context, d sessionDriver, command s
 			case eventSend:
 				d.send <- ev.text
 			case eventAbort:
+				out.aborted = true
 				out.abortLine = ev.text
 				_ = d.session.Close() // 立即终止该节点会话
 				return out
