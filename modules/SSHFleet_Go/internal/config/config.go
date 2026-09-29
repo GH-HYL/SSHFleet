@@ -91,9 +91,9 @@ type Config struct {
 
 // BuiltinPaths 产物路径与文件名的内置取值（用户不可配）。
 var BuiltinPaths = Paths{
-	ErrorKeywords:     "./config/error_keywords.conf",
-	DangerousKeywords: "./config/dangerous_keywords.conf",
-	PasswdKeywords:    "./config/passwd_keywords.conf",
+	ErrorKeywords:     "./config/keywords_error.conf",
+	DangerousKeywords: "./config/keywords_dangerous.conf",
+	PasswdKeywords:    "./config/keywords_passwd.conf",
 	Historys:          "history",
 	Tool:              "SSHFleetTools.log",
 	Exec:              "SSHFleetExec.log",

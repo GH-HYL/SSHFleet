@@ -33,7 +33,7 @@ import (
 // 版本号：单一出处（显示在帮助信息首行下方，经 cli.Parse 传入 Usage）。
 // 与 CHANGELOG 顶部当天段落的段头**同一个号**——开段、抬号时在同一次提交里同步改，
 // 两处不一致即为错误。同一天的改动共用一个号，不因改动多而另起号。
-const appVersion = "7.1.0"
+const appVersion = "8.0.0"
 
 // versionWithBuildID 版本号拼上**构建标识**：git 短提交号（仓库内编译时由 go build
 // 自动注入 vcs.revision；工作区有未提交改动时加 -dirty）+ HEAD 提交时间。
@@ -393,7 +393,7 @@ func main() {
 	if args.ChangePassword != "" && len(expiredKeywords) == 0 {
 		fatal("ssh", fmt.Errorf("改密缺少入场信号\n"+
 			"原因：判据文件里「密码过期」分类没有关键词，工具认不出哪台机器要改密\n"+
-			"提示：该分类在 config/error_keywords.conf，别删它"))
+			"提示：该分类在 config/keywords_error.conf，别删它"))
 	}
 	execResults, err := batch.Run(execCtx, args, cfg, nodes, execLog, prompts, expiredKeywords, batch.Hooks{
 		OnNotice:   reporter.Notice,

@@ -8,7 +8,7 @@ import (
 
 func writePasswdConf(t *testing.T, body string) string {
 	t.Helper()
-	path := t.TempDir() + "/passwd_keywords.conf"
+	path := t.TempDir() + "/keywords_passwd.conf"
 	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}

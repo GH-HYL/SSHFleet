@@ -213,7 +213,7 @@ success_files = 0
 failed_files = 0
 expected = "身份验证失败"
 
-# ---- 2026-09-16 新增：会话被拒与认证阶段被拒（判据见 config/error_keywords.toml 第二块）----
+# ---- 2026-09-16 新增：会话被拒与认证阶段被拒（判据见 config/keywords_error.conf 第二块）----
 # 会话被拒时命令根本没执行，退出码来自拒绝方（nologin / sudo / sshd 会话）：命中判据即
 # 按原因分类，退出码字段本身照旧保留（ADR-0004）。
 
