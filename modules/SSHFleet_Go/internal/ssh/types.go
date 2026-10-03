@@ -17,11 +17,20 @@ type Config struct {
 	ExecTimeout    time.Duration
 }
 
-// StepResult 一条中间步骤命令的退出码（带名字）。中间步骤不止一条：
+// 中间步骤的语义名（StepResult.Name 的取值）。来源冻结在三类工具内部的伴随命令
+// （W10，作者 2026-10-04）：以后执行路径里出现新的中间命令，必须连这份清单一起补议，
+// 不许顺手 append。裸命令原文只出现在呈现层的映射表里，这里不放。
+const (
+	StepPrecheck  = "precheck"  // 下载预检查，命令 test -e
+	StepEnumerate = "enumerate" // 远程文件枚举，命令 find
+	StepPasswd    = "passwd"    // 改密收尾的空命令，命令 :
+)
+
+// StepResult 一条中间步骤命令的退出码（带语义名）。中间步骤不止一条：
 // 下载侧的 test -e 预检查与 find 枚举、改密下发的空命令 `:` 都在这里，
 // 它们的退出码不进 ExitCode（result-verdict spec D30 / D33）。
 type StepResult struct {
-	Name     string // 步骤名（如 `test -e` / `find` / `:`），日志与排查用
+	Name     string // 步骤语义名（StepPrecheck / StepEnumerate / StepPasswd），呈现层据此映射中文
 	ExitCode *int   // 该步骤自己的退出码；拿不到（超时 / 中断）为 nil
 }
 

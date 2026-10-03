@@ -186,7 +186,7 @@ func TestJudgeStructuralFacts(t *testing.T) {
 	}
 
 	// 改密未见过期信号 → 「密码未过期」；`:` 在 Steps、CommandExitCode 恒空
-	res = ssh.Result{ConnectSuccess: true, SessionBegun: true, Steps: []ssh.StepResult{{Name: ":", ExitCode: &zero}}}
+	res = ssh.Result{ConnectSuccess: true, SessionBegun: true, Steps: []ssh.StepResult{{Name: ssh.StepPasswd, ExitCode: &zero}}}
 	Judge(&res, cli.ModePasswd, kw)
 	if res.Category != "密码未过期" || res.ExitCode != nil {
 		t.Fatalf("改密未过期判定不对，实为 %+v", res)
