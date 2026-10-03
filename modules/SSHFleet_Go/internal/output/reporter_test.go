@@ -370,6 +370,51 @@ func TestReporterLogsMissedAnswers(t *testing.T) {
 	}
 }
 
+// W10：中间步骤的退出码在失败行可见——回答「工具在远端额外跑了什么、结果如何」。
+// 与 D35 同一条管道：errText 一处合成，终端 / output.txt / 执行期日志 / 两张 xlsx 处处一样。
+func TestReporterLogsSteps(t *testing.T) {
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "SSHFleet.log")
+	execLog, err := log.InitExec(dir, "SSHFleet.log")
+	if err != nil {
+		t.Fatalf("创建执行期日志失败：%v", err)
+	}
+	t.Cleanup(func() { _ = execLog.Close() })
+
+	one := 1
+	r := NewReporter(execLog, &bytes.Buffer{}, "download", nil, 1, nil, time.Now(), true)
+	r.Result(ssh.Result{
+		Seq: 0, IP: "10.0.0.8", ConnectSuccess: true, Verdict: verdict.Other,
+		Category: "远程路径不存在", ExitCode: nil,
+		ConnectCostTime: 0.1, ExecCostTime: 0.3,
+		Error: ptr("远程路径不存在: /home/u/missing.txt"),
+		Steps: []ssh.StepResult{{Name: ssh.StepPrecheck, ExitCode: &one}},
+	})
+
+	logText := readExecLog(t, logPath)
+	if !strings.Contains(logText, "中间步骤：下载预检（test -e） 退出码 1") {
+		t.Fatalf("执行期日志应带中间步骤详情：\n%s", logText)
+	}
+	if !strings.Contains(logText, "错误详情：远程路径不存在") {
+		t.Fatalf("报错原文段应在前：\n%s", logText)
+	}
+}
+
+// stepsNote 本体：语义名映射中文、未知名原样兜底不猜、退出码缺席不推 0。
+func TestStepsNote(t *testing.T) {
+	one := 1
+	got := stepsNote(ssh.Result{Steps: []ssh.StepResult{
+		{Name: ssh.StepPasswd, ExitCode: &one},
+		{Name: "mystery", ExitCode: nil},
+	}})
+	if want := "中间步骤：改密收尾（:） 退出码 1、mystery 未拿到退出码"; got != want {
+		t.Fatalf("stepsNote 渲染不对：\n got: %s\nwant: %s", got, want)
+	}
+	if stepsNote(ssh.Result{}) != "" {
+		t.Fatalf("无步骤时不应产出任何文本")
+	}
+}
+
 // DisplayCommand：报告与工具日志里的命令行必须能照抄重跑。
 //
 // argv 里早没了引号（本机 shell 剥掉了），平铺拼接会让 `-c 'who -b'` 变成

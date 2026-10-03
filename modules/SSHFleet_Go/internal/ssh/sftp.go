@@ -202,7 +202,7 @@ func (c *Client) DownloadFiles(ctx context.Context, remotePath, localPath string
 	if err := c.runCommand(checkCmd); err != nil {
 		// 预检查是中间步骤（D30）：它自己的退出码进 Steps，不顶成结果退出码——
 		// 判定据此走第一组、按报错原文归类（D27 消掉第二组同名补丁的根据就在这）
-		result.Steps = append(result.Steps, StepResult{Name: "test -e", ExitCode: extractExitCode(err)})
+		result.Steps = append(result.Steps, StepResult{Name: StepPrecheck, ExitCode: extractExitCode(err)})
 		result.Error = strPtr(fmt.Sprintf("远程路径不存在: %s", remotePath))
 		return result
 	}
@@ -245,7 +245,7 @@ func (c *Client) DownloadFiles(ctx context.Context, remotePath, localPath string
 		output, err := c.runCommandCapture(findCmd)
 		if err != nil {
 			// 枚举也是中间步骤：退出码进 Steps，理由同上
-			result.Steps = append(result.Steps, StepResult{Name: "find", ExitCode: extractExitCode(err)})
+			result.Steps = append(result.Steps, StepResult{Name: StepEnumerate, ExitCode: extractExitCode(err)})
 			result.Error = strPtr(fmt.Sprintf("获取远程文件列表失败: %v", err))
 			return result
 		}

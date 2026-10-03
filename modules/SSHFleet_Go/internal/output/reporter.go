@@ -297,14 +297,14 @@ func (r *Reporter) successDetail(res ssh.Result) string {
 	}
 }
 
-// errText 取结果里的失败详情文本：报错原文 → 服务端提示 → 未送出的代填，逐段换行合成。
+// errText 取结果里的失败详情文本：报错原文 → 服务端提示 → 未送出的代填 → 中间步骤，逐段换行合成。
 //
 // 前两段的合成沿用 ADR-0005 时代的顺序（原文在前、提示换行追加在后），D34 把提示
-// 独立成字段后在这里合回一处；第三段是结构事实的细节（D35）。三段都空时给 fallback。
+// 独立成字段后在这里合回一处；后两段是结构事实的细节（D35 / W10）。四段都空时给 fallback。
 // 只在失败行调用——正常行不显示服务端提示（MOTD / 法务声明这类公告不该出现在成功的行里）。
 func errText(res ssh.Result, answers []ssh.Answer, fallback string) string {
-	parts := make([]string, 0, 3)
-	for _, s := range []string{deref(res.Error), strings.TrimSpace(res.ServerBanner), missedNote(res, answers)} {
+	parts := make([]string, 0, 4)
+	for _, s := range []string{deref(res.Error), strings.TrimSpace(res.ServerBanner), missedNote(res, answers), stepsNote(res)} {
 		if s != "" {
 			parts = append(parts, s)
 		}
@@ -343,6 +343,39 @@ func quoteTriggers(triggers []string) string {
 		quoted = append(quoted, `"`+t+`"`)
 	}
 	return strings.Join(quoted, "、")
+}
+
+// stepNames 中间步骤语义名 → 中文说明（含裸命令原文）。W10（2026-10-04）：
+// StepResult.Name 已语义化，命令原文只在这里出现；未知名的兜底是原样显示语义名——
+// 不猜、不编中文。
+var stepNames = map[string]string{
+	ssh.StepPrecheck:  "下载预检（test -e）",
+	ssh.StepEnumerate: "远程文件枚举（find）",
+	ssh.StepPasswd:    "改密收尾（:）",
+}
+
+// stepsNote 中间步骤那行事实（W10）：把 Steps 的语义名还原成中文说明、附各自的退出码。
+//
+// 与 missedNote 同一条规矩：只陈述事实、不写结论词——这一步是预检没过还是枚举出错，
+// 由分类列与报错原文表达，这里只回答「工具在远端额外跑了什么、结果如何」。
+// 退出码拿不到（超时 / 中断）就说拿不到，不推 0。
+func stepsNote(res ssh.Result) string {
+	if len(res.Steps) == 0 {
+		return ""
+	}
+	items := make([]string, 0, len(res.Steps))
+	for _, st := range res.Steps {
+		label, ok := stepNames[st.Name]
+		if !ok {
+			label = st.Name
+		}
+		if st.ExitCode == nil {
+			items = append(items, fmt.Sprintf("%s 未拿到退出码", label))
+			continue
+		}
+		items = append(items, fmt.Sprintf("%s 退出码 %d", label, *st.ExitCode))
+	}
+	return "中间步骤：" + strings.Join(items, "、")
 }
 
 // userNote / authNote 日志里的上下文片段（值为空时给空串，不占位）。

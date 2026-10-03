@@ -112,13 +112,13 @@ func (c *Client) RunPasswdChange(ctx context.Context, in PasswdInput, seq int) *
 	result.EnterSignalSeen = hook.sawEnter()
 	switch {
 	case outcome.err == nil:
-		result.Steps = append(result.Steps, StepResult{Name: passwdCommand, ExitCode: intPtr(0)})
+		result.Steps = append(result.Steps, StepResult{Name: StepPasswd, ExitCode: intPtr(0)})
 	default:
 		if code := extractExitCode(outcome.err); code != nil {
 			// passwd 自己以非 0 收场：那个码只说明「没改成」，原因在它的输出里——
 			// 归 Steps 留痕，不顶成结果退出码（否则判定会给出「执行失败(退出码N)」，
 			// 把远端说的原因整个盖掉，2026-09-29 修）。
-			result.Steps = append(result.Steps, StepResult{Name: passwdCommand, ExitCode: code})
+			result.Steps = append(result.Steps, StepResult{Name: StepPasswd, ExitCode: code})
 		}
 	}
 
