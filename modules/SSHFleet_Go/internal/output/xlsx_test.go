@@ -61,7 +61,7 @@ func cellOf(t *testing.T, f *excelize.File, sheet, cell string) string {
 
 func TestOutputXlsxLayout(t *testing.T) {
 	dir := t.TempDir()
-	if err := WriteOutputXlsx(dir, testResults(), testCfg(), "execute"); err != nil {
+	if err := WriteOutputXlsx(dir, testResults(), testCfg(), "execute", nil); err != nil {
 		t.Fatal(err)
 	}
 	f := openXlsx(t, filepath.Join(dir, config.BuiltinPaths.OutputXlsx))
@@ -157,7 +157,7 @@ func TestOutputXlsxKeepsOutputStructure(t *testing.T) {
 		Output: "         system boot  2026-09-15 10:23\n\ndisk  use%",
 	}}}
 	dir := t.TempDir()
-	if err := WriteOutputXlsx(dir, results, testCfg(), "execute"); err != nil {
+	if err := WriteOutputXlsx(dir, results, testCfg(), "execute", nil); err != nil {
 		t.Fatal(err)
 	}
 	f := openXlsx(t, filepath.Join(dir, config.BuiltinPaths.OutputXlsx))
@@ -175,9 +175,60 @@ func TestOutputXlsxKeepsOutputStructure(t *testing.T) {
 	}
 }
 
+// D35（作者 2026-10-03 裁定）：失败行的报错原文列、以及 output.xlsx 的「错误」行，
+// 要把「未送出的代填」还原成触发词原文。代填未命中那行的 Error 是空的——此前
+// 这一列整个空着，序号与触发词（诊断要看的正是它）在任何地方都看不到。
+func TestXlsxReportsMissedAnswers(t *testing.T) {
+	zero := 0
+	results := &batch.Results{Items: []ssh.Result{{
+		Seq: 1, IP: "10.0.0.1", Port: 22, User: "root",
+		ConnectSuccess: true, Verdict: verdict.Other, Category: "触发词未命中",
+		ExitCode: &zero, ConnectCostTime: 0.1, ExecCostTime: 6.07,
+		AnswersMissed: []int{1, 2}, Output: "name= dept=",
+	}}}
+	answers := []ssh.Answer{
+		{Value: "zhangsan", Triggers: []string{"Your full name"}},
+		{Value: "ops", Triggers: []string{"Your dept"}},
+	}
+	want := `未送出的代填：第 1 条（触发词 "Your full name"）、第 2 条（触发词 "Your dept"）`
+
+	dir := t.TempDir()
+	if err := WriteResultsXlsx(dir, results, testCfg(), "execute", answers); err != nil {
+		t.Fatal(err)
+	}
+	fr := openXlsx(t, filepath.Join(dir, config.BuiltinPaths.ResultsXlsx))
+	sheetR := fr.GetSheetName(0)
+	// 定论退出码照旧是 0（成败与退出码解绑，D1）；报错原文列填的是事实细节
+	if got := cellOf(t, fr, sheetR, "F2"); got != "0" {
+		t.Fatalf("退出码列应为定论退出码 0，实际 %q", got)
+	}
+	if got := cellOf(t, fr, sheetR, "N2"); got != want {
+		t.Fatalf("报错原文列应为 %q，实际 %q", want, got)
+	}
+
+	// output.xlsx 的「错误」行：连上了却失败的行现在也有一行原因（此前只给连接失败的行）
+	if err := WriteOutputXlsx(dir, results, testCfg(), "execute", answers); err != nil {
+		t.Fatal(err)
+	}
+	fo := openXlsx(t, filepath.Join(dir, config.BuiltinPaths.OutputXlsx))
+	sheetO := fo.GetSheetName(0)
+	// 行序：1 表头 / 2 连接 / 3 执行 / 4 错误 / 5 output / 6 分类 / 7 分隔
+	eventCell, _ := excelize.CoordinatesToCellName(2, 4)
+	detailCell, _ := excelize.CoordinatesToCellName(3, 4)
+	if got := cellOf(t, fo, sheetO, eventCell); got != "错误" {
+		t.Fatalf("B4 应为「错误」行，实际 %q", got)
+	}
+	if got := cellOf(t, fo, sheetO, detailCell); got != want {
+		t.Fatalf("错误行详情应为 %q，实际 %q", want, got)
+	}
+	if got := cellOf(t, fo, sheetO, "B6"); got != "分类: 触发词未命中" {
+		t.Fatalf("B6 应为分类行，实际 %q", got)
+	}
+}
+
 func TestResultsXlsxLayoutAndAutoWidth(t *testing.T) {
 	dir := t.TempDir()
-	if err := WriteResultsXlsx(dir, testResults(), testCfg(), "execute"); err != nil {
+	if err := WriteResultsXlsx(dir, testResults(), testCfg(), "execute", nil); err != nil {
 		t.Fatal(err)
 	}
 	f := openXlsx(t, filepath.Join(dir, "results.xlsx"))
@@ -279,7 +330,7 @@ func TestXlsxStripsIllegalCharsFromEveryField(t *testing.T) {
 		Output:   dirtyOutput,
 	}}}
 	dir := t.TempDir()
-	if err := WriteOutputXlsx(dir, results, testCfg(), "execute"); err != nil {
+	if err := WriteOutputXlsx(dir, results, testCfg(), "execute", nil); err != nil {
 		t.Fatalf("含违规字符的输出应能生成 terminal-output.xlsx：%v", err)
 	}
 	f := openXlsx(t, filepath.Join(dir, config.BuiltinPaths.OutputXlsx))
@@ -290,13 +341,13 @@ func TestXlsxStripsIllegalCharsFromEveryField(t *testing.T) {
 		Error: strPtr(dirtyError),
 	}}}
 	dir2 := t.TempDir()
-	if err := WriteOutputXlsx(dir2, failResults, testCfg(), "execute"); err != nil {
+	if err := WriteOutputXlsx(dir2, failResults, testCfg(), "execute", nil); err != nil {
 		t.Fatalf("含违规字符的错误详情应能生成 terminal-output.xlsx：%v", err)
 	}
 	f2 := openXlsx(t, filepath.Join(dir2, config.BuiltinPaths.OutputXlsx))
 	assertNoIllegalChars(t, f2, f2.GetSheetName(0), "dial", "failed")
 
-	if err := WriteResultsXlsx(dir, results, testCfg(), "execute"); err != nil {
+	if err := WriteResultsXlsx(dir, results, testCfg(), "execute", nil); err != nil {
 		t.Fatalf("含违规字符的结果应能生成 results.xlsx：%v", err)
 	}
 	f3 := openXlsx(t, filepath.Join(dir, "results.xlsx"))
@@ -308,7 +359,7 @@ func TestXlsxStripsIllegalCharsFromEveryField(t *testing.T) {
 		Output: "前缀\xff\xfe后缀",
 	}}}
 	dir3 := t.TempDir()
-	if err := WriteResultsXlsx(dir3, badResults, testCfg(), "execute"); err != nil {
+	if err := WriteResultsXlsx(dir3, badResults, testCfg(), "execute", nil); err != nil {
 		t.Fatalf("非法 UTF-8 应被替换后正常写出：%v", err)
 	}
 	f4 := openXlsx(t, filepath.Join(dir3, "results.xlsx"))

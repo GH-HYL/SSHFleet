@@ -41,10 +41,10 @@ func Render(
 	// 两张 xlsx 的收尾同构（生成、失败只留痕不中断、成功报一句），共用一个出口；
 	// 文件名统一取 config.BuiltinPaths，不写硬编码。
 	writeXlsx(cfg.Enable.OutputToXlsx, config.BuiltinPaths.OutputXlsx, logger, func() error {
-		return WriteOutputXlsx(archive.Dir, results, cfg, mode)
+		return WriteOutputXlsx(archive.Dir, results, cfg, mode, a.Answers)
 	})
 	writeXlsx(cfg.Enable.ResultsToXlsx, config.BuiltinPaths.ResultsXlsx, logger, func() error {
-		return WriteResultsXlsx(archive.Dir, results, cfg, mode)
+		return WriteResultsXlsx(archive.Dir, results, cfg, mode, a.Answers)
 	})
 
 	if err := CreateLatestHistoryLink(cfg); err != nil {

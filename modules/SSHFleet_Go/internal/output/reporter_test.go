@@ -40,7 +40,7 @@ func newTestReporterQuiet(t *testing.T, mode string, total int, quiet bool) (*Re
 	t.Cleanup(func() { _ = execLog.Close() })
 
 	outBuf := &bytes.Buffer{}
-	return NewReporter(execLog, outBuf, mode, total, nil, time.Now(), quiet), outBuf, execLogPath
+	return NewReporter(execLog, outBuf, mode, nil, total, nil, time.Now(), quiet), outBuf, execLogPath
 }
 
 // 非交互模式（--yes）下运行期提示只进日志、不上屏（L61 的静默总闸门）。
@@ -334,6 +334,39 @@ func TestReporterLogsFailureEvidence(t *testing.T) {
 	}
 	if strings.Contains(logText4, fmt.Sprintf("line %d", maxOutputLines)) {
 		t.Fatalf("第 %d 行不该写入（已超上限）：\n%s", maxOutputLines, logText4)
+	}
+}
+
+// D35：执行期日志的「错误详情：」也要带出未送出的代填——失败行该显示失败详情的地方
+// 口径一致（终端明细 / output.txt / 执行期日志 / 两张 xlsx），一处合成、处处一样。
+func TestReporterLogsMissedAnswers(t *testing.T) {
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "SSHFleet.log")
+	execLog, err := log.InitExec(dir, "SSHFleet.log")
+	if err != nil {
+		t.Fatalf("创建执行期日志失败：%v", err)
+	}
+	t.Cleanup(func() { _ = execLog.Close() })
+
+	answers := []ssh.Answer{{Value: "zhangsan", Triggers: []string{"Your full name"}}}
+	r := NewReporter(execLog, &bytes.Buffer{}, "execute", answers, 1, nil, time.Now(), true)
+	zero := 0
+	r.Result(ssh.Result{
+		Seq: 0, IP: "10.0.0.7", ConnectSuccess: true, Verdict: verdict.Other,
+		Category: "触发词未命中", ExitCode: &zero,
+		ConnectCostTime: 0.1, ExecCostTime: 6.07,
+		AnswersMissed: []int{1}, Output: "name= dept=",
+	})
+
+	logText := readExecLog(t, logPath)
+	if !strings.Contains(logText, `错误详情：未送出的代填：第 1 条（触发词 "Your full name"）`) {
+		t.Fatalf("执行期日志应带未送出的代填：\n%s", logText)
+	}
+	if !strings.Contains(logText, "命令执行失败，退出码 0") {
+		t.Fatalf("退出码 0 却失败（成败与退出码解绑）应照旧记下：\n%s", logText)
+	}
+	if !strings.Contains(logText, "分类: 触发词未命中") {
+		t.Fatalf("分类行照旧由分类列表达：\n%s", logText)
 	}
 }
 
