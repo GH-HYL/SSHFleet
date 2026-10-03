@@ -45,6 +45,10 @@ type Reporter struct {
 	outFile io.Writer
 	mode    string
 	keyword *verdict.Keywords
+	// answers 代填表（-a 的解析结果，顺序即文本里的行序）。只为一件事存在：
+	// 把结果里「未送出的代填」序号还原成触发词原文（D35）。序号与用户表同源，
+	// 呈现层查一次即可，不必在每个结果里复制一份事实。
+	answers []ssh.Answer
 	total   int
 	start   time.Time
 
@@ -66,6 +70,9 @@ type Reporter struct {
 // NewReporter 构造呈现器。
 //   - execLog: 执行期日志（已轮转至归档目录；nil 表示不写）
 //   - outputFile: output.txt 句柄（nil 表示不写）
+//   - mode: 执行模式（决定展示用的分类名与日志措辞）
+//   - answers: 代填表（-a 的解析结果；没有代填时给 nil）——「未送出的代填」要靠它
+//     把序号还原成触发词原文
 //   - total: 节点总数（进度界面的分母，懒创建时用）
 //   - start: 计时起点（主干传 execStart）。进度界面的耗时由它算起，与统计块的
 //     总耗时同源——进度条不再比总耗时少一截（用户 2026-09-15 裁定对齐口径）
@@ -73,11 +80,12 @@ type Reporter struct {
 //
 // kw 是判据表（统计块的提示与兜底判定用）。成败与分类不在这里定——结果到手时
 // 判定已在 batch 的 worker 协程里做完，呈现层只读结论。
-func NewReporter(execLog *log.Logger, outputFile io.Writer, mode string, total int, kw *verdict.Keywords, start time.Time, quiet bool) *Reporter {
+func NewReporter(execLog *log.Logger, outputFile io.Writer, mode string, answers []ssh.Answer, total int, kw *verdict.Keywords, start time.Time, quiet bool) *Reporter {
 	return &Reporter{
 		logger:  execLog,
 		outFile: outputFile,
 		mode:    mode,
+		answers: answers,
 		keyword: kw,
 		total:   total,
 		start:   start,
@@ -110,7 +118,7 @@ func (r *Reporter) Progress(s batch.Snapshot) {
 // Result 单节点结果：写 output.txt（各模式）+ 命令模式打终端明细 + 写执行期日志。
 // 成败与分类读判定写好的结论；展示分类（成功行的中文名）按模式合成。
 func (r *Reporter) Result(res ssh.Result) {
-	line := ResultLine(res, r.mode, displayCategory(res, r.mode))
+	line := ResultLine(res, r.mode, r.answers, displayCategory(res, r.mode))
 
 	// output.txt 只落文件：终端明细改经 printAbove（进度界面上方），
 	// 与进度条各占一块区域、互不覆盖。
@@ -225,7 +233,7 @@ func (r *Reporter) logNode(res ssh.Result, category string) {
 		el.Success(fmt.Sprintf("%s连接成功%s，耗时 %.3fs",
 			ip, joinNotes(userNote(res.User), authNote(res.AuthMethod)), res.ConnectCostTime))
 	} else {
-		logMultiline(el.Error, ip, "连接失败"+joinNotes(userNote(res.User))+"：", errText(res, "未知错误"))
+		logMultiline(el.Error, ip, "连接失败"+joinNotes(userNote(res.User))+"：", errText(res, r.answers, "未知错误"))
 	}
 
 	// 二级：执行结果（成败读判定结论；失败行把定论退出码带上——
@@ -258,15 +266,15 @@ func (r *Reporter) logNode(res ssh.Result, category string) {
 	}
 
 	// 三级：失败原因原文。连接失败已在上面写过；这里补「连上了却没跑成」的原因
-	//（创建会话失败 / 命令执行超时 / 远程路径不存在 / 逐文件失败……）。
-	// 文本 = 报错原文 + 服务端提示合成（D34），与旧版"提示并进报错原文"的形态一致。
-	if res.ConnectSuccess && errText(res, "") != "" {
-		logMultiline(el.Error, ip, "错误详情：", errText(res, ""))
+	//（创建会话失败 / 命令执行超时 / 远程路径不存在 / 逐文件失败 / 未送出的代填……）。
+	// 文本 = 报错原文 + 服务端提示 + 未送出的代填合成（D34 / D35）。
+	if res.ConnectSuccess && errText(res, r.answers, "") != "" {
+		logMultiline(el.Error, ip, "错误详情：", errText(res, r.answers, ""))
 	}
 
 	// 四级：输出明细。只在失败节点记——成功节点的输出可能是整份文件内容。
 	// 与「错误详情」逐字相同的输出不再重复写一遍（传输模式下只有一个文件失败就是这种）。
-	if res.Output != "" && !sameAsError(res) {
+	if res.Output != "" && !sameAsError(res, r.answers) {
 		logOutputBlock(el.Warn, ip, res.Output)
 	}
 
@@ -289,25 +297,52 @@ func (r *Reporter) successDetail(res ssh.Result) string {
 	}
 }
 
-// errText 取结果里的报错原文（nil 或空时给 fallback）。
-// 文本 = 报错原文 + 服务端提示合成（D34）：判定把提示独立成字段后，呈现层在这里
-// 合回一处，与旧版"提示并进报错原文"的可见形态一致。只在失败行调用——
-// 正常行不显示服务端提示（MOTD / 法务声明这类公告不该出现在成功的行里）。
-func errText(res ssh.Result, fallback string) string {
-	errStr := deref(res.Error)
-	banner := strings.TrimSpace(res.ServerBanner)
-	switch {
-	case banner == "":
-		if errStr != "" {
-			return errStr
+// errText 取结果里的失败详情文本：报错原文 → 服务端提示 → 未送出的代填，逐段换行合成。
+//
+// 前两段的合成沿用 ADR-0005 时代的顺序（原文在前、提示换行追加在后），D34 把提示
+// 独立成字段后在这里合回一处；第三段是结构事实的细节（D35）。三段都空时给 fallback。
+// 只在失败行调用——正常行不显示服务端提示（MOTD / 法务声明这类公告不该出现在成功的行里）。
+func errText(res ssh.Result, answers []ssh.Answer, fallback string) string {
+	parts := make([]string, 0, 3)
+	for _, s := range []string{deref(res.Error), strings.TrimSpace(res.ServerBanner), missedNote(res, answers)} {
+		if s != "" {
+			parts = append(parts, s)
 		}
-	case errStr == "":
-		return banner
-	default:
-		// 顺序沿用 ADR-0005 时代：报错在前、提示换行追加在后
-		return errStr + "\n" + banner
 	}
-	return fallback
+	if len(parts) == 0 {
+		return fallback
+	}
+	return strings.Join(parts, "\n")
+}
+
+// missedNote 「未送出的代填」那行事实（D35）：把结果里的序号还原成触发词原文。
+//
+// 只陈述事实、不写结论词——「触发词未命中」四个字仍只由分类列表达。为什么不把它写进
+// 执行侧：那正是上一轮治掉的病（结构事实降级成文案、下游再靠文本认回来）。
+// 触发词取自 -a 的代填表（序号 1 起，与 Result.AnswersMissed 同源）；
+// 序号越界时只报序号，不猜触发词。
+func missedNote(res ssh.Result, answers []ssh.Answer) string {
+	if len(res.AnswersMissed) == 0 {
+		return ""
+	}
+	items := make([]string, 0, len(res.AnswersMissed))
+	for _, n := range res.AnswersMissed {
+		if n < 1 || n > len(answers) || len(answers[n-1].Triggers) == 0 {
+			items = append(items, fmt.Sprintf("第 %d 条", n))
+			continue
+		}
+		items = append(items, fmt.Sprintf("第 %d 条（触发词 %s）", n, quoteTriggers(answers[n-1].Triggers)))
+	}
+	return "未送出的代填：" + strings.Join(items, "、")
+}
+
+// quoteTriggers 一条代填的触发词原文：各加直引号、顿号相连（如 "a"、"b"）。
+func quoteTriggers(triggers []string) string {
+	quoted := make([]string, 0, len(triggers))
+	for _, t := range triggers {
+		quoted = append(quoted, `"`+t+`"`)
+	}
+	return strings.Join(quoted, "、")
 }
 
 // userNote / authNote 日志里的上下文片段（值为空时给空串，不占位）。
@@ -339,9 +374,9 @@ func joinNotes(parts ...string) string {
 	return "，" + strings.Join(kept, "，")
 }
 
-// sameAsError 输出明细与报错原文是否逐字相同（相同则不必再写一遍明细）。
-func sameAsError(res ssh.Result) bool {
-	errStr := errText(res, "")
+// sameAsError 输出明细与失败详情文本是否逐字相同（相同则不必再写一遍明细）。
+func sameAsError(res ssh.Result, answers []ssh.Answer) bool {
+	errStr := errText(res, answers, "")
 	if errStr == "" || res.Output == "" {
 		return false
 	}

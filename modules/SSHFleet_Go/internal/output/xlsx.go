@@ -11,6 +11,7 @@ import (
 
 	"sshfleet/internal/batch"
 	"sshfleet/internal/config"
+	"sshfleet/internal/ssh"
 	"sshfleet/internal/verdict"
 )
 
@@ -123,6 +124,7 @@ func newResultsStyles(f *excelize.File) (*xlsxStyles, error) {
 //
 //	IP | 连接: 成功 - X.XXXs |
 //	IP | 执行(上传|下载): 成功 - X.XXXs |
+//	IP | 错误 | 失败详情（仅失败行：报错原文 / 服务端提示 / 未送出的代填）
 //	IP | 标准输出和错误输出 | 输出第 N 行（每条输出独占一行、单行显示不折行）
 //	IP | 分类: 分类名 |
 //	（浅蓝分隔行）
@@ -130,7 +132,7 @@ func newResultsStyles(f *excelize.File) (*xlsxStyles, error) {
 // 明细行只经 cleanForExcel 清非法字符（决定「文本能不能写进 XML」），排版一概不动：
 // 行首缩进、中间空行都原样写入。output 字段的首尾空白行在采集侧已去掉，此处不重复处理。
 // 成败与分类读判定写好的结论，展示分类按模式合成。
-func WriteOutputXlsx(archiveDir string, results *batch.Results, cfg *config.Config, mode string) error {
+func WriteOutputXlsx(archiveDir string, results *batch.Results, cfg *config.Config, mode string, answers []ssh.Answer) error {
 	if results.Len() == 0 {
 		return nil
 	}
@@ -182,10 +184,12 @@ func WriteOutputXlsx(archiveDir string, results *batch.Results, cfg *config.Conf
 			return err
 		}
 
-		// 连接失败：补一行错误详情（旧版没这行，错误原文只能从 results.xlsx 的 error 列看到；
-		// 用户 2026-09-15 要求保留，便于只开 output.xlsx 时也能定位原因）
-		if !r.ConnectSuccess {
-			if text := errText(r, ""); text != "" {
+		// 失败行补一行失败详情（旧版只有连接失败那行，其他失败行的原因只能从
+		// results.xlsx 的 error 列看到；用户 2026-09-15 要求保留，便于只开
+		// output.xlsx 时也能定位原因）。口径 2026-10-03 统一到所有失败行——
+		// 连上了却没跑成的行（超时 / 路径不存在 / 未送出的代填）同样得有原因可看。
+		if r.Verdict != verdict.Success {
+			if text := errText(r, answers, ""); text != "" {
 				if err := put(r.IP, "错误", text); err != nil {
 					return err
 				}
@@ -258,8 +262,9 @@ const (
 // WriteResultsXlsx 生成 <归档目录>/<paths.results_xlsx>：结果逐条固化为一行（表头取字段名）。
 // 对位旧 format_dict_list_to_xlsx：表头带细边框、数据单元格带细边框、自动筛选；
 // A–M 列（不含自由文本的 N/O）按内容做一次「最合适的列宽」（用户 2026-09-15 要求）。
-// 退出码列取判定给的定论退出码；报错原文列只在失败行填（正常行不显示服务端提示，D34）。
-func WriteResultsXlsx(archiveDir string, results *batch.Results, cfg *config.Config, mode string) error {
+// 退出码列取判定给的定论退出码；报错原文列只在失败行填（正常行不显示服务端提示，D34），
+// 未送出的代填在那一列里还原成触发词原文（D35）。
+func WriteResultsXlsx(archiveDir string, results *batch.Results, cfg *config.Config, mode string, answers []ssh.Answer) error {
 	if results.Len() == 0 {
 		return nil
 	}
@@ -296,7 +301,7 @@ func WriteResultsXlsx(archiveDir string, results *batch.Results, cfg *config.Con
 		}
 		errColumn := ""
 		if r.Verdict != verdict.Success {
-			errColumn = errText(r, "")
+			errColumn = errText(r, answers, "")
 		}
 		values := []any{
 			r.Seq, r.IP, r.Port, r.User, r.ConnectSuccess, exit,

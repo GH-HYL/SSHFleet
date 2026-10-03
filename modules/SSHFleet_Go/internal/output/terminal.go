@@ -94,7 +94,9 @@ func displayCategory(res ssh.Result, mode string) string {
 // 分类提到执行下面（一眼看出结果定性），output 原文放最下面（长文本不夹在状态行中间）。
 // output 原文**原样**输出，不做任何处理——整备（去首尾空白行）在采集侧完成，
 // r.Output 到手即成品（见 ssh.trimOuterBlankLines）；呈现层再动一次就会各清各的。
-func ResultLine(r ssh.Result, mode string, category string) string {
+//
+// answers 是代填表（-a 的解析结果），只给「未送出的代填」还原触发词用（D35）。
+func ResultLine(r ssh.Result, mode string, answers []ssh.Answer, category string) string {
 	var lines []string
 	lines = append(lines, fmt.Sprintf("【%s】 %s", r.IP, FormatConnStatus(r.ConnectSuccess, r.ConnectCostTime)))
 
@@ -104,8 +106,15 @@ func ResultLine(r ssh.Result, mode string, category string) string {
 			status = "成功"
 		}
 		lines = append(lines, fmt.Sprintf("【%s】 %s: %s - %.3fs", r.IP, ActionName(mode), status, r.ExecCostTime))
+		// 连上了却没跑成：失败详情也要在明细里看得到（报错原文 / 服务端提示 / 未送出的代填）。
+		// 这行原先只在连接失败时才有，这类结果的细节只能事后翻 results.xlsx（D35）。
+		if r.Verdict != verdict.Success {
+			if text := errText(r, answers, ""); text != "" {
+				lines = append(lines, fmt.Sprintf("【%s】 错误详情: %s", r.IP, text))
+			}
+		}
 	} else {
-		lines = append(lines, fmt.Sprintf("【%s】 错误: %s", r.IP, errText(r, "未知错误")))
+		lines = append(lines, fmt.Sprintf("【%s】 错误: %s", r.IP, errText(r, answers, "未知错误")))
 	}
 
 	lines = append(lines, fmt.Sprintf("【%s】 分类: %s", r.IP, category))

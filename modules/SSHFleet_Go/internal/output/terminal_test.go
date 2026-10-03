@@ -32,7 +32,7 @@ func TestResultLineFieldOrderOnSuccess(t *testing.T) {
 		IP: "[10.0.0.1]", ConnectSuccess: true, Verdict: verdict.Success,
 		ConnectCostTime: 0.01, ExecCostTime: 0.02,
 		Output: "hello world\nsecond line",
-	}, "execute", "执行成功")
+	}, "execute", nil, "执行成功")
 
 	lines := strings.Split(got, "\n")
 	conn := lineIndex(lines, "连接: 成功")
@@ -56,7 +56,7 @@ func TestResultLineFieldOrderOnConnectFailure(t *testing.T) {
 	got := ResultLine(ssh.Result{
 		IP: "[10.0.0.2]", ConnectSuccess: false, ConnectCostTime: 0.01,
 		Error: strPtr("dial tcp: connection refused"),
-	}, "execute", "拒绝网络连接")
+	}, "execute", nil, "拒绝网络连接")
 
 	lines := strings.Split(got, "\n")
 	conn := lineIndex(lines, "连接: 失败")
@@ -88,13 +88,88 @@ func TestResultLinePassesOutputThrough(t *testing.T) {
 		IP: "[10.0.0.1]", ConnectSuccess: true, Verdict: verdict.Success,
 		ConnectCostTime: 0.01, ExecCostTime: 0.02,
 		Output: raw,
-	}, "execute", "执行成功")
+	}, "execute", nil, "执行成功")
 
 	if !strings.Contains(got, raw) {
 		t.Fatalf("output 应原样输出（含行首缩进与中间空行），实际：\n%s", got)
 	}
 	if !strings.Contains(got, "disk  use%\n"+strings.Repeat("=", 50)) {
 		t.Fatalf("output 末行与分隔线之间不应多出空行：\n%s", got)
+	}
+}
+
+// 「未送出的代填」这一行事实的细节（D35，作者 2026-10-03 裁定）：失败行要把序号与
+// 触发词原文渲染回来——只陈述事实，不写结论词（「触发词未命中」四个字仍只由分类列表达）。
+// CONTEXT「触发词未命中」词条里那句"序号里最小的那个就是第一个出错点"，指的就是这里的序号。
+func TestResultLineRendersMissedAnswers(t *testing.T) {
+	answers := []ssh.Answer{
+		{Value: "zhangsan", Triggers: []string{"Your full name"}},
+		{Value: "ops", Triggers: []string{"Your dept", "部门"}},
+		{Value: "deb", Triggers: []string{"选哪个包格式"}},
+	}
+
+	// 一条未送出：连上了却失败的行要多出一行「错误详情」（此前这类行在明细里没有原因可看）
+	got := ResultLine(ssh.Result{
+		IP: "[10.0.0.1]", ConnectSuccess: true, Category: "触发词未命中",
+		ConnectCostTime: 0.01, ExecCostTime: 6.07, AnswersMissed: []int{1},
+		Output: "name= dept=",
+	}, "execute", answers, "触发词未命中")
+
+	if !strings.Contains(got, `错误详情: 未送出的代填：第 1 条（触发词 "Your full name"）`) {
+		t.Fatalf("明细里应带未送出代填的序号与触发词：\n%s", got)
+	}
+	if strings.Contains(got, "触发词未命中：") {
+		t.Fatalf("细节里不该再出现结论文案（那是分类列的活儿）：\n%s", got)
+	}
+
+	// 多条未送出：一条一个括号，序号与触发词对得上（不拢成一个括号）
+	got2 := ResultLine(ssh.Result{
+		IP: "[10.0.0.2]", ConnectSuccess: true, Category: "触发词未命中",
+		AnswersMissed: []int{1, 3},
+	}, "execute", answers, "触发词未命中")
+	want := `未送出的代填：第 1 条（触发词 "Your full name"）、第 3 条（触发词 "选哪个包格式"）`
+	if !strings.Contains(got2, want) {
+		t.Fatalf("多条未送出应为 %q，实际：\n%s", want, got2)
+	}
+
+	// 一条挂多个触发词：全列出来（不知道本该命中哪一个）
+	got3 := ResultLine(ssh.Result{
+		IP: "[10.0.0.3]", ConnectSuccess: true, Category: "触发词未命中",
+		AnswersMissed: []int{2},
+	}, "execute", answers, "触发词未命中")
+	if !strings.Contains(got3, `第 2 条（触发词 "Your dept"、"部门"）`) {
+		t.Fatalf("一条挂多个触发词时应全列：\n%s", got3)
+	}
+
+	// 没有未送出的代填就不多这一行（成功行、以及失败但没有代填事实的行）
+	okLine := ResultLine(ssh.Result{
+		IP: "[10.0.0.4]", ConnectSuccess: true, Verdict: verdict.Success,
+	}, "execute", answers, "执行成功")
+	if strings.Contains(okLine, "错误详情") {
+		t.Fatalf("成功行不该出错误详情行：\n%s", okLine)
+	}
+	noAnswer := ResultLine(ssh.Result{
+		IP: "[10.0.0.5]", ConnectSuccess: true, Category: "部分成功", FailedFiles: 1, SuccessFiles: 2,
+	}, "upload", answers, "部分成功")
+	if strings.Contains(noAnswer, "错误详情") {
+		t.Fatalf("没有失败详情可说的行不该出错误详情行：\n%s", noAnswer)
+	}
+}
+
+// 序号越界（理论到不了）时不猜触发词，只报序号——宁可少说，不说错。
+func TestResultLineMissedAnswerOutOfRange(t *testing.T) {
+	got := ResultLine(ssh.Result{
+		IP: "[10.0.0.1]", ConnectSuccess: true, Category: "触发词未命中",
+		AnswersMissed: []int{9},
+	}, "execute", []ssh.Answer{{Value: "a", Triggers: []string{"t"}}}, "触发词未命中")
+
+	lines := strings.Split(got, "\n")
+	idx := lineIndex(lines, "错误详情")
+	if idx < 0 {
+		t.Fatalf("序号越界时也该把序号报出来：\n%s", got)
+	}
+	if !strings.HasSuffix(lines[idx], "未送出的代填：第 9 条") {
+		t.Fatalf("序号越界时应只报序号、不猜触发词：\n%s", lines[idx])
 	}
 }
 
