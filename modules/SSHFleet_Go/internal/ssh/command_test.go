@@ -103,6 +103,38 @@ func TestBuildCommandPythonKeepsNoScriptName(t *testing.T) {
 	}
 }
 
+// 带版本号的 shell 名（Debian 的 /bin/zsh5、ksh93）同样补名字：剥版本号的归一只有一份，
+// 家族判定与 -a 支持范围、--no-shell 互斥认同一个名字（此前整名查表，zsh5 静默不补）。
+func TestBuildCommandVersionedShellKeepsScriptName(t *testing.T) {
+	for _, name := range []string{"zsh5", "ksh93", "/bin/bash5"} {
+		cmd, _ := BuildCommand("", "echo hi", "t.sh", name, false, false)
+		if !strings.Contains(cmd, ". /dev/stdin") || !strings.Contains(cmd, "t.sh") {
+			t.Fatalf("%s 应补回脚本名（名字作 $0），实际 %q", name, cmd)
+		}
+	}
+}
+
+// InterpreterBaseName：解释器名归一的唯一一份剥法，三个判断（-a 范围 / --no-shell
+// 互斥 / $0 家族判定）都从这里认名字。
+func TestInterpreterBaseName(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"bash", "bash"},
+		{"/bin/bash", "bash"},
+		{"BASH", "bash"},
+		{"bash5", "bash"},
+		{"/usr/bin/python3.11", "python"},
+		{"php8.1", "php"},
+		{"ksh93", "ksh"},
+		{"perl -w", "perl"},
+		{"", ""},
+	}
+	for _, c := range cases {
+		if got := InterpreterBaseName(c.in); got != c.want {
+			t.Fatalf("InterpreterBaseName(%q) 应为 %q，实际 %q", c.in, c.want, got)
+		}
+	}
+}
+
 // shellQuote：内部单引号按 '\” 转义，保证整串作为 sh -c 的单个参数传递。
 func TestShellQuote(t *testing.T) {
 	cases := []struct{ in, want string }{
