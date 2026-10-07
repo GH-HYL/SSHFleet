@@ -39,19 +39,19 @@ func TestBuildCommandSudo(t *testing.T) {
 	}
 }
 
-// --nobash：命令模式原样下发，不套 shell、不喂 stdin。
-func TestBuildCommandNoBash(t *testing.T) {
+// --no-shell：命令模式原样下发，不套 shell、不喂 stdin。
+func TestBuildCommandNoShell(t *testing.T) {
 	cmd, stdin := BuildCommand("raw-cmd --flag", "", "", "", true, false)
 	if cmd != "raw-cmd --flag" || stdin != "" {
-		t.Fatalf("--nobash 应原样下发且不喂 stdin，实际 cmd=%q stdin=%q", cmd, stdin)
+		t.Fatalf("--no-shell 应原样下发且不喂 stdin，实际 cmd=%q stdin=%q", cmd, stdin)
 	}
 }
 
-// --nobash 只管命令模式：脚本模式下仍应走外壳。
-func TestBuildCommandNoBashIgnoredForScript(t *testing.T) {
+// --no-shell 只管命令模式：脚本模式下仍应走外壳。
+func TestBuildCommandNoShellIgnoredForScript(t *testing.T) {
 	cmd, stdin := BuildCommand("", "echo script", "", "bash", true, false)
 	if cmd == "echo script" || !strings.HasPrefix(cmd, "sh -c ") {
-		t.Fatalf("脚本模式不该被 --nobash 影响，实际 %q", cmd)
+		t.Fatalf("脚本模式不该被 --no-shell 影响，实际 %q", cmd)
 	}
 	if stdin != "echo script" {
 		t.Fatalf("脚本内容应经 stdin 直喂，实际 %q", stdin)
@@ -224,18 +224,18 @@ func TestDescribeCommandSudo(t *testing.T) {
 	}
 }
 
-// --nobash：命令行就是命令原文，不出现外壳包装。
-func TestDescribeCommandNoBash(t *testing.T) {
-	text := DescribeCommand(DescribeInput{Command: "raw-cmd --flag", NoBash: true})
+// --no-shell：命令行就是命令原文，不出现外壳包装。
+func TestDescribeCommandNoShell(t *testing.T) {
+	text := DescribeCommand(DescribeInput{Command: "raw-cmd --flag", NoShell: true})
 
 	if !strings.Contains(text, "命令行： raw-cmd --flag") {
 		t.Fatalf("应把命令原文作为命令行交代，实际：\n%s", text)
 	}
-	if !strings.Contains(text, "--nobash") {
-		t.Fatalf("应说明是 --nobash 形态，实际：\n%s", text)
+	if !strings.Contains(text, "--no-shell") {
+		t.Fatalf("应说明是 --no-shell 形态，实际：\n%s", text)
 	}
 	if strings.Contains(text, "sh -c") {
-		t.Fatalf("--nobash 下不该出现外壳，实际：\n%s", text)
+		t.Fatalf("--no-shell 下不该出现外壳，实际：\n%s", text)
 	}
 }
 

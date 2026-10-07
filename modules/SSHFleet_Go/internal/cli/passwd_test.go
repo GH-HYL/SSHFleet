@@ -45,12 +45,12 @@ func TestCheckPasswdChangeEncryptedMissingFile(t *testing.T) {
 
 func TestCheckPasswdChangeExclusive(t *testing.T) {
 	cases := map[string]*Args{
-		"-a":        {ChangePassword: "pw", Answer: "1,架构"},
-		"-p":        {ChangePassword: "pw", Path: "/x/"},
-		"-k":        {ChangePassword: "pw", Key: true},
-		"--no-bash": {ChangePassword: "pw", NoBash: true},
-		"--sudo":    {ChangePassword: "pw", sudoFlag: true},
-		"--no-sudo": {ChangePassword: "pw", noSudoFlag: true},
+		"-a":         {ChangePassword: "pw", Answer: "1,架构"},
+		"-p":         {ChangePassword: "pw", Path: "/x/"},
+		"-k":         {ChangePassword: "pw", Key: true},
+		"--no-shell": {ChangePassword: "pw", NoShell: true},
+		"--sudo":     {ChangePassword: "pw", sudoFlag: true},
+		"--no-sudo":  {ChangePassword: "pw", noSudoFlag: true},
 	}
 	for name, a := range cases {
 		if err := checkPasswdChange(a); err == nil || !strings.Contains(err.Error(), "--change-password 不能和") {
