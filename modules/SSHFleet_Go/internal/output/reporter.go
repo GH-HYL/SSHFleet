@@ -58,6 +58,8 @@ type Reporter struct {
 
 	mu   sync.Mutex
 	prog *tea.Program
+	// stats 进度链路计时（排障用）。只记数、不改变行为：见 progressdebug.go。
+	stats *progressStats
 	// plain 直通模式：输出不是终端时不启动进度界面，明细与提示直接落 out。
 	// 否则重定向到文件时会混进成千上万条光标控制序列（用户 2026-09-15 裁定）。
 	plain bool
@@ -88,6 +90,7 @@ func NewReporter(execLog *log.Logger, outputFile io.Writer, mode cli.Mode, answe
 		total:   total,
 		start:   start,
 		out:     os.Stdout,
+		stats:   newProgressStats(execLog),
 		plain:   !isTerminal(os.Stdout),
 		quiet:   quiet,
 	}
@@ -105,12 +108,17 @@ func (r *Reporter) Notice(msg string) {
 }
 
 // Progress 进度事件：首个事件才启动进度界面（采集期提示已先落终端）。
+//
+// Send 是阻塞发（消息队列无缓冲），返回时只代表事件循环把这条消息收下了。这中间的等待
+// 正是「进度为什么不动」的直接读数，故计时后写一条 DEBUG（见 progressdebug.go）。
 func (r *Reporter) Progress(s batch.Snapshot) {
 	prog := r.ensureProgram()
 	if prog == nil {
 		return // 直通模式：不打进度条，明细照常
 	}
+	sent := time.Now()
 	prog.Send(s)
+	r.stats.recordSnapSend(time.Since(sent), s)
 }
 
 // Result 单节点结果：写 output.txt（各模式）+ 命令/脚本与改密打终端明细 + 写执行期日志。
@@ -150,6 +158,8 @@ func (r *Reporter) Stop() {
 	// 渲染完才执行退出，所以这一帧一定会出现在屏幕上。
 	prog.Send(finalMsg{})
 	prog.Wait()
+	// 界面收尾之后写小结：换环境对比时先看这一行（投递等待与渲染耗时都在上面）。
+	r.stats.logSummary()
 }
 
 // ensureProgram 懒创建进度界面：首个进度事件才启动，好让采集期提示先落终端
@@ -162,7 +172,7 @@ func (r *Reporter) ensureProgram() *tea.Program {
 		return r.prog
 	}
 
-	p := tea.NewProgram(newProgressModel(r.mode, r.total, r.start),
+	p := tea.NewProgram(newProgressModel(r.mode, r.total, r.start, r.stats),
 		tea.WithOutput(r.out),
 		tea.WithInput(nil),         // 不接输入：中断仍由主干的信号处理负责
 		tea.WithoutSignalHandler(), // 不抢 SIGINT，免得与 signal.NotifyContext 打架
@@ -184,12 +194,15 @@ func (r *Reporter) ensureProgram() *tea.Program {
 }
 
 // printAbove 在进度界面上方打印；界面未启动（或直通模式）时直接落 out。
+// Println 与进度快照走同一条无缓冲队列，等待时长同样记一条 DEBUG。
 func (r *Reporter) printAbove(text string) {
 	r.mu.Lock()
 	prog := r.prog
 	r.mu.Unlock()
 	if prog != nil {
+		sent := time.Now()
 		prog.Println(text)
+		r.stats.recordLineSend(time.Since(sent))
 		return
 	}
 	fmt.Fprintln(r.out, text)

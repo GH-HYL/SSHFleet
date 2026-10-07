@@ -62,7 +62,11 @@ func newBar(w int) progress.Model {
 		// 临界阻尼的代价是少一点「弹」，换来的是数字只朝一个方向走。
 		progress.WithSpringOptions(18, 1.0),
 		progress.WithFillCharacters('━', '─'),
-		progress.WithScaledGradient("#00D9FF", "#5A56E0"),
+		// 渐变两端：#C05050（暗红）→ #FFB454（亮橙）。起端刻意留暗、末端挑亮，
+		// 两端相对亮度 18% → 55%；低色彩终端（256 色）降色后是 #af5f5f → #ffaf5f，
+		// 仍分得出两端——原来的 #00D9FF → #5A56E0 末段降色后只有 14% 亮度，右头看着发暗
+		// （用户 2026-10-07 在 demo 里选定）。
+		progress.WithScaledGradient("#C05050", "#FFB454"),
 	)
 	m.EmptyColor = "#3C3C50"
 	m.PercentFormat = " %5.1f%%"
@@ -140,6 +144,9 @@ type progressModel struct {
 	bySeq map[int]*nodeView
 
 	totalWindow *speedWindow
+
+	// stats 进度链路计时（排障用，可为 nil）。只读它的方法，不改变渲染。
+	stats *progressStats
 }
 
 // finalMsg 收尾消息：让界面把动画值定格到目标值再退出。
@@ -148,8 +155,8 @@ type progressModel struct {
 type finalMsg struct{}
 
 // newProgressModel 建界面模型。start 由调用方给定（主干传 execStart），
-// 与统计块的总耗时同源。
-func newProgressModel(mode cli.Mode, total int, start time.Time) progressModel {
+// 与统计块的总耗时同源。stats 为排障计时（可为 nil，测试里就传 nil）。
+func newProgressModel(mode cli.Mode, total int, start time.Time, stats *progressStats) progressModel {
 	return progressModel{
 		mode:        mode,
 		total:       total,
@@ -158,12 +165,14 @@ func newProgressModel(mode cli.Mode, total int, start time.Time) progressModel {
 		nodeBar:     newBar(nodeBarWidth),
 		bySeq:       map[int]*nodeView{},
 		totalWindow: &speedWindow{},
+		stats:       stats,
 	}
 }
 
 func (m progressModel) Init() tea.Cmd { return nil }
 
 func (m progressModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	m.stats.observeMsg()
 	switch msg := msg.(type) {
 	case batch.Snapshot:
 		m.applySnapshot(msg)
@@ -337,7 +346,12 @@ func (m progressModel) barView(b progress.Model, target float64) string {
 // （standardRenderer.stop 里的 EraseEntireLine，而 flush 把光标留在最后一行行首）。
 // 命令模式的进度条只有一行、正好就是那一行，会被整条抹掉。多留一个空行接刀，
 // 进度条本身就能像以前那样留在屏幕上（用户 2026-09-15 实测反馈）。
-func (m progressModel) View() string { return m.render() + "\n" }
+func (m progressModel) View() string {
+	start := time.Now()
+	out := m.render() + "\n"
+	m.stats.observeView(time.Since(start)) // 排障计时：这一帧正文的构建耗时
+	return out
+}
 
 // render 界面正文（不含上面那个替死换行；测试直接断言它）。
 func (m progressModel) render() string {

@@ -3,13 +3,15 @@
 // 三条硬规则：
 //   - **所有字段必填**（字段要出现，值可留空），不写死任何默认值：缺字段与非法取值都在这层报错
 //   - **未知字段零容忍**：解码后取未识别键，报错列出具体键名
-//   - **配置里的路径一律绝对路径**，分隔符 `\` 与 `/` 通用、盘符统一大写，程序用时按 `/` 处理
+//   - **配置里的路径一律本机绝对路径**，分隔符 `\` 与 `/` 通用、盘符统一大写，程序用时按 `/` 处理。
+//     绝对路径的形态随平台变：盘符与 UNC 是 Windows 的形态，以 `/` 开头是 Unix 系的形态，两边不能互换
 package config
 
 import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/BurntSushi/toml"
@@ -247,24 +249,66 @@ func resolveCredentialPaths(cfg *Config) error {
 	return nil
 }
 
-// normalizeConfigPath 归一化一个配置路径：分隔符统一为 /、盘符转大写，且必须是绝对路径。
+// normalizeConfigPath 归一化一个配置路径：分隔符统一为 /、盘符转大写，且必须是**本机**绝对路径。
 // 空值表示未配置，放行。不解析 ~：配置是长期备着的东西，写全路径。
+//
+// 报错按值的形态分四种，不压成一句：写 C:/Keys 的人写的是绝对路径，只是不是本机的——
+// 「必须是绝对路径」只留给真的写了相对路径的那种。为什么这么分见下方分支。
 func normalizeConfigPath(name, raw string) (string, error) {
 	p := strings.TrimSpace(raw)
 	if p == "" {
 		return "", nil
 	}
 	p = strings.ReplaceAll(p, `\`, "/")
-	if len(p) >= 2 && p[1] == ':' && isDriveLetter(p[0]) {
+	hasDrive := len(p) >= 2 && p[1] == ':' && isDriveLetter(p[0])
+	if hasDrive {
 		p = strings.ToUpper(p[:1]) + p[1:]
 	}
-	if strings.HasPrefix(p, "~") || !filepath.IsAbs(p) {
-		return "", fmt.Errorf(
-			"%s 必须是绝对路径，当前值：%s\n"+
-				"原因：配置里的凭据路径一律写全路径；相对路径与 ~ 只在清单里能用\n"+
-				"提示：像 /home/ops/.keys/id_rsa 或 D:/Keys/id_rsa 这样写", name, raw)
+
+	// 提示里只给本机形态的示例：同时摆两种，等于教用户写一个马上会被否掉的写法
+	example, absHint := "/home/ops/.keys", "写成以 / 开头的本机路径"
+	if isWindows() {
+		example, absHint = "D:/Keys", "写成带盘符的本机路径"
 	}
-	return p, nil
+	pathErr := func(head, reason string) error {
+		return fmt.Errorf("%s %s，当前值：%s\n原因：%s\n提示：%s，例如 %s",
+			name, head, raw, reason, absHint, example)
+	}
+
+	// ~：与相对路径无关的一类（它既不是相对也不是绝对），单独成句
+	if strings.HasPrefix(p, "~") {
+		return "", fmt.Errorf(
+			"%s 不支持 ~，当前值：%s\n"+
+				"原因：~ 只在清单里能用，配置里要写全路径\n"+
+				"提示：%s，例如 %s", name, raw, absHint, example)
+	}
+
+	if isWindows() {
+		if filepath.IsAbs(p) {
+			return p, nil
+		}
+		if strings.HasPrefix(p, "/") {
+			return "", pathErr("不是本机的绝对路径", "本机是 Windows，这个写法没有盘符")
+		}
+		return "", pathErr("必须是绝对路径", "配置里的路径一律写全路径；相对路径只在清单里能用")
+	}
+
+	// 非 Windows：盘符与 UNC 都是 Windows 形态，本机用不了。UNC 归一化后以 // 开头，
+	// 而 filepath.IsAbs 在 Unix 系只看开头是不是 /——不单独拦下，它会被当成 /服务器/共享 的本地路径，
+	// 最后只报「找不到凭据文件」，看不出真因（\\?\ 设备路径同理落这一支）。
+	if hasDrive {
+		return "", pathErr("不是本机的绝对路径", "本机是 Unix 系系统，这是 Windows 盘符写法")
+	}
+	if strings.HasPrefix(p, "//") {
+		return "", pathErr("不是本机的绝对路径", "本机是 Unix 系系统，这是 Windows 网络路径（UNC）写法")
+	}
+	if filepath.IsAbs(p) {
+		return p, nil
+	}
+	return "", pathErr("必须是绝对路径", "配置里的路径一律写全路径；相对路径只在清单里能用")
 }
+
+// isWindows 决定路径形态的判定口径与报错措辞：绝对路径的形态随平台变。
+func isWindows() bool { return runtime.GOOS == "windows" }
 
 func isDriveLetter(b byte) bool { return (b >= 'A' && b <= 'Z') || (b >= 'a' && b <= 'z') }

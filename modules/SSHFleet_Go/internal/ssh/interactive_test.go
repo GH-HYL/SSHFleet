@@ -102,6 +102,27 @@ func TestInteractiveCommandInterpreterAndRoot(t *testing.T) {
 	}
 }
 
+// -a 的脚本模式：正文照旧 base64 进命令行，脚本名作 `-c` 之后的第一个参数——那正是
+// bash 的 $0，脚本据此仍能从自己的文件名里取信息。
+func TestInteractiveCommandKeepsScriptName(t *testing.T) {
+	got := InteractiveCommand(InteractiveInput{ScriptBody: "echo hi", ScriptName: "(1.2.3.4).sh", Interpreter: "bash"})
+	idx := strings.Index(got, "base64 -d)")
+	if idx < 0 {
+		t.Fatalf("下发行形态变了：%s", got)
+	}
+	if !strings.Contains(got[idx:], "(1.2.3.4).sh") {
+		t.Fatalf("脚本名应挂在 -c 之后当 $0，实际：%s", got)
+	}
+}
+
+// 命令模式（-c）没有脚本文件，不该凭空补一个名字。
+func TestInteractiveCommandNoScriptNameForCommand(t *testing.T) {
+	got := InteractiveCommand(InteractiveInput{Command: "who -b", ScriptName: "t.sh"})
+	if strings.Contains(got, "t.sh") {
+		t.Fatalf("命令模式不该出现脚本名，实际：%s", got)
+	}
+}
+
 // 日志说明与方向稿的形态一致：原始内容 / 处理方式 / 最终命令三段。
 func TestDescribeInteractive(t *testing.T) {
 	text := DescribeInteractive(DescribeInteractiveInput{

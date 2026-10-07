@@ -621,7 +621,10 @@ func usageText(cfg *config.Config, version string, width int) string {
 	examples := [][2]string{
 		{"执行命令:", fmt.Sprintf("%s -f nodes.csv -c \"ls -l\"", name)},
 		{"执行脚本:", fmt.Sprintf("%s -f nodes.csv -s deploy.sh", name)},
-		{"代填执行:", fmt.Sprintf("%s -f nodes.csv -s deploy.sh -a \"1,请选择架构\\ndeb,请选择包格式\"", name)},
+		// 代填的值照原样给两个"值,触发词"对：示例只摆内容，不解释——所以值与触发词
+		// 都取一看就懂的写法（y / rpm 各自对应它那句问话），不用 1 / 2 这种靠题面才懂的填法
+		// （2026-10-07 作者定）。
+		{"代填执行:", fmt.Sprintf("%s -f nodes.csv -s deploy.sh -a \"y,是否继续\\nrpm,请选择包格式\"", name)},
 		{"批量改密:", fmt.Sprintf("%s -f nodes.csv --change-password \"新密码\"", name)},
 		{"上传文件:", fmt.Sprintf("%s -f nodes.csv -u ./dist/app -p /opt/app/", name)},
 		{"下载文件:", fmt.Sprintf("%s -f nodes.csv -d /var/log/app -p ./logs/", name)},

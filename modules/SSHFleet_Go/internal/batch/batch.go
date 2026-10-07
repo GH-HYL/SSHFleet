@@ -79,7 +79,20 @@ func Run(ctx context.Context, a *cli.Args, cfg *config.Config, nodes *nodelist.N
 	if concurrency <= 0 || concurrency > len(tasks) {
 		concurrency = len(tasks)
 	}
+	// 执行参数：两个超时与执行身份。`-t` / `-T` 未显式给值时由参数解析按模式填配置默认值，
+	// 事后光看命令行原文看不出实际生效的是多少；执行身份由 `--sudo` / `--no-sudo` 与配置
+	// 共同决定，终值同样不在命令行原文里。记在这里（单线程区、协程未起），与「开始执行任务」
+	// 一起构成这一轮的现场。
+	logger.Info(fmt.Sprintf("执行参数：执行超时 %d 秒，连接超时 %d 秒，执行身份 %s",
+		a.Timeout, a.ConnectTimeout, identityLabel(a.Sudo)))
+
 	logger.Info(fmt.Sprintf("开始执行任务：节点 %d 个，并发 %d，模式 %s", len(tasks), concurrency, a.ModeName().Info().LogName))
+
+	// 代填表逐条明细（内容 → 触发词）：-a 现场排查的正据——「这次配了哪几条、触发词各是什么」
+	// 一眼可见，不必回头翻命令行。非 -a 无表，一行不写。
+	for _, line := range answerTable(a) {
+		logger.Success(line)
+	}
 
 	// 交代命令被包成了什么（旧 Python builder.py 的「完整命令拼接完成」对应物）：
 	// 命令走 stdin 通道后，命令行里只剩固定形态的 bash -lc，事后看日志查不出
@@ -203,6 +216,7 @@ func buildTasks(a *cli.Args, nodes *nodelist.Nodes, prompts *ssh.PasswdPrompts, 
 			material = cli.ScriptMaterialOf(a, data)
 		}
 		body, interpreter := material.Body, material.Interpreter
+		name := scriptName(a)
 		if len(a.Answers) > 0 {
 			// 交互分支：正文改经命令行承载，会话 stdin 整条让给代填（ADR-0010）。
 			// 下发行在这里生成一次，日志与实际执行共用；长短由参数合规阶段用同一个
@@ -210,6 +224,7 @@ func buildTasks(a *cli.Args, nodes *nodelist.Nodes, prompts *ssh.PasswdPrompts, 
 			in := ssh.InteractiveInput{
 				Command:       a.Command,
 				ScriptBody:    body,
+				ScriptName:    name,
 				Interpreter:   interpreter,
 				AsRoot:        a.Sudo,
 				Answers:       a.Answers,
@@ -222,7 +237,7 @@ func buildTasks(a *cli.Args, nodes *nodelist.Nodes, prompts *ssh.PasswdPrompts, 
 			}
 			break
 		}
-		command, stdin := ssh.BuildCommand(a.Command, body, interpreter, a.NoBash, a.Sudo)
+		command, stdin := ssh.BuildCommand(a.Command, body, name, interpreter, a.NoBash, a.Sudo)
 		for i, node := range nodes.Items {
 			tasks = append(tasks, &task{seq: i, node: node, command: command, stdin: stdin})
 		}
@@ -261,10 +276,44 @@ func commandDescription(a *cli.Args, tasks []*task) []string {
 		Command:     a.Command,
 		ScriptPath:  a.Script,
 		ScriptBody:  body,
+		ScriptName:  scriptName(a),
 		Interpreter: interpreter,
 		NoBash:      a.NoBash,
 		AsRoot:      a.Sudo,
 	}))
+}
+
+// scriptName 脚本文件名（basename）。下发行要把它交回去当 $0——这类脚本常从自己的
+// 名字里取信息（目标 IP、站点类型），不补回去它们就取到空值，后面拿空值做数值比较
+// 会直接报错。为什么是 basename 而不是原路径：脚本并没有落到目标机上，给一个本机
+// 路径反而会让 dirname 那类写法指向不存在的地方。详见 ssh 侧 scriptNameArg 的说明。
+func scriptName(a *cli.Args) string {
+	if a.Script == "" {
+		return ""
+	}
+	return filepath.Base(a.Script)
+}
+
+// identityLabel 执行身份的中文名（与参数屏「执行身份」行同口径）。
+func identityLabel(sudo bool) string {
+	if sudo {
+		return "root"
+	}
+	return "登录用户"
+}
+
+// answerTable -a 代填表的逐条明细（内容 → 触发词）；非 -a 没有表，返回 nil。
+// Describe 是代填的既有呈现形态（报告与参数屏共用），这里不再另拼一份写法。
+func answerTable(a *cli.Args) []string {
+	if len(a.Answers) == 0 {
+		return nil
+	}
+	lines := make([]string, 0, len(a.Answers)+1)
+	lines = append(lines, fmt.Sprintf("代填表（%d 条）：", len(a.Answers)))
+	for i, ans := range a.Answers {
+		lines = append(lines, fmt.Sprintf("  第 %d 条：%s", i+1, ans.Describe()))
+	}
+	return lines
 }
 
 // indentLines 日志正文逐行缩进两格（说明块在日志里自成一段）。
