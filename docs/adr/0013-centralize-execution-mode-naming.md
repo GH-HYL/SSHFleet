@@ -53,7 +53,7 @@ ADR-0003 的《2026-09-29 推翻》节裁定重开此事，理由是其唯一前
 - **与 D2 的关系（`docs/issues/result-verdict/spec.md`）**：D2 管的是「结果结构体只存英文成败枚举，中文由消费侧按模式给」。本 ADR **不改这条实质**——结果结构体仍存英文，转换仍发生在消费侧，只是**映射表搬到了 `cli`**、消费侧改为调它。D2 里「统计侧按模式转中文」的**位置措辞**随之更新，**不是翻案**。
 - **第六档的代价从此收敛**：以后加一档，改这一张表 + 编译器/自检指路，不必再逐处核对 7 个点。
 - 三处写着「四种 / 四选一」的过时注释（`batch/batch.go`、`output/archive.go`、`cli/args.go`）随名字集中一并清掉。
-- 实施落在 `docs/issues/architecture-review-2026-10-06/issues/05-mode-centralization.md`；完成后本条《状态》改为「已实施」。
+- 实施落在 `docs/issues/mode-centralization/`（`spec.md` 记实施形状 + 实现工单 `01`–`04`）；来源工单是 `docs/issues/architecture-review-2026-10-06/issues/05-mode-centralization.md`。完成后本条《状态》改为「已实施」。
 
 ## 备选方案
 
