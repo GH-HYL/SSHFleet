@@ -87,6 +87,34 @@ func TestConfirmInterpreterFallback(t *testing.T) {
 	}
 }
 
+// isBashInterpreter：--no-bash 与自定义解释器互斥的判断依据（bash 与 /bin/bash 都算）。
+func TestIsBashInterpreter(t *testing.T) {
+	for _, name := range []string{"bash", "/bin/bash", "BASH"} {
+		if !isBashInterpreter(name) {
+			t.Fatalf("%s 应判为 bash", name)
+		}
+	}
+	for _, name := range []string{"sh", "dash", "perl", "python3", ""} {
+		if isBashInterpreter(name) {
+			t.Fatalf("%s 不该判为 bash", name)
+		}
+	}
+}
+
+// --no-bash 与自定义解释器互斥：nobash 下命令原样下发、配的解释器不生效，别让用户"既要又要"。
+func TestCheckArgumentsNoBashVsInterpreter(t *testing.T) {
+	err := CheckArguments(&Args{Command: "ls", NoBash: true, Interpreter: "perl"})
+	if err == nil || !strings.Contains(err.Error(), "--no-bash") || !strings.Contains(err.Error(), "perl") {
+		t.Fatalf("--no-bash + 非 bash 解释器应报互斥并点名，实际：%v", err)
+	}
+
+	// 解释器是 bash：不因这条互斥拦下（后续别的检查另算）
+	err = CheckArguments(&Args{Command: "ls", NoBash: true, Interpreter: "bash"})
+	if err != nil && strings.Contains(err.Error(), "--no-bash 与解释器配置") {
+		t.Fatalf("bash 解释器不该触发这条互斥：%v", err)
+	}
+}
+
 // checkAnswerInterpreter：-a 只在解释器属于支持范围时放行（含带目录/版本号的写法），
 // 范围外当场报错并点名；没用 -a 一律放行。
 func TestCheckAnswerInterpreter(t *testing.T) {
