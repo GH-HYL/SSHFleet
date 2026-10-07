@@ -14,6 +14,7 @@ import (
 
 	"sshfleet/internal/common"
 	"sshfleet/internal/config"
+	"sshfleet/internal/ssh"
 )
 
 // configShown 面向用户展示的配置文件路径（与 main 的 configPathShown 同形：不带 ./）。
@@ -74,4 +75,24 @@ func ConfirmInterpreterFallback(a *Args, cfg *config.Config, in *common.Interact
 		return common.ErrCancelled
 	}
 	return nil
+}
+
+// checkAnswerInterpreter 拦下 -a 不支持的解释器。
+//
+// -a 的正文要作"一段程序文本"交给解释器，而各家的参数不一样（shell / python 是 -c，
+// perl / ruby / node / lua 是 -e，php 是 -r，见 ssh.ProgramTextArg）。表外的解释器没有统一
+// 入口：配进来再用 -a 会静默不跑（perl 用 -c 甚至"只做语法检查、跑完就退"）。与其让它闷着
+// 出错，不如在参数合规检查阶段当场说清（2026-10-07 作者定）。
+func checkAnswerInterpreter(a *Args) error {
+	if a.Answer == "" {
+		return nil // 没用 -a，与解释器无关
+	}
+	if _, ok := ssh.ProgramTextArg(a.Interpreter); ok {
+		return nil
+	}
+	return fmt.Errorf(
+		"-a 代填不支持解释器 %q\n"+
+			"目前支持：bash、sh、dash、ksh、zsh、mksh、ash、python、perl、ruby、node、lua、php\n"+
+			"提示：请改 %s 的 [interpreter]，换成上面这些；或去掉 -a 后重跑",
+		a.Interpreter, configShown)
 }

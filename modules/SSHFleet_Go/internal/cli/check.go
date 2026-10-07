@@ -155,6 +155,10 @@ func CheckArguments(a *Args) error {
 	if err := checkAnswer(a, scriptText); err != nil {
 		return err
 	}
+	// -a 的解释器范围：正文要作"一段程序文本"交给解释器，各家参数不同（见 ssh.ProgramTextArg）
+	if err := checkAnswerInterpreter(a); err != nil {
+		return err
+	}
 
 	// -f：来源（文件 / 内联文本）已由 Parse 判定，这里按来源分流——
 	// 内联文本要看首字段像不像节点，文件要能读、且不是二进制。

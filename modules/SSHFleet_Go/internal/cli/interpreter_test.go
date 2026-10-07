@@ -86,3 +86,27 @@ func TestConfirmInterpreterFallback(t *testing.T) {
 		t.Fatalf("答 y 应放行，实际 %v", err)
 	}
 }
+
+// checkAnswerInterpreter：-a 只在解释器属于支持范围时放行（含带目录/版本号的写法），
+// 范围外当场报错并点名；没用 -a 一律放行。
+func TestCheckAnswerInterpreter(t *testing.T) {
+	supported := []string{"bash", "sh", "/usr/bin/python3.11", "perl", "ruby", "node", "lua5.4", "php8.1"}
+	for _, name := range supported {
+		a := &Args{Command: "x", Answer: "1,架构", Interpreter: name}
+		if err := checkAnswerInterpreter(a); err != nil {
+			t.Fatalf("%s 在支持范围内，不该报错：%v", name, err)
+		}
+	}
+
+	// 表外：报错、点名、并把支持范围与去处讲清
+	a := &Args{Command: "x", Answer: "1,架构", Interpreter: "tclsh"}
+	err := checkAnswerInterpreter(a)
+	if err == nil || !strings.Contains(err.Error(), "tclsh") || !strings.Contains(err.Error(), "不支持") {
+		t.Fatalf("表外解释器应报不支持并点名，实际：%v", err)
+	}
+
+	// 没用 -a：与解释器无关，一律放行
+	if err := checkAnswerInterpreter(&Args{Command: "x", Interpreter: "tclsh"}); err != nil {
+		t.Fatalf("没用 -a 不该检查解释器：%v", err)
+	}
+}

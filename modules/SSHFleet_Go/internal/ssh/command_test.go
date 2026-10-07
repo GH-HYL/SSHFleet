@@ -285,3 +285,36 @@ func TestDescribeCommandNoCommand(t *testing.T) {
 		t.Fatalf("无命令时应给空串，实际 %q", text)
 	}
 }
+
+// ProgramTextArg：「程序文本参数」按解释器取，表外不支持；名字可带目录与版本号。
+func TestProgramTextArg(t *testing.T) {
+	cases := []struct {
+		in   string
+		want string
+		ok   bool
+	}{
+		{"bash", "-c", true},
+		{"/usr/bin/python3.11", "-c", true},
+		{"perl", "-e", true},
+		{"ruby", "-e", true},
+		{"node", "-e", true},
+		{"lua5.4", "-e", true},
+		{"php8.1", "-r", true},
+		{"tclsh", "", false},
+		{"", "", false},
+	}
+	for _, c := range cases {
+		got, ok := ProgramTextArg(c.in)
+		if got != c.want || ok != c.ok {
+			t.Fatalf("%q：应 (%q,%v)，实际 (%q,%v)", c.in, c.want, c.ok, got, ok)
+		}
+	}
+}
+
+// 程序文本参数不能写死 -c：perl 这类要用 -e 启动。
+func TestInteractiveCommandUsesProgramArg(t *testing.T) {
+	got := InteractiveCommand(InteractiveInput{Command: "print 1", Interpreter: "perl"})
+	if !strings.Contains(got, "perl -e ") {
+		t.Fatalf("perl 应用 -e 启动程序文本，实际：%s", got)
+	}
+}
