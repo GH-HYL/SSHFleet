@@ -302,15 +302,30 @@ func ProgramTextArg(interpreter string) (string, bool) {
 // （实测 `dash -c 'exec -a "$0" dash'` 报 `exec: -a: not found`），而 `. /dev/stdin` 各家都认。
 // 代价：`.` 是"在当前 shell 里执行"，脚本顶层 `return` 会静默返回（当文件跑会报错），
 // `$BASH_SOURCE` 会变成 `/dev/stdin`（原招是空）——对本工具的场景（从自身文件名取信息）无影响。
+//
+// zsh 要单独适配：zsh 的 source 会把 $0 重置成被 source 的文件名（FUNCTION_ARGZERO
+// 默认开），补回的名字会被 /dev/stdin 盖掉（2026-10-08 实测）。bash / dash 的 source
+// 不动 $0，无此行为。见 sourceStdinBody。
 func scriptStdinInner(interpreter, scriptName string, asRoot bool) string {
 	sudo := ""
 	if asRoot {
 		sudo = modeSudo + " "
 	}
 	if arg := scriptNameArg(interpreter, scriptName); arg != "" {
-		return envPrefix + " " + sudo + interpreter + " -c " + shellQuote(". /dev/stdin") + arg
+		return envPrefix + " " + sudo + interpreter + " -c " + shellQuote(sourceStdinBody(interpreter)) + arg
 	}
 	return envPrefix + " " + sudo + interpreter
+}
+
+// sourceStdinBody `-c` 里那段 source /dev/stdin 的程序文本。zsh 先关掉
+// FUNCTION_ARGZERO 再 source，$0 才保持 -c 参数给的名字（2026-10-08 实测
+// `setopt no_function_argzero; . /dev/stdin` → probe.sh）；其余家族原样 source。
+func sourceStdinBody(interpreter string) string {
+	body := ". /dev/stdin"
+	if InterpreterBaseName(interpreter) == "zsh" {
+		body = "setopt no_function_argzero; " + body
+	}
+	return body
 }
 
 // DescribeInput DescribeCommand 的入参：只收打印真正需要的几项。
