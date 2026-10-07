@@ -8,7 +8,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -187,18 +186,15 @@ func buildTasks(a *cli.Args, nodes *nodelist.Nodes, prompts *ssh.PasswdPrompts, 
 			tasks = append(tasks, &task{seq: i, node: node, remote: a.Download, local: local, useSudo: a.Sudo})
 		}
 	default: // 命令 / 脚本
-		var body, interpreter string
+		var material cli.ScriptMaterial
 		if a.Script != "" {
 			data, err := os.ReadFile(a.Script)
 			if err != nil {
 				return nil, nil, fmt.Errorf("读取脚本文件失败：%s\n原因：%v", a.Script, err)
 			}
-			body = ssh.ScriptBodyOf(data)
-			interpreter = "bash"
-			if path.Ext(a.Script) == ".py" {
-				interpreter = "python3"
-			}
+			material = cli.ScriptMaterialOf(a, data)
 		}
+		body, interpreter := material.Body, material.Interpreter
 		if len(a.Answers) > 0 {
 			// 交互分支：正文改经命令行承载，会话 stdin 整条让给代填（ADR-0010）。
 			// 下发行在这里生成一次，日志与实际执行共用；长短由参数合规阶段用同一个
@@ -245,13 +241,7 @@ func commandDescription(a *cli.Args, tasks []*task) []string {
 		}))
 	}
 
-	interpreter := ""
-	if a.Script != "" {
-		interpreter = "bash"
-		if path.Ext(a.Script) == ".py" {
-			interpreter = "python3"
-		}
-	}
+	interpreter := cli.ScriptInterpreter(a)
 
 	// 脚本模式下正文非空即判定为脚本模式（DescribeCommand 的唯一依据）
 	body := tasks[0].stdin
