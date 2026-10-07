@@ -61,9 +61,13 @@ type InteractiveInput struct {
 }
 
 // InteractiveCommand 拼交互分支的下发行：正文 base64 编入命令行，远端 base64 -d 后
-// 作内层解释器的 -c 参数。长度检查与实际执行都调它，不两处各拼一份。
+// 作内层解释器的「程序文本参数」。长度检查与实际执行都调它，不两处各拼一份。
 //
-// 脚本模式还会把脚本文件名作 `-c` 之后的第一个参数交回去——那正是 shell 的 $0，
+// 「程序文本参数」各解释器不同（shell / python 是 -c，perl / ruby / node / lua 是 -e，
+// php 是 -r），由 ProgramTextArg 按解释器取；表外的解释器在参数合规检查阶段已被拦下，
+// 这里兜底用 -c。
+//
+// 脚本模式还会把脚本文件名作参数之后的第一个参数交回去——那正是 shell 的 $0，
 // 脚本据此仍能从自己的名字里取信息（理由见 scriptNameArg）。命令模式没有文件名，不补。
 //
 // 为什么不走 stdin：一次会话只有一条 stdin，代填要独占它；两者共用时远端 read 会吃掉
@@ -75,8 +79,12 @@ func InteractiveCommand(in InteractiveInput) string {
 		body = in.ScriptBody
 	}
 	encoded := base64.StdEncoding.EncodeToString([]byte(body))
-	inner := innerCommand(in.Interpreter, in.AsRoot) +
-		` -c "$(printf %s ` + encoded + ` | base64 -d)"`
+	programArg, ok := ProgramTextArg(in.Interpreter)
+	if !ok {
+		programArg = "-c" // 合规检查已拦下表外的解释器，这里兜底，不该发生
+	}
+	inner := innerCommand(in.Interpreter, in.AsRoot) + " " + programArg +
+		` "$(printf %s ` + encoded + ` | base64 -d)"`
 	if in.ScriptBody != "" { // 命令模式没有脚本文件，不补名字
 		inner += scriptNameArg(in.Interpreter, in.ScriptName)
 	}

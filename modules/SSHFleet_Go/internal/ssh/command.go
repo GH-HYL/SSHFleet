@@ -217,7 +217,7 @@ func innerCommand(interpreter string, asRoot bool) string {
 //
 // 为什么只给 shell 家族补：python3 的 `-c` 之后第一个参数落在 sys.argv[1] 而不是 argv[0]，
 // 补了只是往脚本的参数表里塞一个它不认的东西，故 python3 维持原样。shell 家族由
-// isShellFamily 判定（bash / sh / dash / ksh / zsh）——这样把 .sh 配成 sh 也照样补回名字。
+// isShellFamily 判定——这样把 .sh 配成 sh / mksh 也照样补回名字。
 // 名字里的括号等特殊字符由 shellQuote 兜住（"(1.2.3.4).sh" 这类文件名必然带括号）。
 func scriptNameArg(interpreter, scriptName string) string {
 	if scriptName == "" || !isShellFamily(interpreter) {
@@ -228,8 +228,9 @@ func scriptNameArg(interpreter, scriptName string) string {
 
 // shellFamilyNames 需要补脚本名（$0）的 shell 家族：它们支持
 // `<解释器> -c '<正文>' '<名字>'` 这种"名字作 $0"的形态。
+// mksh / ash 与 bash 同为 POSIX shell，`-c` 后第一个参数同样落到 $0。
 var shellFamilyNames = map[string]bool{
-	"bash": true, "sh": true, "dash": true, "ksh": true, "zsh": true,
+	"bash": true, "sh": true, "dash": true, "ksh": true, "zsh": true, "mksh": true, "ash": true,
 }
 
 // isShellFamily 解释器是不是 shell 家族：取第一个词再取 basename，
@@ -240,6 +241,46 @@ func isShellFamily(interpreter string) bool {
 		return false
 	}
 	return shellFamilyNames[path.Base(fields[0])]
+}
+
+// programTextArgTable「用一段程序文本启动解释器」的参数：语言名（小写、去版本号）→ 参数。
+//
+// 各家**不一样**（2026-10-07 实测确认）：
+//   - shell 家族 / python：`-c`（POSIX sh 与 CPython 的标准用法）
+//   - perl / ruby / node / lua：`-e`——它们的 `-c` 是"只做语法检查"，会静默跑空
+//   - php：`-r`
+//
+// 表外（tclsh、deno、awk…）没有统一的"一段程序文本"入口，`-a` 不支持——在参数合规检查阶段拦下。
+var programTextArgTable = map[string]string{
+	"ash":    "-c",
+	"bash":   "-c",
+	"dash":   "-c",
+	"ksh":    "-c",
+	"mksh":   "-c",
+	"sh":     "-c",
+	"zsh":    "-c",
+	"python": "-c",
+	"luajit": "-e",
+	"lua":    "-e",
+	"node":   "-e",
+	"nodejs": "-e",
+	"perl":   "-e",
+	"ruby":   "-e",
+	"php":    "-r",
+}
+
+// ProgramTextArg 返回「用一段程序文本启动该解释器」的参数（-c / -e / -r）与它是否在支持范围内。
+// 解释器名允许带目录与版本号（/usr/bin/python3、php8.1）：取 basename、转小写、去掉尾部版本号后查表。
+//
+// 表外返回 ("", false)。-a 的合规检查据此拦下；拼装侧（InteractiveCommand）拿到的只会是表内的解释器。
+func ProgramTextArg(interpreter string) (string, bool) {
+	fields := strings.Fields(interpreter)
+	if len(fields) == 0 {
+		return "", false
+	}
+	base := strings.TrimRight(strings.ToLower(path.Base(fields[0])), "0123456789.")
+	arg, ok := programTextArgTable[base]
+	return arg, ok
 }
 
 // scriptStdinInner 正文走 stdin 那条路（无 -a）的内层命令。
