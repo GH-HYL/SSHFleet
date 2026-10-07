@@ -12,7 +12,7 @@ import (
 
 // 命令模式：命令文本经 stdin 直喂，命令行只剩 bash -lc '<前缀; [sudo ]bash>'。
 func TestBuildCommandCommandMode(t *testing.T) {
-	cmd, stdin := BuildCommand("ls -l", "", "", false, false)
+	cmd, stdin := BuildCommand("ls -l", "", "", "", false, false)
 
 	if stdin != "ls -l" {
 		t.Fatalf("命令应经 stdin 直喂，实际 %q", stdin)
@@ -33,7 +33,7 @@ func TestBuildCommandCommandMode(t *testing.T) {
 
 // sudo 身份：内层命令前加 sudo。
 func TestBuildCommandSudo(t *testing.T) {
-	cmd, _ := BuildCommand("whoami", "", "", false, true)
+	cmd, _ := BuildCommand("whoami", "", "", "", false, true)
 	if !strings.Contains(cmd, "sudo bash") {
 		t.Fatalf("sudo 身份应加 sudo，实际 %q", cmd)
 	}
@@ -41,7 +41,7 @@ func TestBuildCommandSudo(t *testing.T) {
 
 // --nobash：命令模式原样下发，不套 shell、不喂 stdin。
 func TestBuildCommandNoBash(t *testing.T) {
-	cmd, stdin := BuildCommand("raw-cmd --flag", "", "", true, false)
+	cmd, stdin := BuildCommand("raw-cmd --flag", "", "", "", true, false)
 	if cmd != "raw-cmd --flag" || stdin != "" {
 		t.Fatalf("--nobash 应原样下发且不喂 stdin，实际 cmd=%q stdin=%q", cmd, stdin)
 	}
@@ -49,7 +49,7 @@ func TestBuildCommandNoBash(t *testing.T) {
 
 // --nobash 只管命令模式：脚本模式下仍应走登录 shell。
 func TestBuildCommandNoBashIgnoredForScript(t *testing.T) {
-	cmd, stdin := BuildCommand("", "echo script", "bash", true, false)
+	cmd, stdin := BuildCommand("", "echo script", "", "bash", true, false)
 	if cmd == "echo script" || !strings.HasPrefix(cmd, "bash -lc ") {
 		t.Fatalf("脚本模式不该被 --nobash 影响，实际 %q", cmd)
 	}
@@ -65,13 +65,41 @@ func TestBuildCommandScriptMode(t *testing.T) {
 		{"python3", "python3"},
 	}
 	for _, c := range cases {
-		cmd, stdin := BuildCommand("", "print('hi')", c.interpreter, false, false)
+		cmd, stdin := BuildCommand("", "print('hi')", "", c.interpreter, false, false)
 		if stdin != "print('hi')" {
 			t.Fatalf("脚本内容应经 stdin 直喂，实际 %q", stdin)
 		}
 		if !strings.Contains(cmd, c.wantInner) {
 			t.Fatalf("应使用解释器 %q，实际 %q", c.interpreter, cmd)
 		}
+	}
+}
+
+// 脚本模式补回脚本名（$0）：正文仍走 stdin，但名字要交回去——脚本常从自己的文件名里
+// 取信息（文件名带目标 IP 的安装包），经工具跑时 $0 成了 "bash"，那些值就取空。
+func TestBuildCommandScriptKeepsScriptName(t *testing.T) {
+	cmd, stdin := BuildCommand("", "echo hi", "(1.2.3.4).sh", "bash", false, false)
+
+	if stdin != "echo hi" {
+		t.Fatalf("正文仍应走 stdin，实际 %q", stdin)
+	}
+	if strings.Contains(cmd, "echo hi") {
+		t.Fatalf("正文不该进命令行，实际 %q", cmd)
+	}
+	if !strings.Contains(cmd, `exec -a "$0" bash`) {
+		t.Fatalf("应让一个 argv[0]=名字的 bash 去读 stdin，实际 %q", cmd)
+	}
+	if !strings.Contains(cmd, "(1.2.3.4).sh") {
+		t.Fatalf("脚本名应出现在下发行里，实际 %q", cmd)
+	}
+}
+
+// python3 不补名字：`-c` 之后第一个参数落在 sys.argv[1] 而不是 argv[0]，补了只是多塞
+// 一个脚本不认的参数。
+func TestBuildCommandPythonKeepsNoScriptName(t *testing.T) {
+	cmd, _ := BuildCommand("", "print(1)", "t.py", "python3", false, false)
+	if strings.Contains(cmd, "t.py") {
+		t.Fatalf("python3 不该补脚本名，实际 %q", cmd)
 	}
 }
 
@@ -94,7 +122,7 @@ func TestShellQuote(t *testing.T) {
 // `bash -lc '前缀; bash'`，故命令里的引号无需转义、也不会逃出参数边界。
 // （早期实现走 base64 命令行通道，才有转义套娃；改用 stdin 后这条约束消失。）
 func TestBuildCommandCommandTextNotOnCommandLine(t *testing.T) {
-	cmd, stdin := BuildCommand(`echo 'hi'`, "", "", false, false)
+	cmd, stdin := BuildCommand(`echo 'hi'`, "", "", "", false, false)
 
 	if strings.Contains(cmd, "hi") {
 		t.Fatalf("命令原文不该出现在命令行里（已改走 stdin）：%q", cmd)
@@ -177,7 +205,7 @@ func TestDescribeCommandCommandMode(t *testing.T) {
 		}
 	}
 	// 命令行必须与真下发的命令同源
-	login, _ := BuildCommand("who -b", "", "", false, false)
+	login, _ := BuildCommand("who -b", "", "", "", false, false)
 	if !strings.Contains(text, login) {
 		t.Fatalf("交代的命令行应与 BuildCommand 同源\n期望含：%s\n实际：\n%s", login, text)
 	}
@@ -187,7 +215,7 @@ func TestDescribeCommandCommandMode(t *testing.T) {
 func TestDescribeCommandSudo(t *testing.T) {
 	text := DescribeCommand(DescribeInput{Command: "id -u", AsRoot: true})
 
-	login, _ := BuildCommand("id -u", "", "", false, true)
+	login, _ := BuildCommand("id -u", "", "", "", false, true)
 	if !strings.Contains(text, login) {
 		t.Fatalf("sudo 时命令行应与 BuildCommand 同源\n期望含：%s\n实际：\n%s", login, text)
 	}

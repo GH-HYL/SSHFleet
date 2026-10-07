@@ -17,6 +17,9 @@
 !.gitignore
 !.gitattributes
 
+# 许可证：随发布包分发（build-windows.bat 打进两个平台），README 也指向根目录这份
+!LICENSE
+
 # 文档（决策：ADR；仓库级说明与词表；面向用户的手册）
 !CONTEXT.md
 !AGENTS.md

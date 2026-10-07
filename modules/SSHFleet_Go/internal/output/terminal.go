@@ -125,7 +125,7 @@ func ResultLine(r ssh.Result, mode cli.Mode, answers []ssh.Answer, category stri
 }
 
 // PrintStatistics 打印统计块（对位旧 format_statistic_results_to_terminal）。
-// 配色对位旧 terminal.py：标签青 / 校验红 / 成功绿 / 失败红 / 分类黄 / 失败分类统计红 / 提示黄。
+// 配色对位旧 terminal.py：标签青 / 校验红 / 成功绿 / 失败红 / 分类黄 / 失败分类统计红 / 提示暗灰。
 // showTips 为配置开关 enable.show_category_tips：开启时在统计块末尾给出「提示：」块；
 // 关闭时退回旧行为（只给一行「常见退出码」）。
 func PrintStatistics(out io.Writer, stats *result.Stats, kw *verdict.Keywords, showTips bool) {
@@ -186,7 +186,9 @@ func PrintStatistics(out io.Writer, stats *result.Stats, kw *verdict.Keywords, s
 		}
 		if showTips {
 			if lines := categoryTipLines(stats.SortedFailCategories, kw); len(lines) > 0 {
-				fmt.Fprintf(out, "  %s提示：%s\n", ansiYellow, ansiReset)
+				// 「提示：」与它下面的内容同色（暗灰）：这两行是一体的，标签单独上黄色反而
+				// 把它从内容里摘出来（2026-10-07 作者定）。
+				fmt.Fprintf(out, "  %s提示：%s\n", ansiDim, ansiReset)
 				for _, line := range lines {
 					fmt.Fprintf(out, "    %s%s%s\n", ansiDim, line, ansiReset)
 				}

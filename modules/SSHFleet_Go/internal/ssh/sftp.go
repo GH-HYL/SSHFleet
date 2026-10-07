@@ -157,7 +157,8 @@ func (c *Client) UploadFiles(ctx context.Context, files []LocalFile, skipped []s
 		}
 		success++
 		uploadedBytes += written
-		lines = append(lines, fmt.Sprintf("%s: 上传成功 (%.3fs)", f.Rel, cost))
+		// 逐个文件的「成功」行不写：明细首行的文件总数 / 成功 / 失败已说全，每行再带一次
+		// 耗时是重复输出（2026-10-07 作者定）。失败行与跳过行照旧——它们各自带独立信息。
 
 		if onProgress != nil && pacer.allow() {
 			onProgress(Progress{Seq: seq, IP: c.cfg.IP, UploadedBytes: uploadedBytes, TotalBytes: totalBytes, TotalFiles: len(files), SuccessFiles: success, FailedFiles: failed})
@@ -351,7 +352,7 @@ func (c *Client) DownloadFiles(ctx context.Context, remotePath, localPath string
 		}
 		success++
 		downloadedBytes += written
-		lines = append(lines, fmt.Sprintf("%s: 下载成功 (%.3fs)", file.relativePath, cost))
+		// 同上传侧：逐文件的「成功」行不写，明细首行已给出总数 / 成功 / 失败（2026-10-07 作者定）。
 
 		if onProgress != nil && pacer.allow() {
 			onProgress(Progress{Seq: seq, IP: c.cfg.IP, DownloadedBytes: downloadedBytes, TotalBytes: totalBytes, TotalFiles: totalFiles, SuccessFiles: success, FailedFiles: failed})
@@ -522,6 +523,7 @@ func copyDownload(dst io.Writer, src io.Reader, pr *progressReader, plain bool) 
 }
 
 // buildTransferOutput 传输明细文本（头部统计 + 逐文件行），不再 base64 编码。
+// 逐文件行只剩"出过事的那几个"——失败与符号链接跳过；逐个成功不再逐行列出（2026-10-07 作者定）。
 func buildTransferOutput(total, success, failed int, lines []string) string {
 	header := fmt.Sprintf("total_files=%d, success_files=%d, failed_files=%d", total, success, failed)
 	if len(lines) == 0 {
