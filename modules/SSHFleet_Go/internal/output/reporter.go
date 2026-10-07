@@ -262,7 +262,12 @@ func (r *Reporter) logNode(res ssh.Result, category string) {
 			}
 		default:
 			// 命令 / 脚本共用这一路：前缀取自名字表（LogName + ActionName =「命令执行」/「脚本执行」）。
-			// 原先写死「命令」，脚本模式跑完也报「命令」（2026-10-07 修）。ModeNone 不可达。
+			// 原先写死「命令」，脚本模式跑完也报「命令」（2026-10-07 修）。
+			//
+			// ModeNone 到不了这里：cli/check.go 的五选一校验在「一个模式都没给」时就报错退出，
+			// 而结果只由真跑过的机器产出。所以 label 为空、会拼出「成功」这种残缺句子的那一格
+			// **印不出来**，是**有意留着、不加守卫**的——要让它「像句话」只能把「命令」这个字面量
+			// 写回来，而那正是本次改动拆掉的东西。2026-10-07 审计就此问过，结论：记录在此、保持现状。
 			label := r.mode.Info().LogName + r.mode.Info().ActionName
 			if res.Verdict == verdict.Success {
 				el.Success(fmt.Sprintf("%s%s成功，退出码 0，耗时 %.3fs", ip, label, res.ExecCostTime))
