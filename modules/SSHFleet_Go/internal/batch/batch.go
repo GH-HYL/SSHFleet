@@ -127,11 +127,19 @@ func Run(ctx context.Context, a *cli.Args, cfg *config.Config, nodes *nodelist.N
 		// 判定在 worker 协程里做完再交给通道（D9）：下游（进度聚合 / 结果流水 /
 		// 统计 / 呈现）拿到的都是带结论的完整结果。
 		verdict.Judge(res, mode, kw)
-		agg.OnResult(*res)
 		return *res
 	}
 
-	results := runPool(ctx, concurrency, tasks, work, hooks.OnResult)
+	// 「完成」只有一个收口点：真正进了结果通道的结果才算数，聚合器的计数与
+	// 统计读到的切片由此同源。此前在 worker 里先 agg.OnResult、再往通道送，
+	// 而取消时通道的 select 会随机丢弃，进度数因此比统计数多（2026-10-07 审计候选二）。
+	onResult := func(r ssh.Result) {
+		agg.OnResult(r)
+		if hooks.OnResult != nil {
+			hooks.OnResult(r)
+		}
+	}
+	results := runPool(ctx, concurrency, tasks, work, onResult)
 	sortBySeq(results)
 	return &Results{Items: results}, nil
 }

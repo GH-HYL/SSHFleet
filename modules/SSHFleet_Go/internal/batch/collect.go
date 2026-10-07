@@ -41,6 +41,10 @@ func CollectLocalFiles(root string) (*CollectResult, error) {
 		if isLinkish(root, fi) {
 			return nil, fmt.Errorf("没有可上传的文件：-u 指定的路径本身是软链接/快捷方式：%s", root)
 		}
+		// 类型检查与目录分支同一道：单文件也得拦，否则会被当普通文件送进 SFTP
+		if err := specialTypeErr(root, fi); err != nil {
+			return nil, err
+		}
 		res.Files = append(res.Files, ssh.LocalFile{Path: root, Rel: fi.Name(), Size: fi.Size()})
 		return res, nil
 	}
@@ -57,9 +61,8 @@ func CollectLocalFiles(root string) (*CollectResult, error) {
 			res.Skipped = append(res.Skipped, relOf(root, p))
 			return nil
 		}
-		// FIFO / 设备 / socket：不是"链接"，过滤掉会静默改变语义，仍按错误处理
-		if info.Mode()&os.ModeNamedPipe != 0 || info.Mode()&os.ModeDevice != 0 || info.Mode()&os.ModeSocket != 0 {
-			return fmt.Errorf("不支持的文件类型: %s (FIFO/device/socket)", p)
+		if err := specialTypeErr(p, info); err != nil {
+			return err
 		}
 		if info.IsDir() {
 			return nil
@@ -96,6 +99,15 @@ func isLinkish(path string, info os.FileInfo) bool {
 		return err == nil
 	}
 	return false
+}
+
+// specialTypeErr FIFO / 设备 / socket 一律按错误处理：它们不是"链接"，过滤掉会静默改变
+// 语义（目录分支与单文件分支共用同一道判据）。
+func specialTypeErr(p string, info os.FileInfo) error {
+	if info.Mode()&os.ModeNamedPipe != 0 || info.Mode()&os.ModeDevice != 0 || info.Mode()&os.ModeSocket != 0 {
+		return fmt.Errorf("不支持的文件类型: %s (FIFO/device/socket)", p)
+	}
+	return nil
 }
 
 // relOf 相对上传根的路径（POSIX 斜杠，远端拼接用）。
