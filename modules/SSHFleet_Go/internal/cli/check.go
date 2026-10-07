@@ -128,12 +128,12 @@ func CheckArguments(a *Args) error {
 		}
 	}
 
-	// --no-bash 与自定义解释器不能一起用：nobash 是"原样下发"，命令直接交给目标节点的
+	// --no-shell 与自定义解释器不能一起用：no-shell 是"原样下发"，命令直接交给目标节点的
 	// 默认解释器，配的解释器不会生效（解释器是 bash 时不拦——语义本来就一致）。
-	if a.NoBash && a.Interpreter != "" && !isBashInterpreter(a.Interpreter) {
-		return fmt.Errorf("--no-bash 与解释器配置不能一起用\n"+
-			"--no-bash 模式不支持解释器配置：命令会原样下发、由目标节点的默认解释器执行，你配的 %q 不会生效\n"+
-			"提示：去掉 --no-bash 用配置的解释器跑，或把 [interpreter].command 改回 bash", a.Interpreter)
+	if a.NoShell && a.Interpreter != "" && !isBashInterpreter(a.Interpreter) {
+		return fmt.Errorf("--no-shell 与解释器配置不能一起用\n"+
+			"--no-shell 模式不支持解释器配置：命令会原样下发、由目标节点的默认解释器执行，你配的 %q 不会生效\n"+
+			"提示：去掉 --no-shell 用配置的解释器跑，或把 [interpreter].command 改回 bash", a.Interpreter)
 	}
 
 	// -s
@@ -256,8 +256,8 @@ func batchParamsGiven(a *Args) []string {
 	if a.Key {
 		given = append(given, "-k")
 	}
-	if a.NoBash {
-		given = append(given, "--no-bash")
+	if a.NoShell {
+		given = append(given, "--no-shell")
 	}
 	if a.sudoFlag {
 		given = append(given, "--sudo")

@@ -46,8 +46,8 @@ func checkPasswdChangeExclusive(a *Args) error {
 		return fmt.Errorf("--change-password 不能和 -p 一起用\n提示：改密不传文件，用不到目标路径")
 	case a.Key:
 		return fmt.Errorf("--change-password 不能和 -k 一起用\n提示：改密要用账号自己的登录密码登进去，密钥登录派不上用场")
-	case a.NoBash:
-		return fmt.Errorf("--change-password 不能和 --no-bash 一起用\n改密不执行任何命令，没有可施加的对象")
+	case a.NoShell:
+		return fmt.Errorf("--change-password 不能和 --no-shell 一起用\n改密不执行任何命令，没有可施加的对象")
 	case a.sudoFlag || a.noSudoFlag:
 		return fmt.Errorf("--change-password 不能和 --sudo / --no-sudo 一起用\n改的是登录账号自己的密码，与执行身份无关")
 	}

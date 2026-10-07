@@ -351,7 +351,7 @@ func TestUsageTextGroupsOptions(t *testing.T) {
 	}
 
 	// 已删除的旧段落与旧选项名不应再出现
-	for _, gone := range []string{"长选项与短选项等价", "上传并发说明", "建议并发数", "--disinteractive", "--nobash", "-m --mode", "--file"} {
+	for _, gone := range []string{"长选项与短选项等价", "上传并发说明", "建议并发数", "--disinteractive", "--nobash", "--no-bash", "-m --mode", "--file"} {
 		if strings.Contains(text, gone) {
 			t.Fatalf("帮助中不应再有 %q", gone)
 		}
@@ -396,14 +396,14 @@ func TestUsageTextShowsVersion(t *testing.T) {
 // 的 __repr__，输出形如：
 //
 //	Namespace(c='who -b', s='', u='', d='', f='nodes.csv', p='', sudo=False,
-//	          t=None, T=None, n=None, r='v2_cmd', no_bash=False, yes=False, k=False)
+//	          t=None, T=None, n=None, r='v2_cmd', no_shell=False, yes=False, k=False)
 //
 // 这里逐字段对齐：字段名、空值写法（” 与 None）、布尔写法（True/False）都不能自作主张。
 func TestSummaryMatchesArgparseNamespace(t *testing.T) {
 	a := &Args{Command: "who -b", CsvFile: "nodes.csv", Remark: "v2_cmd"}
 	got := a.Summary()
 	want := "Namespace(c='who -b', s='', u='', d='', f='nodes.csv', p='', sudo=False, " +
-		"t=None, T=None, n=None, r='v2_cmd', no_bash=False, yes=False, k=False, answer='', change_password='')"
+		"t=None, T=None, n=None, r='v2_cmd', no_shell=False, yes=False, k=False, answer='', change_password='')"
 	if got != want {
 		t.Fatalf("解析结果格式不对\n实际：%s\n应为：%s", got, want)
 	}
@@ -466,9 +466,9 @@ func TestSummaryKeyMode(t *testing.T) {
 
 // 布尔字段用 Python 的 True / False 拼写。
 func TestSummaryBooleanFields(t *testing.T) {
-	a := &Args{Command: "pwd", NoBash: true, Disinteractive: true, Sudo: true, Key: true}
+	a := &Args{Command: "pwd", NoShell: true, Disinteractive: true, Sudo: true, Key: true}
 	got := a.Summary()
-	for _, want := range []string{"no_bash=True", "yes=True", "sudo=True", "k=True"} {
+	for _, want := range []string{"no_shell=True", "yes=True", "sudo=True", "k=True"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("应有 %q，实际：%s", want, got)
 		}
@@ -476,7 +476,7 @@ func TestSummaryBooleanFields(t *testing.T) {
 	// 没给时是 False，不是空串、也不是 omits
 	a = &Args{Command: "pwd"}
 	got = a.Summary()
-	for _, want := range []string{"no_bash=False", "yes=False", "sudo=False", "k=False"} {
+	for _, want := range []string{"no_shell=False", "yes=False", "sudo=False", "k=False"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("应有 %q，实际：%s", want, got)
 		}

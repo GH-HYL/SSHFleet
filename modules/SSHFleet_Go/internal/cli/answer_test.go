@@ -203,9 +203,9 @@ func TestCheckAnswerCSVEmpty(t *testing.T) {
 // 互斥：三种组合都明确报错，不静默忽略。
 func TestCheckAnswerExclusive(t *testing.T) {
 	cases := map[string]*Args{
-		"--no-bash": {Command: "sh x.sh", NoBash: true, Answer: "1,架构"},
-		"-u":        {Upload: "/x", Path: "/y/", Answer: "1,架构"},
-		"-d":        {Download: "/x", Path: "/y", Answer: "1,架构"},
+		"--no-shell": {Command: "sh x.sh", NoShell: true, Answer: "1,架构"},
+		"-u":         {Upload: "/x", Path: "/y/", Answer: "1,架构"},
+		"-d":         {Download: "/x", Path: "/y", Answer: "1,架构"},
 	}
 	for name, a := range cases {
 		if err := checkAnswer(a, nil); err == nil || !strings.Contains(err.Error(), "-a 不能和") {

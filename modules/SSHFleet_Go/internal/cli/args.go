@@ -39,7 +39,7 @@ type Args struct {
 	Number         int    // -n
 	Remark         string // -r
 	Key            bool   // -k：写了就用密钥登录（私钥取清单第 5 列，其次配置 key）
-	NoBash         bool   // --no-bash
+	NoShell        bool   // --no-shell
 	Disinteractive bool   // --yes
 	// --change-password 与它的解析结果：值随 encrypt 开关是明文密码或密文文件路径，
 	// 解析出的明文由 CheckArguments 填进 NewPassword（执行侧只用后者）。
@@ -179,7 +179,7 @@ func (a *Args) NumberGiven() bool { return a.numberRaw != "" }
 
 // Summary 把解析结果打印成旧版 argparse.Namespace 的样子（工具日志用）：
 // 单行 `字段=值` 平铺，字段名跟着当前选项名走（c / s / u / d / f / p / sudo / t / T / n / r
-// / k 与 no_bash / yes），未指定的字符串打印成 ”、未指定的数值打印成 None。
+// / k 与 no_shell / yes），未指定的字符串打印成 ”、未指定的数值打印成 None。
 //
 // 不复刻的只有两处：旧版把内联清单也塞进 f（靠 f_is_inline 二次判断），这里 f 只装
 // 清单原文、内联与否由 FIsInline 单独报；旧版没有 --key-status 与 -a，故它俩排在后面。
@@ -208,7 +208,7 @@ func (a *Args) Summary() string {
 		"T=" + orNone(a.ConnectTimeout),
 		"n=" + orNone(a.Number),
 		"r=" + orEmpty(a.Remark),
-		"no_bash=" + boolPy(a.NoBash),
+		"no_shell=" + boolPy(a.NoShell),
 		"yes=" + boolPy(a.Disinteractive),
 		"k=" + keyVal,
 		"answer=" + orEmpty(a.Answer),
@@ -283,7 +283,7 @@ func Parse(cfg *config.Config, version string, raw []string) (*Args, error) {
 	fs.StringVarP(&a.connectTimeoutRaw, "connect-timeout", "T", "", "连上服务器的最长等待（秒）")
 	fs.StringVarP(&a.numberRaw, "number", "n", "", "并发数：同时操作几台服务器")
 	fs.StringVarP(&a.Remark, "remark", "r", "", "备注，用作历史记录文件夹名（不填自动生成）")
-	fs.BoolVar(&a.NoBash, "no-bash", false, "命令模式专用: 不套一层 bash 环境")
+	fs.BoolVar(&a.NoShell, "no-shell", false, "命令模式专用: 不套工具的外壳，命令原样下发")
 	fs.BoolVar(&a.Disinteractive, "yes", false, "跳过所有确认提示直接执行")
 	fs.StringVar(&a.ChangePassword, "change-password", "", "批量改密：把清单里密码过期的账号改成同一个新密码")
 	fs.StringVarP(&a.Answer, "answer", "a", "", "代填：看到触发词就自动填内容")
@@ -536,7 +536,7 @@ func helpEntries(cfg *config.Config) []helpEntry {
 		opt("", "--no-sudo", "", noSudoDesc),
 		opt("", "--yes", "", "跳过所有确认直接执行（自动化用，用它之前先手动跑通一次）"),
 		opt("-a", "--answer", "", "代填：看到触发词就自动填内容（值形如「代填内容,触发词,触发词」，多条用 \\n 分行），也可给 CSV 文件的路径（每行一条）"),
-		opt("", "--no-bash", "", "命令模式：不套 bash，直接执行原始命令"),
+		opt("", "--no-shell", "", "命令模式：不套工具的外壳（默认会先设好环境再执行），命令原样下发"),
 		opt("-t", "--timeout", fmt.Sprintf("[默认: %d/%d]", cfg.Execution.TimeoutExecute, cfg.Execution.TimeoutTransfer), "命令跑完、文件传完的最长等待（秒）"),
 		opt("-T", "--connect-timeout", fmt.Sprintf("[默认: %d]", cfg.Execution.TimeoutConnect), "连上服务器的最长等待（秒）"),
 

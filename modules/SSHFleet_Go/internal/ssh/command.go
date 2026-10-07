@@ -55,7 +55,7 @@ const (
 //     解释器由调用方给定——命令模式传命令解释器，脚本模式传脚本解释器。
 //   - 脚本模式补回脚本名（$0）：正文不落盘，但「我叫什么」这件事要交回去——
 //     见 scriptNameArg 的说明。
-//   - `--nobash` 时全部绕开：用户在明确要求「原样下发」，此时不该由工具
+//   - `--no-shell` 时全部绕开：用户在明确要求「原样下发」，此时不该由工具
 //     代他决定环境与身份。
 //
 // 参数：
@@ -63,13 +63,13 @@ const (
 //   - scriptBody:  脚本模式下的脚本内容（命令模式传空）
 //   - scriptName:  脚本模式下的脚本文件名（下发行把它交回去当 $0；命令模式传空）
 //   - interpreter: 解释器（命令模式传命令解释器，脚本模式传脚本解释器）
-//   - noBash:      --nobash：命令模式专用，原样下发
+//   - noShell:      --no-shell：命令模式专用，原样下发
 //   - asRoot:      -m sudo：以 root 身份执行
 //
-// 返回 (下发命令, stdin 内容)：stdin 为空表示不喂输入（--nobash 命令模式）。
-func BuildCommand(command, scriptBody, scriptName, interpreter string, noBash, asRoot bool) (string, string) {
-	// --nobash 为命令模式专用：原样下发，不套外壳、不喂 stdin
-	if noBash && command != "" {
+// 返回 (下发命令, stdin 内容)：stdin 为空表示不喂输入（--no-shell 命令模式）。
+func BuildCommand(command, scriptBody, scriptName, interpreter string, noShell, asRoot bool) (string, string) {
+	// --no-shell 为命令模式专用：原样下发，不套外壳、不喂 stdin
+	if noShell && command != "" {
 		return command, ""
 	}
 
@@ -143,11 +143,11 @@ func needsQuoting(s string) bool {
 // 下发行由本包自己拼（与 BuildCommand 同源），调用方只给业务侧的几项——
 // `sh -c` 的形态是本包的格式，散到调用方就会两处各写一份、各自漂移。
 func DescribeCommand(a DescribeInput) string {
-	// --nobash：不套外壳、不经 stdin 通道，内容直接就是命令行
-	if a.NoBash && a.Command != "" {
+	// --no-shell：不套外壳、不经 stdin 通道，内容直接就是命令行
+	if a.NoShell && a.Command != "" {
 		return "交给 SSH 执行：\n" +
 			"  命令行： " + a.Command + "\n" +
-			"  说明：   --nobash 原样执行，不套外壳、不经 stdin"
+			"  说明：   --no-shell 原样执行，不套外壳、不经 stdin"
 	}
 
 	inner := innerCommand(a.Interpreter, a.AsRoot)
@@ -312,6 +312,6 @@ type DescribeInput struct {
 	ScriptBody  string // 脚本模式：脚本正文（非空即判定为脚本模式）
 	ScriptName  string // 脚本模式：脚本文件名（下发行把它交回去当 $0）
 	Interpreter string // 解释器：命令模式是命令解释器，脚本模式是脚本解释器
-	NoBash      bool   // --nobash 命令模式
+	NoShell     bool   // --no-shell 命令模式
 	AsRoot      bool   // -m sudo（拼下发行用）
 }

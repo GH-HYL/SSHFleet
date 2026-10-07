@@ -130,9 +130,9 @@ func answerEmptyError(src source) error {
 // checkAnswerExclusive -a 与几个开关互斥：冲突的是「同一条会话该长什么样」，明确报错并说明原因。
 func checkAnswerExclusive(a *Args) error {
 	switch {
-	case a.NoBash:
-		return fmt.Errorf("-a 不能和 --no-bash 一起用\n" +
-			"--no-bash 要求命令原样下发，代填要接管会话，同一个会话满足不了两种要求")
+	case a.NoShell:
+		return fmt.Errorf("-a 不能和 --no-shell 一起用\n" +
+			"--no-shell 要求命令原样下发，代填要接管会话，同一个会话满足不了两种要求")
 	case a.Upload != "":
 		return fmt.Errorf("-a 不能和 -u 一起用\n提示：代填是给命令、脚本的交互用的，上传时没有命令在跑")
 	case a.Download != "":
