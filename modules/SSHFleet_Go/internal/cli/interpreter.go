@@ -77,9 +77,9 @@ func ConfirmInterpreterFallback(a *Args, cfg *config.Config, in *common.Interact
 	return nil
 }
 
-// isBashInterpreter 解释器是不是 bash（归一后认名，`/bin/bash`、`bash5` 都算）。
-// 用于 --no-shell 的互斥判断：解释器是 bash（默认）时，no-shell 与"用 bash 跑"语义一致，不拦。
-func isBashInterpreter(interpreter string) bool {
+// IsBashInterpreter 解释器是不是 bash（归一后认名，`/bin/bash`、`bash5` 都算）。
+// 用于参数屏解释器行的展示门槛：配置就是默认的 bash 时不占行、不提示。
+func IsBashInterpreter(interpreter string) bool {
 	return ssh.InterpreterBaseName(interpreter) == "bash"
 }
 
