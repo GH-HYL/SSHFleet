@@ -80,10 +80,19 @@ func BuildCommand(command, scriptBody, interpreter string, noBash, asRoot bool) 
 	return "bash -lc " + shellQuote(loginInner(false, "", asRoot)), command
 }
 
+// escapeSingleQuotes 把一段文本里的单引号转义成 '\''。
+//
+// 转义规则全工具只此一份：shellQuote（整包成单引号）与 sftp.escapeShellArg
+// （嵌入既有单引号对）都调它。两个函数仍然分开——一个整包、一个嵌入，语义不同；
+// 要消掉的是这条**写了两遍**的规则本身，以及"靠注释提醒人保持同口径"的隐患。
+func escapeSingleQuotes(s string) string {
+	return strings.ReplaceAll(s, "'", `'\''`)
+}
+
 // shellQuote 单引号包裹（对位旧 shlex.quote 的单引号路径）：内部单引号按 '\” 转义，
 // 保证命令作为 bash -lc 的单个参数传递时不发生二次解析。
 func shellQuote(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+	return "'" + escapeSingleQuotes(s) + "'"
 }
 
 // QuoteForShell 把一段**参数原文**还原成等价的命令行写法：需要时以单引号包裹

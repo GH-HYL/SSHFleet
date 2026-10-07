@@ -132,7 +132,7 @@ func newResultsStyles(f *excelize.File) (*xlsxStyles, error) {
 // 明细行只经 cleanForExcel 清非法字符（决定「文本能不能写进 XML」），排版一概不动：
 // 行首缩进、中间空行都原样写入。output 字段的首尾空白行在采集侧已去掉，此处不重复处理。
 // 成败与分类读判定写好的结论，展示分类按模式合成。
-func WriteOutputXlsx(archiveDir string, results *batch.Results, cfg *config.Config, mode string, answers []ssh.Answer) error {
+func WriteOutputXlsx(archiveDir string, results *batch.Results, mode string, answers []ssh.Answer) error {
 	if results.Len() == 0 {
 		return nil
 	}
@@ -264,7 +264,7 @@ const (
 // A–M 列（不含自由文本的 N/O）按内容做一次「最合适的列宽」（用户 2026-09-15 要求）。
 // 退出码列取判定给的定论退出码；报错原文列只在失败行填（正常行不显示服务端提示，D34），
 // 未送出的代填在那一列里还原成触发词原文（D35）。
-func WriteResultsXlsx(archiveDir string, results *batch.Results, cfg *config.Config, mode string, answers []ssh.Answer) error {
+func WriteResultsXlsx(archiveDir string, results *batch.Results, mode string, answers []ssh.Answer) error {
 	if results.Len() == 0 {
 		return nil
 	}

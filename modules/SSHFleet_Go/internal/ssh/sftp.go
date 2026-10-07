@@ -194,7 +194,7 @@ func (c *Client) DownloadFiles(ctx context.Context, remotePath, localPath string
 
 	effectiveSudo := useSudo && c.cfg.User != "root"
 
-	// 远程路径预检（sudo 时用 sudo test）；单引号转义与 find/mv 同口径（2026-09-14 审计修复）
+	// 远程路径预检（sudo 时用 sudo test）；路径经 escapeShellArg 转义，转义规则与 find/mv 同源
 	checkCmd := fmt.Sprintf("test -e '%s'", escapeShellArg(remotePath))
 	if effectiveSudo {
 		checkCmd = fmt.Sprintf("sudo test -e '%s'", escapeShellArg(remotePath))
@@ -467,8 +467,11 @@ func (c *Client) sftpUploadWithSudo(sftpClient *sftp.Client, localPath, rel, rem
 }
 
 // escapeShellArg 把路径嵌进远端命令的单引号里之前的转义。
+//
+// 转义规则与 shellQuote 同源（escapeSingleQuotes）——不再各写一遍，与 find/mv 的
+// 口径由结构保证，不靠注释提醒人。
 func escapeShellArg(s string) string {
-	return strings.ReplaceAll(s, "'", `'\''`)
+	return escapeSingleQuotes(s)
 }
 
 // sftpDownloadFile 通过 SFTP 下载单个文件，返回实际下载字节数；失败删除本地半成品。

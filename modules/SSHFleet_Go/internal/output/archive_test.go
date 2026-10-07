@@ -17,7 +17,7 @@ func TestBackupAssetsIncludesAnswerFile(t *testing.T) {
 	}
 	ar := &Archive{Dir: filepath.Join(dir, "history_run")}
 	a := &cli.Args{Command: "whoami", AnswerFile: ans}
-	if err := ar.BackupAssets(nil, a); err != nil {
+	if err := ar.BackupAssets(a); err != nil {
 		t.Fatalf("BackupAssets: %v", err)
 	}
 	got, err := os.ReadFile(filepath.Join(ar.Dir, "assets", "answer.csv"))

@@ -40,7 +40,7 @@ func newTestReporterQuiet(t *testing.T, mode string, total int, quiet bool) (*Re
 	t.Cleanup(func() { _ = execLog.Close() })
 
 	outBuf := &bytes.Buffer{}
-	return NewReporter(execLog, outBuf, mode, nil, total, nil, time.Now(), quiet), outBuf, execLogPath
+	return NewReporter(execLog, outBuf, mode, nil, total, time.Now(), quiet), outBuf, execLogPath
 }
 
 // 非交互模式（--yes）下运行期提示只进日志、不上屏（L61 的静默总闸门）。
@@ -349,7 +349,7 @@ func TestReporterLogsMissedAnswers(t *testing.T) {
 	t.Cleanup(func() { _ = execLog.Close() })
 
 	answers := []ssh.Answer{{Value: "zhangsan", Triggers: []string{"Your full name"}}}
-	r := NewReporter(execLog, &bytes.Buffer{}, "execute", answers, 1, nil, time.Now(), true)
+	r := NewReporter(execLog, &bytes.Buffer{}, "execute", answers, 1, time.Now(), true)
 	zero := 0
 	r.Result(ssh.Result{
 		Seq: 0, IP: "10.0.0.7", ConnectSuccess: true, Verdict: verdict.Other,
@@ -382,7 +382,7 @@ func TestReporterLogsSteps(t *testing.T) {
 	t.Cleanup(func() { _ = execLog.Close() })
 
 	one := 1
-	r := NewReporter(execLog, &bytes.Buffer{}, "download", nil, 1, nil, time.Now(), true)
+	r := NewReporter(execLog, &bytes.Buffer{}, "download", nil, 1, time.Now(), true)
 	r.Result(ssh.Result{
 		Seq: 0, IP: "10.0.0.8", ConnectSuccess: true, Verdict: verdict.Other,
 		Category: "远程路径不存在", ExitCode: nil,

@@ -22,6 +22,8 @@ const (
 	SuccessCategoryExecute = "执行成功"
 	// SuccessCategoryTransport 传输模式（上传/下载）的成功分类。
 	SuccessCategoryTransport = "传输成功"
+	// SuccessCategoryPasswd 改密模式的成功分类。
+	SuccessCategoryPasswd = "改密成功"
 )
 
 // CategoryCount 分类及其数量。
@@ -47,8 +49,8 @@ type Stats struct {
 	GlobalCostTime       float64
 }
 
-// ModeOf 由命令行参数确定执行类别（execute / upload / download）。
-// 命令与脚本同归 execute——统计与展示只分「执行 / 上传 / 下载」三类。
+// ModeOf 由命令行参数确定执行类别（execute / upload / download / passwd）。
+// 命令与脚本同归 execute——统计与展示分「执行 / 上传 / 下载 / 改密」四类。
 // 模式本身由 cli.Args.ModeName 单点判定，此处只做归并。
 func ModeOf(a *cli.Args) string {
 	switch a.ModeName() {
@@ -56,6 +58,8 @@ func ModeOf(a *cli.Args) string {
 		return "upload"
 	case cli.ModeDownload:
 		return "download"
+	case cli.ModePasswd:
+		return "passwd"
 	default:
 		return "execute"
 	}
@@ -65,9 +69,15 @@ func ModeOf(a *cli.Args) string {
 // worker 协程里已做完，这里只读结论）。
 func Statistics(items []ssh.Result, nodes *nodelist.Nodes, a *cli.Args, start, stop time.Time) *Stats {
 	mode := ModeOf(a)
+	// 成功分类按模式给：上传/下载→传输成功，改密→改密成功，其余（命令/脚本）→执行成功。
+	// 「算不算传输类」只判 upload/download——与展示侧 terminal.displayCategory 同口径，
+	// 不再用「不是执行就算传输」那种反判（改密原先落 default 时靠巧合一致，立档后必须同口径）。
 	successCategory := SuccessCategoryExecute
-	if mode != "execute" {
+	switch mode {
+	case "upload", "download":
 		successCategory = SuccessCategoryTransport
+	case "passwd":
+		successCategory = SuccessCategoryPasswd
 	}
 
 	stats := &Stats{
