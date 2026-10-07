@@ -128,6 +128,14 @@ func CheckArguments(a *Args) error {
 		}
 	}
 
+	// --no-bash 与自定义解释器不能一起用：nobash 是"原样下发"，命令直接交给目标节点的
+	// 默认解释器，配的解释器不会生效（解释器是 bash 时不拦——语义本来就一致）。
+	if a.NoBash && a.Interpreter != "" && !isBashInterpreter(a.Interpreter) {
+		return fmt.Errorf("--no-bash 与解释器配置不能一起用\n"+
+			"--no-bash 模式不支持解释器配置：命令会原样下发、由目标节点的默认解释器执行，你配的 %q 不会生效\n"+
+			"提示：去掉 --no-bash 用配置的解释器跑，或把 [interpreter].command 改回 bash", a.Interpreter)
+	}
+
 	// -s
 	var scriptText []byte // -a 的长度检查要用同一份正文算下发行，不再读一次文件
 	if a.Script != "" {

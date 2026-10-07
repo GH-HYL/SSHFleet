@@ -286,18 +286,21 @@ func ProgramTextArg(interpreter string) (string, bool) {
 // scriptStdinInner 正文走 stdin 那条路（无 -a）的内层命令。
 //
 // 需要补名字时不能只把一个参数挂在后面——解释器读 stdin 时 $0 取自它自己的 argv[0]，
-// 挂参数没用（`bash -s <名字>` 只会把名字当成位置参数 $1）。办法是先起一个
-// `<解释器> -c 'exec -a "$0" <解释器>' '<名字>'`：外层 -c 的 $0 就是名字，再 exec 一个
-// argv[0] 为它的解释器接着读 stdin，$0 便还原成脚本名。正文始终不经命令行，
-// 长度上限那件事没有被破坏。
+// 挂参数没用（`bash -s <名字>` 只会把名字当成位置参数 $1）。办法是 `-c '. /dev/stdin' '<名字>'`：
+// `.`（source）把 stdin 上的脚本体读进当前 shell，而 -c 的第一个参数就是 $0，名字于是还原。
+// 正文始终不经命令行，长度上限那件事没有被破坏。
+//
+// 为什么不用 `exec -a "$0" <解释器>`：那招只有 bash/ksh 系认，dash/ash 的 exec 不认 -a
+// （实测 `dash -c 'exec -a "$0" dash'` 报 `exec: -a: not found`），而 `. /dev/stdin` 各家都认。
+// 代价：`.` 是"在当前 shell 里执行"，脚本顶层 `return` 会静默返回（当文件跑会报错），
+// `$BASH_SOURCE` 会变成 `/dev/stdin`（原招是空）——对本工具的场景（从自身文件名取信息）无影响。
 func scriptStdinInner(interpreter, scriptName string, asRoot bool) string {
 	sudo := ""
 	if asRoot {
 		sudo = modeSudo + " "
 	}
 	if arg := scriptNameArg(interpreter, scriptName); arg != "" {
-		return envPrefix + " " + sudo + interpreter + " -c " +
-			shellQuote(`exec -a "$0" `+interpreter) + arg
+		return envPrefix + " " + sudo + interpreter + " -c " + shellQuote(". /dev/stdin") + arg
 	}
 	return envPrefix + " " + sudo + interpreter
 }

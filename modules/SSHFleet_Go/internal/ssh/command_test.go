@@ -86,8 +86,8 @@ func TestBuildCommandScriptKeepsScriptName(t *testing.T) {
 	if strings.Contains(cmd, "echo hi") {
 		t.Fatalf("正文不该进命令行，实际 %q", cmd)
 	}
-	if !strings.Contains(cmd, `exec -a "$0" bash`) {
-		t.Fatalf("应让一个 argv[0]=名字的 bash 去读 stdin，实际 %q", cmd)
+	if !strings.Contains(cmd, ". /dev/stdin") {
+		t.Fatalf("应让一个 source stdin 的 bash 去读 stdin（名字作 $0），实际 %q", cmd)
 	}
 	if !strings.Contains(cmd, "(1.2.3.4).sh") {
 		t.Fatalf("脚本名应出现在下发行里，实际 %q", cmd)

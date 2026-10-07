@@ -77,6 +77,16 @@ func ConfirmInterpreterFallback(a *Args, cfg *config.Config, in *common.Interact
 	return nil
 }
 
+// isBashInterpreter 解释器是不是 bash（取 basename、去尾部版本号，兼容 /bin/bash）。
+// 用于 --no-bash 的互斥判断：解释器是 bash（默认）时，nobash 与"用 bash 跑"语义一致，不拦。
+func isBashInterpreter(interpreter string) bool {
+	fields := strings.Fields(interpreter)
+	if len(fields) == 0 {
+		return false
+	}
+	return strings.TrimRight(strings.ToLower(path.Base(fields[0])), "0123456789.") == "bash"
+}
+
 // checkAnswerInterpreter 拦下 -a 不支持的解释器。
 //
 // -a 的正文要作"一段程序文本"交给解释器，而各家的参数不一样（shell / python 是 -c，
