@@ -106,20 +106,16 @@ func (c *Client) RunPasswdChange(ctx context.Context, in PasswdInput, seq int) *
 	// 事实：会话起没起、怎么收的场、改密对话走到哪一步。下发的 `:` 是中间步骤，
 	// 它的退出码进 Steps（D33）——CommandExitCode 恒为 nil，改密没有"目的命令"。
 	result.SessionBegun = outcome.begun
-	result.TimedOut = outcome.timedOut
-	result.Canceled = outcome.canceled
+	f := endFactsOf(outcome.err, outcome.timedOut, outcome.canceled)
+	result.TimedOut = f.timedOut
+	result.Canceled = f.canceled
 	result.PasswdEarlyClose = outcome.aborted
 	result.EnterSignalSeen = hook.sawEnter()
-	switch {
-	case outcome.err == nil:
-		result.Steps = append(result.Steps, StepResult{Name: StepPasswd, ExitCode: intPtr(0)})
-	default:
-		if code := extractExitCode(outcome.err); code != nil {
-			// passwd 自己以非 0 收场：那个码只说明「没改成」，原因在它的输出里——
-			// 归 Steps 留痕，不顶成结果退出码（否则判定会给出「执行失败(退出码N)」，
-			// 把远端说的原因整个盖掉，2026-09-29 修）。
-			result.Steps = append(result.Steps, StepResult{Name: StepPasswd, ExitCode: code})
-		}
+	// passwd 自己以非 0 收场：那个码只说明「没改成」，原因在它的输出里——
+	// 归 Steps 留痕，不顶成结果退出码（否则判定会给出「执行失败(退出码N)」，
+	// 把远端说的原因整个盖掉，2026-09-29 修）。
+	if f.exitCode != nil {
+		result.Steps = append(result.Steps, StepResult{Name: StepPasswd, ExitCode: f.exitCode})
 	}
 
 	// 失败原因（报错原文，不是结论）：远端当场说了原因就用它的原话，分类靠判据表；
@@ -127,15 +123,15 @@ func (c *Client) RunPasswdChange(ctx context.Context, in PasswdInput, seq int) *
 	//（连不上、会话建不起来、命令没能开始）没有可读的远端输出，保留原文。
 	// 顺序要紧：超时同样在 outcome.err 上带一个错误值，而那个值只是「命令执行超时(60s)」，
 	// 先走非超时分支就会把远端说的原因盖掉（2026-09-29 实测踩到）。
-	if outcome.aborted || outcome.timedOut {
+	if outcome.aborted || f.timedOut {
 		result.Error = strPtr(passwdNote(note, hook, outcome))
 	} else if outcome.err != nil {
-		if code := extractExitCode(outcome.err); code != nil {
+		if f.exitCode != nil {
 			result.Error = strPtr(passwdNote(note, hook, outcome))
 		} else {
 			// 连接层 / 会话层的错误（连不上、会话建不起来、命令没能开始）：没有可读的
 			// 远端输出，保留原文——盖成「改密没有完成」只会把真原因丢掉。
-			result.Error = strPtr(outcome.err.Error())
+			result.Error = f.errText
 		}
 	}
 	return result

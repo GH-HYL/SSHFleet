@@ -175,21 +175,11 @@ func (c *Client) RunInteractive(ctx context.Context, in InteractiveInput, seq in
 
 	// 事实：会话起没起、怎么收的场、目的命令的退出码
 	result.SessionBegun = outcome.begun
-	result.TimedOut = outcome.timedOut
-	result.Canceled = outcome.canceled
-	switch {
-	case outcome.err == nil:
-		code := 0
-		result.CommandExitCode = &code
-	case !outcome.timedOut && !outcome.canceled:
-		if code := extractExitCode(outcome.err); code != nil {
-			result.CommandExitCode = code
-		} else {
-			result.Error = strPtr(outcome.err.Error())
-		}
-	default:
-		result.Error = strPtr(outcome.err.Error())
-	}
+	f := endFactsOf(outcome.err, outcome.timedOut, outcome.canceled)
+	result.CommandExitCode = f.exitCode
+	result.Error = f.errText
+	result.TimedOut = f.timedOut
+	result.Canceled = f.canceled
 
 	// 事实：代填的收尾三态。中止词优先（命中过的场次不判未命中，否则即时归因会被盖掉）；
 	// 中断有自己的去处（任务已取消），也不判未命中。
