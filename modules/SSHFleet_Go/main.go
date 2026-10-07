@@ -369,7 +369,7 @@ func main() {
 	execLogPath := filepath.Join(archive.Dir, config.BuiltinPaths.Exec)
 	logger.Info(fmt.Sprintf("执行期日志已轮转至：%s（执行结束自动切回）", execLogPath))
 
-	mode := result.ModeOf(args)
+	mode := args.ModeName()
 	if dangerNote != "" {
 		execLog.Warn(dangerNote)
 	}

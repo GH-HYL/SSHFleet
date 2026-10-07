@@ -44,25 +44,22 @@ func WriteReport(archiveDir string, stats *result.Stats, a *cli.Args, cfg *confi
 	fmt.Fprintf(&b, "\n【执行命令】 \n  %s\n", DisplayCommand(common.MaskCommandLine(argv)))
 
 	b.WriteString("\n【执行参数】\n")
-	// 模式名由 cli.Args.ModeName 单点判定，此处只做「模式 → 报告段落」的映射。
+	// 「执行模式」这一行的值取自模式名字表；其下的命令 / 路径 / 新密码是各模式自己的内容，
+	// 仍按模式分派——那是结构性差异，不是叫法。
+	fmt.Fprintf(&b, "  执行模式： %s\n", a.ModeName().Info().ReportTitle)
 	switch a.ModeName() {
-	case "command":
-		b.WriteString("  执行模式： 命令模式\n")
+	case cli.ModeCommand:
 		fmt.Fprintf(&b, "  执行命令： %s\n", a.Command)
-	case "script":
-		b.WriteString("  执行模式： 脚本模式\n")
+	case cli.ModeScript:
 		fmt.Fprintf(&b, "  脚本路径： %s\n", a.Script)
-	case "upload":
-		b.WriteString("  执行模式： 上传模式\n")
+	case cli.ModeUpload:
 		fmt.Fprintf(&b, "  本地路径： %s\n", a.Upload)
 		fmt.Fprintf(&b, "  远程路径： %s\n", a.Path)
-	case "download":
+	case cli.ModeDownload:
 		// spec D37：旧版完全没有下载模式分支
-		b.WriteString("  执行模式： 下载模式\n")
 		fmt.Fprintf(&b, "  远程路径： %s\n", a.Download)
 		fmt.Fprintf(&b, "  本地路径： %s\n", a.Path)
-	case "passwd":
-		b.WriteString("  执行模式： 改密模式\n")
+	case cli.ModePasswd:
 		// 新密码是明确知道身份的凭据：报告属归档产物，只留脱敏形态
 		fmt.Fprintf(&b, "  新密码： %s\n", common.MaskSecret(a.ChangePassword))
 	}
@@ -81,15 +78,8 @@ func WriteReport(archiveDir string, stats *result.Stats, a *cli.Args, cfg *confi
 		fmt.Fprintf(&b, "  连接超时： %ds\n", a.ConnectTimeout)
 	}
 	if a.Timeout != 0 {
-		// 措辞按模式走（与参数屏同口径），改密报「改密超时」。
-		switch a.ModeName() {
-		case cli.ModeCommand, cli.ModeScript:
-			fmt.Fprintf(&b, "  执行超时： %ds\n", a.Timeout)
-		case cli.ModeUpload, cli.ModeDownload:
-			fmt.Fprintf(&b, "  传输超时： %ds\n", a.Timeout)
-		case cli.ModePasswd:
-			fmt.Fprintf(&b, "  改密超时： %ds\n", a.Timeout)
-		}
+		// 措辞取自名字表（执行超时 / 传输超时 / 改密超时），与参数屏同一处来源。
+		fmt.Fprintf(&b, "  %s： %ds\n", a.ModeName().Info().TimeoutLabel, a.Timeout)
 	}
 
 	b.WriteString("\n【结果统计】\n")

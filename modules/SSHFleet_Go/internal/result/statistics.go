@@ -16,16 +16,6 @@ import (
 	"sshfleet/internal/verdict"
 )
 
-// 成功分类的中文名（D2：判定只给成败，中文由统计/呈现侧按模式给）。
-const (
-	// SuccessCategoryExecute 命令模式的成功分类。
-	SuccessCategoryExecute = "执行成功"
-	// SuccessCategoryTransport 传输模式（上传/下载）的成功分类。
-	SuccessCategoryTransport = "传输成功"
-	// SuccessCategoryPasswd 改密模式的成功分类。
-	SuccessCategoryPasswd = "改密成功"
-)
-
 // CategoryCount 分类及其数量。
 type CategoryCount struct {
 	Category string
@@ -49,36 +39,12 @@ type Stats struct {
 	GlobalCostTime       float64
 }
 
-// ModeOf 由命令行参数确定执行类别（execute / upload / download / passwd）。
-// 命令与脚本同归 execute——统计与展示分「执行 / 上传 / 下载 / 改密」四类。
-// 模式本身由 cli.Args.ModeName 单点判定，此处只做归并。
-func ModeOf(a *cli.Args) string {
-	switch a.ModeName() {
-	case cli.ModeUpload:
-		return "upload"
-	case cli.ModeDownload:
-		return "download"
-	case cli.ModePasswd:
-		return "passwd"
-	default:
-		return "execute"
-	}
-}
-
 // Statistics 计算结果统计信息。items 是判定完毕的结果切片（判定在 batch 的
 // worker 协程里已做完，这里只读结论）。
 func Statistics(items []ssh.Result, nodes *nodelist.Nodes, a *cli.Args, start, stop time.Time) *Stats {
-	mode := ModeOf(a)
-	// 成功分类按模式给：上传/下载→传输成功，改密→改密成功，其余（命令/脚本）→执行成功。
-	// 「算不算传输类」只判 upload/download——与展示侧 terminal.displayCategory 同口径，
-	// 不再用「不是执行就算传输」那种反判（改密原先落 default 时靠巧合一致，立档后必须同口径）。
-	successCategory := SuccessCategoryExecute
-	switch mode {
-	case "upload", "download":
-		successCategory = SuccessCategoryTransport
-	case "passwd":
-		successCategory = SuccessCategoryPasswd
-	}
+	// 成功分类由模式名字表给（命令/脚本→执行成功、上传/下载→传输成功、改密→改密成功）。
+	// 「算不算传输类」从此只有名字表一处判据，统计侧不再自己判。
+	successCategory := a.ModeName().Info().SuccessCategory
 
 	stats := &Stats{
 		ResultsTotal:    len(items),

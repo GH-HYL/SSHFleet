@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"sshfleet/internal/cli"
 	"sshfleet/internal/common"
 	"sshfleet/internal/config"
 	"sshfleet/internal/result"
@@ -44,19 +45,8 @@ var exitCodeHints = map[int]string{
 	255: "命令执行失败",
 }
 
-// ActionName 模式 → 动作中文名（状态行用）。
-func ActionName(mode string) string {
-	switch mode {
-	case "upload":
-		return "上传"
-	case "download":
-		return "下载"
-	case "passwd":
-		return "改密"
-	default:
-		return "执行"
-	}
-}
+// ActionName 模式 → 动作中文名（状态行用）。名字取自模式名字表。
+func ActionName(mode cli.Mode) string { return mode.Info().ActionName }
 
 // FormatConnStatus 连接状态行：「连接: 成功 - X.XXXs」。
 func FormatConnStatus(connectSuccess bool, cost float64) string {
@@ -80,17 +70,11 @@ func FormatSpeed(bytesPerSec float64) string {
 }
 
 // displayCategory 单条结果展示用的分类名（终端明细 / xlsx 分类列同一口径）：
-// 成功行按模式给中文（执行成功 / 传输成功 / 改密成功，D2），失败行用判定给出的分类。
-func displayCategory(res ssh.Result, mode string) string {
+// 成功行按模式取名字表里的成功分类中文（执行成功 / 传输成功 / 改密成功，D2 的位置不变），
+// 失败行用判定给出的分类。
+func displayCategory(res ssh.Result, mode cli.Mode) string {
 	if res.Verdict == verdict.Success {
-		switch mode {
-		case "upload", "download":
-			return result.SuccessCategoryTransport
-		case "passwd":
-			return result.SuccessCategoryPasswd
-		default:
-			return result.SuccessCategoryExecute
-		}
+		return mode.Info().SuccessCategory
 	}
 	return res.Category
 }
@@ -102,7 +86,7 @@ func displayCategory(res ssh.Result, mode string) string {
 // r.Output 到手即成品（见 ssh.trimOuterBlankLines）；呈现层再动一次就会各清各的。
 //
 // answers 是代填表（-a 的解析结果），只给「未送出的代填」还原触发词用（D35）。
-func ResultLine(r ssh.Result, mode string, answers []ssh.Answer, category string) string {
+func ResultLine(r ssh.Result, mode cli.Mode, answers []ssh.Answer, category string) string {
 	var lines []string
 	lines = append(lines, fmt.Sprintf("【%s】 %s", r.IP, FormatConnStatus(r.ConnectSuccess, r.ConnectCostTime)))
 

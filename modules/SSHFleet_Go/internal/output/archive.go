@@ -203,13 +203,13 @@ func absoluteOrSelf(p string) string {
 }
 
 // archiveDirName 归档目录名：<时间>_<模式>[_备注]（对位旧命名）。
-// 模式名由 cli.Args.ModeName 单点判定，此处不再重判 Args 的字段。
+// 模式段取自模式名字表，此处不再重判 Args 的字段。
 func archiveDirName(a *cli.Args) (string, error) {
-	modeName := a.ModeName()
-	if modeName == "" {
-		modeName = "unknown" // 防御：参数合规检查已保证四者必有其一
+	dirName := a.ModeName().Info().DirName
+	if dirName == "" {
+		dirName = "unknown" // 防御：参数合规检查已保证五者必有其一
 	}
-	name := fmt.Sprintf("%s_%s", time.Now().Format("2006-01-02_15-04-05"), modeName)
+	name := fmt.Sprintf("%s_%s", time.Now().Format("2006-01-02_15-04-05"), dirName)
 	if remark := strings.TrimSpace(a.Remark); remark != "" {
 		name += "_" + remark
 	}

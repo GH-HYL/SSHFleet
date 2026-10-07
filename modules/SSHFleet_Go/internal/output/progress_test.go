@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/bubbles/progress"
 
 	"sshfleet/internal/batch"
+	"sshfleet/internal/cli"
 	"sshfleet/internal/ssh"
 )
 
@@ -20,13 +21,13 @@ import (
 // 随实现一并删除。这里只钉住属于我们自己的部分：两种模式渲染成什么、
 // 逐节点显示位怎么分配、进度取值按什么口径。
 
-func newTestProgress(mode string, total int) progressModel {
+func newTestProgress(mode cli.Mode, total int) progressModel {
 	return newProgressModel(mode, total, time.Now())
 }
 
 // 命令模式：单行，含台数、成败与耗时。
 func TestCommandViewIsSingleLineWithCounts(t *testing.T) {
-	m := newTestProgress("execute", 5)
+	m := newTestProgress(cli.ModeCommand, 5)
 	m.applySnapshot(batch.Snapshot{Total: 5, Completed: 3, Succeeded: 2, Failed: 1})
 
 	view := m.render()
@@ -43,7 +44,7 @@ func TestCommandViewIsSingleLineWithCounts(t *testing.T) {
 // 传输模式：多行块（总进度 / 节点进度 / 分隔线 / 逐节点条）；
 // 已完成的节点让出显示位，正在传输的节点才有条。
 func TestTransferViewListsActiveNodesOnly(t *testing.T) {
-	m := newTestProgress("upload", 3)
+	m := newTestProgress(cli.ModeUpload, 3)
 	m.applySnapshot(batch.Snapshot{
 		Total: 3, Completed: 1, Succeeded: 1, BytesDone: 512, BytesTotal: 1024,
 		Nodes: []batch.NodeSnapshot{
@@ -76,7 +77,7 @@ func TestTransferVisibleNodesCapped(t *testing.T) {
 			Seq: i, IP: fmt.Sprintf("10.0.0.%d", i), Bytes: 1, TotalBytes: 10,
 		})
 	}
-	m := newTestProgress("upload", total)
+	m := newTestProgress(cli.ModeUpload, total)
 	m.applySnapshot(batch.Snapshot{Total: total, Nodes: nodes})
 	m.syncBars()
 
@@ -94,7 +95,7 @@ func TestTransferVisibleNodesCapped(t *testing.T) {
 // View 末尾刻意多带一个换行：bubbletea 退出时会擦掉自己渲染的最后一行
 // （命令模式的进度条只有一行，正好是那行），留个空行替它接刀，进度条才能留在屏幕上。
 func TestViewLeavesSacrificialTrailingLine(t *testing.T) {
-	m := newTestProgress("execute", 2)
+	m := newTestProgress(cli.ModeCommand, 2)
 	view := m.View()
 	if !strings.HasSuffix(view, "\n") {
 		t.Fatal("View 末尾应留一个换行，用于承接 bubbletea 退出时的擦行")
@@ -109,7 +110,7 @@ func TestViewLeavesSacrificialTrailingLine(t *testing.T) {
 func TestExecuteProgressSequenceMonotonic(t *testing.T) {
 	total := 8
 	agg := batch.NewAggregator(total, nil)
-	m := newTestProgress("execute", total)
+	m := newTestProgress(cli.ModeCommand, total)
 
 	m.applySnapshot(agg.Snapshot())
 	t.Logf("初始        : %.4f", m.progress())
@@ -137,7 +138,7 @@ func TestExecuteProgressSequenceMonotonic(t *testing.T) {
 // 节点完成到来，动画往往还停在半路。（用户 2026-09-15 实测：节点进度已 72/72，
 // 条却停在 97.2%。）
 func TestFinalFrameSnapsToTarget(t *testing.T) {
-	m := newTestProgress("execute", 4)
+	m := newTestProgress(cli.ModeCommand, 4)
 	m.applySnapshot(batch.Snapshot{Total: 4, Completed: 4})
 
 	// 没有动画帧驱动时，普通渲染停在弹簧的当前值 0%
@@ -150,7 +151,7 @@ func TestFinalFrameSnapsToTarget(t *testing.T) {
 	}
 
 	// 传输模式的三条（总进度 / 节点进度 / 逐节点）同样要定格
-	tr := newTestProgress("upload", 2)
+	tr := newTestProgress(cli.ModeUpload, 2)
 	tr.applySnapshot(batch.Snapshot{
 		Total: 2, Completed: 2, BytesDone: 100, BytesTotal: 100,
 		Nodes: []batch.NodeSnapshot{{Seq: 0, IP: "10.0.0.1", Bytes: 50, TotalBytes: 50, Done: true}},
@@ -165,7 +166,7 @@ func TestFinalFrameSnapsToTarget(t *testing.T) {
 // 终帧消息要带回退出命令：渲染由事件循环在本条消息之后做，退出紧随其后，
 // 这样终帧一定上屏（直接调 Program.Quit 则可能跳过这一帧）。
 func TestFinalMsgSetsFlagAndQuits(t *testing.T) {
-	m := newTestProgress("execute", 2)
+	m := newTestProgress(cli.ModeCommand, 2)
 	updated, cmd := m.Update(finalMsg{})
 	if cmd == nil {
 		t.Fatal("终帧消息应带回退出命令")
@@ -178,7 +179,7 @@ func TestFinalMsgSetsFlagAndQuits(t *testing.T) {
 // 总进度按台数加权：并发受限时不会因为「当前这批传完」就冲到 100%。
 // （用户 2026-09-15 实测：50 台 10 并发上传，进度条先到 100% 再回落。）
 func TestProgressWeightsByNodeCount(t *testing.T) {
-	m := newTestProgress("upload", 50)
+	m := newTestProgress(cli.ModeUpload, 50)
 	nodes := make([]batch.NodeSnapshot, 0, 10)
 	for i := 0; i < 10; i++ {
 		nodes = append(nodes, batch.NodeSnapshot{
@@ -194,7 +195,7 @@ func TestProgressWeightsByNodeCount(t *testing.T) {
 	}
 
 	// 在传的节点按自身进度计入
-	m2 := newTestProgress("upload", 4)
+	m2 := newTestProgress(cli.ModeUpload, 4)
 	m2.applySnapshot(batch.Snapshot{Total: 4, Completed: 1, Nodes: []batch.NodeSnapshot{
 		{Seq: 0, Bytes: 10, TotalBytes: 10, Done: true},
 		{Seq: 1, Bytes: 5, TotalBytes: 10},
@@ -204,7 +205,7 @@ func TestProgressWeightsByNodeCount(t *testing.T) {
 	}
 
 	// 命令模式：完成的台数 / 总数
-	c := newTestProgress("execute", 10)
+	c := newTestProgress(cli.ModeCommand, 10)
 	c.applySnapshot(batch.Snapshot{Total: 10, Completed: 9})
 	if got := c.progress(); got != 0.9 {
 		t.Fatalf("命令模式 9/10 应为 0.9，实际 %v", got)
@@ -213,7 +214,7 @@ func TestProgressWeightsByNodeCount(t *testing.T) {
 
 // 目标值只在变化时下发：每次无脑 SetPercent 会刷新动画 tag，把排队中的动画帧作废。
 func TestSyncBarsSkipsUnchangedPercent(t *testing.T) {
-	m := newTestProgress("execute", 4)
+	m := newTestProgress(cli.ModeCommand, 4)
 	m.applySnapshot(batch.Snapshot{Total: 4, Completed: 2})
 	if cmd := m.syncBars(); cmd == nil {
 		t.Fatal("进度推进时应下发动画命令")
@@ -243,7 +244,7 @@ func TestClampAndNodePercent(t *testing.T) {
 
 // 空快照（还没收到任何进度）也要渲染出内容，不能是空串。
 func TestViewRendersOnEmptySnapshot(t *testing.T) {
-	for _, mode := range []string{"execute", "upload", "download"} {
+	for _, mode := range []cli.Mode{cli.ModeCommand, cli.ModeUpload, cli.ModeDownload} {
 		m := newTestProgress(mode, 0)
 		if got := m.render(); got == "" {
 			t.Fatalf("%s 模式在空快照下也应渲染出内容", mode)

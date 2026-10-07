@@ -106,6 +106,72 @@ func (a *Args) ModeName() Mode {
 	return ModeNone
 }
 
+// allModes 执行模式全集。新增第 6 档时，必须同时加到这里与 modeTable——
+// 只加一处会被 init 自检在启动时拦下。
+var allModes = []Mode{ModePasswd, ModeCommand, ModeScript, ModeUpload, ModeDownload}
+
+// ModeInfo 一种执行模式的全部名字：各处文案与派生判据都收在这一处。
+// 字段只增不改名——它同时是呈现契约（呈现层按字段取值，不再各自比对参数字段）。
+//
+// 为什么收在一处：加一档模式原先要逐处核对 7 个点、手改 4 处（落改密那一档实测 28 文件 / 8 包）。
+// 收齐之后，加一档只改 modeTable 与 allModes 各一行。
+type ModeInfo struct {
+	DirName         string // 归档目录名里的模式段（英文）
+	LogName         string // 执行期日志文案
+	ActionName      string // 终端明细状态行的动作名
+	ScreenLabel     string // 参数屏「执行模式」行的值
+	ReportTitle     string // 报告「执行模式」行的值
+	TimeoutLabel    string // 超时行措辞
+	SuccessCategory string // 成功分类的中文名
+	Transfer        bool   // 是不是传输类（上传 / 下载为真）
+}
+
+// modeTable 模式 → 名字。值即各处现值；改动前先逐字核对。
+var modeTable = map[Mode]ModeInfo{
+	ModePasswd: {
+		DirName: "passwd", LogName: "改密", ActionName: "改密",
+		ScreenLabel: "改密模式", ReportTitle: "改密模式",
+		TimeoutLabel: "改密超时", SuccessCategory: "改密成功",
+	},
+	ModeCommand: {
+		DirName: "command", LogName: "命令", ActionName: "执行",
+		ScreenLabel: "命令模式", ReportTitle: "命令模式",
+		TimeoutLabel: "执行超时", SuccessCategory: "执行成功",
+	},
+	ModeScript: {
+		DirName: "script", LogName: "脚本", ActionName: "执行",
+		ScreenLabel: "脚本模式", ReportTitle: "脚本模式",
+		TimeoutLabel: "执行超时", SuccessCategory: "执行成功",
+	},
+	ModeUpload: {
+		DirName: "upload", LogName: "上传", ActionName: "上传",
+		ScreenLabel: "上传模式", ReportTitle: "上传模式",
+		TimeoutLabel: "传输超时", SuccessCategory: "传输成功", Transfer: true,
+	},
+	ModeDownload: {
+		DirName: "download", LogName: "下载", ActionName: "下载",
+		ScreenLabel: "下载模式", ReportTitle: "下载模式",
+		TimeoutLabel: "传输超时", SuccessCategory: "传输成功", Transfer: true,
+	},
+}
+
+// Info 取该模式的全部名字。ModeNone 返回零值。
+func (m Mode) Info() ModeInfo { return modeTable[m] }
+
+// init 启动期自检：模式全集里每一个都必须在名字表里登记。
+//
+// 为什么不用编译期：Go 对 switch / 表查找都没有穷尽检查——加了模式却漏填一格，编译照样过，
+// 只是那格静默为空。这里把「安静的错误」换成「一启动就停」，报错指名到模式。
+func init() {
+	for _, m := range allModes {
+		if modeTable[m].LogName == "" {
+			panic(fmt.Sprintf(
+				"执行模式名字表缺格：模式 %q 没登记。新增模式时请同时补 cli.modeTable 与 cli.allModes",
+				string(m)))
+		}
+	}
+}
+
 // NumberGiven 本次是否显式指定了 -n（没指定即"全部并行"）。
 func (a *Args) NumberGiven() bool { return a.numberRaw != "" }
 
@@ -436,7 +502,7 @@ func opt(short, long, tag, desc string) helpEntry {
 
 // helpEntries 选项表内容：描述力求简洁、清晰、明确——能省的字省掉，
 // 「必填 / 取值语义 / 默认值」这些影响使用的信息一个不省。
-// 五组：模式（四选一）/ 清单与目标路径 / 执行参数 / 密钥与凭据 / 密钥管理，组间空行分隔。
+// 五组：模式（五选一）/ 清单与目标路径 / 执行参数 / 密钥与凭据 / 密钥管理，组间空行分隔。
 func helpEntries(cfg *config.Config) []helpEntry {
 	sudoTag, noSudoDesc := "[当前配置: 关]", "这次以登录用户身份执行"
 	if cfg.Execution.Sudo {

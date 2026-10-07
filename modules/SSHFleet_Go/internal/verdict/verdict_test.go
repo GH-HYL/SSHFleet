@@ -62,8 +62,8 @@ func judgeCorpus(c corpusCase, kw *Keywords) string {
 	}
 	Judge(&res, mode, kw)
 	if res.Verdict == Success {
-		// 成功行的展示分类由统计/呈现侧按模式转中文（D2）；result 包引 verdict，
-		// 这里只能写字面量、不能回引它的常量
+		// 成功行的展示分类由呈现侧按模式给（D2）。这里写**字面量**、不读 cli 的名字表：
+		// 期望值不跟着实现走，实现改错了这一行才会响——这是本断言存在的意义。
 		if mode == cli.ModeUpload || mode == cli.ModeDownload {
 			return "传输成功"
 		}

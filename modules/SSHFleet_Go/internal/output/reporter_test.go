@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"sshfleet/internal/batch"
+	"sshfleet/internal/cli"
 	"sshfleet/internal/log"
-	"sshfleet/internal/result"
 	"sshfleet/internal/ssh"
 	"sshfleet/internal/verdict"
 )
@@ -22,13 +22,13 @@ import (
 // 三去向（终端 / output.txt / 执行期日志）与分类都成了可断言的。
 
 // newTestReporter 造一个接住三个去向的呈现器：output.txt 与执行期日志都落到临时目录。
-func newTestReporter(t *testing.T, mode string, total int) (*Reporter, *bytes.Buffer, string) {
+func newTestReporter(t *testing.T, mode cli.Mode, total int) (*Reporter, *bytes.Buffer, string) {
 	t.Helper()
 	return newTestReporterQuiet(t, mode, total, false)
 }
 
 // newTestReporterQuiet 同上，但可指定非交互模式（--yes 的静默闸门）。
-func newTestReporterQuiet(t *testing.T, mode string, total int, quiet bool) (*Reporter, *bytes.Buffer, string) {
+func newTestReporterQuiet(t *testing.T, mode cli.Mode, total int, quiet bool) (*Reporter, *bytes.Buffer, string) {
 	t.Helper()
 	dir := t.TempDir()
 
@@ -47,7 +47,7 @@ func newTestReporterQuiet(t *testing.T, mode string, total int, quiet bool) (*Re
 // 挡的只有"教学类"那一路——报错与结果明细照旧。
 func TestNoticeQuietInNonInteractiveMode(t *testing.T) {
 	// 非交互：终端那一路整个没有输出
-	r, _, logPath := newTestReporterQuiet(t, "upload", 1, true)
+	r, _, logPath := newTestReporterQuiet(t, cli.ModeUpload, 1, true)
 	r.out = tempOut(t)
 	r.Notice("提示：源里的软链接被过滤\n")
 	if got := readTempOut(t, r.out); got != "" {
@@ -58,7 +58,7 @@ func TestNoticeQuietInNonInteractiveMode(t *testing.T) {
 	}
 
 	// 交互模式照旧上屏
-	r2, _, _ := newTestReporter(t, "upload", 1)
+	r2, _, _ := newTestReporter(t, cli.ModeUpload, 1)
 	r2.out = tempOut(t)
 	r2.Notice("提示：源里的软链接被过滤\n")
 	if got := readTempOut(t, r2.out); !strings.Contains(got, "软链接被过滤") {
@@ -105,7 +105,7 @@ func intp(i int) *int      { return &i }
 
 // 命令模式：成功结果同时进 output.txt 与执行期日志，分类为「执行成功」。
 func TestReporterResultWritesBothSinks(t *testing.T) {
-	r, outFile, execLogPath := newTestReporter(t, "execute", 2)
+	r, outFile, execLogPath := newTestReporter(t, cli.ModeCommand, 2)
 
 	res := ssh.Result{
 		Seq: 0, IP: "10.0.0.1", ConnectSuccess: true, Verdict: verdict.Success,
@@ -138,7 +138,7 @@ func TestReporterResultWritesBothSinks(t *testing.T) {
 
 // 连接失败：错误原文进分类明细，日志记「连接失败」；容器里没有退出码，不得出现退出码字样。
 func TestReporterConnectFailure(t *testing.T) {
-	r, outFile, execLogPath := newTestReporter(t, "execute", 1)
+	r, outFile, execLogPath := newTestReporter(t, cli.ModeCommand, 1)
 
 	res := ssh.Result{
 		Seq: 0, IP: "10.0.0.2", ConnectSuccess: false, Verdict: verdict.Other,
@@ -168,7 +168,7 @@ func TestReporterConnectFailure(t *testing.T) {
 
 // 传输模式：分类走传输口径，上传完成按成功/失败文件数选级别。
 func TestReporterTransferMode(t *testing.T) {
-	r, outFile, execLogPath := newTestReporter(t, "upload", 1)
+	r, outFile, execLogPath := newTestReporter(t, cli.ModeUpload, 1)
 
 	res := ssh.Result{
 		Seq: 0, IP: "10.0.0.3", ConnectSuccess: true, Verdict: verdict.Success,
@@ -177,8 +177,8 @@ func TestReporterTransferMode(t *testing.T) {
 	}
 	r.Result(res)
 
-	if got := displayCategory(res, "upload"); got != result.SuccessCategoryTransport {
-		t.Fatalf("传输模式成功分类应为 %q，实际 %q", result.SuccessCategoryTransport, got)
+	if got := displayCategory(res, cli.ModeUpload); got != cli.ModeUpload.Info().SuccessCategory {
+		t.Fatalf("传输模式成功分类应为 %q，实际 %q", cli.ModeUpload.Info().SuccessCategory, got)
 	}
 	logText := readExecLog(t, execLogPath)
 	if !strings.Contains(logText, "成功：连接 0.100s，上传 3/3 个文件") {
@@ -186,7 +186,7 @@ func TestReporterTransferMode(t *testing.T) {
 	}
 
 	// 有失败项时改走 WARN 级别与「（有失败项）」措辞
-	r2, _, execLogPath2 := newTestReporter(t, "upload", 1)
+	r2, _, execLogPath2 := newTestReporter(t, cli.ModeUpload, 1)
 	r2.Result(ssh.Result{
 		Seq: 0, IP: "10.0.0.4", ConnectSuccess: true,
 		TotalFiles: 3, SuccessFiles: 2, FailedFiles: 1,
@@ -201,7 +201,7 @@ func TestReporterTransferMode(t *testing.T) {
 
 // 采集期提示：界面尚未创建时直接落终端，并同时进执行期日志。
 func TestReporterNoticeGoesToLog(t *testing.T) {
-	r, _, execLogPath := newTestReporter(t, "upload", 1)
+	r, _, execLogPath := newTestReporter(t, cli.ModeUpload, 1)
 	r.Notice("提示：上传源中有 2 个软链接/快捷方式被过滤（不上传）：a.lnk, b.lnk")
 
 	if !strings.Contains(readExecLog(t, execLogPath), "软链接/快捷方式被过滤") {
@@ -211,7 +211,7 @@ func TestReporterNoticeGoesToLog(t *testing.T) {
 
 // 进度界面懒创建：没收到进度事件时 Stop 是空操作（不该崩、不该写东西）。
 func TestReporterStopWithoutProgress(t *testing.T) {
-	r, outFile, _ := newTestReporter(t, "execute", 1)
+	r, outFile, _ := newTestReporter(t, cli.ModeCommand, 1)
 	r.Stop()
 	r.Stop() // 幂等
 	if outFile.Len() != 0 {
@@ -223,7 +223,7 @@ func TestReporterStopWithoutProgress(t *testing.T) {
 // 真终端下会启动 bubbletea 界面——那条路径走不到这里（go test 的 stdout 是管道），
 // 由手工跑一次真实执行覆盖。
 func TestReporterProgressInPlainModeWhenNotTTY(t *testing.T) {
-	r, _, _ := newTestReporter(t, "execute", 3)
+	r, _, _ := newTestReporter(t, cli.ModeCommand, 3)
 	if !r.plain {
 		t.Skip("当前 go test 的输出是终端，本用例只覆盖直通模式")
 	}
@@ -242,7 +242,7 @@ func TestReporterProgressInPlainModeWhenNotTTY(t *testing.T) {
 // go test 的 stdout 是管道（所以上面的用例永远走直通），这里把 plain 关掉、
 // 输出改指临时文件，让 bubbletea 真跑一遍——渲染内容会落进那个文件。
 func TestReporterRunsProgressProgram(t *testing.T) {
-	r, _, _ := newTestReporter(t, "execute", 2)
+	r, _, _ := newTestReporter(t, cli.ModeCommand, 2)
 
 	f, err := os.CreateTemp(t.TempDir(), "progress-*.out")
 	if err != nil {
@@ -278,7 +278,7 @@ func TestReporterRunsProgressProgram(t *testing.T) {
 // 后者是服务端拒绝语与逐文件失败原因的唯一来源（密码过期、nologin、传输明细）。
 func TestReporterLogsFailureEvidence(t *testing.T) {
 	// 1) 命令失败：输出明细进日志（密码过期就是这种：Error 为空、证据在 Output）
-	r, _, logPath := newTestReporter(t, "execute", 1)
+	r, _, logPath := newTestReporter(t, cli.ModeCommand, 1)
 	r.Result(ssh.Result{
 		Seq: 0, IP: "10.0.0.9", User: "root", AuthMethod: "密码",
 		ConnectSuccess: true, ExitCode: intp(1), ConnectCostTime: 0.1, ExecCostTime: 0.004,
@@ -298,7 +298,7 @@ func TestReporterLogsFailureEvidence(t *testing.T) {
 	}
 
 	// 2) 连上了但没跑成：报错原文进日志（Error 非空、退出码缺席）
-	r2, _, logPath2 := newTestReporter(t, "execute", 1)
+	r2, _, logPath2 := newTestReporter(t, cli.ModeCommand, 1)
 	r2.Result(ssh.Result{
 		Seq: 0, IP: "10.0.0.10", ConnectSuccess: true, ConnectCostTime: 0.2,
 		Error: ptr("创建会话失败 - ssh: rejected: connect failed (\"open failed\")"),
@@ -309,7 +309,7 @@ func TestReporterLogsFailureEvidence(t *testing.T) {
 	}
 
 	// 3) 成功节点不写输出明细（`cat 大文件` 这类命令不能把日志撑爆）
-	r3, _, logPath3 := newTestReporter(t, "execute", 1)
+	r3, _, logPath3 := newTestReporter(t, cli.ModeCommand, 1)
 	r3.Result(ssh.Result{
 		Seq: 0, IP: "10.0.0.11", ConnectSuccess: true, Verdict: verdict.Success,
 		ConnectCostTime: 0.1, ExecCostTime: 0.2, Output: "line1\nline2\nline3",
@@ -323,7 +323,7 @@ func TestReporterLogsFailureEvidence(t *testing.T) {
 	for i := 0; i < maxOutputLines+7; i++ {
 		fmt.Fprintf(&big, "line %d\n", i)
 	}
-	r4, _, logPath4 := newTestReporter(t, "execute", 1)
+	r4, _, logPath4 := newTestReporter(t, cli.ModeCommand, 1)
 	r4.Result(ssh.Result{
 		Seq: 0, IP: "10.0.0.12", ConnectSuccess: true, ExitCode: intp(2),
 		ConnectCostTime: 0.1, ExecCostTime: 0.2, Output: big.String(),
@@ -349,7 +349,7 @@ func TestReporterLogsMissedAnswers(t *testing.T) {
 	t.Cleanup(func() { _ = execLog.Close() })
 
 	answers := []ssh.Answer{{Value: "zhangsan", Triggers: []string{"Your full name"}}}
-	r := NewReporter(execLog, &bytes.Buffer{}, "execute", answers, 1, time.Now(), true)
+	r := NewReporter(execLog, &bytes.Buffer{}, cli.ModeCommand, answers, 1, time.Now(), true)
 	zero := 0
 	r.Result(ssh.Result{
 		Seq: 0, IP: "10.0.0.7", ConnectSuccess: true, Verdict: verdict.Other,
@@ -382,7 +382,7 @@ func TestReporterLogsSteps(t *testing.T) {
 	t.Cleanup(func() { _ = execLog.Close() })
 
 	one := 1
-	r := NewReporter(execLog, &bytes.Buffer{}, "download", nil, 1, time.Now(), true)
+	r := NewReporter(execLog, &bytes.Buffer{}, cli.ModeDownload, nil, 1, time.Now(), true)
 	r.Result(ssh.Result{
 		Seq: 0, IP: "10.0.0.8", ConnectSuccess: true, Verdict: verdict.Other,
 		Category: "远程路径不存在", ExitCode: nil,

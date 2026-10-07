@@ -26,7 +26,7 @@ type Results struct{ Items []ssh.Result }
 
 func (r *Results) Len() int { return len(r.Items) }
 
-// task 单个节点的执行任务（四种模式共用：命令 / 脚本 / 上传 / 下载）。
+// task 单个节点的执行任务（五种模式共用：命令 / 脚本 / 上传 / 下载 / 改密）。
 type task struct {
 	seq     int
 	node    nodelist.NodeInfo
@@ -80,7 +80,7 @@ func Run(ctx context.Context, a *cli.Args, cfg *config.Config, nodes *nodelist.N
 	if concurrency <= 0 || concurrency > len(tasks) {
 		concurrency = len(tasks)
 	}
-	logger.Info(fmt.Sprintf("开始执行任务：节点 %d 个，并发 %d，模式 %s", len(tasks), concurrency, execModeName(a)))
+	logger.Info(fmt.Sprintf("开始执行任务：节点 %d 个，并发 %d，模式 %s", len(tasks), concurrency, a.ModeName().Info().LogName))
 
 	// 交代命令被包成了什么（旧 Python builder.py 的「完整命令拼接完成」对应物）：
 	// 命令走 stdin 通道后，命令行里只剩固定形态的 bash -lc，事后看日志查不出
@@ -224,24 +224,6 @@ func buildTasks(a *cli.Args, nodes *nodelist.Nodes, prompts *ssh.PasswdPrompts, 
 		}
 	}
 	return tasks, notices, nil
-}
-
-// execModeName 模式名的中文文案（日志用）。模式本身由 cli.Args.ModeName 判定，
-// 这里只做「模式名 → 文案」的映射，不再重判 Args 的字段。
-func execModeName(a *cli.Args) string {
-	switch a.ModeName() {
-	case "command":
-		return "命令"
-	case "script":
-		return "脚本"
-	case "upload":
-		return "上传"
-	case "download":
-		return "下载"
-	case "passwd":
-		return "改密"
-	}
-	return "未知"
 }
 
 // commandDescription 命令/脚本模式下「交给 SSH 执行的是什么」的日志行。

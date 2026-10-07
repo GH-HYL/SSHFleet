@@ -25,6 +25,7 @@ import (
 	"github.com/mattn/go-isatty"
 
 	"sshfleet/internal/batch"
+	"sshfleet/internal/cli"
 	"sshfleet/internal/common"
 	"sshfleet/internal/config"
 	"sshfleet/internal/log"
@@ -43,7 +44,7 @@ import (
 type Reporter struct {
 	logger  *log.Logger
 	outFile io.Writer
-	mode    string
+	mode    cli.Mode
 	// answers 代填表（-a 的解析结果，顺序即文本里的行序）。只为一件事存在：
 	// 把结果里「未送出的代填」序号还原成触发词原文（D35）。序号与用户表同源，
 	// 呈现层查一次即可，不必在每个结果里复制一份事实。
@@ -78,7 +79,7 @@ type Reporter struct {
 //   - quiet: 非交互模式（--yes）。运行期提示不上屏，只进日志（L61 静默闸门）
 //
 // 成败与分类不在这里定——结果到手时判定已在 batch 的 worker 协程里做完，呈现层只读结论。
-func NewReporter(execLog *log.Logger, outputFile io.Writer, mode string, answers []ssh.Answer, total int, start time.Time, quiet bool) *Reporter {
+func NewReporter(execLog *log.Logger, outputFile io.Writer, mode cli.Mode, answers []ssh.Answer, total int, start time.Time, quiet bool) *Reporter {
 	return &Reporter{
 		logger:  execLog,
 		outFile: outputFile,
@@ -125,9 +126,9 @@ func (r *Reporter) Result(res ssh.Result) {
 		_, _ = fmt.Fprintln(r.outFile, line)
 	}
 
-	// 终端明细：命令/脚本（execute）与改密（passwd）都要上屏；上传/下载不上屏。
-	// 改密不在这里列出就会整类明细消失——ModeOf 立了 passwd 档之后必须同步。
-	if r.mode == "execute" || r.mode == "passwd" {
+	// 终端明细：非传输类（命令 / 脚本 / 改密）上屏；传输类（上传 / 下载）不上屏——
+	// 那两条路有进度界面负责呈现明细。
+	if !r.mode.Info().Transfer {
 		r.printAbove(line)
 	}
 	r.logNode(res, category)
@@ -241,11 +242,8 @@ func (r *Reporter) logNode(res ssh.Result, category string) {
 	// 「退出码 0 却计入失败」是判定与退出码解绑的活证，照实显示）
 	if res.ConnectSuccess {
 		switch r.mode {
-		case "upload", "download":
-			action := "上传"
-			if r.mode == "download" {
-				action = "下载"
-			}
+		case cli.ModeUpload, cli.ModeDownload:
+			action := r.mode.Info().ActionName
 			note := ""
 			var write func(...any) = el.Success
 			if res.FailedFiles > 0 {
@@ -253,7 +251,7 @@ func (r *Reporter) logNode(res ssh.Result, category string) {
 			}
 			write(fmt.Sprintf("%s%s完成：成功 %d/%d 个文件%s，共 %s，耗时 %.3fs",
 				ip, action, res.SuccessFiles, res.TotalFiles, note, common.FormatBytes(res.TotalBytes), res.ExecCostTime))
-		case "passwd":
+		case cli.ModePasswd:
 			// 改密没有"目的命令"，不带退出码（定论退出码对改密恒为 nil）
 			if res.Verdict == verdict.Success {
 				el.Success(fmt.Sprintf("%s改密成功，耗时 %.3fs", ip, res.ExecCostTime))
@@ -294,16 +292,12 @@ func (r *Reporter) logNode(res ssh.Result, category string) {
 func (r *Reporter) successDetail(res ssh.Result) string {
 	conn := fmt.Sprintf("连接 %.3fs，", res.ConnectCostTime)
 	switch r.mode {
-	case "upload":
-		return fmt.Sprintf("%s上传 %d/%d 个文件（%s），耗时 %.3fs",
-			conn, res.SuccessFiles, res.TotalFiles, common.FormatBytes(res.TotalBytes), res.ExecCostTime)
-	case "download":
-		return fmt.Sprintf("%s下载 %d/%d 个文件（%s），耗时 %.3fs",
-			conn, res.SuccessFiles, res.TotalFiles, common.FormatBytes(res.TotalBytes), res.ExecCostTime)
-	case "passwd":
-		return fmt.Sprintf("%s改密 %.3fs", conn, res.ExecCostTime)
-	default:
-		return fmt.Sprintf("%s执行 %.3fs", conn, res.ExecCostTime)
+	case cli.ModeUpload, cli.ModeDownload:
+		return fmt.Sprintf("%s%s %d/%d 个文件（%s），耗时 %.3fs",
+			conn, r.mode.Info().ActionName, res.SuccessFiles, res.TotalFiles,
+			common.FormatBytes(res.TotalBytes), res.ExecCostTime)
+	default: // 命令 / 脚本 / 改密：动作名 + 耗时
+		return fmt.Sprintf("%s%s %.3fs", conn, r.mode.Info().ActionName, res.ExecCostTime)
 	}
 }
 

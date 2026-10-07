@@ -11,6 +11,7 @@ import (
 	"github.com/xuri/excelize/v2"
 
 	"sshfleet/internal/batch"
+	"sshfleet/internal/cli"
 	"sshfleet/internal/config"
 	"sshfleet/internal/ssh"
 	"sshfleet/internal/verdict"
@@ -57,7 +58,7 @@ func cellOf(t *testing.T, f *excelize.File, sheet, cell string) string {
 
 func TestOutputXlsxLayout(t *testing.T) {
 	dir := t.TempDir()
-	if err := WriteOutputXlsx(dir, testResults(), "execute", nil); err != nil {
+	if err := WriteOutputXlsx(dir, testResults(), cli.ModeCommand, nil); err != nil {
 		t.Fatal(err)
 	}
 	f := openXlsx(t, filepath.Join(dir, config.BuiltinPaths.OutputXlsx))
@@ -153,7 +154,7 @@ func TestOutputXlsxKeepsOutputStructure(t *testing.T) {
 		Output: "         system boot  2026-09-15 10:23\n\ndisk  use%",
 	}}}
 	dir := t.TempDir()
-	if err := WriteOutputXlsx(dir, results, "execute", nil); err != nil {
+	if err := WriteOutputXlsx(dir, results, cli.ModeCommand, nil); err != nil {
 		t.Fatal(err)
 	}
 	f := openXlsx(t, filepath.Join(dir, config.BuiltinPaths.OutputXlsx))
@@ -189,7 +190,7 @@ func TestXlsxReportsMissedAnswers(t *testing.T) {
 	want := `未送出的代填：第 1 条（触发词 "Your full name"）、第 2 条（触发词 "Your dept"）`
 
 	dir := t.TempDir()
-	if err := WriteResultsXlsx(dir, results, "execute", answers); err != nil {
+	if err := WriteResultsXlsx(dir, results, cli.ModeCommand, answers); err != nil {
 		t.Fatal(err)
 	}
 	fr := openXlsx(t, filepath.Join(dir, config.BuiltinPaths.ResultsXlsx))
@@ -203,7 +204,7 @@ func TestXlsxReportsMissedAnswers(t *testing.T) {
 	}
 
 	// output.xlsx 的「错误」行：连上了却失败的行现在也有一行原因（此前只给连接失败的行）
-	if err := WriteOutputXlsx(dir, results, "execute", answers); err != nil {
+	if err := WriteOutputXlsx(dir, results, cli.ModeCommand, answers); err != nil {
 		t.Fatal(err)
 	}
 	fo := openXlsx(t, filepath.Join(dir, config.BuiltinPaths.OutputXlsx))
@@ -224,7 +225,7 @@ func TestXlsxReportsMissedAnswers(t *testing.T) {
 
 func TestResultsXlsxLayoutAndAutoWidth(t *testing.T) {
 	dir := t.TempDir()
-	if err := WriteResultsXlsx(dir, testResults(), "execute", nil); err != nil {
+	if err := WriteResultsXlsx(dir, testResults(), cli.ModeCommand, nil); err != nil {
 		t.Fatal(err)
 	}
 	f := openXlsx(t, filepath.Join(dir, "results.xlsx"))
@@ -326,7 +327,7 @@ func TestXlsxStripsIllegalCharsFromEveryField(t *testing.T) {
 		Output:   dirtyOutput,
 	}}}
 	dir := t.TempDir()
-	if err := WriteOutputXlsx(dir, results, "execute", nil); err != nil {
+	if err := WriteOutputXlsx(dir, results, cli.ModeCommand, nil); err != nil {
 		t.Fatalf("含违规字符的输出应能生成 terminal-output.xlsx：%v", err)
 	}
 	f := openXlsx(t, filepath.Join(dir, config.BuiltinPaths.OutputXlsx))
@@ -337,13 +338,13 @@ func TestXlsxStripsIllegalCharsFromEveryField(t *testing.T) {
 		Error: strPtr(dirtyError),
 	}}}
 	dir2 := t.TempDir()
-	if err := WriteOutputXlsx(dir2, failResults, "execute", nil); err != nil {
+	if err := WriteOutputXlsx(dir2, failResults, cli.ModeCommand, nil); err != nil {
 		t.Fatalf("含违规字符的错误详情应能生成 terminal-output.xlsx：%v", err)
 	}
 	f2 := openXlsx(t, filepath.Join(dir2, config.BuiltinPaths.OutputXlsx))
 	assertNoIllegalChars(t, f2, f2.GetSheetName(0), "dial", "failed")
 
-	if err := WriteResultsXlsx(dir, results, "execute", nil); err != nil {
+	if err := WriteResultsXlsx(dir, results, cli.ModeCommand, nil); err != nil {
 		t.Fatalf("含违规字符的结果应能生成 results.xlsx：%v", err)
 	}
 	f3 := openXlsx(t, filepath.Join(dir, "results.xlsx"))
@@ -355,7 +356,7 @@ func TestXlsxStripsIllegalCharsFromEveryField(t *testing.T) {
 		Output: "前缀\xff\xfe后缀",
 	}}}
 	dir3 := t.TempDir()
-	if err := WriteResultsXlsx(dir3, badResults, "execute", nil); err != nil {
+	if err := WriteResultsXlsx(dir3, badResults, cli.ModeCommand, nil); err != nil {
 		t.Fatalf("非法 UTF-8 应被替换后正常写出：%v", err)
 	}
 	f4 := openXlsx(t, filepath.Join(dir3, "results.xlsx"))

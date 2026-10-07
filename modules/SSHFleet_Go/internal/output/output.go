@@ -26,7 +26,7 @@ func Render(
 	argv []string,
 	logger *log.Logger,
 ) error {
-	mode := result.ModeOf(a)
+	mode := a.ModeName()
 
 	if err := WriteReport(archive.Dir, stats, a, cfg, argv, kw); err != nil {
 		return fmt.Errorf("格式化统计结果信息输出到报告文件失败\n原因：%v", err)
