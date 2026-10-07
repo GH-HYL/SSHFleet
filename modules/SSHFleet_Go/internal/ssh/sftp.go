@@ -458,8 +458,9 @@ func (c *Client) sftpUploadWithSudo(sftpClient *sftp.Client, localPath, rel, rem
 		// 权限设置失败不阻断（旧行为）
 	}
 
-	// sudo mv 到最终路径（引号转义防路径含特殊字符）
-	if err := c.runCommand(fmt.Sprintf("sudo mv '%s' '%s'", tmpFilePath, escapeShellArg(remoteFilePath))); err != nil {
+	// sudo mv 到最终路径：两个参数都转义——两边都含用户可控字符（临时名里带着本地文件名的
+	// 基名，最终名是原路径 + 原文件名），任一边漏转义都会把远端命令拼坏。
+	if err := c.runCommand(fmt.Sprintf("sudo mv '%s' '%s'", escapeShellArg(tmpFilePath), escapeShellArg(remoteFilePath))); err != nil {
 		cleanup()
 		return 0, fmt.Errorf("sudo mv 失败: %w", err)
 	}

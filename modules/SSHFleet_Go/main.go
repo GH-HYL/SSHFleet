@@ -336,6 +336,22 @@ func main() {
 	}
 	logger.Success("读取节点信息成功")
 
+	// ---- 步骤 7 前置：上传清单严格采集（唯一一次） -----------------------
+	// 采集从执行期（batch.buildTasks）提到确认之前：确认屏与最终传输同源，
+	// 「不能传的东西」（不可读文件、FIFO/设备/socket）在按下 y 之前就报出来，
+	// 不再出现「确认屏看着正常、点 y 之后才失败」。
+	var upload *batch.CollectResult
+	if args.Upload != "" {
+		src, aerr := filepath.Abs(args.Upload)
+		if aerr != nil {
+			fatal("upload", aerr)
+		}
+		upload, aerr = batch.CollectLocalFiles(src)
+		if aerr != nil {
+			fatal("upload", aerr)
+		}
+	}
+
 	// ---- 步骤 7：参数确认（交互） --------------------------------------
 	if err := confirm.Confirm(args, nodes, cfg, logger, in); err != nil {
 		fatal("confirm", err)
@@ -389,7 +405,7 @@ func main() {
 			"原因：判据文件里「密码过期」分类没有关键词，工具认不出哪台机器要改密\n"+
 			"提示：该分类在 config/keywords_error.conf，别删它"))
 	}
-	execResults, err := batch.Run(execCtx, args, cfg, nodes, execLog, prompts, errorKeywords, batch.Hooks{
+	execResults, err := batch.Run(execCtx, args, cfg, nodes, execLog, prompts, errorKeywords, upload, batch.Hooks{
 		OnNotice:   reporter.Notice,
 		OnProgress: reporter.Progress,
 		OnResult:   reporter.Result,
