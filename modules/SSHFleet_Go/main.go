@@ -167,14 +167,6 @@ func logErrorLines(lg *log.Logger, where string, err error) {
 	}
 }
 
-// errorText 解引用错误指针（空指针给空串）。
-func errorText(p *string) string {
-	if p == nil {
-		return ""
-	}
-	return *p
-}
-
 // passwdPromptsOf 把改密配置里的提示词表转成执行侧的形态。
 // 配置层与执行侧各持一份结构：前者管文件解析与校验，后者只管匹配，互不牵连。
 func passwdPromptsOf(c *config.PasswdConfig) *ssh.PasswdPrompts {

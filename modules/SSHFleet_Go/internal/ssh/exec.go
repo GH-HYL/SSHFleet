@@ -209,5 +209,3 @@ func endFactsOf(err error, timedOut, canceled bool) endFacts {
 }
 
 func strPtr(s string) *string { return &s }
-
-func intPtr(i int) *int { return &i }

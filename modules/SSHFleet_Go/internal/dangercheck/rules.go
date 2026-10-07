@@ -29,14 +29,6 @@ type Rules struct {
 	patterns []*regexp.Regexp
 }
 
-// Count 规则条数。
-func (r *Rules) Count() int {
-	if r == nil {
-		return 0
-	}
-	return len(r.items)
-}
-
 type rulesFile struct {
 	Rules []Rule `toml:"rules"`
 }

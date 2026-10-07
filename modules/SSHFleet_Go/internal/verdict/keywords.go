@@ -93,28 +93,6 @@ func (k *Keywords) PrependCategories(items []Category) {
 	k.items = append(merged, k.items...)
 }
 
-// Names 分类名列表（保序，两块并集、同名去重；测试与展示用）。
-func (k *Keywords) Names() []string {
-	out := make([]string, 0, len(k.items)+len(k.exitItems))
-	seen := make(map[string]bool, len(k.items)+len(k.exitItems))
-	for _, c := range k.all() {
-		if seen[c.Name] {
-			continue
-		}
-		seen[c.Name] = true
-		out = append(out, c.Name)
-	}
-	return out
-}
-
-// all 两块按顺序拼起来（只用于遍历，不持有）。
-func (k *Keywords) all() []Category {
-	out := make([]Category, 0, len(k.items)+len(k.exitItems))
-	out = append(out, k.items...)
-	out = append(out, k.exitItems...)
-	return out
-}
-
 // Has 分类名是否存在。**必须覆盖两块**：IsFallbackCategory 靠它区分"已知分类"
 // 与"判据未命中时的兜底原文"，漏掉第二组会把选组出来的分类误判成兜底原文。
 func (k *Keywords) Has(name string) bool {
