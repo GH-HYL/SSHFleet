@@ -55,8 +55,9 @@ type Args struct {
 	Answer  string       // -a 的原始值（内联文本，或一个 CSV 文件路径）
 	Answers []ssh.Answer // -a 解析后的代填表（顺序即文本里的行序）
 	// AnswerFile 是 -a 取值为文件时的路径（内联时为空），归档备份用。
-	AnswerFile string
-	Match      ssh.MatchOptions // [interactive] 的匹配口径：管触发词与中止词
+	AnswerFile  string
+	Match       ssh.MatchOptions // [interactive] 的匹配口径：管触发词与中止词
+	Interpreter string           // 本次执行用的解释器（配置推导；-c/-s 模式才有值）
 
 	// --sudo / --no-sudo 是否在命令行出现：互斥判定与「密钥管理命令不与批量参数同给」都要用
 	sudoFlag, noSudoFlag bool
@@ -361,6 +362,9 @@ func Parse(cfg *config.Config, version string, raw []string) (*Args, error) {
 
 	// 匹配口径取自配置（[interactive]）：执行侧从 Args 取，不再回头读配置
 	a.Match = ssh.MatchOptions{Regex: cfg.Interactive.Regex, CaseSensitive: cfg.Interactive.CaseSensitive}
+	// 解释器取自配置（[interpreter]）：-c 用 command，-s 按后缀查 script、没命中回退 command。
+	// 回退是否被用户点头由启动阶段的 ConfirmInterpreterFallback 把关，这里只算终值。
+	a.Interpreter = interpreterOf(&a, cfg)
 	// 凭据加密开关：--change-password 的取值按它解释（明文 / 密文文件路径）
 	a.credentialEncrypted = cfg.Credential.Encrypt
 

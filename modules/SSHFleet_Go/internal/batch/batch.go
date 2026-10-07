@@ -95,7 +95,7 @@ func Run(ctx context.Context, a *cli.Args, cfg *config.Config, nodes *nodelist.N
 	}
 
 	// 交代命令被包成了什么（旧 Python builder.py 的「完整命令拼接完成」对应物）：
-	// 命令走 stdin 通道后，命令行里只剩固定形态的 bash -lc，事后看日志查不出
+	// 命令走 stdin 通道后，命令行里只剩固定形态的 sh -c，事后看日志查不出
 	// 「原始命令是什么、被包成了哪一行」，脚本模式连解释器与身份都无从确认。
 	for _, line := range commandDescription(a, tasks) {
 		logger.Success(line)
@@ -215,7 +215,13 @@ func buildTasks(a *cli.Args, nodes *nodelist.Nodes, prompts *ssh.PasswdPrompts, 
 			}
 			material = cli.ScriptMaterialOf(a, data)
 		}
-		body, interpreter := material.Body, material.Interpreter
+		body := material.Body
+		// 解释器在参数解析阶段就算好了（命令模式 = 命令解释器；脚本模式 = 后缀映射或回退），
+		// 这里只取用。空值说明解析链路有漏——拼接前拦下，不让一条没有解释器的命令发出去。
+		interpreter := a.Interpreter
+		if interpreter == "" {
+			return nil, nil, fmt.Errorf("没有为这次执行解析出解释器\n提示：检查配置文件里的 [interpreter] 段")
+		}
 		name := scriptName(a)
 		if len(a.Answers) > 0 {
 			// 交互分支：正文改经命令行承载，会话 stdin 整条让给代填（ADR-0010）。
@@ -264,7 +270,7 @@ func commandDescription(a *cli.Args, tasks []*task) []string {
 		}))
 	}
 
-	interpreter := cli.ScriptInterpreter(a)
+	interpreter := a.Interpreter
 
 	// 脚本模式下正文非空即判定为脚本模式（DescribeCommand 的唯一依据）
 	body := tasks[0].stdin

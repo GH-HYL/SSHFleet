@@ -132,7 +132,7 @@ func CheckArguments(a *Args) error {
 	var scriptText []byte // -a 的长度检查要用同一份正文算下发行，不再读一次文件
 	if a.Script != "" {
 		if info, err := os.Stat(a.Script); err == nil && info.IsDir() {
-			return fmt.Errorf("-s 参数指定的路径是目录，不是脚本文件：%s\n提示：请指向一个 .sh 或 .py 文件", a.Script)
+			return fmt.Errorf("-s 参数指定的路径是目录，不是脚本文件：%s\n提示：请指向一个脚本文件", a.Script)
 		}
 		data, err := os.ReadFile(a.Script)
 		if err != nil {
@@ -140,9 +140,6 @@ func CheckArguments(a *Args) error {
 		}
 		if len(data) == 0 {
 			return fmt.Errorf("-s 参数指定的脚本文件为空：%s\n提示：请先写入内容再执行", a.Script)
-		}
-		if !strings.HasSuffix(a.Script, ".sh") && !strings.HasSuffix(a.Script, ".py") {
-			return fmt.Errorf("-s 参数指定的脚本文件扩展名必须是 .sh 或 .py，当前值：%s\n提示：请改后缀，或换一个脚本文件", a.Script)
 		}
 		if bytes.IndexByte(data, 0) >= 0 {
 			return fmt.Errorf("%s 是二进制文件\n提示：请换一个文本格式的脚本", a.Script)

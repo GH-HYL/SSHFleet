@@ -10,18 +10,18 @@ import (
 // 这个函数此前收整份命令行参数，想测它得先凑齐一整套参数与配置；
 // 改成收基本类型后，输入就是几行字面量，可以逐条钉住下发形态。
 
-// 命令模式：命令文本经 stdin 直喂，命令行只剩 bash -lc '<前缀; [sudo ]bash>'。
+// 命令模式：命令文本经 stdin 直喂，命令行只剩 sh -c '<前缀; [sudo ]解释器>'。
 func TestBuildCommandCommandMode(t *testing.T) {
-	cmd, stdin := BuildCommand("ls -l", "", "", "", false, false)
+	cmd, stdin := BuildCommand("ls -l", "", "", "bash", false, false)
 
 	if stdin != "ls -l" {
 		t.Fatalf("命令应经 stdin 直喂，实际 %q", stdin)
 	}
-	if !strings.HasPrefix(cmd, "bash -lc ") {
-		t.Fatalf("应套一层登录 shell，实际 %q", cmd)
+	if !strings.HasPrefix(cmd, "sh -c ") {
+		t.Fatalf("应套一层外壳，实际 %q", cmd)
 	}
 	if !strings.Contains(cmd, envPrefix) {
-		t.Fatalf("应带上语言环境前缀，实际 %q", cmd)
+		t.Fatalf("应带上环境前缀，实际 %q", cmd)
 	}
 	if strings.Contains(cmd, "sudo") {
 		t.Fatalf("direct 身份不该出现 sudo，实际 %q", cmd)
@@ -33,7 +33,7 @@ func TestBuildCommandCommandMode(t *testing.T) {
 
 // sudo 身份：内层命令前加 sudo。
 func TestBuildCommandSudo(t *testing.T) {
-	cmd, _ := BuildCommand("whoami", "", "", "", false, true)
+	cmd, _ := BuildCommand("whoami", "", "", "bash", false, true)
 	if !strings.Contains(cmd, "sudo bash") {
 		t.Fatalf("sudo 身份应加 sudo，实际 %q", cmd)
 	}
@@ -47,10 +47,10 @@ func TestBuildCommandNoBash(t *testing.T) {
 	}
 }
 
-// --nobash 只管命令模式：脚本模式下仍应走登录 shell。
+// --nobash 只管命令模式：脚本模式下仍应走外壳。
 func TestBuildCommandNoBashIgnoredForScript(t *testing.T) {
 	cmd, stdin := BuildCommand("", "echo script", "", "bash", true, false)
-	if cmd == "echo script" || !strings.HasPrefix(cmd, "bash -lc ") {
+	if cmd == "echo script" || !strings.HasPrefix(cmd, "sh -c ") {
 		t.Fatalf("脚本模式不该被 --nobash 影响，实际 %q", cmd)
 	}
 	if stdin != "echo script" {
@@ -103,7 +103,7 @@ func TestBuildCommandPythonKeepsNoScriptName(t *testing.T) {
 	}
 }
 
-// shellQuote：内部单引号按 '\” 转义，保证整串作为 bash -lc 的单个参数传递。
+// shellQuote：内部单引号按 '\” 转义，保证整串作为 sh -c 的单个参数传递。
 func TestShellQuote(t *testing.T) {
 	cases := []struct{ in, want string }{
 		{"plain", "'plain'"},
@@ -119,10 +119,10 @@ func TestShellQuote(t *testing.T) {
 }
 
 // 命令模式的命令走 stdin，**不进命令行**——命令行里只有固定形态的
-// `bash -lc '前缀; bash'`，故命令里的引号无需转义、也不会逃出参数边界。
+// `sh -c '前缀; bash'`，故命令里的引号无需转义、也不会逃出参数边界。
 // （早期实现走 base64 命令行通道，才有转义套娃；改用 stdin 后这条约束消失。）
 func TestBuildCommandCommandTextNotOnCommandLine(t *testing.T) {
-	cmd, stdin := BuildCommand(`echo 'hi'`, "", "", "", false, false)
+	cmd, stdin := BuildCommand(`echo 'hi'`, "", "", "bash", false, false)
 
 	if strings.Contains(cmd, "hi") {
 		t.Fatalf("命令原文不该出现在命令行里（已改走 stdin）：%q", cmd)
@@ -130,8 +130,8 @@ func TestBuildCommandCommandTextNotOnCommandLine(t *testing.T) {
 	if stdin != `echo 'hi'` {
 		t.Fatalf("命令原文应原样进 stdin，实际 %q", stdin)
 	}
-	// 命令行形态固定：bash -lc '<单引号包裹的前缀; bash>'
-	if !strings.HasPrefix(cmd, "bash -lc '") || !strings.HasSuffix(cmd, "'") {
+	// 命令行形态固定：sh -c '<单引号包裹的前缀; bash>'
+	if !strings.HasPrefix(cmd, "sh -c '") || !strings.HasSuffix(cmd, "'") {
 		t.Fatalf("命令行形态不符：%q", cmd)
 	}
 	if strings.Count(cmd, "'") != 2 {
@@ -191,11 +191,11 @@ func TestQuoteForShellRestoresBrokenArgv(t *testing.T) {
 // 不描述「包装前后」——内容走 stdin 通道后，日志里看不见内容本身，
 // 所以只需把「实际交给 SSH 执行的事实」讲清：命令行、stdin、导入的环境变量。
 func TestDescribeCommandCommandMode(t *testing.T) {
-	text := DescribeCommand(DescribeInput{Command: "who -b"})
+	text := DescribeCommand(DescribeInput{Command: "who -b", Interpreter: "bash"})
 
 	for _, want := range []string{
 		"交给 SSH 执行",
-		"命令行： bash -lc 'export LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8; bash'",
+		"命令行： sh -c 'export LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; bash'",
 		"stdin：  who -b",
 		"LC_ALL / LANG",
 		"登录用户的 bash",
@@ -205,17 +205,17 @@ func TestDescribeCommandCommandMode(t *testing.T) {
 		}
 	}
 	// 命令行必须与真下发的命令同源
-	login, _ := BuildCommand("who -b", "", "", "", false, false)
+	login, _ := BuildCommand("who -b", "", "", "bash", false, false)
 	if !strings.Contains(text, login) {
 		t.Fatalf("交代的命令行应与 BuildCommand 同源\n期望含：%s\n实际：\n%s", login, text)
 	}
 }
 
-// sudo 身份：命令行里带 sudo，说明里点明是 root 身份的 bash。
+// sudo 身份：命令行里带 sudo，说明里点明是 root 身份的解释器。
 func TestDescribeCommandSudo(t *testing.T) {
-	text := DescribeCommand(DescribeInput{Command: "id -u", AsRoot: true})
+	text := DescribeCommand(DescribeInput{Command: "id -u", AsRoot: true, Interpreter: "bash"})
 
-	login, _ := BuildCommand("id -u", "", "", "", false, true)
+	login, _ := BuildCommand("id -u", "", "", "bash", false, true)
 	if !strings.Contains(text, login) {
 		t.Fatalf("sudo 时命令行应与 BuildCommand 同源\n期望含：%s\n实际：\n%s", login, text)
 	}
@@ -224,7 +224,7 @@ func TestDescribeCommandSudo(t *testing.T) {
 	}
 }
 
-// --nobash：命令行就是命令原文，不出现登录 shell 包装。
+// --nobash：命令行就是命令原文，不出现外壳包装。
 func TestDescribeCommandNoBash(t *testing.T) {
 	text := DescribeCommand(DescribeInput{Command: "raw-cmd --flag", NoBash: true})
 
@@ -234,8 +234,8 @@ func TestDescribeCommandNoBash(t *testing.T) {
 	if !strings.Contains(text, "--nobash") {
 		t.Fatalf("应说明是 --nobash 形态，实际：\n%s", text)
 	}
-	if strings.Contains(text, "bash -lc") {
-		t.Fatalf("--nobash 下不该出现登录 shell，实际：\n%s", text)
+	if strings.Contains(text, "sh -c") {
+		t.Fatalf("--nobash 下不该出现外壳，实际：\n%s", text)
 	}
 }
 
@@ -250,7 +250,7 @@ func TestDescribeCommandScriptMode(t *testing.T) {
 
 	for _, want := range []string{
 		"交给 SSH 执行",
-		"bash -lc 'export LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8; sudo bash'",
+		"sh -c 'export LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; sudo bash'",
 		"stdin：  脚本 /x/t.sh 的内容（bash 解释）",
 		"root 身份",
 	} {

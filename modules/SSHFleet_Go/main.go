@@ -34,7 +34,7 @@ import (
 // 版本号：单一出处（显示在帮助信息首行下方，经 cli.Parse 传入 Usage）。
 // 与 CHANGELOG 顶部当天段落的段头**同一个号**——开段、抬号时在同一次提交里同步改，
 // 两处不一致即为错误。同一天的改动共用一个号，不因改动多而另起号。
-const appVersion = "8.1.1"
+const appVersion = "8.2.0"
 
 // versionWithBuildID 版本号拼上**构建标识**：git 短提交号（仓库内编译时由 go build
 // 自动注入 vcs.revision；工作区有未提交改动时加 -dirty）+ HEAD 提交时间。
@@ -268,6 +268,11 @@ func main() {
 	}
 	if err := cli.CheckArguments(args); err != nil {
 		fatal("cli", fmt.Errorf("参数合规性检查未通过\n原因：%v", err))
+	}
+	// 脚本后缀没配解释器：在确认屏之前当场问一句是否用回退解释器继续（默认 no，
+	// 回车即退出）。放这里与参数合规检查同处"启动检查"阶段，符合既有的确认时机。
+	if err := cli.ConfirmInterpreterFallback(args, cfg, in); err != nil {
+		fatal("cli", err)
 	}
 	logger.Success("输入的参数合规性检查通过")
 
