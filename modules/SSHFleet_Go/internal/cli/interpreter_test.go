@@ -90,28 +90,22 @@ func TestConfirmInterpreterFallback(t *testing.T) {
 // isBashInterpreter：--no-shell 与自定义解释器互斥的判断依据（bash 与 /bin/bash 都算）。
 func TestIsBashInterpreter(t *testing.T) {
 	for _, name := range []string{"bash", "/bin/bash", "BASH", "bash5"} {
-		if !isBashInterpreter(name) {
+		if !IsBashInterpreter(name) {
 			t.Fatalf("%s 应判为 bash", name)
 		}
 	}
 	for _, name := range []string{"sh", "dash", "zsh5", "perl", "python3", ""} {
-		if isBashInterpreter(name) {
+		if IsBashInterpreter(name) {
 			t.Fatalf("%s 不该判为 bash", name)
 		}
 	}
 }
 
-// --no-shell 与自定义解释器互斥：no-shell 下命令原样下发、配的解释器不生效，别让用户"既要又要"。
-func TestCheckArgumentsNoShellVsInterpreter(t *testing.T) {
-	err := CheckArguments(&Args{Command: "ls", NoShell: true, Interpreter: "perl"})
-	if err == nil || !strings.Contains(err.Error(), "--no-shell") || !strings.Contains(err.Error(), "perl") {
-		t.Fatalf("--no-shell + 非 bash 解释器应报互斥并点名，实际：%v", err)
-	}
-
-	// 解释器是 bash：不因这条互斥拦下（后续别的检查另算）
-	err = CheckArguments(&Args{Command: "ls", NoShell: true, Interpreter: "bash"})
-	if err != nil && strings.Contains(err.Error(), "--no-shell 与解释器配置") {
-		t.Fatalf("bash 解释器不该触发这条互斥：%v", err)
+// --no-shell 与解释器配置一起用不再报错（2026-10-08 作者定）：no-shell 下解释器配置
+// 本来就不参与执行，参数屏对非 bash 的配置提示一句即可，不该逼人改配置。
+func TestCheckArgumentsNoShellWithInterpreter(t *testing.T) {
+	if err := CheckArguments(&Args{Command: "ls", NoShell: true, Interpreter: "perl"}); err != nil {
+		t.Fatalf("--no-shell + 非 bash 解释器不应报错（参数屏提示代替硬拦），实际：%v", err)
 	}
 }
 
