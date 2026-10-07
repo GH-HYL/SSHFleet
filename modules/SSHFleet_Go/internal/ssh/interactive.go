@@ -53,7 +53,7 @@ type InteractiveInput struct {
 	Command       string   // 命令模式：命令原文
 	ScriptBody    string   // 脚本模式：脚本正文（非空即脚本模式）
 	ScriptName    string   // 脚本模式：脚本文件名（下发行把它交回去当 $0，见 scriptNameArg）
-	Interpreter   string   // 脚本模式：bash / python3
+	Interpreter   string   // 解释器：命令模式是命令解释器，脚本模式是脚本解释器
 	AsRoot        bool     // -m sudo
 	Answers       []Answer // 代填表（顺序即命令行给出顺序）
 	Match         MatchOptions
@@ -63,7 +63,7 @@ type InteractiveInput struct {
 // InteractiveCommand 拼交互分支的下发行：正文 base64 编入命令行，远端 base64 -d 后
 // 作内层解释器的 -c 参数。长度检查与实际执行都调它，不两处各拼一份。
 //
-// 脚本模式还会把脚本文件名作 `-c` 之后的第一个参数交回去——那正是 bash 的 $0，
+// 脚本模式还会把脚本文件名作 `-c` 之后的第一个参数交回去——那正是 shell 的 $0，
 // 脚本据此仍能从自己的名字里取信息（理由见 scriptNameArg）。命令模式没有文件名，不补。
 //
 // 为什么不走 stdin：一次会话只有一条 stdin，代填要独占它；两者共用时远端 read 会吃掉
@@ -75,10 +75,12 @@ func InteractiveCommand(in InteractiveInput) string {
 		body = in.ScriptBody
 	}
 	encoded := base64.StdEncoding.EncodeToString([]byte(body))
-	inner := loginInner(in.ScriptBody != "", in.Interpreter, in.AsRoot) +
-		` -c "$(printf %s ` + encoded + ` | base64 -d)"` +
-		scriptNameArg(in.Interpreter, in.ScriptName)
-	return "bash -lc " + shellQuote(inner)
+	inner := innerCommand(in.Interpreter, in.AsRoot) +
+		` -c "$(printf %s ` + encoded + ` | base64 -d)"`
+	if in.ScriptBody != "" { // 命令模式没有脚本文件，不补名字
+		inner += scriptNameArg(in.Interpreter, in.ScriptName)
+	}
+	return "sh -c " + shellQuote(inner)
 }
 
 // ScriptBodyOf 脚本文件内容 → 会话里真正执行的正文：剥 UTF-8 BOM、去掉整块首尾空白。

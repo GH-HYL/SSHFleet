@@ -81,6 +81,16 @@ type Upload struct {
 	MediumParallel int `toml:"medium_parallel"`
 }
 
+// Interpreter 解释器配置，只对命令模式（-c）与脚本模式（-s）生效。
+//   - Command：命令模式使用的解释器；脚本模式后缀没配到时也回退到它
+//   - Script： 脚本模式的「后缀 → 解释器」映射，键带点（如 ".sh"）
+//
+// 取值为一段命令名或路径（如 bash / python3 / /usr/bin/perl），原样交给目标机识别。
+type Interpreter struct {
+	Command string            `toml:"command"`
+	Script  map[string]string `toml:"script"`
+}
+
 // Config 配置文件全集。
 type Config struct {
 	Account     Account     `toml:"account"`
@@ -88,6 +98,7 @@ type Config struct {
 	Execution   Execution   `toml:"execution"`
 	Enable      Enable      `toml:"enable"`
 	Interactive Interactive `toml:"interactive"`
+	Interpreter Interpreter `toml:"interpreter"`
 	Upload      Upload      `toml:"upload"`
 }
 
@@ -178,6 +189,7 @@ func validate(cfg *Config, md toml.MetaData) error {
 		{"upload.small_file", definedStr(md, "upload", "small_file")},
 		{"upload.large_file", definedStr(md, "upload", "large_file")},
 		{"upload.medium_parallel", definedStr(md, "upload", "medium_parallel")},
+		{"interpreter.command", definedStr(md, "interpreter", "command")},
 	}
 	var missing []string
 	for _, r := range required {
@@ -213,6 +225,56 @@ func validate(cfg *Config, md toml.MetaData) error {
 	if cfg.Upload.MediumParallel < 1 {
 		return fmt.Errorf("upload.medium_parallel 取值非法：%d（须为正整数）", cfg.Upload.MediumParallel)
 	}
+	if err := validateInterpreter(&cfg.Interpreter); err != nil {
+		return err
+	}
+	return nil
+}
+
+// validateInterpreter 校验解释器配置，并把脚本后缀键归一为小写（匹配时忽略大小写）。
+//
+// 取值只要求"配了就有值"：命令模式项不能空，脚本映射每条的后缀与解释器都不能空；
+// 后缀须带点、不能重复（忽略大小写）。解释器本身允许写名字或路径，原样交给目标机，
+// 不做可用性判断——能不能跑是目标机的事。
+func validateInterpreter(it *Interpreter) error {
+	it.Command = strings.TrimSpace(it.Command)
+	if it.Command == "" {
+		return fmt.Errorf("interpreter.command 不能为空\n提示：写命令模式（-c）要用的解释器，例如 bash")
+	}
+	if strings.ContainsAny(it.Command, "\r\n") {
+		return fmt.Errorf("interpreter.command 不能含换行，当前值：%q", it.Command)
+	}
+	if len(it.Script) == 0 {
+		return fmt.Errorf("interpreter.script 至少要配一条\n" +
+			"提示：写成 \".sh\" = \"bash\" 这样，后缀带点、等号两边都要有值")
+	}
+	norm := make(map[string]string, len(it.Script))
+	seen := make(map[string]string, len(it.Script))
+	for rawKey, rawVal := range it.Script {
+		key := strings.TrimSpace(rawKey)
+		val := strings.TrimSpace(rawVal)
+		if key == "" {
+			return fmt.Errorf("interpreter.script 里有一条后缀是空的\n" +
+				"提示：每条都要写成 \".sh\" = \"bash\"，后缀带点、等号两边都要有值")
+		}
+		if !strings.HasPrefix(key, ".") {
+			return fmt.Errorf("interpreter.script 的后缀要以点开头，当前值：%q\n提示：写成 \".sh\"，不要写成 \"sh\"", key)
+		}
+		if val == "" {
+			return fmt.Errorf("interpreter.script 里 %q 没有配解释器\n提示：等号右边要写解释器，例如 \".sh\" = \"bash\"", key)
+		}
+		if strings.ContainsAny(val, "\r\n") {
+			return fmt.Errorf("interpreter.script 里 %q 的解释器不能含换行，当前值：%q", key, val)
+		}
+		lower := strings.ToLower(key)
+		if prev, dup := seen[lower]; dup {
+			return fmt.Errorf("interpreter.script 里后缀重复：%q 与 %q 是同一个后缀（大小写不区分）\n"+
+				"提示：一个后缀只能配一个解释器", prev, key)
+		}
+		seen[lower] = key
+		norm[lower] = val
+	}
+	it.Script = norm
 	return nil
 }
 

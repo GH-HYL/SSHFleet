@@ -109,6 +109,12 @@ func buildInfoTable(args *cli.Args, nodes *nodelist.Nodes, note string) [][2]str
 		identity = "root"
 	}
 	t := [][2]string{{"执行身份", identity}}
+	// 解释器行：只在命令 / 脚本模式出现，且只在它不是默认的 bash 时才占一行——默认值
+	// 不必提醒（2026-10-07 定）。上传 / 下载 / 改密不涉及可配解释器，不显示。
+	if (args.ModeName() == cli.ModeCommand || args.ModeName() == cli.ModeScript) &&
+		args.Interpreter != "" && args.Interpreter != "bash" {
+		t = append(t, [2]string{"解释器", args.Interpreter})
+	}
 	// 「执行模式」这一行的值取自模式名字表；其下的命令 / 路径 / 新密码是各模式自己的内容，
 	// 仍按模式分派——那是结构性差异，不是叫法。
 	modeLabel := [2]string{"执行模式", args.ModeName().Info().ScreenLabel}

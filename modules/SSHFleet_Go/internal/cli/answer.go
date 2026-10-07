@@ -196,15 +196,14 @@ func checkAnswerLength(a *Args, scriptText []byte) error {
 // 本包只用来算下发行长度，不参与执行。
 func answerInputOf(a *Args, scriptText []byte) ssh.InteractiveInput {
 	in := ssh.InteractiveInput{
-		Command: a.Command,
-		AsRoot:  a.Sudo,
-		Answers: a.Answers,
-		Match:   a.Match,
+		Command:     a.Command,
+		Interpreter: a.Interpreter,
+		AsRoot:      a.Sudo,
+		Answers:     a.Answers,
+		Match:       a.Match,
 	}
 	if a.Script != "" {
-		m := ScriptMaterialOf(a, scriptText)
-		in.ScriptBody = m.Body
-		in.Interpreter = m.Interpreter
+		in.ScriptBody = ScriptMaterialOf(a, scriptText).Body
 	}
 	return in
 }

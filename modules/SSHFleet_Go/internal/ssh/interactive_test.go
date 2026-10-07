@@ -81,8 +81,8 @@ func TestOutputHookAbortWins(t *testing.T) {
 // 下发行形态：正文 base64 编入命令行、作内层解释器的 -c 参数，最外层只有一层单引号。
 func TestInteractiveCommandForm(t *testing.T) {
 	enc := base64.StdEncoding.EncodeToString([]byte("who -b"))
-	got := InteractiveCommand(InteractiveInput{Command: "who -b"})
-	want := "bash -lc 'export LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8; bash -c \"$(printf %s " + enc + " | base64 -d)\"'"
+	got := InteractiveCommand(InteractiveInput{Command: "who -b", Interpreter: "bash"})
+	want := "sh -c 'export LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; bash -c \"$(printf %s " + enc + " | base64 -d)\"'"
 	if got != want {
 		t.Fatalf("下发行形态不对\n实际：%s\n应为：%s", got, want)
 	}
@@ -90,7 +90,7 @@ func TestInteractiveCommandForm(t *testing.T) {
 
 // sudo 时提权的是解释器本身；脚本模式按解释器换 python3；正文不进命令行原文。
 func TestInteractiveCommandInterpreterAndRoot(t *testing.T) {
-	if root := InteractiveCommand(InteractiveInput{Command: "id", AsRoot: true}); !strings.Contains(root, "sudo bash -c") {
+	if root := InteractiveCommand(InteractiveInput{Command: "id", AsRoot: true, Interpreter: "bash"}); !strings.Contains(root, "sudo bash -c") {
 		t.Fatalf("sudo 应提权内层解释器：%s", root)
 	}
 	py := InteractiveCommand(InteractiveInput{ScriptBody: "print(1)", Interpreter: "python3"})
@@ -117,7 +117,7 @@ func TestInteractiveCommandKeepsScriptName(t *testing.T) {
 
 // 命令模式（-c）没有脚本文件，不该凭空补一个名字。
 func TestInteractiveCommandNoScriptNameForCommand(t *testing.T) {
-	got := InteractiveCommand(InteractiveInput{Command: "who -b", ScriptName: "t.sh"})
+	got := InteractiveCommand(InteractiveInput{Command: "who -b", ScriptName: "t.sh", Interpreter: "bash"})
 	if strings.Contains(got, "t.sh") {
 		t.Fatalf("命令模式不该出现脚本名，实际：%s", got)
 	}
@@ -126,16 +126,16 @@ func TestInteractiveCommandNoScriptNameForCommand(t *testing.T) {
 // 日志说明与方向稿的形态一致：原始内容 / 处理方式 / 最终命令三段。
 func TestDescribeInteractive(t *testing.T) {
 	text := DescribeInteractive(DescribeInteractiveInput{
-		Command: "who -b", Answers: 2, Downlink: "bash -lc 'x'",
+		Command: "who -b", Answers: 2, Downlink: "sh -c 'x'",
 	})
-	for _, want := range []string{"原始命令： who -b", "会话 stdin 整条让给代填（2 条）", "最终命令： bash -lc 'x'"} {
+	for _, want := range []string{"原始命令： who -b", "会话 stdin 整条让给代填（2 条）", "最终命令： sh -c 'x'"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("日志说明缺少 %q：\n%s", want, text)
 		}
 	}
 
 	text = DescribeInteractive(DescribeInteractiveInput{
-		ScriptPath: "deploy.sh", ScriptBody: "echo hi", Answers: 1, Downlink: "bash -lc 'y'",
+		ScriptPath: "deploy.sh", ScriptBody: "echo hi", Answers: 1, Downlink: "sh -c 'y'",
 	})
 	if !strings.Contains(text, "原始脚本： deploy.sh（正文经 base64 编入命令行，不落盘）") {
 		t.Fatalf("脚本模式的日志说明不对：\n%s", text)
