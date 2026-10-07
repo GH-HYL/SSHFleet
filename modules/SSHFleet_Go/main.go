@@ -398,22 +398,27 @@ func main() {
 		OnResult:   reporter.Result,
 	})
 	reporter.Stop()
+	// 先认错，再拿结果：Run 在开工前失败（如上传源含 FIFO/设备/socket、文件不可读、脚本读不到）
+	// 时返回的是 (*Results)(nil)，下面任何一次取字段都会 panic，那条本该给用户看的错反而
+	// 永远打不出来。此路径上进度界面尚未创建，Stop 是空操作，提前 fatal 不影响收尾。
+	if err != nil {
+		fatal("batch", err)
+	}
 	logger.Info(fmt.Sprintf("执行期日志已写完，切回工具日志：%s", execLogPath))
 
 	// ---- 步骤 9：结果统计 + 错误分类 -----------------------------------
 	// 统计先算——纯计算、无副作用，收尾行的四个数直接读它，主干不再自己数一遍
 	//（成功/失败与统计同源，连接成败也由统计一并算）。
-	stats := result.Statistics(execResults.Items, nodes, args, execStart, time.Now())
+	// 中断要在这里就交给统计：中断造成的缺额不算「异常」，与真出错区分开（2026-10-07 审计候选二）。
+	interrupted := execCtx.Err() != nil
+	stats := result.Statistics(execResults.Items, nodes, args, execStart, time.Now(), interrupted)
 
 	// 执行期日志收尾：连接与成败统计合成一行（对位旧引擎的「连接统计」「执行完成」两条，
 	// 正常路径能合并就合并——1000+ 节点时日志要尽量短）。
 	execLog.Info(fmt.Sprintf("执行结束：成功 %d 台，失败 %d 台；连接成功 %d，连接失败 %d",
 		stats.SuccessCounts, stats.FailCounts, stats.ConnectSuccessCounts, stats.ConnectFailCounts))
 
-	if err != nil {
-		fatal("batch", err)
-	}
-	if execCtx.Err() != nil {
+	if interrupted {
 		fmt.Println("已收到中断信号，SSHFleet 停止执行（已完成节点的结果已写入日志/输出文件）")
 		logger.Warn("收到中断信号，执行已停止")
 	}

@@ -133,10 +133,16 @@ func PrintStatistics(out io.Writer, stats *result.Stats, kw *verdict.Keywords, s
 	fmt.Fprintln(out, bar)
 	fmt.Fprintf(out, "  总耗时：%.2f 秒\n", stats.GlobalCostTime)
 
-	if stats.Verify == "通过" {
+	switch {
+	case stats.Verify == "通过":
 		fmt.Fprintf(out, "  %s节点总数：%s %d  %s完成总数：%s%d\n",
 			ansiCyan, ansiReset, stats.NodesTotal, ansiCyan, ansiReset, stats.ResultsTotal)
-	} else {
+	case stats.Interrupted:
+		// 中断：另起一栏，把「未执行」单独列出。用户自己按的中断，不与「跑错了」共用「异常」。
+		fmt.Fprintf(out, "  %s节点总数：%s %d  %s完成总数：%s%d  %s未执行：%s%d\n",
+			ansiCyan, ansiReset, stats.NodesTotal, ansiCyan, ansiReset, stats.ResultsTotal,
+			ansiCyan, ansiReset, stats.NotExecuted)
+	default:
 		fmt.Fprintf(out, "  %s节点总数：%s %d  %s完成总数：%s%d  %s总数校验：%s%s%s%s\n",
 			ansiCyan, ansiReset, stats.NodesTotal, ansiCyan, ansiReset, stats.ResultsTotal,
 			ansiCyan, ansiReset, ansiRed, stats.Verify, ansiReset)

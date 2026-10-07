@@ -26,7 +26,9 @@ type CategoryCount struct {
 type Stats struct {
 	ResultsTotal         int
 	NodesTotal           int
-	Verify               string // 结果数与节点数一致时「通过」，否则「异常」
+	NotExecuted          int    // 节点总数 − 结果数：中断后没跑完（结果被丢弃）的台数
+	Interrupted          bool   // 本次执行由中断信号结束
+	Verify               string // 结果数与节点数一致时「通过」，不一致时「异常」；中断导致的缺额置空（不共用「异常」）
 	SuccessCounts        int
 	FailCounts           int
 	ConnectSuccessCounts int
@@ -43,7 +45,7 @@ type Stats struct {
 
 // Statistics 计算结果统计信息。items 是判定完毕的结果切片（判定在 batch 的
 // worker 协程里已做完，这里只读结论）。
-func Statistics(items []ssh.Result, nodes *nodelist.Nodes, a *cli.Args, start, stop time.Time) *Stats {
+func Statistics(items []ssh.Result, nodes *nodelist.Nodes, a *cli.Args, start, stop time.Time, interrupted bool) *Stats {
 	// 成功分类由模式名字表给（命令/脚本→执行成功、上传/下载→传输成功、改密→改密成功）。
 	// 「算不算传输类」从此只有名字表一处判据，统计侧不再自己判。
 	successCategory := a.ModeName().Info().SuccessCategory
@@ -51,15 +53,21 @@ func Statistics(items []ssh.Result, nodes *nodelist.Nodes, a *cli.Args, start, s
 	stats := &Stats{
 		ResultsTotal:    len(items),
 		NodesTotal:      nodes.Len(),
+		NotExecuted:     nodes.Len() - len(items),
+		Interrupted:     interrupted,
 		CategoryIPMap:   map[string][]string{},
 		SuccessCategory: successCategory,
 		GlobalStartTime: start,
 		GlobalStopTime:  stop,
 		GlobalCostTime:  stop.Sub(start).Seconds(),
 	}
-	if stats.NodesTotal == stats.ResultsTotal {
+	// 缺额分两种：中断没跑完（用户自己按的，不该叫「异常」），与其它原因的不一致（真异常）。
+	switch {
+	case stats.NotExecuted == 0:
 		stats.Verify = "通过"
-	} else {
+	case interrupted:
+		stats.Verify = ""
+	default:
 		stats.Verify = "异常"
 	}
 
