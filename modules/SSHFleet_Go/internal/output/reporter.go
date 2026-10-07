@@ -261,14 +261,17 @@ func (r *Reporter) logNode(res ssh.Result, category string) {
 				el.Error(fmt.Sprintf("%s%s失败，耗时 %.3fs", ip, label, res.ExecCostTime))
 			}
 		default:
+			// 命令 / 脚本共用这一路：前缀取自名字表（LogName + ActionName =「命令执行」/「脚本执行」）。
+			// 原先写死「命令」，脚本模式跑完也报「命令」（2026-10-07 修）。ModeNone 不可达。
+			label := r.mode.Info().LogName + r.mode.Info().ActionName
 			if res.Verdict == verdict.Success {
-				el.Success(fmt.Sprintf("%s命令执行成功，退出码 0，耗时 %.3fs", ip, res.ExecCostTime))
+				el.Success(fmt.Sprintf("%s%s成功，退出码 0，耗时 %.3fs", ip, label, res.ExecCostTime))
 			} else {
 				code := "无"
 				if res.ExitCode != nil {
 					code = fmt.Sprintf("%d", *res.ExitCode)
 				}
-				el.Error(fmt.Sprintf("%s命令执行失败，退出码 %s，耗时 %.3fs", ip, code, res.ExecCostTime))
+				el.Error(fmt.Sprintf("%s%s失败，退出码 %s，耗时 %.3fs", ip, label, code, res.ExecCostTime))
 			}
 		}
 	}
