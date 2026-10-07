@@ -81,11 +81,14 @@ func WriteReport(archiveDir string, stats *result.Stats, a *cli.Args, cfg *confi
 		fmt.Fprintf(&b, "  连接超时： %ds\n", a.ConnectTimeout)
 	}
 	if a.Timeout != 0 {
-		switch {
-		case a.Command != "" || a.Script != "":
+		// 措辞按模式走（与参数屏同口径），改密报「改密超时」。
+		switch a.ModeName() {
+		case cli.ModeCommand, cli.ModeScript:
 			fmt.Fprintf(&b, "  执行超时： %ds\n", a.Timeout)
-		case a.Upload != "" || a.Download != "":
+		case cli.ModeUpload, cli.ModeDownload:
 			fmt.Fprintf(&b, "  传输超时： %ds\n", a.Timeout)
+		case cli.ModePasswd:
+			fmt.Fprintf(&b, "  改密超时： %ds\n", a.Timeout)
 		}
 	}
 

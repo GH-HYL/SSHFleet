@@ -125,11 +125,15 @@ func buildInfoTable(args *cli.Args, nodes *nodelist.Nodes, allParallel bool) [][
 		t = append(t, [2]string{"连接超时", fmt.Sprintf("%ds", args.ConnectTimeout)})
 	}
 	if args.Timeout != 0 {
-		switch {
-		case args.Command != "" || args.Script != "":
+		// 措辞按模式走；改密有自己的名字——它的 -t 取自 timeout_execute，
+		// 但用户看的是「这次改密等多久」，写成「执行超时」会让他以为在跑命令。
+		switch args.ModeName() {
+		case cli.ModeCommand, cli.ModeScript:
 			t = append(t, [2]string{"执行超时", fmt.Sprintf("%ds", args.Timeout)})
-		case args.Upload != "", args.Download != "":
+		case cli.ModeUpload, cli.ModeDownload:
 			t = append(t, [2]string{"传输超时", fmt.Sprintf("%ds", args.Timeout)})
+		case cli.ModePasswd:
+			t = append(t, [2]string{"改密超时", fmt.Sprintf("%ds", args.Timeout)})
 		}
 	}
 	if args.Remark != "" {

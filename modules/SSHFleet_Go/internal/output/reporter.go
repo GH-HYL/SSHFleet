@@ -44,7 +44,6 @@ type Reporter struct {
 	logger  *log.Logger
 	outFile io.Writer
 	mode    string
-	keyword *verdict.Keywords
 	// answers 代填表（-a 的解析结果，顺序即文本里的行序）。只为一件事存在：
 	// 把结果里「未送出的代填」序号还原成触发词原文（D35）。序号与用户表同源，
 	// 呈现层查一次即可，不必在每个结果里复制一份事实。
@@ -78,15 +77,13 @@ type Reporter struct {
 //     总耗时同源——进度条不再比总耗时少一截（用户 2026-09-15 裁定对齐口径）
 //   - quiet: 非交互模式（--yes）。运行期提示不上屏，只进日志（L61 静默闸门）
 //
-// kw 是判据表（统计块的提示与兜底判定用）。成败与分类不在这里定——结果到手时
-// 判定已在 batch 的 worker 协程里做完，呈现层只读结论。
-func NewReporter(execLog *log.Logger, outputFile io.Writer, mode string, answers []ssh.Answer, total int, kw *verdict.Keywords, start time.Time, quiet bool) *Reporter {
+// 成败与分类不在这里定——结果到手时判定已在 batch 的 worker 协程里做完，呈现层只读结论。
+func NewReporter(execLog *log.Logger, outputFile io.Writer, mode string, answers []ssh.Answer, total int, start time.Time, quiet bool) *Reporter {
 	return &Reporter{
 		logger:  execLog,
 		outFile: outputFile,
 		mode:    mode,
 		answers: answers,
-		keyword: kw,
 		total:   total,
 		start:   start,
 		out:     os.Stdout,
@@ -115,10 +112,12 @@ func (r *Reporter) Progress(s batch.Snapshot) {
 	prog.Send(s)
 }
 
-// Result 单节点结果：写 output.txt（各模式）+ 命令模式打终端明细 + 写执行期日志。
+// Result 单节点结果：写 output.txt（各模式）+ 命令/脚本与改密打终端明细 + 写执行期日志。
 // 成败与分类读判定写好的结论；展示分类（成功行的中文名）按模式合成。
 func (r *Reporter) Result(res ssh.Result) {
-	line := ResultLine(res, r.mode, r.answers, displayCategory(res, r.mode))
+	// 展示分类每结果只算一次：明细行与日志行读同一个值。
+	category := displayCategory(res, r.mode)
+	line := ResultLine(res, r.mode, r.answers, category)
 
 	// output.txt 只落文件：终端明细改经 printAbove（进度界面上方），
 	// 与进度条各占一块区域、互不覆盖。
@@ -126,10 +125,12 @@ func (r *Reporter) Result(res ssh.Result) {
 		_, _ = fmt.Fprintln(r.outFile, line)
 	}
 
-	if r.mode == "execute" {
+	// 终端明细：命令/脚本（execute）与改密（passwd）都要上屏；上传/下载不上屏。
+	// 改密不在这里列出就会整类明细消失——ModeOf 立了 passwd 档之后必须同步。
+	if r.mode == "execute" || r.mode == "passwd" {
 		r.printAbove(line)
 	}
-	r.logNode(res, displayCategory(res, r.mode))
+	r.logNode(res, category)
 }
 
 // Stop 收尾：先让进度界面渲染一帧「终帧」（各条按目标值定格），再退出、
@@ -252,6 +253,13 @@ func (r *Reporter) logNode(res ssh.Result, category string) {
 			}
 			write(fmt.Sprintf("%s%s完成：成功 %d/%d 个文件%s，共 %s，耗时 %.3fs",
 				ip, action, res.SuccessFiles, res.TotalFiles, note, common.FormatBytes(res.TotalBytes), res.ExecCostTime))
+		case "passwd":
+			// 改密没有"目的命令"，不带退出码（定论退出码对改密恒为 nil）
+			if res.Verdict == verdict.Success {
+				el.Success(fmt.Sprintf("%s改密成功，耗时 %.3fs", ip, res.ExecCostTime))
+			} else {
+				el.Error(fmt.Sprintf("%s改密失败，耗时 %.3fs", ip, res.ExecCostTime))
+			}
 		default:
 			if res.Verdict == verdict.Success {
 				el.Success(fmt.Sprintf("%s命令执行成功，退出码 0，耗时 %.3fs", ip, res.ExecCostTime))
@@ -292,6 +300,8 @@ func (r *Reporter) successDetail(res ssh.Result) string {
 	case "download":
 		return fmt.Sprintf("%s下载 %d/%d 个文件（%s），耗时 %.3fs",
 			conn, res.SuccessFiles, res.TotalFiles, common.FormatBytes(res.TotalBytes), res.ExecCostTime)
+	case "passwd":
+		return fmt.Sprintf("%s改密 %.3fs", conn, res.ExecCostTime)
 	default:
 		return fmt.Sprintf("%s执行 %.3fs", conn, res.ExecCostTime)
 	}

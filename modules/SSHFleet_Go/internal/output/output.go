@@ -33,7 +33,7 @@ func Render(
 	}
 	logger.Success("格式化统计结果信息输出到报告文件成功")
 
-	if err := archive.BackupAssets(cfg, a); err != nil {
+	if err := archive.BackupAssets(a); err != nil {
 		return fmt.Errorf("保存执行资源文件失败\n原因：%v", err)
 	}
 	logger.Success("保存执行资源文件成功")
@@ -41,13 +41,13 @@ func Render(
 	// 两张 xlsx 的收尾同构（生成、失败只留痕不中断、成功报一句），共用一个出口；
 	// 文件名统一取 config.BuiltinPaths，不写硬编码。
 	writeXlsx(cfg.Enable.OutputToXlsx, config.BuiltinPaths.OutputXlsx, logger, func() error {
-		return WriteOutputXlsx(archive.Dir, results, cfg, mode, a.Answers)
+		return WriteOutputXlsx(archive.Dir, results, mode, a.Answers)
 	})
 	writeXlsx(cfg.Enable.ResultsToXlsx, config.BuiltinPaths.ResultsXlsx, logger, func() error {
-		return WriteResultsXlsx(archive.Dir, results, cfg, mode, a.Answers)
+		return WriteResultsXlsx(archive.Dir, results, mode, a.Answers)
 	})
 
-	if err := CreateLatestHistoryLink(cfg); err != nil {
+	if err := CreateLatestHistoryLink(); err != nil {
 		fmt.Fprintf(os.Stderr, "%s[警告]%s %v\n", ansiYellow, ansiReset, err)
 		logger.Warn(fmt.Sprintf("创建最新历史记录链接失败：%v", err))
 	}

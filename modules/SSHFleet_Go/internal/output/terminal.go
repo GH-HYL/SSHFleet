@@ -51,6 +51,8 @@ func ActionName(mode string) string {
 		return "上传"
 	case "download":
 		return "下载"
+	case "passwd":
+		return "改密"
 	default:
 		return "执行"
 	}
@@ -78,13 +80,17 @@ func FormatSpeed(bytesPerSec float64) string {
 }
 
 // displayCategory 单条结果展示用的分类名（终端明细 / xlsx 分类列同一口径）：
-// 成功行按模式给中文（执行成功 / 传输成功，D2），失败行用判定给出的分类。
+// 成功行按模式给中文（执行成功 / 传输成功 / 改密成功，D2），失败行用判定给出的分类。
 func displayCategory(res ssh.Result, mode string) string {
 	if res.Verdict == verdict.Success {
-		if mode == "upload" || mode == "download" {
+		switch mode {
+		case "upload", "download":
 			return result.SuccessCategoryTransport
+		case "passwd":
+			return result.SuccessCategoryPasswd
+		default:
+			return result.SuccessCategoryExecute
 		}
-		return result.SuccessCategoryExecute
 	}
 	return res.Category
 }

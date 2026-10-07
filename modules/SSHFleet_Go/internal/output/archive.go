@@ -30,8 +30,8 @@ type Archive struct {
 }
 
 // CreateArchive 创建归档目录。
-func CreateArchive(cfg *config.Config, a *cli.Args) (*Archive, error) {
-	dir, err := archiveDirName(cfg, a)
+func CreateArchive(a *cli.Args) (*Archive, error) {
+	dir, err := archiveDirName(a)
 	if err != nil {
 		return nil, err
 	}
@@ -46,7 +46,7 @@ func CreateArchive(cfg *config.Config, a *cli.Args) (*Archive, error) {
 // 清单存的是**脱敏副本**：明文密码就写在清单第 4 列，原样复制等于把凭据又存了一份。
 // 脚本没有凭据，原样复制。代填文件原样复制——代填内容按已定的「留痕优先」口径明文记录，
 // 与 report、工具日志同一口径。
-func (ar *Archive) BackupAssets(cfg *config.Config, a *cli.Args) error {
+func (ar *Archive) BackupAssets(a *cli.Args) error {
 	if ar == nil {
 		return nil
 	}
@@ -146,7 +146,7 @@ func joinCSVLine(fields []string) string {
 
 // CreateLatestHistoryLink 在当前目录建 latest_history 目录链接，指向最新归档目录。
 // POSIX 用软链接，Windows 用目录联接（junction）——两者的取舍与限制见 createDirLink。
-func CreateLatestHistoryLink(cfg *config.Config) error {
+func CreateLatestHistoryLink() error {
 	entries, err := os.ReadDir(config.BuiltinPaths.Historys)
 	if err != nil {
 		return fmt.Errorf("读取历史记录目录失败：%s\n原因：%v", config.BuiltinPaths.Historys, err)
@@ -204,7 +204,7 @@ func absoluteOrSelf(p string) string {
 
 // archiveDirName 归档目录名：<时间>_<模式>[_备注]（对位旧命名）。
 // 模式名由 cli.Args.ModeName 单点判定，此处不再重判 Args 的字段。
-func archiveDirName(cfg *config.Config, a *cli.Args) (string, error) {
+func archiveDirName(a *cli.Args) (string, error) {
 	modeName := a.ModeName()
 	if modeName == "" {
 		modeName = "unknown" // 防御：参数合规检查已保证四者必有其一
