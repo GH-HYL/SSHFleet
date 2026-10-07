@@ -101,26 +101,15 @@ func (c *Client) RunCommand(ctx context.Context, command, stdin string, seq int)
 	result.ExecCostTime = time.Since(execStart).Seconds()
 	result.Output = trimOuterBlankLines(out.String())
 
-	// SessionBegun 判据：拿到退出码、干净收场、或超时/中断（三者都只在命令已在跑时发生）。
+	// 结束信号 → 事实字段（单点在 endFactsOf，与代填 / 改密通道共用）。
+	f := endFactsOf(err, timedOut, canceled)
+	result.CommandExitCode = f.exitCode
+	result.Error = f.errText
+	result.TimedOut = f.timedOut
+	result.Canceled = f.canceled
+	// 会话建立：拿到退出码、干净收场、或超时/中断（三者都只在命令已在跑时发生）。
 	// 都不是（如远端拒了命令本身）即未下发。
-	switch {
-	case err == nil:
-		code := 0
-		result.CommandExitCode = &code
-		result.SessionBegun = true
-	case !timedOut && !canceled:
-		if code := extractExitCode(err); code != nil {
-			result.CommandExitCode = code
-			result.SessionBegun = true
-		} else {
-			result.Error = strPtr(err.Error())
-		}
-	default:
-		result.Error = strPtr(err.Error())
-		result.TimedOut = timedOut
-		result.Canceled = canceled
-		result.SessionBegun = true
-	}
+	result.SessionBegun = f.exitCode != nil || f.timedOut || f.canceled
 	return result
 }
 
@@ -180,6 +169,43 @@ func extractExitCode(err error) *int {
 		return &code
 	}
 	return nil
+}
+
+// endFacts 一次执行的结束信号 → 事实字段。三条通道（命令 / 代填 / 改密）收场时登记的
+// 是同一件事，这里做单点映射：
+//
+//   - 干净收场（err==nil）  → 退出码 0
+//   - 非超时非中断的异常     → 拿得到退出码就用它，拿不到就把远端原文记为报错
+//   - 超时 / 中断            → 记原文，两个标志置真
+//
+// 顺序要紧：超时 / 中断同样在 err 上带一个错误值，而那个值只是「命令执行超时(Ns)」——
+// 先走非超时分支就会把远端说的原因盖掉（2026-09-29 实测踩到）。故由两个标志把关。
+//
+// 不管 SessionBegun：命令通道由本节信号推、交互与改密通道由「会话建起来没」给，
+// 语义本就不一样，各调用点自行落。
+type endFacts struct {
+	exitCode *int
+	errText  *string
+	timedOut bool
+	canceled bool
+}
+
+func endFactsOf(err error, timedOut, canceled bool) endFacts {
+	f := endFacts{timedOut: timedOut, canceled: canceled}
+	switch {
+	case err == nil:
+		code := 0
+		f.exitCode = &code
+	case !timedOut && !canceled:
+		if code := extractExitCode(err); code != nil {
+			f.exitCode = code
+		} else {
+			f.errText = strPtr(err.Error())
+		}
+	default:
+		f.errText = strPtr(err.Error())
+	}
+	return f
 }
 
 func strPtr(s string) *string { return &s }
