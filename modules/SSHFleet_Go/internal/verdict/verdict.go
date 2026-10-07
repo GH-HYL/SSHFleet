@@ -31,11 +31,11 @@ const (
 // 这些名字与 config/keywords_error.conf、keywords_passwd.conf 里的同名分类对应——
 // 改名会让终端统计把它们当兜底原文单排一行。
 const (
-	catPasswordExpired  = "密码过期"      // 中止词命中（CONTEXT「中止词」：归类「密码过期」是约定）
+	catPasswordExpired  = "密码过期"    // 中止词命中（CONTEXT「中止词」：归类「密码过期」是约定）
 	catTriggerMiss      = "触发词未命中"  // 代填还有没送出去的
 	catExhaustedTimeout = "代填用尽后超时" // 代填全部送出后仍等到超时
-	catPartialSuccess   = "部分成功"      // 传输有成功有失败
-	catPasswdNotExpired = "密码未过期"    // 改密整场没出现过期信号
+	catPartialSuccess   = "部分成功"    // 传输有成功有失败
+	catPasswdNotExpired = "密码未过期"   // 改密整场没出现过期信号
 )
 
 // 判据表里那条按退出码自动给的兜底分类的前缀（配置文件写不了带数字的名字）。
@@ -202,4 +202,3 @@ func truncate(text string) string {
 	}
 	return string(out) + "…"
 }
-
