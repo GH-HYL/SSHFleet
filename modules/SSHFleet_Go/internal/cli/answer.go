@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"sshfleet/internal/common"
@@ -192,8 +193,8 @@ func checkAnswerLength(a *Args, scriptText []byte) error {
 }
 
 // answerInputOf 由命令行参数拼交互分支的入场值（正文取自脚本文件内容）。
-// 材料（正文 · 解释器）走 ScriptMaterialOf 单点，与 batch 侧拼的是同一份：
-// 本包只用来算下发行长度，不参与执行。
+// 材料（正文 · 解释器 · 脚本名）走 ScriptMaterialOf / scriptName 同一套来源，
+// 与 batch 侧拼的是同一份：量的串 = 实际发的串。
 func answerInputOf(a *Args, scriptText []byte) ssh.InteractiveInput {
 	in := ssh.InteractiveInput{
 		Command:     a.Command,
@@ -204,6 +205,7 @@ func answerInputOf(a *Args, scriptText []byte) ssh.InteractiveInput {
 	}
 	if a.Script != "" {
 		in.ScriptBody = ScriptMaterialOf(a, scriptText).Body
+		in.ScriptName = filepath.Base(a.Script)
 	}
 	return in
 }
