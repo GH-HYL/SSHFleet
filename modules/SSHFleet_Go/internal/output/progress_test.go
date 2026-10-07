@@ -20,7 +20,7 @@ import (
 // 逐节点显示位怎么分配、进度取值按什么口径。
 
 func newTestProgress(mode cli.Mode, total int) progressModel {
-	return newProgressModel(mode, total, time.Now(), nil)
+	return newProgressModel(mode, total, time.Now())
 }
 
 // 命令模式：单行，含台数、成败与耗时。
