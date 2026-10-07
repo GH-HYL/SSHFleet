@@ -39,7 +39,7 @@ func readCSVRows(csvPath string, isInline bool, in *common.Interactor) ([][]stri
 	// 表头识别（spec 实现层差异，落实 D13）：首行首列严格 IPv4 解析失败
 	// 且该行含逗号 → 判为表头移除；否则报错。
 	first := infos[0]
-	if !isStrictIPv4(first[0]) {
+	if !common.IsIPv4Literal(first[0]) {
 		joined := strings.Join(first, ",")
 		if strings.Contains(joined, ",") {
 			infos = infos[1:]

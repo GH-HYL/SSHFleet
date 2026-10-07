@@ -5,9 +5,6 @@
 package nodelist
 
 import (
-	"net/netip"
-	"strings"
-
 	"sshfleet/internal/cli"
 	"sshfleet/internal/common"
 	"sshfleet/internal/config"
@@ -83,10 +80,4 @@ func Read(args *cli.Args, cfg *config.Config, in *common.Interactor) (*Nodes, er
 		return nil, err
 	}
 	return &Nodes{Items: nodes}, nil
-}
-
-// isStrictIPv4 D13：节点标识只支持 IPv4 字面量，严格校验（netip.ParseAddr）。
-func isStrictIPv4(s string) bool {
-	addr, err := netip.ParseAddr(strings.TrimSpace(s))
-	return err == nil && addr.Is4()
 }

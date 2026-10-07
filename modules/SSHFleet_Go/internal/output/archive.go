@@ -12,7 +12,6 @@ package output
 import (
 	"encoding/csv"
 	"fmt"
-	"net/netip"
 	"os"
 	"path/filepath"
 	"sort"
@@ -107,7 +106,7 @@ func copyCredentialList(src, assetsDir string) error {
 			continue
 		}
 		fields, perr := splitCSVLine(line)
-		if perr != nil || len(fields) < 4 || !isIPv4Literal(fields[0]) {
+		if perr != nil || len(fields) < 4 || !common.IsIPv4Literal(fields[0]) {
 			out.WriteString(line + "\n") // 表头、注释、异常行一律原样
 			continue
 		}
@@ -127,12 +126,6 @@ func splitCSVLine(line string) ([]string, error) {
 	r.FieldsPerRecord = -1
 	r.LazyQuotes = true
 	return r.Read()
-}
-
-// isIPv4Literal 首列是不是 IPv4 字面量（清单的每一行都以 IP 开头，表头不是）。
-func isIPv4Literal(s string) bool {
-	addr, err := netip.ParseAddr(strings.TrimSpace(s))
-	return err == nil && addr.Is4()
 }
 
 // joinCSVLine 按 CSV 规则拼一行。
