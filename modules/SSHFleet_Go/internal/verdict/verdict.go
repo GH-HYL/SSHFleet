@@ -8,6 +8,7 @@
 package verdict
 
 import (
+	"strconv"
 	"strings"
 
 	"sshfleet/internal/cli"
@@ -113,7 +114,7 @@ func Judge(res *ssh.Result, mode cli.Mode, kw *Keywords) {
 		if hit := kw.matchText(true, joinText(src, res.Output)); hit != "" {
 			res.Category = hit
 		} else {
-			res.Category = exitCodeFailPrefix + itoa(*res.CommandExitCode) + ")"
+			res.Category = exitCodeFailPrefix + strconv.Itoa(*res.CommandExitCode) + ")"
 		}
 		res.ExitCode = res.CommandExitCode
 		return
@@ -202,21 +203,3 @@ func truncate(text string) string {
 	return string(out) + "…"
 }
 
-func itoa(v int) string {
-	if v == 0 {
-		return "0"
-	}
-	neg := v < 0
-	if neg {
-		v = -v
-	}
-	var b []byte
-	for v > 0 {
-		b = append([]byte{byte('0' + v%10)}, b...)
-		v /= 10
-	}
-	if neg {
-		return "-" + string(b)
-	}
-	return string(b)
-}

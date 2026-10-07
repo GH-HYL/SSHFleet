@@ -381,7 +381,4 @@ func TestHelpers(t *testing.T) {
 	if !isAllDigits("0123") || isAllDigits("") || isAllDigits("1a") || isAllDigits("-1") {
 		t.Fatal("isAllDigits 判定不合预期")
 	}
-	if !isStrictIPv4(" 192.168.1.1 ") || isStrictIPv4("256.1.1.1") || isStrictIPv4("::1") {
-		t.Fatal("isStrictIPv4 判定不合预期")
-	}
 }

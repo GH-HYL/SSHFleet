@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"sshfleet/internal/common"
 	"sshfleet/internal/config"
 )
 
@@ -56,7 +57,7 @@ func parseNode(row []string, idx int, pre *precheckResult, cfg *config.Config) (
 	// IP：必须存在 + 严格 IPv4（旧版正则不校验每段范围的缺陷在此修正）
 	if ip == "" {
 		errs = append(errs, "IP必须存在")
-	} else if !isStrictIPv4(ip) {
+	} else if !common.IsIPv4Literal(ip) {
 		errs = append(errs, "IP格式不正确")
 	}
 
