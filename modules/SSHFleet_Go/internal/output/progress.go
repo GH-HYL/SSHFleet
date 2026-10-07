@@ -142,9 +142,6 @@ type progressModel struct {
 	bySeq map[int]*nodeView
 
 	totalWindow *speedWindow
-
-	// stats 进度链路计时（排障用，可为 nil）。只读它的方法，不改变渲染。
-	stats *progressStats
 }
 
 // finalMsg 收尾消息：Stop 时下发一次，由 Update 返回 tea.Quit。
@@ -153,8 +150,8 @@ type progressModel struct {
 type finalMsg struct{}
 
 // newProgressModel 建界面模型。start 由调用方给定（主干传 execStart），
-// 与统计块的总耗时同源。stats 为排障计时（可为 nil，测试里就传 nil）。
-func newProgressModel(mode cli.Mode, total int, start time.Time, stats *progressStats) progressModel {
+// 与统计块的总耗时同源。
+func newProgressModel(mode cli.Mode, total int, start time.Time) progressModel {
 	return progressModel{
 		mode:        mode,
 		total:       total,
@@ -163,7 +160,6 @@ func newProgressModel(mode cli.Mode, total int, start time.Time, stats *progress
 		nodeBar:     newBar(nodeBarWidth),
 		bySeq:       map[int]*nodeView{},
 		totalWindow: &speedWindow{},
-		stats:       stats,
 	}
 }
 
@@ -172,7 +168,6 @@ func (m progressModel) Init() tea.Cmd { return nil }
 // 只处理两类消息：快照（改数据 + 重新分配显示位）与收尾。没有任何动画帧——
 // 条按目标值直接渲染，所以这里不回吐命令，事件循环不必为渲染再转一圈。
 func (m progressModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	m.stats.observeMsg()
 	switch msg := msg.(type) {
 	case batch.Snapshot:
 		m.applySnapshot(msg)
@@ -302,10 +297,7 @@ func (m progressModel) barView(b progress.Model, target float64) string {
 // 命令模式的进度条只有一行、正好就是那一行，会被整条抹掉。多留一个空行接刀，
 // 进度条本身就能像以前那样留在屏幕上（用户 2026-09-15 实测反馈）。
 func (m progressModel) View() string {
-	start := time.Now()
-	out := m.render() + "\n"
-	m.stats.observeView(time.Since(start)) // 排障计时：这一帧正文的构建耗时
-	return out
+	return m.render() + "\n"
 }
 
 // render 界面正文（不含上面那个替死换行；测试直接断言它）。
