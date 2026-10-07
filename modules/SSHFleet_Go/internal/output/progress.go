@@ -53,14 +53,17 @@ var (
 
 // newBar 造一条进度条。样式口径（用户在 demo 里选定的「满配」）：
 // 细线字符 ━/─、scaled 渐变（颜色随已填充宽度走）、暗空档色、百分比一位小数且加粗。
+//
+// 不挂弹簧动画（2026-10-08）。原先用 bubbles 的弹簧缓动，问题出在它的帧是**按 tag 认领**的：
+// SetPercent 每调一次 tag 就 +1，而在途的那一帧随即作废、且作废后不再重排。批量执行时快照
+// 比动画帧还密（真机实测 98% 的快照间隔短于一个 16.7ms 的帧），于是每一帧都被下一次重设
+// 目标作废，弹簧一步也迈不动——条与百分比会**冻结在旧值**（真机现象：几百台跑完仍显示 0.0%，
+// 而同一行的「已完成 N/总」一路在涨）。
+//
+// 现在按目标值直接渲染（见 barView）：数字永远等于真实进度，也不再产生动画帧的开销。
 func newBar(w int) progress.Model {
 	m := progress.New(
 		progress.WithWidth(w),
-		// 临界阻尼（1.0，也是 bubbles 的默认值）+ 高频率：主工程的进度值是**跳变**的
-		//（一次可能同时完成好几台），欠阻尼的弹簧会冲过目标值——冲过 100% 被截断显示成
-		// 满格、回落时又经过 95%，看起来就是「先满、回落、再满」（用户 2026-09-15 实测）。
-		// 临界阻尼的代价是少一点「弹」，换来的是数字只朝一个方向走。
-		progress.WithSpringOptions(18, 1.0),
 		progress.WithFillCharacters('━', '─'),
 		// 渐变两端：#C05050（暗红）→ #FFB454（亮橙）。起端刻意留暗、末端挑亮，
 		// 两端相对亮度 18% → 55%；低色彩终端（256 色）降色后是 #af5f5f → #ffaf5f，
@@ -104,8 +107,8 @@ func (w *speedWindow) update(bytes int64) float64 {
 	return float64(deltaBytes) / deltaTime
 }
 
-// nodeView 单个节点在界面上的状态。bar 只在获得显示位时才建——
-// 691 台并发若每台都挂一条带动画的进度条，就是 691 个逐帧定时器。
+// nodeView 单个节点在界面上的状态。只记数据：那一条条怎么画由 View 现算
+// （条不带动画、也不存状态，见 barView），所以这里没有"每节点一条进度条"的负担。
 type nodeView struct {
 	seq          int
 	ip           string
@@ -117,8 +120,7 @@ type nodeView struct {
 	done         bool
 	speed        float64
 
-	hasBar bool
-	bar    progress.Model
+	hasBar bool // 是否占着一个显示位（最多 maxVisibleNodes 个）
 	window *speedWindow
 }
 
@@ -126,10 +128,6 @@ type progressModel struct {
 	mode  cli.Mode
 	total int
 	start time.Time
-
-	// final 终帧标记：为 true 时各条按「目标百分比」静态定格渲染，
-	// 不再读弹簧动画的当前值（见 barView）。
-	final bool
 
 	completed  int
 	succeeded  int
@@ -149,9 +147,9 @@ type progressModel struct {
 	stats *progressStats
 }
 
-// finalMsg 收尾消息：让界面把动画值定格到目标值再退出。
-// Stop 时下发一次，由 Update 返回 tea.Quit——
-// 这样「终帧渲染」与「退出」由事件循环按序执行，渲染一定发生在退出之前。
+// finalMsg 收尾消息：Stop 时下发一次，由 Update 返回 tea.Quit。
+// 走消息而不是直接 Quit，是为了让「最后一批明细行/快照的渲染」排在退出之前——
+// 它们是本消息之前入队的，事件循环按序处理，一定先落屏。
 type finalMsg struct{}
 
 // newProgressModel 建界面模型。start 由调用方给定（主干传 execStart），
@@ -171,37 +169,17 @@ func newProgressModel(mode cli.Mode, total int, start time.Time, stats *progress
 
 func (m progressModel) Init() tea.Cmd { return nil }
 
+// 只处理两类消息：快照（改数据 + 重新分配显示位）与收尾。没有任何动画帧——
+// 条按目标值直接渲染，所以这里不回吐命令，事件循环不必为渲染再转一圈。
 func (m progressModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.stats.observeMsg()
 	switch msg := msg.(type) {
 	case batch.Snapshot:
 		m.applySnapshot(msg)
-		return m, m.syncBars()
-
-	// 收尾：定格终帧并退出。渲染由事件循环在本条消息处理完之后做，
-	// 所以这一帧一定会以目标值出现在屏幕上。
+		m.syncBars()
+		return m, nil
 	case finalMsg:
-		m.final = true
 		return m, tea.Quit
-
-	// 动画帧：各条自己按 spring 插值逼近目标值；FrameMsg 带 id，不匹配的条会自行忽略
-	case progress.FrameMsg:
-		cmds := make([]tea.Cmd, 0, len(m.nodes)+2)
-		nm, c := m.totalBar.Update(msg)
-		m.totalBar = nm.(progress.Model)
-		cmds = append(cmds, c)
-		nm, c = m.nodeBar.Update(msg)
-		m.nodeBar = nm.(progress.Model)
-		cmds = append(cmds, c)
-		for _, n := range m.nodes {
-			if !n.hasBar {
-				continue
-			}
-			nb, c := n.bar.Update(msg)
-			n.bar = nb.(progress.Model)
-			cmds = append(cmds, c)
-		}
-		return m, tea.Batch(cmds...)
 	}
 	return m, nil
 }
@@ -232,15 +210,13 @@ func (m *progressModel) applySnapshot(s batch.Snapshot) {
 	}
 }
 
-// syncBars 维护逐节点条的显示位并推进各条进度。
+// syncBars 维护逐节点条的显示位。条本身按目标值现画（barView），这里只管"谁有位子"。
 //
 // 显示位规则（对位旧版 MAX_VISIBLE_NODES 的排队机制）：已完成的节点让出显示位；
 // 显示位只授予「已开始传输（有字节）且未完成」的节点，满 maxVisibleNodes 为止，
 // 其余排队不显示，等有节点完成再补位。不按终端高度自适应——72 台满屏 0% 空条
 // 观感极差（用户 2026-09-15 裁定）。
-func (m *progressModel) syncBars() tea.Cmd {
-	var cmds []tea.Cmd
-
+func (m *progressModel) syncBars() {
 	visible := 0
 	for _, n := range m.nodes {
 		if n.hasBar && n.done {
@@ -257,28 +233,9 @@ func (m *progressModel) syncBars() tea.Cmd {
 		if n.hasBar || n.done || n.bytes == 0 {
 			continue
 		}
-		n.bar = newBar(nodeBarWidth)
 		n.hasBar = true
 		visible++
 	}
-
-	// 推进目标值。Percent() 取的是目标值，只在变化时下发——
-	// 每次无脑 SetPercent 会刷新动画 tag，把排队中的动画帧全部作废。
-	if pct := m.progress(); m.totalBar.Percent() < pct {
-		cmds = append(cmds, m.totalBar.SetPercent(pct))
-	}
-	if pct := m.nodeProgress(); m.nodeBar.Percent() < pct {
-		cmds = append(cmds, m.nodeBar.SetPercent(pct))
-	}
-	for _, n := range m.nodes {
-		if !n.hasBar {
-			continue
-		}
-		if pct := nodePercent(*n); n.bar.Percent() < pct {
-			cmds = append(cmds, n.bar.SetPercent(pct))
-		}
-	}
-	return tea.Batch(cmds...)
 }
 
 // progress 总进度：已完成台数 + 各在传节点自身进度之和，除以节点总数。
@@ -330,14 +287,12 @@ func clamp01(v float64) float64 {
 	return v
 }
 
-// barView 渲染一条进度条。终帧（final）按目标百分比静态定格——弹簧动画要几帧才
-// 收敛，而 Stop 紧跟着最后一个节点完成到来，动画往往还停在半路（用户 2026-09-15
-// 实测：节点进度已 72/72，条却停在 97.2%）。退出前必须用目标值渲染，不能靠等。
+// barView 渲染一条进度条：**按目标百分比直出**（ViewAs），不读动画的当前值。
+//
+// 由此得到的性质，正是这一块要的：显示值恒等于真实进度——不会落后（快节奏下弹簧会被
+// 饿死，见 newBar 的说明），也不会回退（progress() 单调不减），退出时更不必"定格终帧"。
 func (m progressModel) barView(b progress.Model, target float64) string {
-	if m.final {
-		return b.ViewAs(target)
-	}
-	return b.View()
+	return b.ViewAs(target)
 }
 
 // View 渲染整块。
@@ -395,7 +350,7 @@ func (m progressModel) transferView() string {
 			continue
 		}
 		fmt.Fprintf(&b, "%s%s  %s  %s  %s\n",
-			indent, m.barView(n.bar, nodePercent(*n)), styleDim.Render(FormatSpeed(n.speed)),
+			indent, m.barView(m.nodeBar, nodePercent(*n)), styleDim.Render(FormatSpeed(n.speed)),
 			styleDim.Render(n.ip),
 			fmt.Sprintf("共 %d 个文件  成功 %d  失败 %d", n.totalFiles, n.successFiles, n.failedFiles))
 	}

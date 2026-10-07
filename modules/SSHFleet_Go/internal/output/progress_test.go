@@ -7,8 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/charmbracelet/bubbles/progress"
-
 	"sshfleet/internal/batch"
 	"sshfleet/internal/cli"
 	"sshfleet/internal/ssh"
@@ -134,45 +132,34 @@ func TestExecuteProgressSequenceMonotonic(t *testing.T) {
 	}
 }
 
-// 终帧必须按目标值静态定格：进度条读的是弹簧动画的当前值，而 Stop 紧跟着最后一个
-// 节点完成到来，动画往往还停在半路。（用户 2026-09-15 实测：节点进度已 72/72，
-// 条却停在 97.2%。）
-func TestFinalFrameSnapsToTarget(t *testing.T) {
+// 条与百分比恒等于目标进度——不落后、不等动画，第一条快照进来就位。
+// （用户 2026-10-08 真机：1109 台里几百台跑完了，条还钉在 0.0%。根因是弹簧动画的帧按
+// tag 认领，快照比帧密时每帧都被下一次重设目标作废，显示值完全冻结；改为直出后不存在。）
+func TestBarsRenderTargetImmediately(t *testing.T) {
 	m := newTestProgress(cli.ModeCommand, 4)
 	m.applySnapshot(batch.Snapshot{Total: 4, Completed: 4})
 
-	// 没有动画帧驱动时，普通渲染停在弹簧的当前值 0%
-	if got := m.render(); !strings.Contains(got, "0.0%") {
-		t.Fatalf("动画未推进时普通渲染应停在 0%%，实际：\n%s", got)
-	}
-	m.final = true
 	if got := m.render(); !strings.Contains(got, "100.0%") {
-		t.Fatalf("终帧应定格在目标值 100.0%%，实际：\n%s", got)
+		t.Fatalf("命令模式的条与百分比应立刻等于目标值 100.0%%，实际：\n%s", got)
 	}
 
-	// 传输模式的三条（总进度 / 节点进度 / 逐节点）同样要定格
+	// 传输模式的三条（总进度 / 节点进度 / 逐节点）同样直出
 	tr := newTestProgress(cli.ModeUpload, 2)
 	tr.applySnapshot(batch.Snapshot{
 		Total: 2, Completed: 2, BytesDone: 100, BytesTotal: 100,
-		Nodes: []batch.NodeSnapshot{{Seq: 0, IP: "10.0.0.1", Bytes: 50, TotalBytes: 50, Done: true}},
+		Nodes: []batch.NodeSnapshot{{Seq: 0, IP: "10.0.0.1", Bytes: 50, TotalBytes: 50, SuccessFiles: 1, TotalFiles: 1}},
 	})
 	tr.syncBars()
-	tr.final = true
 	if got := tr.render(); !strings.Contains(got, "100.0%") {
-		t.Fatalf("传输模式终帧也应定格在 100.0%%，实际：\n%s", got)
+		t.Fatalf("传输模式的条也应立刻等于目标值 100.0%%，实际：\n%s", got)
 	}
 }
 
-// 终帧消息要带回退出命令：渲染由事件循环在本条消息之后做，退出紧随其后，
-// 这样终帧一定上屏（直接调 Program.Quit 则可能跳过这一帧）。
-func TestFinalMsgSetsFlagAndQuits(t *testing.T) {
+// 收尾消息要带回退出命令（走消息而不是直接 Quit，好让先前入队的渲染先落屏）。
+func TestFinalMsgQuits(t *testing.T) {
 	m := newTestProgress(cli.ModeCommand, 2)
-	updated, cmd := m.Update(finalMsg{})
-	if cmd == nil {
+	if _, cmd := m.Update(finalMsg{}); cmd == nil {
 		t.Fatal("终帧消息应带回退出命令")
-	}
-	if !updated.(progressModel).final {
-		t.Fatal("终帧标记应已置位")
 	}
 }
 
@@ -212,18 +199,50 @@ func TestProgressWeightsByNodeCount(t *testing.T) {
 	}
 }
 
-// 目标值只在变化时下发：每次无脑 SetPercent 会刷新动画 tag，把排队中的动画帧作废。
-func TestSyncBarsSkipsUnchangedPercent(t *testing.T) {
+// 快照消息不该回吐命令：条是直出的，渲染不再需要"再转一圈"的事件循环。
+func TestSnapshotUpdateIssuesNoCommand(t *testing.T) {
 	m := newTestProgress(cli.ModeCommand, 4)
-	m.applySnapshot(batch.Snapshot{Total: 4, Completed: 2})
-	if cmd := m.syncBars(); cmd == nil {
-		t.Fatal("进度推进时应下发动画命令")
+	if _, cmd := m.Update(batch.Snapshot{Total: 4, Completed: 2}); cmd != nil {
+		t.Fatal("快照处理不该产生后续命令（直出渲染没有动画帧）")
 	}
-	if got := m.totalBar.Percent(); got != 0.5 {
-		t.Fatalf("总进度目标应为 0.5，实际 %v", got)
+}
+
+// 显示值跟得上真实进度：快照来得比动画帧还密（1ms 一份，远快于 16.7ms 的帧）时也不许落后。
+// 这是「几百台跑完、条还停在 0.0%」那个真机问题的回归位——旧实现此时会一直停在 0.0%。
+func TestDisplayTracksProgressUnderBurst(t *testing.T) {
+	const total = 300
+	m := newTestProgress(cli.ModeCommand, total)
+	for i := 1; i <= total; i++ {
+		updated, _ := m.Update(batch.Snapshot{Total: total, Completed: i})
+		m = updated.(progressModel)
+		if i%50 == 0 {
+			got := percentIn(t, m.render())
+			want := float64(i) / total * 100
+			if got < want-0.1 {
+				t.Fatalf("第 %d/%d 台完成时显示值落后：显示 %.1f%%，真实 %.1f%%", i, total, got, want)
+			}
+		}
+		time.Sleep(time.Millisecond)
 	}
-	if cmd := m.syncBars(); cmd != nil {
-		t.Fatal("数据没变时不该重复下发动画命令")
+}
+
+// 显示值不得回退：进度值是跳变的（一次可能同时完成好几台），旧实现靠弹簧的临界阻尼保证
+// 「数字只朝一个方向走」；现在由直出 + progress() 单调保证。
+func TestDisplayedPercentNeverGoesBackwards(t *testing.T) {
+	const total = 40
+	m := newTestProgress(cli.ModeCommand, total)
+	last := 0.0
+	for i := 0; i <= total; i++ {
+		updated, _ := m.Update(batch.Snapshot{Total: total, Completed: i})
+		m = updated.(progressModel)
+		got := percentIn(t, m.render())
+		if got < last {
+			t.Fatalf("第 %d 台完成后显示值回退：%.1f%% → %.1f%%", i, last, got)
+		}
+		last = got
+	}
+	if last != 100 {
+		t.Fatalf("全部完成后显示值应为 100%%，实际 %.1f%%", last)
 	}
 }
 
@@ -252,50 +271,31 @@ func TestViewRendersOnEmptySnapshot(t *testing.T) {
 	}
 }
 
-// 弹簧动画不得回退：进度值是跳变的（一次可能同时完成好几台），欠阻尼的弹簧会冲过
-// 目标值再回落——冲过 100% 被截断显示成满格、回落时又经过 95%，看上去就是
-// 「先满、回落、再满」（用户 2026-09-15 实测反馈）。
-//
-// 顺带钉住一件事：弹簧收敛时会留微小残差（实测停在 99.9%，走不到精确 100%），
-// 所以退出前必须用终帧按目标值定格，不能指望动画自己收敛到位。
-func TestBarAnimationNeverGoesBackwards(t *testing.T) {
-	bar := newBar(24)
-	cmd := bar.SetPercent(1.0) // 从 0 直跳满格，最容易把过冲逼出来
-
-	last := 0.0
-	for i := 0; i < 600 && cmd != nil; i++ {
-		msg := cmd()
-		updated, next := bar.Update(msg)
-		bar = updated.(progress.Model)
-		cmd = next
-
-		shown := shownPercent(t, bar)
-		if shown < last {
-			t.Fatalf("第 %d 帧动画回退：%.1f%% → %.1f%%", i, last, shown)
+// 条按目标值直出：给多少就画多少，不截断也不溢出（进度取值离开 [0,1] 时由 clamp01 收住）。
+func TestBarRendersExactlyGivenPercent(t *testing.T) {
+	for _, pct := range []float64{0, 0.375, 1} {
+		got := newBar(24).ViewAs(pct)
+		want := fmt.Sprintf("%.1f%%", pct*100)
+		if !strings.HasSuffix(got, want) {
+			t.Fatalf("ViewAs(%.3f) 应显示 %s，实际 %q", pct, want, got)
 		}
-		last = shown
-	}
-	if last < 99.9 {
-		t.Fatalf("动画应最终收敛到接近 100%%，实际停在 %.1f%%", last)
 	}
 }
 
-// shownPercent 从渲染结果里读动画的当前百分比。
-// （bubbles 的 Percent() 给的是目标值，动画当前值只能从 View 里取。）
-func shownPercent(t *testing.T, b progress.Model) float64 {
+// percentIn 从渲染出来的一行里读百分比数字（条与百分比同源，取最后一个）。
+func percentIn(t *testing.T, view string) float64 {
 	t.Helper()
-	v := b.View()
-	i := strings.LastIndexByte(v, '%')
+	i := strings.LastIndexByte(view, '%')
 	if i <= 0 {
-		t.Fatalf("渲染结果里找不到百分比：%q", v)
+		t.Fatalf("渲染结果里找不到百分比：%q", view)
 	}
 	j := i - 1
-	for j >= 0 && ((v[j] >= '0' && v[j] <= '9') || v[j] == '.') {
+	for j >= 0 && ((view[j] >= '0' && view[j] <= '9') || view[j] == '.') {
 		j--
 	}
-	f, err := strconv.ParseFloat(v[j+1:i], 64)
+	f, err := strconv.ParseFloat(view[j+1:i], 64)
 	if err != nil {
-		t.Fatalf("解析百分比失败（%q）：%q", v[j+1:i], v)
+		t.Fatalf("解析百分比失败（%q）：%q", view[j+1:i], view)
 	}
 	return f
 }

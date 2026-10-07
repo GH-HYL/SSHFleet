@@ -214,6 +214,44 @@ func TestJudgeStructuralFacts(t *testing.T) {
 	}
 }
 
+// 外部中断按"中断在哪一步"分两档（用户 2026-10-08 真机：Ctrl+C 时日志里混进两种结果——
+// 还在建连的报 `建立连接失败 - dial tcp …: operation was canceled`，不在关键词表里，
+// 每台一个分类把汇总刷屏；已连上的报 `context canceled`，归了「任务已取消」）。
+// 这里走的是结构事实（ssh 侧写下的 Canceled + 连没连上），不看文案。
+func TestCanceledSplitsByPhase(t *testing.T) {
+	kw := loadKeywords(t)
+
+	// 还没连上就被中断 → 「建连被取消」，而且必须是登记过的分类
+	// （否则汇总里会按"报错原文"单排一行——正是这次的病）
+	connErr := "建立连接失败 - dial tcp 10.0.0.1:22: operation was canceled"
+	res := ssh.Result{ConnectSuccess: false, Canceled: true, Error: &connErr}
+	Judge(&res, cli.ModeCommand, kw)
+	if res.Category != "建连被取消" {
+		t.Fatalf("建连阶段被中断应归「建连被取消」，实为 %q", res.Category)
+	}
+	if IsFallbackCategory(res.Category, kw) {
+		t.Fatalf("「建连被取消」必须登记在关键词表里，实为兜底原文：%q", res.Category)
+	}
+
+	// 已连上、跑到中途被中断 → 「任务已取消」
+	canceled := "context canceled"
+	res = ssh.Result{ConnectSuccess: true, SessionBegun: true, Canceled: true, Error: &canceled}
+	Judge(&res, cli.ModeCommand, kw)
+	if res.Category != "任务已取消" {
+		t.Fatalf("执行阶段被中断应归「任务已取消」，实为 %q", res.Category)
+	}
+
+	// 中止词（密码过期）比"被中断"更具体，不许被盖掉
+	res = ssh.Result{
+		ConnectSuccess: true, SessionBegun: true, Canceled: true,
+		AbortLine: "WARNING: Your password has expired.",
+	}
+	Judge(&res, cli.ModeCommand, kw)
+	if res.Category != "密码过期" {
+		t.Fatalf("中止词命中时应保留「密码过期」，实为 %q", res.Category)
+	}
+}
+
 func lowerAll(in []string) []string {
 	out := make([]string, 0, len(in))
 	for _, s := range in {

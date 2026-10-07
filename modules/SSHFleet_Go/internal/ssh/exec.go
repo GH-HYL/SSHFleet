@@ -52,6 +52,14 @@ func (c *Client) connectFor(ctx context.Context, result *Result) bool {
 	if err != nil {
 		result.ConnectSuccess = false
 		result.Error = strPtr(err.Error())
+		// 这次建连失败是被外部中断打断的，不是目标机自己的毛病——照实记下来。
+		// 判定侧据此把"取消"与"连不上"分开报，不必再去辨认报错文案
+		//（与执行 / 代填 / 改密 / 传输四条通道同一个口径，见 runWithTimeoutAndCancel）。
+		// ctx 只由信号取消（main 里 signal.NotifyContext，无 deadline），故 Err() 非空
+		// 就一定是"用户按了 Ctrl+C / 收到了 TERM"。
+		if ctx.Err() != nil {
+			result.Canceled = true
+		}
 		return false
 	}
 	result.ConnectSuccess = true
