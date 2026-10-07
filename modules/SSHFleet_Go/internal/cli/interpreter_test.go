@@ -89,12 +89,12 @@ func TestConfirmInterpreterFallback(t *testing.T) {
 
 // isBashInterpreter：--no-shell 与自定义解释器互斥的判断依据（bash 与 /bin/bash 都算）。
 func TestIsBashInterpreter(t *testing.T) {
-	for _, name := range []string{"bash", "/bin/bash", "BASH"} {
+	for _, name := range []string{"bash", "/bin/bash", "BASH", "bash5"} {
 		if !isBashInterpreter(name) {
 			t.Fatalf("%s 应判为 bash", name)
 		}
 	}
-	for _, name := range []string{"sh", "dash", "perl", "python3", ""} {
+	for _, name := range []string{"sh", "dash", "zsh5", "perl", "python3", ""} {
 		if isBashInterpreter(name) {
 			t.Fatalf("%s 不该判为 bash", name)
 		}

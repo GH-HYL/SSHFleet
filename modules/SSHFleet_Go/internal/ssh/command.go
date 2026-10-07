@@ -233,14 +233,11 @@ var shellFamilyNames = map[string]bool{
 	"bash": true, "sh": true, "dash": true, "ksh": true, "zsh": true, "mksh": true, "ash": true,
 }
 
-// isShellFamily 解释器是不是 shell 家族：取第一个词再取 basename，
-// `bash` / `sh` / `/bin/sh` 都算，`python3` / `perl` 不算；带参数（如 `perl -w`）时只看第一个词。
+// isShellFamily 解释器是不是 shell 家族：经 InterpreterBaseName 归一后查表，
+// `bash` / `sh` / `/bin/sh` / `zsh5` / `ksh93` 都算，`python3` / `perl` 不算；
+// 带参数（如 `perl -w`）时只看第一个词。
 func isShellFamily(interpreter string) bool {
-	fields := strings.Fields(interpreter)
-	if len(fields) == 0 {
-		return false
-	}
-	return shellFamilyNames[path.Base(fields[0])]
+	return shellFamilyNames[InterpreterBaseName(interpreter)]
 }
 
 // programTextArgTable「用一段程序文本启动解释器」的参数：语言名（小写、去版本号）→ 参数。
@@ -269,17 +266,28 @@ var programTextArgTable = map[string]string{
 	"php":    "-r",
 }
 
+// InterpreterBaseName 把配置里的解释器取值归一成「认名用的标准名」：
+// 取第一个词（带参数如 `perl -w` 时只看第一个词）、去目录、转小写、去尾部版本号
+// （/usr/bin/python3 → python、php8.1 → php、zsh5 → zsh）。
+//
+// 这套剥法全工具只有这一份（2026-10-08 审计裁决）：-a 的支持范围、--no-shell 的
+// 互斥、$0 补名的家族判定都认它。此前剥法写了两遍、其中家族判定那遍不剥，
+// 同一个名字得出两个结果——zsh5 在 -a 检查里认得、在家族判定里认不出，
+// $0 静默失效。空值返回空串。
+func InterpreterBaseName(interpreter string) string {
+	fields := strings.Fields(interpreter)
+	if len(fields) == 0 {
+		return ""
+	}
+	return strings.TrimRight(strings.ToLower(path.Base(fields[0])), "0123456789.")
+}
+
 // ProgramTextArg 返回「用一段程序文本启动该解释器」的参数（-c / -e / -r）与它是否在支持范围内。
-// 解释器名允许带目录与版本号（/usr/bin/python3、php8.1）：取 basename、转小写、去掉尾部版本号后查表。
+// 解释器名允许带目录与版本号（/usr/bin/python3、php8.1），由 InterpreterBaseName 归一后查表。
 //
 // 表外返回 ("", false)。-a 的合规检查据此拦下；拼装侧（InteractiveCommand）拿到的只会是表内的解释器。
 func ProgramTextArg(interpreter string) (string, bool) {
-	fields := strings.Fields(interpreter)
-	if len(fields) == 0 {
-		return "", false
-	}
-	base := strings.TrimRight(strings.ToLower(path.Base(fields[0])), "0123456789.")
-	arg, ok := programTextArgTable[base]
+	arg, ok := programTextArgTable[InterpreterBaseName(interpreter)]
 	return arg, ok
 }
 
