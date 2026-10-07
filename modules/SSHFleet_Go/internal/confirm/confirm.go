@@ -130,7 +130,10 @@ func buildInfoTable(args *cli.Args, nodes *nodelist.Nodes, allParallel bool) [][
 	if args.Timeout != 0 {
 		// 措辞取自名字表（执行超时 / 传输超时 / 改密超时）。改密虽走 timeout_execute 的默认值，
 		// 但用户看的是「这次改密等多久」，名字表里就写着「改密超时」。
-		t = append(t, [2]string{args.ModeName().Info().TimeoutLabel, fmt.Sprintf("%ds", args.Timeout)})
+		// 名字表对「没选定模式」返零值——那就不加这一行，别摆个空标签（参数合规已保证模式必选）。
+		if label := args.ModeName().Info().TimeoutLabel; label != "" {
+			t = append(t, [2]string{label, fmt.Sprintf("%ds", args.Timeout)})
+		}
 	}
 	if args.Remark != "" {
 		t = append(t, [2]string{"备注", strings.TrimSpace(args.Remark)})

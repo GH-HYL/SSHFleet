@@ -121,8 +121,7 @@ func (c *Client) RunPasswdChange(ctx context.Context, in PasswdInput, seq int) *
 	// 失败原因（报错原文，不是结论）：远端当场说了原因就用它的原话，分类靠判据表；
 	// 超时 / 早收场与「passwd 非 0 收场」共用一份兜底文案。连接层 / 会话层的错误
 	//（连不上、会话建不起来、命令没能开始）没有可读的远端输出，保留原文。
-	// 顺序要紧：超时同样在 outcome.err 上带一个错误值，而那个值只是「命令执行超时(60s)」，
-	// 先走非超时分支就会把远端说的原因盖掉（2026-09-29 实测踩到）。
+	// 「超时 / 中断先判、否则盖掉远端原因」的次序警示写在 endFactsOf 的注释里（单点），此处不重复。
 	if outcome.aborted || f.timedOut {
 		result.Error = strPtr(passwdNote(note, hook, outcome))
 	} else if outcome.err != nil {

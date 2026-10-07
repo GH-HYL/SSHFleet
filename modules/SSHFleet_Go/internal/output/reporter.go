@@ -252,11 +252,13 @@ func (r *Reporter) logNode(res ssh.Result, category string) {
 			write(fmt.Sprintf("%s%s完成：成功 %d/%d 个文件%s，共 %s，耗时 %.3fs",
 				ip, action, res.SuccessFiles, res.TotalFiles, note, common.FormatBytes(res.TotalBytes), res.ExecCostTime))
 		case cli.ModePasswd:
-			// 改密没有"目的命令"，不带退出码（定论退出码对改密恒为 nil）
+			// 改密没有"目的命令"，不带退出码（定论退出码对改密恒为 nil）。
+			// 词取自名字表（LogName =「改密」），成功 / 失败两行都不再握字面量。
+			label := r.mode.Info().LogName
 			if res.Verdict == verdict.Success {
-				el.Success(fmt.Sprintf("%s改密成功，耗时 %.3fs", ip, res.ExecCostTime))
+				el.Success(fmt.Sprintf("%s%s成功，耗时 %.3fs", ip, label, res.ExecCostTime))
 			} else {
-				el.Error(fmt.Sprintf("%s改密失败，耗时 %.3fs", ip, res.ExecCostTime))
+				el.Error(fmt.Sprintf("%s%s失败，耗时 %.3fs", ip, label, res.ExecCostTime))
 			}
 		default:
 			if res.Verdict == verdict.Success {
