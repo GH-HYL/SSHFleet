@@ -79,6 +79,15 @@ func displayCategory(res ssh.Result, mode cli.Mode) string {
 	return res.Category
 }
 
+// statusLine 单节点状态行（终端明细与 xlsx 结果列同一口径）：<动作>: 成功/失败 - <耗时>s。
+func statusLine(r ssh.Result, mode cli.Mode) string {
+	status := "失败"
+	if r.Verdict == verdict.Success {
+		status = "成功"
+	}
+	return fmt.Sprintf("%s: %s - %.3fs", ActionName(mode), status, r.ExecCostTime)
+}
+
 // ResultLine 单条结果的明细文本（对位旧 format_result_line）。
 // 字段顺序（用户 2026-09-15 裁定）：连接 → 执行/错误 → 分类 → output 内容 → 分隔线。
 // 分类提到执行下面（一眼看出结果定性），output 原文放最下面（长文本不夹在状态行中间）。
@@ -91,11 +100,7 @@ func ResultLine(r ssh.Result, mode cli.Mode, answers []ssh.Answer, category stri
 	lines = append(lines, fmt.Sprintf("【%s】 %s", r.IP, FormatConnStatus(r.ConnectSuccess, r.ConnectCostTime)))
 
 	if r.ConnectSuccess {
-		status := "失败"
-		if r.Verdict == verdict.Success {
-			status = "成功"
-		}
-		lines = append(lines, fmt.Sprintf("【%s】 %s: %s - %.3fs", r.IP, ActionName(mode), status, r.ExecCostTime))
+		lines = append(lines, fmt.Sprintf("【%s】 %s", r.IP, statusLine(r, mode)))
 		// 连上了却没跑成：失败详情也要在明细里看得到（报错原文 / 服务端提示 / 未送出的代填）。
 		// 这行原先只在连接失败时才有，这类结果的细节只能事后翻 results.xlsx（D35）。
 		if r.Verdict != verdict.Success {

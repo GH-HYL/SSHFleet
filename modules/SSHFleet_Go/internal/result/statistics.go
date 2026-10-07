@@ -29,6 +29,8 @@ type Stats struct {
 	Verify               string // 结果数与节点数一致时「通过」，否则「异常」
 	SuccessCounts        int
 	FailCounts           int
+	ConnectSuccessCounts int
+	ConnectFailCounts    int
 	SortedFailCategories []CategoryCount
 	SuccessCategory      string
 	SuccessIPsCount      int
@@ -63,6 +65,12 @@ func Statistics(items []ssh.Result, nodes *nodelist.Nodes, a *cli.Args, start, s
 
 	counts := map[string]int{}
 	for _, r := range items {
+		// 连接成败也在这里一并算：主干收尾行的四个数都读统计，各处不再自己数一遍。
+		if r.ConnectSuccess {
+			stats.ConnectSuccessCounts++
+		} else {
+			stats.ConnectFailCounts++
+		}
 		category := r.Category
 		if r.Verdict == verdict.Success {
 			stats.SuccessCounts++
