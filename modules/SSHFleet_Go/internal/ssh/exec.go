@@ -63,7 +63,7 @@ func (c *Client) connectFor(ctx context.Context, result *Result) bool {
 // 旧实现是 select + time.After 建一个不会被取消的 timer）。
 //
 // 只写事实字段，不写结论（成败与分类由结果判定产生）：退出码进 CommandExitCode
-//（目的那条命令，D33），结果退出码 ExitCode 一个字都不写。
+// （目的那条命令，D33），结果退出码 ExitCode 一个字都不写。
 func (c *Client) RunCommand(ctx context.Context, command, stdin string, seq int) *Result {
 	result := c.newResult(seq)
 	defer c.captureBanner(result) // 服务端提示无条件写独立字段（D34）

@@ -8,8 +8,8 @@ import (
 
 	"sshfleet/internal/cli"
 	"sshfleet/internal/result"
-	"sshfleet/internal/verdict"
 	"sshfleet/internal/ssh"
+	"sshfleet/internal/verdict"
 )
 
 // 单条结果明细的字段顺序（用户 2026-09-15 裁定）：

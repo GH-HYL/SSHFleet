@@ -142,7 +142,7 @@ func TestReporterConnectFailure(t *testing.T) {
 
 	res := ssh.Result{
 		Seq: 0, IP: "10.0.0.2", ConnectSuccess: false, Verdict: verdict.Other,
-		Category: "dial tcp 10.0.0.2:22: connect: connection refused",
+		Category:        "dial tcp 10.0.0.2:22: connect: connection refused",
 		ConnectCostTime: 0.5,
 		Error:           ptr("dial tcp 10.0.0.2:22: connect: connection refused"),
 	}

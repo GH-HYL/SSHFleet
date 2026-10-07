@@ -147,7 +147,7 @@ func TestPasswdMatcherMatchOptions(t *testing.T) {
 // 喂进去的凭据要从采集输出里抹掉：远端回显关闭的时机不由我们定（实测漏过一次）。
 //
 // 语料一律用**假口令**：本文件会随公开仓库一起走，绝不写任何真实凭据
-//（2026-09-30：此前这里误用了真实口令当样例，已换掉）。
+// （2026-09-30：此前这里误用了真实口令当样例，已换掉）。
 func TestScrubPasswdSecrets(t *testing.T) {
 	text := "WARNING: Your password has expired.\nOldP@ssw0rd\npasswd：已成功更新密码\n"
 	got := scrubPasswdSecrets(text, "OldP@ssw0rd", "NewP@ssw0rd")

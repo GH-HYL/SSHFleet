@@ -81,7 +81,7 @@ func BuildCommand(command, scriptBody, scriptName, interpreter string, noShell, 
 	return "sh -c " + shellQuote(innerCommand(interpreter, asRoot)), command
 }
 
-// escapeSingleQuotes 把一段文本里的单引号转义成 '\''。
+// escapeSingleQuotes 把一段文本里的单引号转义成 '\”。
 //
 // 转义规则全工具只此一份：shellQuote（整包成单引号）与 sftp.escapeShellArg
 // （嵌入既有单引号对）都调它。两个函数仍然分开——一个整包、一个嵌入，语义不同；
