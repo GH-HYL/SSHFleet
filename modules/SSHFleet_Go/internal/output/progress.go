@@ -25,6 +25,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"sshfleet/internal/batch"
+	"sshfleet/internal/cli"
 	"sshfleet/internal/common"
 )
 
@@ -118,7 +119,7 @@ type nodeView struct {
 }
 
 type progressModel struct {
-	mode  string
+	mode  cli.Mode
 	total int
 	start time.Time
 
@@ -148,7 +149,7 @@ type finalMsg struct{}
 
 // newProgressModel 建界面模型。start 由调用方给定（主干传 execStart），
 // 与统计块的总耗时同源。
-func newProgressModel(mode string, total int, start time.Time) progressModel {
+func newProgressModel(mode cli.Mode, total int, start time.Time) progressModel {
 	return progressModel{
 		mode:        mode,
 		total:       total,
@@ -340,7 +341,8 @@ func (m progressModel) View() string { return m.render() + "\n" }
 
 // render 界面正文（不含上面那个替死换行；测试直接断言它）。
 func (m progressModel) render() string {
-	if m.mode == "upload" || m.mode == "download" {
+	// 传输类走逐节点进度视图，其余（命令 / 脚本 / 改密）走单行到位视图。
+	if m.mode.Info().Transfer {
 		return m.transferView()
 	}
 	return m.commandView()
@@ -357,10 +359,8 @@ func (m progressModel) commandView() string {
 
 // transferView 传输模式：总进度 + 节点进度 + 分隔线 + 逐节点条。
 func (m progressModel) transferView() string {
-	label := "上传进度"
-	if m.mode == "download" {
-		label = "下载进度"
-	}
+	// 标题 = 动作名（上传 / 下载）+ 进度
+	label := m.mode.Info().ActionName + "进度"
 
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s%s  %s  %s  %s/%s\n",

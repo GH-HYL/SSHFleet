@@ -101,18 +101,21 @@ func buildInfoTable(args *cli.Args, nodes *nodelist.Nodes, allParallel bool) [][
 		identity = "root"
 	}
 	t := [][2]string{{"执行身份", identity}}
-	switch {
-	case args.Command != "":
-		t = append(t, [2]string{"执行模式", "命令模式"}, [2]string{"执行命令", args.Command}, [2]string{"", ""})
-	case args.Script != "":
-		t = append(t, [2]string{"执行模式", "脚本模式"}, [2]string{"脚本路径", args.Script}, [2]string{"", ""})
-	case args.Upload != "":
-		t = append(t, [2]string{"执行模式", "上传模式"}, [2]string{"本地路径", args.Upload}, [2]string{"远程路径", args.Path}, [2]string{"", ""})
-	case args.Download != "":
-		t = append(t, [2]string{"执行模式", "下载模式"}, [2]string{"远程路径", args.Download}, [2]string{"本地路径", args.Path}, [2]string{"", ""})
-	case args.ChangePassword != "":
+	// 「执行模式」这一行的值取自模式名字表；其下的命令 / 路径 / 新密码是各模式自己的内容，
+	// 仍按模式分派——那是结构性差异，不是叫法。
+	modeLabel := [2]string{"执行模式", args.ModeName().Info().ScreenLabel}
+	switch args.ModeName() {
+	case cli.ModeCommand:
+		t = append(t, modeLabel, [2]string{"执行命令", args.Command}, [2]string{"", ""})
+	case cli.ModeScript:
+		t = append(t, modeLabel, [2]string{"脚本路径", args.Script}, [2]string{"", ""})
+	case cli.ModeUpload:
+		t = append(t, modeLabel, [2]string{"本地路径", args.Upload}, [2]string{"远程路径", args.Path}, [2]string{"", ""})
+	case cli.ModeDownload:
+		t = append(t, modeLabel, [2]string{"远程路径", args.Download}, [2]string{"本地路径", args.Path}, [2]string{"", ""})
+	case cli.ModePasswd:
 		// 新密码是明确知道身份的凭据：按下确认之前看得见形态，但只看得到脱敏形态
-		t = append(t, [2]string{"执行模式", "改密模式"}, [2]string{"新密码", common.MaskSecret(args.ChangePassword)}, [2]string{"", ""})
+		t = append(t, modeLabel, [2]string{"新密码", common.MaskSecret(args.ChangePassword)}, [2]string{"", ""})
 	}
 	t = append(t, answerRows(args)...)
 	t = append(t,
@@ -125,16 +128,9 @@ func buildInfoTable(args *cli.Args, nodes *nodelist.Nodes, allParallel bool) [][
 		t = append(t, [2]string{"连接超时", fmt.Sprintf("%ds", args.ConnectTimeout)})
 	}
 	if args.Timeout != 0 {
-		// 措辞按模式走；改密有自己的名字——它的 -t 取自 timeout_execute，
-		// 但用户看的是「这次改密等多久」，写成「执行超时」会让他以为在跑命令。
-		switch args.ModeName() {
-		case cli.ModeCommand, cli.ModeScript:
-			t = append(t, [2]string{"执行超时", fmt.Sprintf("%ds", args.Timeout)})
-		case cli.ModeUpload, cli.ModeDownload:
-			t = append(t, [2]string{"传输超时", fmt.Sprintf("%ds", args.Timeout)})
-		case cli.ModePasswd:
-			t = append(t, [2]string{"改密超时", fmt.Sprintf("%ds", args.Timeout)})
-		}
+		// 措辞取自名字表（执行超时 / 传输超时 / 改密超时）。改密虽走 timeout_execute 的默认值，
+		// 但用户看的是「这次改密等多久」，名字表里就写着「改密超时」。
+		t = append(t, [2]string{args.ModeName().Info().TimeoutLabel, fmt.Sprintf("%ds", args.Timeout)})
 	}
 	if args.Remark != "" {
 		t = append(t, [2]string{"备注", strings.TrimSpace(args.Remark)})

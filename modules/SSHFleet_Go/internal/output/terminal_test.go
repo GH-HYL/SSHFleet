@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"sshfleet/internal/cli"
 	"sshfleet/internal/result"
 	"sshfleet/internal/verdict"
 	"sshfleet/internal/ssh"
@@ -32,7 +33,7 @@ func TestResultLineFieldOrderOnSuccess(t *testing.T) {
 		IP: "[10.0.0.1]", ConnectSuccess: true, Verdict: verdict.Success,
 		ConnectCostTime: 0.01, ExecCostTime: 0.02,
 		Output: "hello world\nsecond line",
-	}, "execute", nil, "执行成功")
+	}, cli.ModeCommand, nil, "执行成功")
 
 	lines := strings.Split(got, "\n")
 	conn := lineIndex(lines, "连接: 成功")
@@ -56,7 +57,7 @@ func TestResultLineFieldOrderOnConnectFailure(t *testing.T) {
 	got := ResultLine(ssh.Result{
 		IP: "[10.0.0.2]", ConnectSuccess: false, ConnectCostTime: 0.01,
 		Error: strPtr("dial tcp: connection refused"),
-	}, "execute", nil, "拒绝网络连接")
+	}, cli.ModeCommand, nil, "拒绝网络连接")
 
 	lines := strings.Split(got, "\n")
 	conn := lineIndex(lines, "连接: 失败")
@@ -88,7 +89,7 @@ func TestResultLinePassesOutputThrough(t *testing.T) {
 		IP: "[10.0.0.1]", ConnectSuccess: true, Verdict: verdict.Success,
 		ConnectCostTime: 0.01, ExecCostTime: 0.02,
 		Output: raw,
-	}, "execute", nil, "执行成功")
+	}, cli.ModeCommand, nil, "执行成功")
 
 	if !strings.Contains(got, raw) {
 		t.Fatalf("output 应原样输出（含行首缩进与中间空行），实际：\n%s", got)
@@ -113,7 +114,7 @@ func TestResultLineRendersMissedAnswers(t *testing.T) {
 		IP: "[10.0.0.1]", ConnectSuccess: true, Category: "触发词未命中",
 		ConnectCostTime: 0.01, ExecCostTime: 6.07, AnswersMissed: []int{1},
 		Output: "name= dept=",
-	}, "execute", answers, "触发词未命中")
+	}, cli.ModeCommand, answers, "触发词未命中")
 
 	if !strings.Contains(got, `错误详情: 未送出的代填：第 1 条（触发词 "Your full name"）`) {
 		t.Fatalf("明细里应带未送出代填的序号与触发词：\n%s", got)
@@ -126,7 +127,7 @@ func TestResultLineRendersMissedAnswers(t *testing.T) {
 	got2 := ResultLine(ssh.Result{
 		IP: "[10.0.0.2]", ConnectSuccess: true, Category: "触发词未命中",
 		AnswersMissed: []int{1, 3},
-	}, "execute", answers, "触发词未命中")
+	}, cli.ModeCommand, answers, "触发词未命中")
 	want := `未送出的代填：第 1 条（触发词 "Your full name"）、第 3 条（触发词 "选哪个包格式"）`
 	if !strings.Contains(got2, want) {
 		t.Fatalf("多条未送出应为 %q，实际：\n%s", want, got2)
@@ -136,7 +137,7 @@ func TestResultLineRendersMissedAnswers(t *testing.T) {
 	got3 := ResultLine(ssh.Result{
 		IP: "[10.0.0.3]", ConnectSuccess: true, Category: "触发词未命中",
 		AnswersMissed: []int{2},
-	}, "execute", answers, "触发词未命中")
+	}, cli.ModeCommand, answers, "触发词未命中")
 	if !strings.Contains(got3, `第 2 条（触发词 "Your dept"、"部门"）`) {
 		t.Fatalf("一条挂多个触发词时应全列：\n%s", got3)
 	}
@@ -144,13 +145,13 @@ func TestResultLineRendersMissedAnswers(t *testing.T) {
 	// 没有未送出的代填就不多这一行（成功行、以及失败但没有代填事实的行）
 	okLine := ResultLine(ssh.Result{
 		IP: "[10.0.0.4]", ConnectSuccess: true, Verdict: verdict.Success,
-	}, "execute", answers, "执行成功")
+	}, cli.ModeCommand, answers, "执行成功")
 	if strings.Contains(okLine, "错误详情") {
 		t.Fatalf("成功行不该出错误详情行：\n%s", okLine)
 	}
 	noAnswer := ResultLine(ssh.Result{
 		IP: "[10.0.0.5]", ConnectSuccess: true, Category: "部分成功", FailedFiles: 1, SuccessFiles: 2,
-	}, "upload", answers, "部分成功")
+	}, cli.ModeUpload, answers, "部分成功")
 	if strings.Contains(noAnswer, "错误详情") {
 		t.Fatalf("没有失败详情可说的行不该出错误详情行：\n%s", noAnswer)
 	}
@@ -161,7 +162,7 @@ func TestResultLineMissedAnswerOutOfRange(t *testing.T) {
 	got := ResultLine(ssh.Result{
 		IP: "[10.0.0.1]", ConnectSuccess: true, Category: "触发词未命中",
 		AnswersMissed: []int{9},
-	}, "execute", []ssh.Answer{{Value: "a", Triggers: []string{"t"}}}, "触发词未命中")
+	}, cli.ModeCommand, []ssh.Answer{{Value: "a", Triggers: []string{"t"}}}, "触发词未命中")
 
 	lines := strings.Split(got, "\n")
 	idx := lineIndex(lines, "错误详情")
