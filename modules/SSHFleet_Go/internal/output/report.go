@@ -79,7 +79,10 @@ func WriteReport(archiveDir string, stats *result.Stats, a *cli.Args, cfg *confi
 	}
 	if a.Timeout != 0 {
 		// 措辞取自名字表（执行超时 / 传输超时 / 改密超时），与参数屏同一处来源。
-		fmt.Fprintf(&b, "  %s： %ds\n", a.ModeName().Info().TimeoutLabel, a.Timeout)
+		// 名字表对「没选定模式」返零值——那就不写这一行（与参数屏同口径）。
+		if label := a.ModeName().Info().TimeoutLabel; label != "" {
+			fmt.Fprintf(&b, "  %s： %ds\n", label, a.Timeout)
+		}
 	}
 
 	b.WriteString("\n【结果统计】\n")

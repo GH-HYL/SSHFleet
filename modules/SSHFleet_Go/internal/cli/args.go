@@ -114,7 +114,8 @@ var allModes = []Mode{ModePasswd, ModeCommand, ModeScript, ModeUpload, ModeDownl
 // 字段只增不改名——它同时是呈现契约（呈现层按字段取值，不再各自比对参数字段）。
 //
 // 为什么收在一处：加一档模式原先要逐处核对 7 个点、手改 4 处（落改密那一档实测 28 文件 / 8 包）。
-// 收齐之后，加一档只改 modeTable 与 allModes 各一行。
+// 收齐之后，**名字部分**只改 modeTable 与 allModes 各一行；各模式「显示哪些字段、构建哪条任务」
+// 仍是结构性差异，要各自加一路（见 ADR-0013 的《2026-10-07 实施记录》）。
 type ModeInfo struct {
 	DirName         string // 归档目录名里的模式段（英文）
 	LogName         string // 执行期日志文案
