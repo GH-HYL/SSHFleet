@@ -36,6 +36,10 @@ const (
 	catExhaustedTimeout = "代填用尽后超时" // 代填全部送出后仍等到超时
 	catPartialSuccess   = "部分成功"    // 传输有成功有失败
 	catPasswdNotExpired = "密码未过期"   // 改密整场没出现过期信号
+	// 外部中断（Ctrl+C / 上级取消）按"中断在哪一步"分两档：连接都没建成的机器
+	// 压根没被执行到，跟"跑到一半被中断"混为一谈会让人以为它跑过。
+	catCanceled        = "任务已取消" // 已连上，命令 / 传输 / 改密跑到中途被中断
+	catConnectCanceled = "建连被取消" // 还在建立连接就被中断（连接慢的机器最容易撞上）
 )
 
 // 判据表里那条按退出码自动给的兜底分类的前缀（配置文件写不了带数字的名字）。
@@ -100,6 +104,20 @@ func Judge(res *ssh.Result, mode cli.Mode, kw *Keywords) {
 			res.Category = catPasswdNotExpired
 			return
 		}
+	}
+
+	// —— 二级之前：外部中断（Ctrl+C / 上级取消）——
+	//
+	// 这是**结构事实**，不看报错文案（与 TimedOut 同口径，见 ssh.endFacts 的说明）。
+	// 排在模式规则之后：中止词（密码过期）那类结论比"被中断"更具体，不该被盖掉；
+	// 排在各模式的成功规则之后：取消本来也走不到成功。传输的「部分成功」同理更具体。
+	if res.Canceled {
+		if res.ConnectSuccess {
+			res.Category = catCanceled
+		} else {
+			res.Category = catConnectCanceled
+		}
+		return
 	}
 
 	// —— 二级：文案查判据表（4.3 选组）——
