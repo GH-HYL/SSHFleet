@@ -239,7 +239,11 @@ func (r *Reporter) logNode(res ssh.Result, category string) {
 	}
 
 	// 二级：执行结果（成败读判定结论；失败行把定论退出码带上——
-	// 「退出码 0 却计入失败」是判定与退出码解绑的活证，照实显示）
+	// 「退出码 0 却计入失败」是判定与退出码解绑的活证，照实显示）。
+	//
+	// 本级只写失败：成功在上面已提前 return，下面整块只有失败行走得到。
+	// 各模式原先还各留了一个「成功」分支，那些行永远印不出来，而且 1d622fb
+	// 那次「改从名字表取词」正是改在了不可达的地方——2026-10-07 一并清掉。
 	if res.ConnectSuccess {
 		switch r.mode {
 		case cli.ModeUpload, cli.ModeDownload:
@@ -253,31 +257,22 @@ func (r *Reporter) logNode(res ssh.Result, category string) {
 				ip, action, res.SuccessFiles, res.TotalFiles, note, common.FormatBytes(res.TotalBytes), res.ExecCostTime))
 		case cli.ModePasswd:
 			// 改密没有"目的命令"，不带退出码（定论退出码对改密恒为 nil）。
-			// 词取自名字表（LogName =「改密」），成功 / 失败两行都不再握字面量。
-			label := r.mode.Info().LogName
-			if res.Verdict == verdict.Success {
-				el.Success(fmt.Sprintf("%s%s成功，耗时 %.3fs", ip, label, res.ExecCostTime))
-			} else {
-				el.Error(fmt.Sprintf("%s%s失败，耗时 %.3fs", ip, label, res.ExecCostTime))
-			}
+			// 词取自名字表（LogName =「改密」）。
+			el.Error(fmt.Sprintf("%s%s失败，耗时 %.3fs", ip, r.mode.Info().LogName, res.ExecCostTime))
 		default:
 			// 命令 / 脚本共用这一路：前缀取自名字表（LogName + ActionName =「命令执行」/「脚本执行」）。
 			// 原先写死「命令」，脚本模式跑完也报「命令」（2026-10-07 修）。
 			//
 			// ModeNone 到不了这里：cli/check.go 的五选一校验在「一个模式都没给」时就报错退出，
-			// 而结果只由真跑过的机器产出。所以 label 为空、会拼出「成功」这种残缺句子的那一格
-			// **印不出来**，是**有意留着、不加守卫**的——要让它「像句话」只能把「命令」这个字面量
-			// 写回来，而那正是本次改动拆掉的东西。2026-10-07 审计就此问过，结论：记录在此、保持现状。
+			// 而结果只由真跑过的机器产出。所以 label 为空、会拼出「失败，退出码 无」这种残缺
+			// 句子的那一格**印不出来**，是**有意留着、不加守卫**的——2026-10-07 审计就此问过，
+			// 结论：记录在此、保持现状。
 			label := r.mode.Info().LogName + r.mode.Info().ActionName
-			if res.Verdict == verdict.Success {
-				el.Success(fmt.Sprintf("%s%s成功，退出码 0，耗时 %.3fs", ip, label, res.ExecCostTime))
-			} else {
-				code := "无"
-				if res.ExitCode != nil {
-					code = fmt.Sprintf("%d", *res.ExitCode)
-				}
-				el.Error(fmt.Sprintf("%s%s失败，退出码 %s，耗时 %.3fs", ip, label, code, res.ExecCostTime))
+			code := "无"
+			if res.ExitCode != nil {
+				code = fmt.Sprintf("%d", *res.ExitCode)
 			}
+			el.Error(fmt.Sprintf("%s%s失败，退出码 %s，耗时 %.3fs", ip, label, code, res.ExecCostTime))
 		}
 	}
 
