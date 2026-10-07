@@ -65,7 +65,7 @@ fatal: Access denied for user sftest2 by PAM account configuration [preauth]
 ## 2026-09-29 修订：提示独立成字段（`ServerBanner`），不再并入 `Error`
 
 本 ADR 的《决定》（追加进 `Result.Error`、不新增字段）被**结果统一重构**推翻
-（`docs/issues/result-verdict/spec.md` D34）。推翻的根由是本轮立的更高一条规矩——
+（`docs/issues/result-verdict/spec-已闭环.md` D34）。推翻的根由是本轮立的更高一条规矩——
 **执行侧只写事实，已写下的值不许再改**：往已写好的 `Error` 里追加内容，正是"改已写的值"。
 
 - `BannerCallback` 接住提示这部分**不变**；变的只是落点：写入独立字段 `Result.ServerBanner`，**无条件写**
