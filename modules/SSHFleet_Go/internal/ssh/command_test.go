@@ -114,6 +114,24 @@ func TestBuildCommandVersionedShellKeepsScriptName(t *testing.T) {
 	}
 }
 
+// zsh 的 source 会把 $0 重置成被 source 的文件名，内层串要先关 FUNCTION_ARGZERO
+// 再 source，名字才保持 -c 参数给的值；bash / dash 无此行为，串里不出现 setopt。
+func TestBuildCommandZshSourceKeepsArgZero(t *testing.T) {
+	cmd, _ := BuildCommand("", "echo hi", "t.sh", "zsh5", false, false)
+	if !strings.Contains(cmd, "setopt no_function_argzero; . /dev/stdin") {
+		t.Fatalf("zsh 的内层串应先关 FUNCTION_ARGZERO 再 source，实际 %q", cmd)
+	}
+	if !strings.Contains(cmd, "t.sh") {
+		t.Fatalf("zsh 也应补回脚本名，实际 %q", cmd)
+	}
+	for _, name := range []string{"bash", "dash", "ksh93"} {
+		cmd, _ := BuildCommand("", "echo hi", "t.sh", name, false, false)
+		if strings.Contains(cmd, "setopt") {
+			t.Fatalf("%s 不该带 zsh 的 setopt，实际 %q", name, cmd)
+		}
+	}
+}
+
 // InterpreterBaseName：解释器名归一的唯一一份剥法，三个判断（-a 范围 / --no-shell
 // 互斥 / $0 家族判定）都从这里认名字。
 func TestInterpreterBaseName(t *testing.T) {
