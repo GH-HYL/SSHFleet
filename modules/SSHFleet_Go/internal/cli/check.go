@@ -6,7 +6,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"unicode/utf8"
 
@@ -35,8 +34,6 @@ func CheckConfigFiles() error {
 	}
 	return nil
 }
-
-var loopKeywordRe = regexp.MustCompile(`^[^a-zA-Z]*([a-zA-Z]+)`)
 
 // CheckArguments 参数合规性检查。23 条校验保持旧版结构与顺序，
 // 错误统一返回给 main 打印。差异见 spec D40（-k 三态）、D29（脚本 CRLF
@@ -119,12 +116,6 @@ func CheckArguments(a *Args) error {
 	if a.Command != "" {
 		if strings.TrimSpace(a.Command) == "" {
 			return fmt.Errorf("-c 参数不能为空，请提供要执行的命令\n提示：-c 后面跟命令原文，例如 -c \"systemctl status sshd\"")
-		}
-		if m := loopKeywordRe.FindStringSubmatch(strings.TrimSpace(a.Command)); m != nil {
-			switch m[1] {
-			case "for", "while", "until", "if", "case":
-				return fmt.Errorf("-c 参数不兼容执行循环的命令，请使用脚本模式执行")
-			}
 		}
 	}
 
