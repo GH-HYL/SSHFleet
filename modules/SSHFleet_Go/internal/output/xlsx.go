@@ -177,11 +177,7 @@ func WriteOutputXlsx(archiveDir string, results *batch.Results, mode cli.Mode, a
 			return err
 		}
 
-		status := "失败"
-		if r.Verdict == verdict.Success {
-			status = "成功"
-		}
-		if err := put(r.IP, fmt.Sprintf("%s: %s - %.3fs", ActionName(mode), status, r.ExecCostTime), ""); err != nil {
+		if err := put(r.IP, statusLine(r, mode), ""); err != nil {
 			return err
 		}
 

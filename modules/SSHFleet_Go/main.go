@@ -400,24 +400,15 @@ func main() {
 	reporter.Stop()
 	logger.Info(fmt.Sprintf("执行期日志已写完，切回工具日志：%s", execLogPath))
 
-	// 汇总本轮连接与成败（写入执行期日志的收尾行）。成败读判定写好的结论。
-	var connOK, connFail, okCount, failCount int
-	for _, r := range execResults.Items {
-		if r.ConnectSuccess {
-			connOK++
-		} else {
-			connFail++
-		}
-		if r.Verdict == verdict.Success {
-			okCount++
-		} else {
-			failCount++
-		}
-	}
+	// ---- 步骤 9：结果统计 + 错误分类 -----------------------------------
+	// 统计先算——纯计算、无副作用，收尾行的四个数直接读它，主干不再自己数一遍
+	//（成功/失败与统计同源，连接成败也由统计一并算）。
+	stats := result.Statistics(execResults.Items, nodes, args, execStart, time.Now())
+
 	// 执行期日志收尾：连接与成败统计合成一行（对位旧引擎的「连接统计」「执行完成」两条，
 	// 正常路径能合并就合并——1000+ 节点时日志要尽量短）。
 	execLog.Info(fmt.Sprintf("执行结束：成功 %d 台，失败 %d 台；连接成功 %d，连接失败 %d",
-		okCount, failCount, connOK, connFail))
+		stats.SuccessCounts, stats.FailCounts, stats.ConnectSuccessCounts, stats.ConnectFailCounts))
 
 	if err != nil {
 		fatal("batch", err)
@@ -426,8 +417,6 @@ func main() {
 		fmt.Println("已收到中断信号，SSHFleet 停止执行（已完成节点的结果已写入日志/输出文件）")
 		logger.Warn("收到中断信号，执行已停止")
 	}
-	// ---- 步骤 9：结果统计 + 错误分类 -----------------------------------
-	stats := result.Statistics(execResults.Items, nodes, args, execStart, time.Now())
 	logger.Success("计算统计结果信息成功")
 	output.PrintStatistics(os.Stdout, stats, errorKeywords, cfg.Enable.ShowCategoryTips)
 
