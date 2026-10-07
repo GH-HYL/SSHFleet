@@ -71,20 +71,6 @@ func persistHint() string {
 		rcPath(), envName, envName, envName, envName, rcPath(), rcPath())
 }
 
-// readPersistedKey 依次查 ~/.zshrc 与 ~/.bashrc，命中即返回；都没有返回空串。
-func readPersistedKey() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ""
-	}
-	for _, rc := range rcFiles {
-		if key := findExportInFile(filepath.Join(home, rc)); key != "" {
-			return key
-		}
-	}
-	return ""
-}
-
 // persistKey 把主密钥写进登录 shell 的 rc 文件（按 $SHELL 选 zsh/bash，D30）：
 // 目标 rc 内的主密钥行收敛为末尾唯一一条；另一侧 rc 文件若**已存在且已含**主密钥行，
 // 一并改写为同一把钥匙（两个 shell 各持不同密钥是同一类分叉，只会在换 shell 后爆发）。

@@ -142,16 +142,6 @@ func readCredentialPEMCore(path string) (string, []CredError) {
 	return text, nil
 }
 
-// ReadPEMRaw 私钥 PEM 原样读取（对位 _read_credential(decode_base64=False)）。
-// 调用方需保证文件已通过 ReadCredentialPEM /  -k 存在性校验。
-func ReadPEMRaw(path string) (string, error) {
-	content, err := os.ReadFile(path)
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(string(content)), nil
-}
-
 // ---- 错误码 → 用户文案（单一事实来源，校验汇总 / 退出指引两条路径共用） ----
 
 // credProblems 错误码列表 → 调用方可直接拼接的短文案列表（每条已含路径），空 = 通过。
