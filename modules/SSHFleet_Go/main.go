@@ -34,7 +34,7 @@ import (
 // 版本号：单一出处（显示在帮助信息首行下方，经 cli.Parse 传入 Usage）。
 // 与 CHANGELOG 顶部当天段落的段头**同一个号**——开段、抬号时在同一次提交里同步改，
 // 两处不一致即为错误。同一天的改动共用一个号，不因改动多而另起号。
-const appVersion = "9.0.2"
+const appVersion = "9.1.0"
 
 // versionWithBuildID 版本号拼上**构建标识**：git 短提交号（仓库内编译时由 go build
 // 自动注入 vcs.revision；工作区有未提交改动时加 -dirty）+ HEAD 提交时间。
@@ -224,7 +224,7 @@ func main() {
 	logger.Success("参数解析成功，解析结果：" + args.Summary())
 
 	// 交互器：全工具唯一的用户交互入口（In/Out 注入 + 非交互标志）
-	in := common.NewInteractor(args.Disinteractive)
+	in := common.NewInteractor(args.Disinteractive, logger)
 
 	// ---- 步骤 4：工具模式分流（keygen / key-status / convert-secret）-----
 	// 独立工具与批量执行解耦，处理完直接退出，不进入后续步骤。
@@ -304,14 +304,18 @@ func main() {
 		logger.Warn(fmt.Sprintf("命中禁止命令，已退出：%s", dangerReport.Matches[0].Content))
 		_ = logger.Close()
 		os.Exit(1)
-	case len(dangerReport.Matches) > 0 && in.Disinteractive:
-		// 非交互模式：非 forbidden 放行，但写入工具日志留痕（spec D35）
-		dangerNote = fmt.Sprintf("非交互模式放行危险命令（最高级别 %s，分类 %s，来源行 %d）：%s",
-			dangerReport.Highest(), dangerReport.Matches[0].RuleName, dangerReport.Matches[0].Line, dangerReport.Matches[0].Content)
-		logger.Warn(dangerNote)
 	case len(dangerReport.Matches) > 0:
-		output.PrintDangerWarning(dangerReport, false)
-		confirmed, cerr := in.Confirm("\n"+colorYellow+"确定继续？"+colorReset, false)
+		// 非 forbidden：交互下打印警告 + 问一句；非交互（--yes）下不打屏，只由 Confirm 留痕放行。
+		if !in.Disinteractive {
+			output.PrintDangerWarning(dangerReport, false)
+		}
+		autoNote := fmt.Sprintf("非交互模式放行危险命令（最高级别 %s，分类 %s，来源行 %d）：%s",
+			dangerReport.Highest(), dangerReport.Matches[0].RuleName, dangerReport.Matches[0].Line, dangerReport.Matches[0].Content)
+		confirmed, cerr := in.Confirm(common.ConfirmReq{
+			Prompt:     "\n" + colorYellow + "确定继续？" + colorReset,
+			DefaultYes: false,
+			Trace:      autoNote, // 非交互（--yes）跳过时由 Confirm 写日志留痕
+		})
 		if cerr != nil {
 			fatal("dangercheck", cerr)
 		}
@@ -324,8 +328,12 @@ func main() {
 			_ = logger.Close()
 			fatal("dangercheck", common.ErrCancelled)
 		}
-		dangerNote = fmt.Sprintf("用户已确认风险继续执行（最高级别 %s）：%s", dangerReport.Highest(), dangerReport.Matches[0].Content)
-		logger.Warn(dangerNote)
+		if in.Disinteractive {
+			dangerNote = autoNote
+		} else {
+			dangerNote = fmt.Sprintf("用户已确认风险继续执行（最高级别 %s）：%s", dangerReport.Highest(), dangerReport.Matches[0].Content)
+			logger.Warn(dangerNote)
+		}
 	}
 	logger.Success("危险关键词内容检查通过")
 

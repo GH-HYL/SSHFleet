@@ -80,9 +80,10 @@ func TestOutputHookAbortWins(t *testing.T) {
 
 // 下发行形态：正文 base64 编入命令行、作内层解释器的 -c 参数，最外层只有一层单引号。
 func TestInteractiveCommandForm(t *testing.T) {
+	const env = "export LC_ALL=C;"
 	enc := base64.StdEncoding.EncodeToString([]byte("who -b"))
-	got := InteractiveCommand(DownlinkSpec{Command: "who -b", Interpreter: "bash"})
-	want := "sh -c 'export LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; bash -c \"$(printf %s " + enc + " | base64 -d)\"'"
+	got := InteractiveCommand(DownlinkSpec{Command: "who -b", Interpreter: "bash", EnvPrefix: env})
+	want := "sh -c '" + env + " bash -c \"$(printf %s " + enc + " | base64 -d)\"'"
 	if got != want {
 		t.Fatalf("下发行形态不对\n实际：%s\n应为：%s", got, want)
 	}

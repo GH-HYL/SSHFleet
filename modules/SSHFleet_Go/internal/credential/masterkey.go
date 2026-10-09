@@ -279,7 +279,7 @@ func GenKey(in *common.Interactor) error {
 		if in.Disinteractive {
 			return fmt.Errorf("检测到已存在主密钥，非交互模式不自动覆盖（覆盖后旧密钥加密的凭据文件将无法解密）。\n如需覆盖：去掉 --yes 后重新执行 --gen-key")
 		}
-		confirmed, err := in.Confirm("是否确认覆盖？", false)
+		confirmed, err := in.Confirm(common.ConfirmReq{Prompt: "是否确认覆盖？", DefaultYes: false})
 		if err != nil {
 			// 对位旧 _confirm_overwrite：EOF 视为「否」，保留原密钥正常返回（不作为取消）
 			fmt.Fprintln(in.Out, "已保留原密钥，未做修改")

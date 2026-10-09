@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 
@@ -34,12 +35,15 @@ type Credential struct {
 	SecretDir   string `toml:"secret_dir"`
 }
 
-// Execution 执行身份与三个超时。
+// Execution 执行身份、远端环境变量与三个超时。
 type Execution struct {
 	Sudo            bool `toml:"sudo"`
 	TimeoutConnect  int  `toml:"timeout_connect"`
 	TimeoutExecute  int  `toml:"timeout_execute"`
 	TimeoutTransfer int  `toml:"timeout_transfer"`
+	// Env 是命令行下发前要在远端导入的环境变量（名字 → 值），空表 = 不导入。
+	// 出厂配置给的是统一 locale / PATH / TERM 几条；拼装见 ssh.ExportPrefix。
+	Env map[string]string `toml:"env"`
 }
 
 // Enable 功能开关。
@@ -178,6 +182,7 @@ func validate(cfg *Config, md toml.MetaData) error {
 		{"credential.key_password", definedStr(md, "credential", "key_password")},
 		{"credential.secret_dir", definedStr(md, "credential", "secret_dir")},
 		{"execution.sudo", definedStr(md, "execution", "sudo")},
+		{"execution.env", definedStr(md, "execution", "env")},
 		{"execution.timeout_connect", definedStr(md, "execution", "timeout_connect")},
 		{"execution.timeout_execute", definedStr(md, "execution", "timeout_execute")},
 		{"execution.timeout_transfer", definedStr(md, "execution", "timeout_transfer")},
@@ -225,8 +230,33 @@ func validate(cfg *Config, md toml.MetaData) error {
 	if cfg.Upload.MediumParallel < 1 {
 		return fmt.Errorf("upload.medium_parallel 取值非法：%d（须为正整数）", cfg.Upload.MediumParallel)
 	}
+	if err := validateEnv(cfg.Execution.Env); err != nil {
+		return err
+	}
 	if err := validateInterpreter(&cfg.Interpreter); err != nil {
 		return err
+	}
+	return nil
+}
+
+// envNameRe 合法 shell 变量名：字母或下划线开头，后接字母 / 数字 / 下划线。
+var envNameRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+// validateEnv 校验 [execution] env 并就地归一：
+//   - 键名必须是合法 shell 变量名——`export` 只认这种名字，写别的（123、A-B）到远端会报
+//     not a valid identifier、变量静默不生效，所以在启动阶段就拦下、点名；
+//   - 空键或空值一律丢弃：空值 = 把这条临时关掉，按「没有这一条键值对」处理。
+func validateEnv(env map[string]string) error {
+	for name, value := range env {
+		if name == "" || value == "" {
+			delete(env, name)
+			continue
+		}
+		if !envNameRe.MatchString(name) {
+			return fmt.Errorf("execution.env 里的 %q 不是合法的环境变量名\n"+
+				"原因：shell 的 export 只认「字母或下划线开头，后接字母、数字、下划线」的名字，写别的到远端会报 not a valid identifier、变量不生效\n"+
+				"提示：改成一个合法名字，例如 MY_VAR", name)
+		}
 	}
 	return nil
 }

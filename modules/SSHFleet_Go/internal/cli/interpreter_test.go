@@ -109,18 +109,12 @@ func TestCheckArgumentsNoShellWithInterpreter(t *testing.T) {
 	}
 }
 
-// -s 与 --no-shell 互斥：no-shell 只对 -c 有意义，脚本没有"原样下发"的形态；
-// 此前加在 -s 上会被静默丢掉、照常执行。
-func TestCheckArgumentsNoShellVsScript(t *testing.T) {
+// -s 与 --no-shell 不再互斥（2026-10-09 作者定）：no-shell 对脚本同样成立——剥掉外壳与环境，
+// 只留解释器自己那条调用，正文照旧走 stdin。这里只确认不再报那条互斥错误。
+func TestCheckArgumentsNoShellWithScript(t *testing.T) {
 	err := CheckArguments(&Args{Script: "x.sh", NoShell: true})
-	if err == nil || !strings.Contains(err.Error(), "-s 不能和 --no-shell") {
-		t.Fatalf("-s + --no-shell 应报互斥，实际：%v", err)
-	}
-
-	// 不带 --no-shell 的脚本不走这条互斥（后续脚本文件检查另算）
-	err = CheckArguments(&Args{Script: "x.sh"})
 	if err != nil && strings.Contains(err.Error(), "--no-shell") {
-		t.Fatalf("不带 --no-shell 不该触发这条互斥：%v", err)
+		t.Fatalf("-s + --no-shell 不该再报互斥，实际：%v", err)
 	}
 }
 

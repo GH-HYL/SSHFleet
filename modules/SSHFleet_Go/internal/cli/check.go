@@ -122,12 +122,6 @@ func CheckArguments(a *Args) error {
 	// -s
 	var scriptText []byte // -a 的长度检查要用同一份正文算下发行，不再读一次文件
 	if a.Script != "" {
-		// 与 -a / --change-password 同口径：冲突的都当场说清，不静默丢掉开关。
-		// --no-shell 是"命令原样下发"，只对 -c 有意义；脚本正文必须由工具送达。
-		if a.NoShell {
-			return fmt.Errorf("-s 不能和 --no-shell 一起用\n" +
-				"--no-shell 只对 -c 有意义（命令原样下发）；脚本正文必须由工具送达（stdin / 命令行），没有\"原样下发\"的形态")
-		}
 		if info, err := os.Stat(a.Script); err == nil && info.IsDir() {
 			return fmt.Errorf("-s 参数指定的路径是目录，不是脚本文件：%s\n提示：请指向一个脚本文件", a.Script)
 		}
