@@ -20,9 +20,10 @@ import (
 //   - TERM=dumb：统一成哑终端，抑制彩色与转义序列。
 //
 // 具体是哪几条、还能加什么，见 config/SSHFleet.conf 与配置手册——本包只负责把配置拼成形。
+// 值怎么落地见 quoteEnvValue：一律双引号包裹，交目标节点在导入时展开。
 //
 // 键名排序 → 同一份配置每次拼出的串一样（日志与 A/B 比对才不会出现无端差异）；
-// 值按需加引号（安全字符裸拼，含空格等才包单引号）→ 拼得干净、落地也安全。
+// 值一律双引号包裹 → 交目标节点在导入时就地展开（见 quoteEnvValue）。
 func ExportPrefix(vars map[string]string) string {
 	if len(vars) == 0 {
 		return ""
@@ -40,7 +41,7 @@ func ExportPrefix(vars map[string]string) string {
 		}
 		b.WriteString(name)
 		b.WriteByte('=')
-		b.WriteString(QuoteForShell(vars[name]))
+		b.WriteString(quoteEnvValue(vars[name]))
 	}
 	b.WriteByte(';')
 	return b.String()
@@ -137,11 +138,30 @@ func shellQuote(s string) string {
 	return "'" + escapeSingleQuotes(s) + "'"
 }
 
+// quoteEnvValue 把环境变量的**值**包成可直接下发的写法：一律双引号包裹，
+// 值里的双引号转义成 \"。只做这一件转义——除此之外一个字符都不动。
+//
+// 为什么不与 QuoteForShell 共用：两者要求**相反**。QuoteForShell 服务的是「打印给人看的
+// 命令行」，对 `$` 必须补引号（不补，用户照抄重跑时 `$HOME` 会被展开成别的东西）；
+// 而这里的值恰恰要交目标节点展开，必须包双引号——双引号拦不住 `$`、`$(…)` 与反引号。
+// 两个函数各自单点，别互相替换。
+//
+// 为什么一律双引号、不留「安全的裸拼」：规则只剩一条（值 = 双引号里的文本），
+// 不必逐条判断；双引号嵌在下发行外层那对单引号里**不需要转义**，日志也不因此变脏。
+//
+// 于是值的其余字符按 shell 双引号语义在目标节点落地：`$VAR`、`${VAR}`、`$(命令)`、
+// 反引号 都会展开或执行，要字面的 `$` 就写 `\$`（`\\` 得到一个 `\`）。
+// 唯一的例外是要命的那个：值以 `\` 结尾时，那个 `\` 会吃掉收尾的引号、整条下发串变成
+// 语法错——这种值在启动期就被 config.validateEnv 拦下，这里不再兜。
+func quoteEnvValue(v string) string {
+	return `"` + strings.ReplaceAll(v, `"`, `\"`) + `"`
+}
+
 // QuoteForShell 把一段**参数原文**还原成等价的命令行写法：需要时以单引号包裹
 // （内部单引号按 '\” 转义），不需要时原样返回。
 //
 // 用途仅限「打印给人看的命令行」——日志与 report.txt 里的执行命令。
-// 不下发、不参与任何解析，故不影响执行行为。
+// 不下发、不参与任何解析，故不影响执行行为；下发那侧有它自己的引号逻辑（见 quoteEnvValue）。
 //
 // 为什么需要它：用户敲的是 `-c 'who -b'`，argv 递过来时引号已被本机 shell 剥掉，
 // 直接平铺打印会变成 `-c who -b`——那是一条会把 `-b` 拆成多余参数的命令，

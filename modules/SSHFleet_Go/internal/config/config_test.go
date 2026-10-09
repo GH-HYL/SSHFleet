@@ -5,7 +5,8 @@ import (
 	"testing"
 )
 
-// validateEnv：键名必须是合法 shell 变量名（挡 123 / A-B）；空键与空值一律丢弃。
+// validateEnv：键名必须是合法 shell 变量名（挡 123 / A-B）；空键与空值一律丢弃；
+// 值不能以奇数个反斜杠结尾（会吃掉下发串的收尾引号）。
 func TestValidateEnv(t *testing.T) {
 	ok := map[string]string{"LC_ALL": "en_US.UTF-8", "PATH": "/bin:/usr/bin", "_X1": "v"}
 	if err := validateEnv(ok); err != nil {
@@ -27,6 +28,18 @@ func TestValidateEnv(t *testing.T) {
 	for _, bad := range []string{"123", "1A", "A-B", "A B", "A.B"} {
 		if err := validateEnv(map[string]string{bad: "v"}); err == nil || !strings.Contains(err.Error(), "不是合法的环境变量名") {
 			t.Fatalf("%q 应被拦下，实际 %v", bad, err)
+		}
+	}
+
+	// 值中间的反斜杠、成对的反斜杠都放行；只有末尾落单的那个会破坏下发串
+	for _, value := range []string{`C:\dir`, `a\\b`, `尾\\`} {
+		if err := validateEnv(map[string]string{"P": value}); err != nil {
+			t.Fatalf("%q 应放行，实际 %v", value, err)
+		}
+	}
+	for _, value := range []string{`尾\`, `尾\\\`} {
+		if err := validateEnv(map[string]string{"P": value}); err == nil || !strings.Contains(err.Error(), "不能以反斜杠结尾") {
+			t.Fatalf("%q 应被拦下，实际 %v", value, err)
 		}
 	}
 }

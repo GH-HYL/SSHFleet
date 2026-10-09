@@ -423,7 +423,7 @@ SSHFleet -f nodes.csv -s deploy.pl
 
 | 怎么跑 | 远端收到的命令行 | 命令正文走哪 |
 | --- | --- | --- |
-| `-c "hostname"` | `sh -c 'export LC_ALL=… LANG=… PATH=…; bash'` | 会话 stdin |
+| `-c "hostname"` | `sh -c 'export LANG="…" LC_ALL="…" PATH="…" TERM="dumb"; bash'` | 会话 stdin |
 | `-s deploy.sh` | `sh -c 'export …; bash -c ". /dev/stdin" "deploy.sh"'` | 会话 stdin |
 | 上面两条加 `-a` | `sh -c 'export …; bash -c "$(printf %s <base64> \| base64 -d)" "deploy.sh"'`（末尾的脚本名只在脚本模式出现） | 编进命令行 |
 | 任意一条加 `--sudo` | 左边各条里的 `bash` 前多一个 `sudo ` | 不变 |
