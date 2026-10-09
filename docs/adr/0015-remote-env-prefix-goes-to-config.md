@@ -1,4 +1,4 @@
-# ADR-0015: 远端环境前缀改为配置驱动（`[execution] env`）
+# ADR-0015: 远端环境前缀改为配置驱动（`[env]`）
 
 - **状态**：已接受
 - **日期**：2026-10-09
@@ -21,10 +21,10 @@ export LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8 PATH=/usr/local/sbin:/usr/local/bin:/
 
 ## 决定
 
-1. 配置新增 **`[execution.env]`**（进阶配置）：一行一个，写成 `名字 = "值"`。出厂给出四条：
+1. 配置新增 **`[env]`**（顶层段，与 `[account]` 等平级）：一行一个，写成 `名字 = "值"`。出厂给出四条：
 
    ```toml
-   [execution.env]
+   [env]
    LANG   = "en_US.UTF-8"
    LC_ALL = "en_US.UTF-8"
    PATH   = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
@@ -50,7 +50,7 @@ export LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8 PATH=/usr/local/sbin:/usr/local/bin:/
 
 - **常量 `envPrefix` 删除**；`ssh.BuildCommand`、`ssh.InteractiveCommand`、`ssh.DescribeCommand` 都改收 `envPrefix`（`DownlinkSpec` 与 `DescribeInput` 各加一格）。
 - **日志与报告的「说明」一行不再枚举变量名**（改为"先导入配置文件里的环境变量"）——具体是哪几个、值是什么，「命令行」那一行已逐字给出。
-- **出厂配置多了 `[execution.env]` 段**；老配置缺这段会在启动时报「配置缺少必填字段」（作者口径：不提供兼容）。
+- **出厂配置多了 `[env]` 段**；老配置缺这段会在启动时报「配置缺少必填字段」（作者口径：不提供兼容；仍写成旧的 `[execution.env]` 会收到一句改名提示，照提示把段名改成 `[env]` 即可）。
 - **`--sudo` 下变量在 `sudo` 之前导入**，能否穿过 sudo 取决于目标机 sudoers（多数发行版保留 `LC_*`；`PATH` 由 sudo 的 `secure_path` 决定）。不带外部依赖就修不了这一点，文档已写明。
 - **`--no-shell` 语义不变**，只是明确"它不读这份配置"。
 
@@ -66,4 +66,4 @@ export LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8 PATH=/usr/local/sbin:/usr/local/bin:/
 
 ## 更新记录
 
-- 2026-10-09：`[execution.env]` 的**值改为交给目标节点展开**（一律双引号下发，`$` 不再被挡）。上文「决定」第 3 条里"值按需加引号（shell 安全字符裸拼，含空格等才包单引号）"、「理由」中"为什么值按需加引号"、「备选方案」中"值一律加引号 → 噪声"那一行，均**不再约束**；替代见 ADR-0016。键名排序、`export` 与 `;` 由工具补、空表 = 不导入这几条仍然有效。
+- 2026-10-09：`[env]` 的**值改为交给目标节点展开**（一律双引号下发，`$` 不再被挡）。上文「决定」第 3 条里"值按需加引号（shell 安全字符裸拼，含空格等才包单引号）"、「理由」中"为什么值按需加引号"、「备选方案」中"值一律加引号 → 噪声"那一行，均**不再约束**；替代见 ADR-0016。键名排序、`export` 与 `;` 由工具补、空表 = 不导入这几条仍然有效。
