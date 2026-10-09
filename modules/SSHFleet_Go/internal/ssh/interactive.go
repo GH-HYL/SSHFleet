@@ -47,21 +47,30 @@ func (a Answer) Describe() string {
 	return value + " → " + strings.Join(a.Triggers, "、")
 }
 
-// InteractiveInput 交互分支的入场值：正文、解释器、身份标记，加代填表、匹配口径与中止词。
-// 与 DescribeInput 同一手法——只收真正需要的几项，不收整份命令行参数。
+// DownlinkSpec 下发行的输入：这次要发的命令行长什么样，全部事实都在这里。
+//
+// 只由参数合规阶段（cli）装配一次，长度检查与执行共用同一个值——量的串就是发的串
+// （ADR-0010 的语义基础）。此前它在两处各装配一遍、靠人记住同时改，2026-10-08 因此
+// 漏过一次（脚本模式少补一个脚本名，闸门放进来一条比它以为的更长的命令）。
+type DownlinkSpec struct {
+	Command     string // 命令模式：命令原文
+	ScriptBody  string // 脚本模式：脚本正文（非空即脚本模式）
+	ScriptName  string // 脚本模式：脚本文件名（下发行把它交回去当 $0，见 scriptNameArg）
+	Interpreter string // 解释器：命令模式是命令解释器，脚本模式是脚本解释器
+	AsRoot      bool   // -m sudo
+}
+
+// InteractiveInput 交互分支的执行期入场值：代填怎么喂、什么时候中止。
+// 下发行的输入不在这里——那是 DownlinkSpec，在参数合规阶段就算好了。
 type InteractiveInput struct {
-	Command       string   // 命令模式：命令原文
-	ScriptBody    string   // 脚本模式：脚本正文（非空即脚本模式）
-	ScriptName    string   // 脚本模式：脚本文件名（下发行把它交回去当 $0，见 scriptNameArg）
-	Interpreter   string   // 解释器：命令模式是命令解释器，脚本模式是脚本解释器
-	AsRoot        bool     // -m sudo
 	Answers       []Answer // 代填表（顺序即命令行给出顺序）
 	Match         MatchOptions
 	AbortKeywords []string // 中止词：关键词取判据文件「密码过期」分类
 }
 
 // InteractiveCommand 拼交互分支的下发行：正文 base64 编入命令行，远端 base64 -d 后
-// 作内层解释器的「程序文本参数」。长度检查与实际执行都调它，不两处各拼一份。
+// 作内层解释器的「程序文本参数」。**全场只在参数合规检查阶段调一次**，结果存进
+// Args.Downlink，长度检查、日志与实际执行读的都是那个值——不两处各拼一份。
 //
 // 「程序文本参数」各解释器不同（shell / python 是 -c，perl / ruby / node / lua 是 -e，
 // php 是 -r），由 ProgramTextArg 按解释器取；表外的解释器在参数合规检查阶段已被拦下，
@@ -73,20 +82,20 @@ type InteractiveInput struct {
 // 为什么不走 stdin：一次会话只有一条 stdin，代填要独占它；两者共用时远端 read 会吃掉
 // 脚本体自己的下一行，后半段静默消失且不报错（实测 F4/F5）。为什么不落盘：目标机
 // 磁盘满是常态，落 /tmp 会因磁盘失败（ADR-0010）。
-func InteractiveCommand(in InteractiveInput) string {
-	body := in.Command
-	if in.ScriptBody != "" {
-		body = in.ScriptBody
+func InteractiveCommand(spec DownlinkSpec) string {
+	body := spec.Command
+	if spec.ScriptBody != "" {
+		body = spec.ScriptBody
 	}
 	encoded := base64.StdEncoding.EncodeToString([]byte(body))
-	programArg, ok := ProgramTextArg(in.Interpreter)
+	programArg, ok := ProgramTextArg(spec.Interpreter)
 	if !ok {
 		programArg = "-c" // 合规检查已拦下表外的解释器，这里兜底，不该发生
 	}
-	inner := innerCommand(in.Interpreter, in.AsRoot) + " " + programArg +
+	inner := innerCommand(spec.Interpreter, spec.AsRoot) + " " + programArg +
 		` "$(printf %s ` + encoded + ` | base64 -d)"`
-	if in.ScriptBody != "" { // 命令模式没有脚本文件，不补名字
-		inner += scriptNameArg(in.Interpreter, in.ScriptName)
+	if spec.ScriptBody != "" { // 命令模式没有脚本文件，不补名字
+		inner += scriptNameArg(spec.Interpreter, spec.ScriptName)
 	}
 	return "sh -c " + shellQuote(inner)
 }
@@ -103,10 +112,9 @@ func ScriptBodyOf(data []byte) string {
 // DescribeInteractiveInput DescribeInteractive 的入参：只收打印真正需要的几项。
 type DescribeInteractiveInput struct {
 	Command    string // 命令模式：命令原文
-	ScriptPath string // 脚本模式：脚本文件路径
-	ScriptBody string // 脚本模式：脚本正文（非空即判定为脚本模式）
+	ScriptPath string // 脚本模式：脚本文件路径（非空即脚本模式）
 	Answers    int    // 代填条数
-	Downlink   string // 下发行（由 InteractiveCommand 单点生成）
+	Downlink   string // 下发行（参数合规阶段经 InteractiveCommand 生成一次）
 }
 
 // DescribeInteractive 交代交互分支「交给 SSH 执行的是什么」——供日志打印，不参与下发。
@@ -116,7 +124,7 @@ type DescribeInteractiveInput struct {
 func DescribeInteractive(a DescribeInteractiveInput) string {
 	const head = "交给 SSH 执行：\n"
 	tail := "  最终命令： " + a.Downlink
-	if a.ScriptBody != "" {
+	if a.ScriptPath != "" {
 		return head +
 			"  原始脚本： " + a.ScriptPath + "（正文经 base64 编入命令行，不落盘）\n" +
 			"  处理方式： 会话 stdin 整条让给代填（" + strconv.Itoa(a.Answers) + " 条）\n" +
@@ -130,6 +138,8 @@ func DescribeInteractive(a DescribeInteractiveInput) string {
 }
 
 // RunInteractive 执行命令/脚本，并按代填表自动回应远端的索要输入。
+// downlink 是参数合规阶段拼好的下发行（Args.Downlink），这里不再自己拼——
+// 长度检查量的串与这里发出去的串因此是同一个值（ADR-0010）。
 //
 // 与 RunCommand 复用同一套收尾：newResult / connectFor / captureBanner / lockedBuffer /
 // trimOuterBlankLines / extractExitCode；超时与中断的契约也照抄（超时返回
@@ -138,7 +148,7 @@ func DescribeInteractive(a DescribeInteractiveInput) string {
 // 只写事实字段，不写结论：未命中进 AnswersMissed、中止词原文进 AbortLine、
 // 表已空仍超时置 AnswersExhausted——成败与分类由结果判定产生，这里不再抹退出码、
 // 不再拼"触发词未命中：…"之类的结论文案。
-func (c *Client) RunInteractive(ctx context.Context, in InteractiveInput, seq int) *Result {
+func (c *Client) RunInteractive(ctx context.Context, in InteractiveInput, downlink string, seq int) *Result {
 	result := c.newResult(seq)
 	defer c.captureBanner(result)
 
@@ -182,7 +192,7 @@ func (c *Client) RunInteractive(ctx context.Context, in InteractiveInput, seq in
 	}()
 
 	execStart := time.Now()
-	outcome := c.runInteractiveSession(ctx, session, hook, send, InteractiveCommand(in))
+	outcome := c.runInteractiveSession(ctx, session, hook, send, downlink)
 	result.ExecCostTime = time.Since(execStart).Seconds()
 	close(send)
 	hook.Flush()

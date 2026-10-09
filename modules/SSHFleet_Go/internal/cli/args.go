@@ -58,6 +58,10 @@ type Args struct {
 	AnswerFile  string
 	Match       ssh.MatchOptions // [interactive] 的匹配口径：管触发词与中止词
 	Interpreter string           // 本次执行用的解释器（配置推导；-c/-s 模式才有值）
+	// Downlink 是 -a 交互分支的下发行（正文经 base64 编入命令行的那条）。与 Interpreter
+	// 同一口径：参数合规检查阶段算好一次，执行侧直接取用，不再自己拼——长度检查量的串
+	// 与实际发出去的串因此是同一个值（ADR-0010）。非 -a 运行为空串。
+	Downlink string
 
 	// --sudo / --no-sudo 是否在命令行出现：互斥判定与「密钥管理命令不与批量参数同给」都要用
 	sudoFlag, noSudoFlag bool

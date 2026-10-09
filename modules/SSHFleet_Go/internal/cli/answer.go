@@ -179,8 +179,10 @@ func validateAnswers(answers []ssh.Answer, opts ssh.MatchOptions) error {
 
 // checkAnswerLength 长度检查：判据是最终下发行的字节数，仅 -a 运行执行——
 // 普通路径维持 stdin 交付、没有长度上限。超限在本地拦下退出，不放到远端执行时才报错。
+// 下发行在这里算好一次、存进 Args.Downlink，执行侧直接取用，不再自己拼（ADR-0010）。
 func checkAnswerLength(a *Args, scriptText []byte) error {
-	line := ssh.InteractiveCommand(answerInputOf(a, scriptText))
+	line := ssh.InteractiveCommand(downlinkSpecOf(a, scriptText))
+	a.Downlink = line
 	if len(line) <= answerLimit {
 		return nil
 	}
@@ -192,20 +194,19 @@ func checkAnswerLength(a *Args, scriptText []byte) error {
 		"提示：长度受工具限制，请核减脚本内容", body, len(line), answerLimit)
 }
 
-// answerInputOf 由命令行参数拼交互分支的入场值（正文取自脚本文件内容）。
-// 材料（正文 · 解释器 · 脚本名）走 ScriptMaterialOf / scriptName 同一套来源，
-// 与 batch 侧拼的是同一份：量的串 = 实际发的串。
-func answerInputOf(a *Args, scriptText []byte) ssh.InteractiveInput {
-	in := ssh.InteractiveInput{
+// downlinkSpecOf 装配下发行的输入（脚本模式的正文取自脚本文件内容）——**全场唯一一装配点**。
+// 长度检查与执行读的都是由它拼成的那一条：量的串 = 实际发的串（ADR-0010）。
+//
+// 不收代填表与匹配口径：它们不参与下发行的拼装，只在执行期用（见 ssh.InteractiveInput）。
+func downlinkSpecOf(a *Args, scriptText []byte) ssh.DownlinkSpec {
+	spec := ssh.DownlinkSpec{
 		Command:     a.Command,
 		Interpreter: a.Interpreter,
 		AsRoot:      a.Sudo,
-		Answers:     a.Answers,
-		Match:       a.Match,
 	}
 	if a.Script != "" {
-		in.ScriptBody = ScriptMaterialOf(a, scriptText).Body
-		in.ScriptName = filepath.Base(a.Script)
+		spec.ScriptBody = ScriptMaterialOf(a, scriptText).Body
+		spec.ScriptName = filepath.Base(a.Script)
 	}
-	return in
+	return spec
 }
