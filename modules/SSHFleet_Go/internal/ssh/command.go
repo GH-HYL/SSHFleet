@@ -230,14 +230,14 @@ func DescribeCommand(a DescribeInput) string {
 		return "交给 SSH 执行：\n" +
 			"  命令行： " + downLine + "\n" +
 			"  stdin：  脚本 " + a.ScriptPath + " 的内容（" + a.Interpreter + " 解释）\n" +
-			"  说明：   " + envNote(hasEnv) + "以 " + interpreterWho(a.AsRoot) + " 执行 stdin 送来的脚本"
+			"  说明：   " + envNote(hasEnv) + scriptWho(a.AsRoot) + " stdin 送来的脚本"
 	}
 
 	if a.Command != "" {
 		return "交给 SSH 执行：\n" +
 			"  命令行： " + downLine + "\n" +
 			"  stdin：  " + a.Command + "\n" +
-			"  说明：   " + envNote(hasEnv) + "把 stdin 送来的命令交给 " + shellWho(a.Interpreter, a.AsRoot) + " 执行"
+			"  说明：   " + envNote(hasEnv) + "把 stdin 送来的命令" + commandWho(a.Interpreter, a.AsRoot)
 	}
 	return ""
 }
@@ -251,20 +251,24 @@ func envNote(hasEnv bool) string {
 	return "未配置环境变量，直接"
 }
 
-// shellWho 执行命令的解释器（含提权说明）。
-func shellWho(interpreter string, asRoot bool) string {
+// commandWho 命令模式「说明」行的谓语：`…命令交给 <身份的解释器>执行`。
+//
+// 这里连「交给」「执行」一起给出，是为了**空格**：空格只留在中文与西文交界处
+// （`的 bash`、`bash 执行`），中文之间不加。此前把这两个字固定拼在调用方，root 分支
+// 就拼出 `（sudo） 执行`、脚本分支拼出 `身份 执行`——一个多余的空格（2026-10-09 订正）。
+func commandWho(interpreter string, asRoot bool) string {
 	if asRoot {
-		return "root 身份的 " + interpreter + "（sudo）"
+		return "交给 root 身份的 " + interpreter + "（sudo）执行"
 	}
-	return "登录用户的 " + interpreter
+	return "交给登录用户的 " + interpreter + " 执行"
 }
 
-// interpreterWho 执行脚本的解释器（含提权说明）。
-func interpreterWho(asRoot bool) string {
+// scriptWho 脚本模式「说明」行的谓语：`…以 <身份>执行 stdin 送来的脚本`。空格的取舍同 commandWho。
+func scriptWho(asRoot bool) string {
 	if asRoot {
-		return "root 身份"
+		return "以 root 身份执行"
 	}
-	return "登录用户身份"
+	return "以登录用户身份执行"
 }
 
 // innerCommand 拼外壳的内层命令（env 前缀 + [sudo ]解释器）。

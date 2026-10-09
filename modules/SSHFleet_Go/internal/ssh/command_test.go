@@ -304,7 +304,7 @@ func TestDescribeCommandCommandMode(t *testing.T) {
 		"命令行： sh -c '" + env + " bash'",
 		"stdin：  who -b",
 		"配置文件里的环境变量",
-		"登录用户的 bash",
+		"交给登录用户的 bash 执行", // 中文之间不留空格，西文两侧留
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("应有 %q，实际：\n%s", want, text)
@@ -327,6 +327,10 @@ func TestDescribeCommandSudo(t *testing.T) {
 	}
 	if !strings.Contains(text, "root 身份的 bash（sudo）") {
 		t.Fatalf("应点明 root 身份，实际：\n%s", text)
+	}
+	// 中文之间不留空格：是 `（sudo）执行`，不是 `（sudo） 执行`
+	if !strings.Contains(text, "（sudo）执行") {
+		t.Fatalf("括号后不该多一个空格，实际：\n%s", text)
 	}
 }
 
@@ -360,7 +364,7 @@ func TestDescribeCommandScriptMode(t *testing.T) {
 		"交给 SSH 执行",
 		"sh -c '" + env + " sudo bash'",
 		"stdin：  脚本 /x/t.sh 的内容（bash 解释）",
-		"root 身份",
+		"以 root 身份执行", // 中文之间不留空格
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("应有 %q，实际：\n%s", want, text)
