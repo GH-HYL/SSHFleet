@@ -200,7 +200,7 @@ func absoluteOrSelf(p string) string {
 func archiveDirName(a *cli.Args) (string, error) {
 	dirName := a.ModeName().Info().DirName
 	if dirName == "" {
-		dirName = "unknown" // 防御：参数合规检查已保证五者必有其一
+		dirName = "unknown" // 防御：选项/参数合规检查已保证五者必有其一
 	}
 	name := fmt.Sprintf("%s_%s", time.Now().Format("2006-01-02_15-04-05"), dirName)
 	if remark := strings.TrimSpace(a.Remark); remark != "" {

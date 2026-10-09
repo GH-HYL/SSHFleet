@@ -14,7 +14,7 @@ type MatchOptions struct {
 
 // ValidateKeywords 按下达口径预编译关键词：正则模式下语法非法即报错。
 //
-// 在参数合规检查阶段调用——非法正则在本地就拦下，不留到运行期静默不匹配
+// 在选项/参数合规检查阶段调用——非法正则在本地就拦下，不留到运行期静默不匹配
 // （那时用户只会看到「触发词未命中」，而真原因是触发词自己写错了）。
 func ValidateKeywords(keywords []string, opts MatchOptions) error {
 	if !opts.Regex {
