@@ -136,7 +136,7 @@ func Run(ctx context.Context, a *cli.Args, cfg *config.Config, nodes *nodelist.N
 		case t.passwd != nil:
 			res = client.RunPasswdChange(ctx, *t.passwd, t.seq)
 		case t.interactive != nil:
-			res = client.RunInteractive(ctx, *t.interactive, t.seq)
+			res = client.RunInteractive(ctx, *t.interactive, t.command, t.seq)
 		default:
 			res = client.RunCommand(ctx, t.command, t.stdin, t.seq)
 		}
@@ -225,21 +225,21 @@ func buildTasks(a *cli.Args, nodes *nodelist.Nodes, prompts *ssh.PasswdPrompts, 
 		name := scriptName(a)
 		if len(a.Answers) > 0 {
 			// 交互分支：正文改经命令行承载，会话 stdin 整条让给代填（ADR-0010）。
-			// 下发行在这里生成一次，日志与实际执行共用；长短由参数合规阶段用同一个
-			// 构造函数算过，这里不再重算。
+			// 下发行由参数合规阶段拼好存进 Args.Downlink（那里要拿它做长度检查），
+			// 这里直接取用——量的串、日志里那条、实际发出去那条是同一个值，不再重拼。
+			if a.Downlink == "" {
+				return nil, nil, fmt.Errorf("没有为这次交互执行拼出下发行\n" +
+					"原因：参数合规检查阶段未产出 Args.Downlink\n" +
+					"提示：这是内部错误，请把本次命令反馈给作者")
+			}
+			// 执行期入场值只剩三样：代填表、匹配口径、中止词。
 			in := ssh.InteractiveInput{
-				Command:       a.Command,
-				ScriptBody:    body,
-				ScriptName:    name,
-				Interpreter:   interpreter,
-				AsRoot:        a.Sudo,
 				Answers:       a.Answers,
 				Match:         a.Match,
 				AbortKeywords: expiredKeywords,
 			}
-			command := ssh.InteractiveCommand(in)
 			for i, node := range nodes.Items {
-				tasks = append(tasks, &task{seq: i, node: node, command: command, interactive: &in})
+				tasks = append(tasks, &task{seq: i, node: node, command: a.Downlink, interactive: &in})
 			}
 			break
 		}
@@ -264,7 +264,6 @@ func commandDescription(a *cli.Args, tasks []*task) []string {
 		return indentLines(ssh.DescribeInteractive(ssh.DescribeInteractiveInput{
 			Command:    a.Command,
 			ScriptPath: a.Script,
-			ScriptBody: t.interactive.ScriptBody,
 			Answers:    len(t.interactive.Answers),
 			Downlink:   t.command,
 		}))

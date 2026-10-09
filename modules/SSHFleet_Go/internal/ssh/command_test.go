@@ -363,7 +363,7 @@ func TestProgramTextArg(t *testing.T) {
 
 // 程序文本参数不能写死 -c：perl 这类要用 -e 启动。
 func TestInteractiveCommandUsesProgramArg(t *testing.T) {
-	got := InteractiveCommand(InteractiveInput{Command: "print 1", Interpreter: "perl"})
+	got := InteractiveCommand(DownlinkSpec{Command: "print 1", Interpreter: "perl"})
 	if !strings.Contains(got, "perl -e ") {
 		t.Fatalf("perl 应用 -e 启动程序文本，实际：%s", got)
 	}
