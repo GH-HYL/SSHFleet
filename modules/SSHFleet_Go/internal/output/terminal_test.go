@@ -176,16 +176,17 @@ func TestResultLineMissedAnswerOutOfRange(t *testing.T) {
 
 // 「提示：」块（2026-09-16）：内容取自配置文件里各分类的 tip 字段；
 // 只有「执行失败(退出码N)」由工具按退出码补含义（分类名带数字，配置里写不了）。
+// 退出码从统计给的字段读（CategoryCount.ExitCode），不从分类名里解（2026-10-09）。
 func TestCategoryTipLines(t *testing.T) {
 	kw, err := verdict.LoadKeywords(filepath.Join("..", "..", "config", "keywords_error.conf"))
 	if err != nil {
 		t.Fatalf("关键词文件应可加载: %v", err)
 	}
 	cats := []result.CategoryCount{
-		{Category: "连接被断开", Count: 2},      // 配置里写了 tip
-		{Category: "这个分类不在配置里", Count: 1},  // 查不到 tip → 不出现
-		{Category: "执行失败(退出码1)", Count: 1}, // 内置说明 + 已知退出码含义
-		{Category: "执行失败(退出码3)", Count: 1}, // 内置说明 + 未知退出码（无含义）
+		{Category: "连接被断开", Count: 2},                           // 配置里写了 tip
+		{Category: "这个分类不在配置里", Count: 1},                       // 查不到 tip → 不出现
+		{Category: "执行失败(退出码1)", Count: 1, ExitCode: intPtr(1)}, // 内置说明 + 已知退出码含义
+		{Category: "执行失败(退出码3)", Count: 1, ExitCode: intPtr(3)}, // 内置说明 + 未知退出码（无含义）
 	}
 	lines := categoryTipLines(cats, kw)
 
@@ -224,7 +225,7 @@ func TestPrintStatisticsTipSwitch(t *testing.T) {
 		NodesTotal: 1, ResultsTotal: 1, Verify: "通过", FailCounts: 1,
 		SortedFailCategories: []result.CategoryCount{
 			{Category: "连接被断开", Count: 1},
-			{Category: "执行失败(退出码1)", Count: 1},
+			{Category: "执行失败(退出码1)", Count: 1, ExitCode: intPtr(1)},
 		},
 	}
 

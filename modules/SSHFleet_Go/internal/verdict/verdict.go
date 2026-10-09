@@ -162,6 +162,14 @@ func classifyByKeywords(kw *Keywords, src, output string) string {
 	return Unclassified
 }
 
+// IsExitCodeCategory 分类名是不是「按退出码自动给的兜底分类」（执行失败(退出码N)）。
+//
+// 这个分类名由 Judge 产出（见上面那个分支），产出时退出码同时也写进了 Result.ExitCode——
+// 所以消费方要那个数字，读字段即可，不必再拿正则从名字里解回来（2026-10-09）。
+func IsExitCodeCategory(category string) bool {
+	return strings.HasPrefix(category, exitCodeFailPrefix)
+}
+
 // IsFallbackCategory 判断分类名是否为「关键词未命中时的兜底原文」。
 // 必须覆盖判据表两组的名字（Has 取并集），漏掉一组会把覆盖出来的分类误判成兜底原文。
 func IsFallbackCategory(category string, kw *Keywords) bool {
@@ -174,7 +182,7 @@ func IsFallbackCategory(category string, kw *Keywords) bool {
 	if category == catPartialSuccess {
 		return false
 	}
-	return !strings.HasPrefix(category, exitCodeFailPrefix)
+	return !IsExitCodeCategory(category)
 }
 
 // Unclassified 完全无信息时的兜底分类。

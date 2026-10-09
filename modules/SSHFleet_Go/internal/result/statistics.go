@@ -20,6 +20,9 @@ import (
 type CategoryCount struct {
 	Category string
 	Count    int
+	// ExitCode 该分类携带的退出码；只有「执行失败(退出码N)」这类分类有值，其余为 nil。
+	// 它同时内嵌在分类名里，但那是给人看的文字：要这个数就读这里，不要去解名字（2026-10-09）。
+	ExitCode *int
 }
 
 // Stats 统计结果。
@@ -72,6 +75,7 @@ func Statistics(items []ssh.Result, nodes *nodelist.Nodes, a *cli.Args, start, s
 	}
 
 	counts := map[string]int{}
+	exitCodes := map[string]*int{}
 	for _, r := range items {
 		// 连接成败也在这里一并算：主干收尾行的四个数都读统计，各处不再自己数一遍。
 		if r.ConnectSuccess {
@@ -88,12 +92,21 @@ func Statistics(items []ssh.Result, nodes *nodelist.Nodes, a *cli.Args, start, s
 		}
 
 		counts[category]++
+		// 「执行失败(退出码N)」这个分类带退出码：从结果字段搬一格出来，呈现侧就不必解析分类名。
+		// 同一分类下各台的退出码必然相同（名字里就写着它），取第一次遇到的即可。
+		if _, seen := exitCodes[category]; !seen && verdict.IsExitCodeCategory(category) {
+			exitCodes[category] = r.ExitCode
+		}
 		stats.CategoryIPMap[category] = append(stats.CategoryIPMap[category], r.IP)
 	}
 
 	delete(counts, successCategory)
 	for category, count := range counts {
-		stats.SortedFailCategories = append(stats.SortedFailCategories, CategoryCount{category, count})
+		stats.SortedFailCategories = append(stats.SortedFailCategories, CategoryCount{
+			Category: category,
+			Count:    count,
+			ExitCode: exitCodes[category],
+		})
 	}
 	sort.SliceStable(stats.SortedFailCategories, func(i, j int) bool {
 		return stats.SortedFailCategories[i].Count > stats.SortedFailCategories[j].Count
