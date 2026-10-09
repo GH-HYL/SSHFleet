@@ -226,69 +226,102 @@ func scriptNameArg(interpreter, scriptName string) string {
 	return " " + shellQuote(scriptName)
 }
 
-// shellFamilyNames 需要补脚本名（$0）的 shell 家族：它们支持
-// `<解释器> -c '<正文>' '<名字>'` 这种"名字作 $0"的形态。
-// mksh / ash 与 bash 同为 POSIX shell，`-c` 后第一个参数同样落到 $0。
-var shellFamilyNames = map[string]bool{
-	"bash": true, "sh": true, "dash": true, "ksh": true, "zsh": true, "mksh": true, "ash": true,
+// interpreterInfo 解释器登记项：一行一个名字，各处判据都从它取。
+type interpreterInfo struct {
+	name       string // 归一后的标准名，也是查表的 key（见 InterpreterBaseName）
+	programArg string // 「用一段程序文本启动它」的参数：-c / -e / -r
+	shell      bool   // 是否 shell 家族：决定脚本模式下补不补脚本名（$0）
+	srcPrelude string // source /dev/stdin 之前要先关掉的 shell 选项（只有 zsh 需要）
+}
+
+// interpreterTable 全工具认的解释器，就在这一张表里。
+//
+// 此前它散成三份：一张「要不要补 $0」的 shell 家族表（7 个，mksh / ash 与 bash 同为
+// POSIX shell，`-c` 后第一个参数同样落到 $0）、一张「-a 用哪个程序文本参数」的表（15 个）、
+// 外加 sourceStdinBody 里对 zsh 的一处特判；面向用户的「支持范围」又是手抄的第四份，
+// 抄漏了 luajit 与 nodejs。2026-10-09 收成这一处。
+//
+// **顺序即面向用户的显示顺序**（报错文案与文档照它写）。新增一个解释器 = 加一行。
+var interpreterTable = []interpreterInfo{
+	{"bash", "-c", true, ""},
+	{"sh", "-c", true, ""},
+	{"dash", "-c", true, ""},
+	{"ksh", "-c", true, ""},
+	{"zsh", "-c", true, "setopt no_function_argzero"},
+	{"mksh", "-c", true, ""},
+	{"ash", "-c", true, ""},
+	{"python", "-c", false, ""},
+	{"luajit", "-e", false, ""},
+	{"lua", "-e", false, ""},
+	{"node", "-e", false, ""},
+	{"nodejs", "-e", false, ""},
+	{"perl", "-e", false, ""},
+	{"ruby", "-e", false, ""},
+	{"php", "-r", false, ""},
+}
+
+// interpreterInfoOf 按归一后的标准名查表：`/bin/sh`、`zsh5`、`perl -w`、`php8.1` 都认。
+// 表外的名字返回 (零值, false)。
+func interpreterInfoOf(interpreter string) (interpreterInfo, bool) {
+	name := InterpreterBaseName(interpreter)
+	if name == "" {
+		return interpreterInfo{}, false
+	}
+	for _, it := range interpreterTable {
+		if it.name == name {
+			return it, true
+		}
+	}
+	return interpreterInfo{}, false
+}
+
+// SupportedInterpreters 面向用户的支持范围，顺序与表一致。
+// 报错文案与文档都照它写，不再各抄一份。
+func SupportedInterpreters() []string {
+	out := make([]string, 0, len(interpreterTable))
+	for _, it := range interpreterTable {
+		out = append(out, it.name)
+	}
+	return out
 }
 
 // isShellFamily 解释器是不是 shell 家族：经 InterpreterBaseName 归一后查表，
 // `bash` / `sh` / `/bin/sh` / `zsh5` / `ksh93` 都算，`python3` / `perl` 不算；
 // 带参数（如 `perl -w`）时只看第一个词。
 func isShellFamily(interpreter string) bool {
-	return shellFamilyNames[InterpreterBaseName(interpreter)]
+	it, ok := interpreterInfoOf(interpreter)
+	return ok && it.shell
 }
 
-// programTextArgTable「用一段程序文本启动解释器」的参数：语言名（小写、去版本号）→ 参数。
-//
 // 各家**不一样**（2026-10-07 实测确认）：
 //   - shell 家族 / python：`-c`（POSIX sh 与 CPython 的标准用法）
 //   - perl / ruby / node / lua：`-e`——它们的 `-c` 是"只做语法检查"，会静默跑空
 //   - php：`-r`
 //
 // 表外（tclsh、deno、awk…）没有统一的"一段程序文本"入口，`-a` 不支持——在参数合规检查阶段拦下。
-var programTextArgTable = map[string]string{
-	"ash":    "-c",
-	"bash":   "-c",
-	"dash":   "-c",
-	"ksh":    "-c",
-	"mksh":   "-c",
-	"sh":     "-c",
-	"zsh":    "-c",
-	"python": "-c",
-	"luajit": "-e",
-	"lua":    "-e",
-	"node":   "-e",
-	"nodejs": "-e",
-	"perl":   "-e",
-	"ruby":   "-e",
-	"php":    "-r",
+// 参数本体在 interpreterTable 那张登记表里，这里只是取用。
+func ProgramTextArg(interpreter string) (string, bool) {
+	it, ok := interpreterInfoOf(interpreter)
+	if !ok {
+		return "", false
+	}
+	return it.programArg, true
 }
 
 // InterpreterBaseName 把配置里的解释器取值归一成「认名用的标准名」：
 // 取第一个词（带参数如 `perl -w` 时只看第一个词）、去目录、转小写、去尾部版本号
 // （/usr/bin/python3 → python、php8.1 → php、zsh5 → zsh）。
 //
-// 这套剥法全工具只有这一份（2026-10-08 审计裁决）：-a 的支持范围、--no-shell 的
-// 互斥、$0 补名的家族判定都认它。此前剥法写了两遍、其中家族判定那遍不剥，
-// 同一个名字得出两个结果——zsh5 在 -a 检查里认得、在家族判定里认不出，
-// $0 静默失效。空值返回空串。
+// 这套剥法全工具只有这一份（2026-10-08 审计裁决）：-a 的支持范围、$0 补名的家族判定、
+// source 前的选项适配都认它——三者都走 interpreterInfoOf 查同一张登记表。
+// 此前剥法写了两遍、其中家族判定那遍不剥，同一个名字得出两个结果——zsh5 在 -a 检查里
+// 认得、在家族判定里认不出，$0 静默失效。空值返回空串。
 func InterpreterBaseName(interpreter string) string {
 	fields := strings.Fields(interpreter)
 	if len(fields) == 0 {
 		return ""
 	}
 	return strings.TrimRight(strings.ToLower(path.Base(fields[0])), "0123456789.")
-}
-
-// ProgramTextArg 返回「用一段程序文本启动该解释器」的参数（-c / -e / -r）与它是否在支持范围内。
-// 解释器名允许带目录与版本号（/usr/bin/python3、php8.1），由 InterpreterBaseName 归一后查表。
-//
-// 表外返回 ("", false)。-a 的合规检查据此拦下；拼装侧（InteractiveCommand）拿到的只会是表内的解释器。
-func ProgramTextArg(interpreter string) (string, bool) {
-	arg, ok := programTextArgTable[InterpreterBaseName(interpreter)]
-	return arg, ok
 }
 
 // scriptStdinInner 正文走 stdin 那条路（无 -a）的内层命令。
@@ -320,10 +353,11 @@ func scriptStdinInner(interpreter, scriptName string, asRoot bool) string {
 // sourceStdinBody `-c` 里那段 source /dev/stdin 的程序文本。zsh 先关掉
 // FUNCTION_ARGZERO 再 source，$0 才保持 -c 参数给的名字（2026-10-08 实测
 // `setopt no_function_argzero; . /dev/stdin` → probe.sh）；其余家族原样 source。
+// 要关什么写在登记表的 srcPrelude 那格，这里只负责拼。
 func sourceStdinBody(interpreter string) string {
 	body := ". /dev/stdin"
-	if InterpreterBaseName(interpreter) == "zsh" {
-		body = "setopt no_function_argzero; " + body
+	if it, ok := interpreterInfoOf(interpreter); ok && it.srcPrelude != "" {
+		body = it.srcPrelude + "; " + body
 	}
 	return body
 }
