@@ -210,7 +210,7 @@ func main() {
 	logger.Info(fmt.Sprintf("工作路径：%s", func() string { wd, _ := os.Getwd(); return wd }()))
 	// 逐段补回引号：argv 里早没了引号，平铺打印会让 `-c 'who -b'` 这类命令
 	// 在日志里变成另一条命令（详情见 output.DisplayCommand）
-	logger.Info(fmt.Sprintf("原始命令行参数：%s", output.DisplayCommand(common.MaskCommandLine(os.Args))))
+	logger.Info(fmt.Sprintf("原始选项/参数：%s", output.DisplayCommand(common.MaskCommandLine(os.Args))))
 	logger.Info(fmt.Sprintf("日志目录：%s，工具日志文件名：%s", config.BuiltinPaths.Historys, config.BuiltinPaths.Tool))
 
 	// ---- 步骤 3：解析命令行 ------------------------------------------
@@ -219,9 +219,9 @@ func main() {
 		if errors.Is(err, cli.ErrHelp) {
 			return // 帮助已打印，以 0 退出
 		}
-		fatal("cli", fmt.Errorf("参数解析失败\n原因：%v", err))
+		fatal("cli", fmt.Errorf("选项/参数解析失败\n原因：%v", err))
 	}
-	logger.Success("参数解析成功，解析结果：" + args.Summary())
+	logger.Success("选项/参数解析成功，解析结果：" + args.Summary())
 
 	// 交互器：全工具唯一的用户交互入口（In/Out 注入 + 非交互标志）
 	in := common.NewInteractor(args.Disinteractive, logger)
@@ -229,7 +229,7 @@ func main() {
 	// ---- 步骤 4：工具模式分流（keygen / key-status / convert-secret）-----
 	// 独立工具与批量执行解耦，处理完直接退出，不进入后续步骤。
 	if err := cli.CheckKeyToolExclusivity(args); err != nil {
-		fatal("cli", fmt.Errorf("参数合规性检查未通过\n原因：%v", err))
+		fatal("cli", fmt.Errorf("选项/参数合规性检查未通过\n原因：%v", err))
 	}
 	if args.GenKey {
 		logger.Info("进入密钥管理模式（--gen-key）")
@@ -262,19 +262,19 @@ func main() {
 		}
 	}
 
-	// ---- 步骤 5：参数合规检查 + 危险命令检测 ---------------------------
+	// ---- 步骤 5：选项/参数合规检查 + 危险命令检测 ---------------------------
 	if err := cli.CheckConfigFiles(); err != nil {
 		fatal("cli", err)
 	}
 	if err := cli.CheckArguments(args); err != nil {
-		fatal("cli", fmt.Errorf("参数合规性检查未通过\n原因：%v", err))
+		fatal("cli", fmt.Errorf("选项/参数合规性检查未通过\n原因：%v", err))
 	}
 	// 脚本后缀没配解释器：在确认屏之前当场问一句是否用回退解释器继续（默认 no，
-	// 回车即退出）。放这里与参数合规检查同处"启动检查"阶段，符合既有的确认时机。
+	// 回车即退出）。放这里与选项/参数合规检查同处"启动检查"阶段，符合既有的确认时机。
 	if err := cli.ConfirmInterpreterFallback(args, cfg, in); err != nil {
 		fatal("cli", err)
 	}
-	logger.Success("输入的参数合规性检查通过")
+	logger.Success("输入的选项/参数合规性检查通过")
 
 	// 危险命令检测：规则文件加载（含规则校验）+ 命中判定 + 处置
 	dangerRules, err := dangercheck.LoadRules(config.BuiltinPaths.DangerousKeywords)

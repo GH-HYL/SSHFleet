@@ -82,7 +82,7 @@ func Run(ctx context.Context, a *cli.Args, cfg *config.Config, nodes *nodelist.N
 	if concurrency <= 0 || concurrency > len(tasks) {
 		concurrency = len(tasks)
 	}
-	// 执行参数：两个超时与执行身份。`-t` / `-T` 未显式给值时由参数解析按模式填配置默认值，
+	// 执行参数：两个超时与执行身份。`-t` / `-T` 未显式给值时由选项/参数解析按模式填配置默认值，
 	// 事后光看命令行原文看不出实际生效的是多少；执行身份由 `--sudo` / `--no-sudo` 与配置
 	// 共同决定，终值同样不在命令行原文里。记在这里（单线程区、协程未起），与「开始执行任务」
 	// 一起构成这一轮的现场。
@@ -216,7 +216,7 @@ func buildTasks(a *cli.Args, nodes *nodelist.Nodes, prompts *ssh.PasswdPrompts, 
 			material = cli.ScriptMaterialOf(a, data)
 		}
 		body := material.Body
-		// 解释器在参数解析阶段就算好了（命令模式 = 命令解释器；脚本模式 = 后缀映射或回退），
+		// 解释器在选项/参数解析阶段就算好了（命令模式 = 命令解释器；脚本模式 = 后缀映射或回退），
 		// 这里只取用。空值说明解析链路有漏——拼接前拦下，不让一条没有解释器的命令发出去。
 		interpreter := a.Interpreter
 		if interpreter == "" {
@@ -225,11 +225,11 @@ func buildTasks(a *cli.Args, nodes *nodelist.Nodes, prompts *ssh.PasswdPrompts, 
 		name := scriptName(a)
 		if len(a.Answers) > 0 {
 			// 交互分支：正文改经命令行承载，会话 stdin 整条让给代填（ADR-0010）。
-			// 下发行由参数合规阶段拼好存进 Args.Downlink（那里要拿它做长度检查），
+			// 下发行由选项/参数合规阶段拼好存进 Args.Downlink（那里要拿它做长度检查），
 			// 这里直接取用——量的串、日志里那条、实际发出去那条是同一个值，不再重拼。
 			if a.Downlink == "" {
 				return nil, nil, fmt.Errorf("没有为这次交互执行拼出下发行\n" +
-					"原因：参数合规检查阶段未产出 Args.Downlink\n" +
+					"原因：选项/参数合规检查阶段未产出 Args.Downlink\n" +
 					"提示：这是内部错误，请把本次命令反馈给作者")
 			}
 			// 执行期入场值只剩三样：代填表、匹配口径、中止词。

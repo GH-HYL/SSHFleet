@@ -62,7 +62,7 @@ type Args struct {
 	// 与 Interpreter 同一口径：解析时算好一次，执行侧直接取用；空串 = 配置里没给环境变量。
 	EnvPrefix string
 	// Downlink 是 -a 交互分支的下发行（正文经 base64 编入命令行的那条）。与 Interpreter
-	// 同一口径：参数合规检查阶段算好一次，执行侧直接取用，不再自己拼——长度检查量的串
+	// 同一口径：选项/参数合规检查阶段算好一次，执行侧直接取用，不再自己拼——长度检查量的串
 	// 与实际发出去的串因此是同一个值（ADR-0010）。非 -a 运行为空串。
 	Downlink string
 
@@ -89,12 +89,12 @@ const (
 	ModeScript   Mode = "script"
 	ModeUpload   Mode = "upload"
 	ModeDownload Mode = "download"
-	// ModeNone 都没给（正常流程走不到；参数合规检查已保证五者必有其一，只作防御）
+	// ModeNone 都没给（正常流程走不到；选项/参数合规检查已保证五者必有其一，只作防御）
 	ModeNone Mode = ""
 )
 
 // ModeName 返回本次运行的模式（passwd / command / script / upload / download）。
-// 五个值互斥，判定次序不影响结果（参数合规检查已保证只有一个非空）；都没给时返回
+// 五个值互斥，判定次序不影响结果（选项/参数合规检查已保证只有一个非空）；都没给时返回
 // ModeNone（正常流程走不到，只作防御）。
 //
 // 全工具单一判据点：归档目录名、报告、日志文案此前各自重判一遍同一组字段。

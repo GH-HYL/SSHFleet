@@ -35,7 +35,7 @@ func CheckConfigFiles() error {
 	return nil
 }
 
-// CheckArguments 参数合规性检查。23 条校验保持旧版结构与顺序，
+// CheckArguments 选项/参数合规性检查。23 条校验保持旧版结构与顺序，
 // 错误统一返回给 main 打印。差异见 spec D40（-k 三态）、D29（脚本 CRLF
 // 不再改写本地文件）、ADR-0002（-p 消歧义约束措辞）、D13（内联预检仅 IPv4）。
 func CheckArguments(a *Args) error {

@@ -376,7 +376,7 @@ func isShellFamily(interpreter string) bool {
 //   - perl / ruby / node / lua：`-e`——它们的 `-c` 是"只做语法检查"，会静默跑空
 //   - php：`-r`
 //
-// 表外（tclsh、deno、awk…）没有统一的"一段程序文本"入口，`-a` 不支持——在参数合规检查阶段拦下。
+// 表外（tclsh、deno、awk…）没有统一的"一段程序文本"入口，`-a` 不支持——在选项/参数合规检查阶段拦下。
 // 参数本体在 interpreterTable 那张登记表里，这里只是取用。
 func ProgramTextArg(interpreter string) (string, bool) {
 	it, ok := interpreterInfoOf(interpreter)

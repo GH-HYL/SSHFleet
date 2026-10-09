@@ -92,7 +92,7 @@ func IsBashInterpreter(interpreter string) bool {
 // -a 的正文要作"一段程序文本"交给解释器，而各家的参数不一样（shell / python 是 -c，
 // perl / ruby / node / lua 是 -e，php 是 -r，见 ssh.ProgramTextArg）。表外的解释器没有统一
 // 入口：配进来再用 -a 会静默不跑（perl 用 -c 甚至"只做语法检查、跑完就退"）。与其让它闷着
-// 出错，不如在参数合规检查阶段当场说清（2026-10-07 作者定）。
+// 出错，不如在选项/参数合规检查阶段当场说清（2026-10-07 作者定）。
 func checkAnswerInterpreter(a *Args) error {
 	if a.Answer == "" {
 		return nil // 没用 -a，与解释器无关

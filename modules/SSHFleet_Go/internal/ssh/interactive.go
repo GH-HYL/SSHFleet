@@ -49,7 +49,7 @@ func (a Answer) Describe() string {
 
 // DownlinkSpec 下发行的输入：这次要发的命令行长什么样，全部事实都在这里。
 //
-// 只由参数合规阶段（cli）装配一次，长度检查与执行共用同一个值——量的串就是发的串
+// 只由选项/参数合规阶段（cli）装配一次，长度检查与执行共用同一个值——量的串就是发的串
 // （ADR-0010 的语义基础）。此前它在两处各装配一遍、靠人记住同时改，2026-10-08 因此
 // 漏过一次（脚本模式少补一个脚本名，闸门放进来一条比它以为的更长的命令）。
 type DownlinkSpec struct {
@@ -62,7 +62,7 @@ type DownlinkSpec struct {
 }
 
 // InteractiveInput 交互分支的执行期入场值：代填怎么喂、什么时候中止。
-// 下发行的输入不在这里——那是 DownlinkSpec，在参数合规阶段就算好了。
+// 下发行的输入不在这里——那是 DownlinkSpec，在选项/参数合规阶段就算好了。
 type InteractiveInput struct {
 	Answers       []Answer // 代填表（顺序即命令行给出顺序）
 	Match         MatchOptions
@@ -70,11 +70,11 @@ type InteractiveInput struct {
 }
 
 // InteractiveCommand 拼交互分支的下发行：正文 base64 编入命令行，远端 base64 -d 后
-// 作内层解释器的「程序文本参数」。**全场只在参数合规检查阶段调一次**，结果存进
+// 作内层解释器的「程序文本参数」。**全场只在选项/参数合规检查阶段调一次**，结果存进
 // Args.Downlink，长度检查、日志与实际执行读的都是那个值——不两处各拼一份。
 //
 // 「程序文本参数」各解释器不同（shell / python 是 -c，perl / ruby / node / lua 是 -e，
-// php 是 -r），由 ProgramTextArg 按解释器取；表外的解释器在参数合规检查阶段已被拦下，
+// php 是 -r），由 ProgramTextArg 按解释器取；表外的解释器在选项/参数合规检查阶段已被拦下，
 // 这里兜底用 -c。
 //
 // 脚本模式还会把脚本文件名作参数之后的第一个参数交回去——那正是 shell 的 $0，
@@ -115,7 +115,7 @@ type DescribeInteractiveInput struct {
 	Command    string // 命令模式：命令原文
 	ScriptPath string // 脚本模式：脚本文件路径（非空即脚本模式）
 	Answers    int    // 代填条数
-	Downlink   string // 下发行（参数合规阶段经 InteractiveCommand 生成一次）
+	Downlink   string // 下发行（选项/参数合规阶段经 InteractiveCommand 生成一次）
 }
 
 // DescribeInteractive 交代交互分支「交给 SSH 执行的是什么」——供日志打印，不参与下发。
@@ -139,7 +139,7 @@ func DescribeInteractive(a DescribeInteractiveInput) string {
 }
 
 // RunInteractive 执行命令/脚本，并按代填表自动回应远端的索要输入。
-// downlink 是参数合规阶段拼好的下发行（Args.Downlink），这里不再自己拼——
+// downlink 是选项/参数合规阶段拼好的下发行（Args.Downlink），这里不再自己拼——
 // 长度检查量的串与这里发出去的串因此是同一个值（ADR-0010）。
 //
 // 与 RunCommand 复用同一套收尾：newResult / connectFor / captureBanner / lockedBuffer /
