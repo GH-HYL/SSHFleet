@@ -15,21 +15,19 @@ const emitInterval = 200 * time.Millisecond
 
 // NodeSnapshot 单节点进度快照。
 type NodeSnapshot struct {
-	Seq            int
-	IP             string
-	Bytes          int64 // 已传输字节（只增不减，取节点自报的最大值）
-	TotalBytes     int64
-	TotalFiles     int
-	SuccessFiles   int
-	FailedFiles    int
-	Done           bool
-	ConnectSuccess bool
-	ExitCode       *int
+	Seq          int
+	IP           string
+	Bytes        int64 // 已传输字节（只增不减，取节点自报的最大值）
+	TotalBytes   int64
+	TotalFiles   int
+	SuccessFiles int
+	FailedFiles  int
+	Done         bool
 }
 
 // Snapshot 聚合快照（渲染函数的输入；M5 据它画总进度与各节点进度）。
+// 不含总台数：渲染侧的总台数由它自己的构造参数给（见 NewReporter），不必经这里再传一遍。
 type Snapshot struct {
-	Total      int
 	Completed  int
 	Succeeded  int
 	Failed     int
@@ -42,7 +40,6 @@ type Snapshot struct {
 // 跨调用保存状态、与 worker pool 同一生命周期（spec D2、D32 条件 1）。
 type Aggregator struct {
 	mu         sync.Mutex
-	total      int
 	completed  int
 	succeeded  int
 	failed     int
@@ -54,8 +51,8 @@ type Aggregator struct {
 }
 
 // NewAggregator 创建聚合器；render 可为 nil（无渲染需求，如测试）。
-func NewAggregator(total int, render RenderFunc) *Aggregator {
-	return &Aggregator{total: total, nodes: make(map[int]*NodeSnapshot), render: render}
+func NewAggregator(render RenderFunc) *Aggregator {
+	return &Aggregator{nodes: make(map[int]*NodeSnapshot), render: render}
 }
 
 // OnProgress 接收单节点进度（ssh 的字节级 / 循环级回调）。
@@ -94,8 +91,6 @@ func (ag *Aggregator) OnResult(r ssh.Result) {
 	node := ag.node(r.Seq)
 	node.IP = r.IP
 	node.Done = true
-	node.ConnectSuccess = r.ConnectSuccess
-	node.ExitCode = r.ExitCode
 	if r.TotalBytes > node.Bytes {
 		ag.bytesDone += r.TotalBytes - node.Bytes
 		node.Bytes = r.TotalBytes
@@ -137,7 +132,6 @@ func (ag *Aggregator) node(seq int) *NodeSnapshot {
 
 func (ag *Aggregator) snapshotLocked() Snapshot {
 	snap := Snapshot{
-		Total:      ag.total,
 		Completed:  ag.completed,
 		Succeeded:  ag.succeeded,
 		Failed:     ag.failed,

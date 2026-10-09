@@ -228,7 +228,7 @@ func TestReporterProgressInPlainModeWhenNotTTY(t *testing.T) {
 		t.Skip("当前 go test 的输出是终端，本用例只覆盖直通模式")
 	}
 
-	r.Progress(batch.Snapshot{Total: 3, Completed: 1, Succeeded: 1})
+	r.Progress(batch.Snapshot{Completed: 1, Succeeded: 1})
 	r.mu.Lock()
 	created := r.prog != nil
 	r.mu.Unlock()
@@ -252,7 +252,7 @@ func TestReporterRunsProgressProgram(t *testing.T) {
 	r.out = f
 	r.plain = false
 
-	r.Progress(batch.Snapshot{Total: 2, Completed: 1, Succeeded: 1})
+	r.Progress(batch.Snapshot{Completed: 1, Succeeded: 1})
 	r.mu.Lock()
 	started := r.prog != nil
 	r.mu.Unlock()
