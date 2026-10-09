@@ -58,7 +58,7 @@ type Args struct {
 	AnswerFile  string
 	Match       ssh.MatchOptions // [interactive] 的匹配口径：管触发词与中止词
 	Interpreter string           // 本次执行用的解释器（配置推导；-c/-s 模式才有值）
-	// EnvPrefix 是本次下发命令开头那段 `export …;`（由 [execution] env 拼成，见 ssh.ExportPrefix）。
+	// EnvPrefix 是本次下发命令开头那段 `export …;`（由 [env] 拼成，见 ssh.ExportPrefix）。
 	// 与 Interpreter 同一口径：解析时算好一次，执行侧直接取用；空串 = 配置里没给环境变量。
 	EnvPrefix string
 	// Downlink 是 -a 交互分支的下发行（正文经 base64 编入命令行的那条）。与 Interpreter
@@ -373,7 +373,7 @@ func Parse(cfg *config.Config, version string, raw []string) (*Args, error) {
 	// 回退是否被用户点头由启动阶段的 ConfirmInterpreterFallback 把关，这里只算终值。
 	a.Interpreter = interpreterOf(&a, cfg)
 	// 下发前缀同样在这里拼一次：键名排序保证每次一样，执行侧只取用（与 Interpreter 同口径）。
-	a.EnvPrefix = ssh.ExportPrefix(cfg.Execution.Env)
+	a.EnvPrefix = ssh.ExportPrefix(cfg.Env)
 	// 凭据加密开关：--change-password 的取值按它解释（明文 / 密文文件路径）
 	a.credentialEncrypted = cfg.Credential.Encrypt
 

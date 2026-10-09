@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-// ExportPrefix 把 [execution] env 里的环境变量拼成下发行开头那段 `export …;`（空配置返回空串）。
+// ExportPrefix 把 [env] 里的环境变量拼成下发行开头那段 `export …;`（空配置返回空串）。
 //
 // 出厂配置给的是「统一 locale + 一组标准 PATH + 哑终端」几条。为什么是它们：
 //   - locale（LC_ALL / LANG）：SSH 非交互会话拿到的是目标机默认的 locale，各机器不一样
@@ -19,7 +19,7 @@ import (
 //     所以直接给一组标准目录。列了不存在的目录不会报错（查找时静默跳过）。
 //   - TERM=dumb：统一成哑终端，抑制彩色与转义序列。
 //
-// 具体是哪几条、还能加什么，见 config/SSHFleet.conf 与配置手册——本包只负责把配置拼成形。
+// 具体是哪几条、还能加什么，见 config/SSHFleet.conf 与《进阶配置手册》——本包只负责把配置拼成形。
 // 值怎么落地见 quoteEnvValue：一律双引号包裹，交目标节点在导入时展开。
 //
 // 键名排序 → 同一份配置每次拼出的串一样（日志与 A/B 比对才不会出现无端差异）；
@@ -81,7 +81,7 @@ const (
 // # 各行为分别为了什么
 //
 //   - `sh -c`：提供"先设环境、再起解释器"的容器；不读 profile、不依赖 bash。
-//   - `export …`：统一目标机环境，内容来自 [execution] env（见 ExportPrefix）。
+//   - `export …`：统一目标机环境，内容来自 [env]（见 ExportPrefix）。
 //   - stdin 直喂内容：命令原文 / 脚本正文不进命令行，只经标准输入送下去。
 //     好处是内容不参与 shell 解析、没有引号转义套娃、也没有命令行长度上限。
 //   - 内层 `[sudo ]解释器`：sudo 时提权的是**解释器本身**
