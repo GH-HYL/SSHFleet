@@ -320,7 +320,7 @@ func TestUsageTextGroupsOptions(t *testing.T) {
 	text := usageText(cfg, "9.9.9", 120)
 
 	titles := helpTitleLines(text)
-	want := []string{"模式（五选一）", "清单与目标路径", "执行参数", "密钥与凭据", "密钥管理（不执行批量任务）"}
+	want := []string{"模式（五选一）", "清单与目标路径", "执行选项", "密钥与凭据", "密钥管理（不执行批量任务）"}
 	if len(titles) != len(want) {
 		t.Fatalf("应有 %d 个组标题，实际 %d 个：%v", len(want), len(titles), titles)
 	}

@@ -49,12 +49,12 @@ func CheckArguments(a *Args) error {
 	}
 	if modeCount == 0 {
 		return fmt.Errorf(
-			"执行模式参数：-c、-s、-u、-d、--change-password 互斥，只能指定一个\n" +
+			"执行模式选项：-c、-s、-u、-d、--change-password 互斥，只能指定一个\n" +
 				"提示：你没有指定任何模式，请从下面五个里选一个：\n" +
 				"      -c 执行命令   -s 执行脚本   -u 上传文件   -d 下载文件   --change-password 批量改密")
 	}
 	if modeCount > 1 {
-		return fmt.Errorf("执行模式参数：-c、-s、-u、-d、--change-password 互斥，只能指定一个\n提示：一次只能做一件事，请只保留一个模式")
+		return fmt.Errorf("执行模式选项：-c、-s、-u、-d、--change-password 互斥，只能指定一个\n提示：一次只能做一件事，请只保留一个模式")
 	}
 
 	// --change-password：互斥与取值（放这里，早于下面那些"只为某个模式服务"的校验）
@@ -265,7 +265,7 @@ func CheckKeyToolExclusivity(a *Args) error {
 	}
 	if given := batchParamsGiven(a); len(given) > 0 {
 		return fmt.Errorf(
-			"%s 不能和批量执行参数一起用：同时给了 %s\n"+
+			"%s 不能和批量执行选项一起用：同时给了 %s\n"+
 				"提示：分成两次执行——先跑密钥管理命令，再跑批量执行", tools[0], strings.Join(given, "、"))
 	}
 	return nil
@@ -278,7 +278,7 @@ func checkPositiveInt(raw string, val int, invalid bool, flag, what string) erro
 		return nil
 	}
 	if invalid || val <= 0 {
-		return fmt.Errorf("%s 参数格式错误，%s必须是正整数，当前值：%s\n提示：给一个正整数（单位见该参数的说明）", flag, what, raw)
+		return fmt.Errorf("%s 参数格式错误，%s必须是正整数，当前值：%s\n提示：给一个正整数（单位见该选项的说明）", flag, what, raw)
 	}
 	return nil
 }
