@@ -4,7 +4,6 @@ package output
 import (
 	"fmt"
 	"io"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -201,21 +200,16 @@ func PrintStatistics(out io.Writer, stats *result.Stats, kw *verdict.Keywords, s
 	fmt.Fprintln(out, bar)
 }
 
-var exitCodeRe = regexp.MustCompile(`退出码(\d+)`)
-
-// exitCodeHintLine 从失败分类中提取本次出现的退出码，翻译为常见退出码提示（按台数降序）。
+// exitCodeHintLine 按失败分类携带的退出码，翻译为常见退出码提示（按台数降序）。
+// 退出码取自统计给的字段（CategoryCount.ExitCode），不从分类名里解析。
 func exitCodeHintLine(categories []result.CategoryCount) string {
 	seen := map[int]int{}
 	var order []int
 	for _, c := range categories {
-		m := exitCodeRe.FindStringSubmatch(c.Category)
-		if m == nil {
+		if c.ExitCode == nil {
 			continue
 		}
-		code, err := strconv.Atoi(m[1])
-		if err != nil {
-			continue
-		}
+		code := *c.ExitCode
 		if _, ok := exitCodeHints[code]; !ok {
 			continue
 		}
@@ -246,16 +240,15 @@ const exitCodeFailTip = "命令自身失败，或命令没跑起来被拒（未�
 
 // categoryTipLines 汇总「提示：」块的内容：本次出现过的失败分类里，写了解释（配置文件里
 // 的 tip 字段）的各出一行「分类名：解释」。按传入顺序（已按台数降序）输出。
+// 带退出码的分类读到字段后换成固定说明，不再解析分类名。
 func categoryTipLines(categories []result.CategoryCount, kw *verdict.Keywords) []string {
 	out := make([]string, 0, len(categories))
 	for _, c := range categories {
 		tip := kw.TipOf(c.Category)
-		if m := exitCodeRe.FindStringSubmatch(c.Category); m != nil {
+		if c.ExitCode != nil {
 			tip = exitCodeFailTip
-			if code, err := strconv.Atoi(m[1]); err == nil {
-				if meaning, ok := exitCodeHints[code]; ok {
-					tip += "。退出码 " + m[1] + " = " + meaning
-				}
+			if meaning, ok := exitCodeHints[*c.ExitCode]; ok {
+				tip += "。退出码 " + strconv.Itoa(*c.ExitCode) + " = " + meaning
 			}
 		}
 		if tip == "" {
