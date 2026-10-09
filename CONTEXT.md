@@ -11,6 +11,8 @@ SSHFleet 工程领域上下文（单一上下文布局）。
 | 术语 | 定义 |
 | ---- | ---- |
 | CSV 取值（csv value） | `-f` 与 `-a` 共用的取值形态：一个 CSV 文件路径，或同一格式的内联文本。两处只有列语义不同 |
+| 选项（option） | 命令行上的开关，如 `-c` / `--command`、`-f` / `--csv-file`。与「参数」相对：选项是那个开关，参数是它后面跟的值 |
+| 参数（argument） | 选项后面跟的值——`-f nodes.csv` 里的 `nodes.csv`、`-c "uptime"` 里的 `uptime`。口语里也常把两者统称「参数」 |
 | 节点清单（node list） | 描述目标主机集合的清单。取值形态见「CSV 取值」 |
 | 节点信息（node info） | 单台目标主机的连接要素：`ip` / `port` / `user` / `password` / `key` / `key_password`。后三项的实际含义随 `encrypt` 开关变化 |
 | 凭据（credential） | 密码、私钥、私钥口令三类认证材料。清单第 4 / 5 / 6 列分别对应其内容或文件路径 |
