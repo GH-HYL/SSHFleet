@@ -57,6 +57,7 @@ type DownlinkSpec struct {
 	ScriptBody  string // 脚本模式：脚本正文（非空即脚本模式）
 	ScriptName  string // 脚本模式：脚本文件名（下发行把它交回去当 $0，见 scriptNameArg）
 	Interpreter string // 解释器：命令模式是命令解释器，脚本模式是脚本解释器
+	EnvPrefix   string // 下发行开头的环境段（ExportPrefix 的产物）；空 = 没配环境变量
 	AsRoot      bool   // -m sudo
 }
 
@@ -92,7 +93,7 @@ func InteractiveCommand(spec DownlinkSpec) string {
 	if !ok {
 		programArg = "-c" // 合规检查已拦下表外的解释器，这里兜底，不该发生
 	}
-	inner := innerCommand(spec.Interpreter, spec.AsRoot) + " " + programArg +
+	inner := innerCommand(spec.EnvPrefix, spec.Interpreter, spec.AsRoot) + " " + programArg +
 		` "$(printf %s ` + encoded + ` | base64 -d)"`
 	if spec.ScriptBody != "" { // 命令模式没有脚本文件，不补名字
 		inner += scriptNameArg(spec.Interpreter, spec.ScriptName)

@@ -202,6 +202,7 @@ func downlinkSpecOf(a *Args, scriptText []byte) ssh.DownlinkSpec {
 	spec := ssh.DownlinkSpec{
 		Command:     a.Command,
 		Interpreter: a.Interpreter,
+		EnvPrefix:   a.EnvPrefix,
 		AsRoot:      a.Sudo,
 	}
 	if a.Script != "" {

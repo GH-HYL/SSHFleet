@@ -243,7 +243,7 @@ func buildTasks(a *cli.Args, nodes *nodelist.Nodes, prompts *ssh.PasswdPrompts, 
 			}
 			break
 		}
-		command, stdin := ssh.BuildCommand(a.Command, body, name, interpreter, a.NoShell, a.Sudo)
+		command, stdin := ssh.BuildCommand(a.Command, body, name, interpreter, a.EnvPrefix, a.NoShell, a.Sudo)
 		for i, node := range nodes.Items {
 			tasks = append(tasks, &task{seq: i, node: node, command: command, stdin: stdin})
 		}
@@ -283,6 +283,7 @@ func commandDescription(a *cli.Args, tasks []*task) []string {
 		ScriptBody:  body,
 		ScriptName:  scriptName(a),
 		Interpreter: interpreter,
+		EnvPrefix:   a.EnvPrefix,
 		NoShell:     a.NoShell,
 		AsRoot:      a.Sudo,
 	}))

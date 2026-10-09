@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"golang.org/x/term"
+
+	"sshfleet/internal/log"
 )
 
 // ErrCancelled 用户取消交互；main 据此以 1 退出且不附加 [ERROR] 前缀
@@ -28,13 +30,14 @@ const (
 type Interactor struct {
 	In             io.Reader
 	Out            io.Writer
-	Disinteractive bool // 对位 --disinteractive：Confirm 显式返回已确认（不再借用 yorn 值）
+	Disinteractive bool        // 对位 --disinteractive：Confirm 显式返回已确认（不再借用 yorn 值）
+	Log            *log.Logger // 留痕出口：Confirm 在非交互（--yes）跳过确认时写一条
 
 	sc *bufio.Scanner
 }
 
-func NewInteractor(disinteractive bool) *Interactor {
-	return &Interactor{In: os.Stdin, Out: os.Stdout, Disinteractive: disinteractive}
+func NewInteractor(disinteractive bool, logger *log.Logger) *Interactor {
+	return &Interactor{In: os.Stdin, Out: os.Stdout, Disinteractive: disinteractive, Log: logger}
 }
 
 // Notice 非交互性提示（校验重试提示、清单清洗说明等）：只往注入的输出流写，
@@ -84,19 +87,35 @@ func (i *Interactor) PromptPassword(prompt string) (string, error) {
 	return i.Prompt(prompt)
 }
 
-// Confirm yes/no 确认。defaultYes 决定回车缺省与 [Y/n]/[y/N] 措辞。
-// 非交互模式显式返回已确认（spec 实现层差异：不再借用 yorn 参数值）。
-// EOF：打印「输入结束，操作已取消」并返回 ErrCancelled；
-// Ctrl+C 由 main 级信号处理接管（M3 细化中断语义）。
-func (i *Interactor) Confirm(prompt string, defaultYes bool) (bool, error) {
+// ConfirmReq 一次 yes/no 确认的全部入参（打包传参，避免位置参数一路加长）。
+type ConfirmReq struct {
+	Prompt     string // 交互提问语；[Y/n] / [y/N] 后缀由 Confirm 自己拼
+	DefaultYes bool   // 回车缺省
+	Trace      string // 留痕文案：非交互（--yes）跳过确认时写进工具日志；空 = 不留痕
+	SkipLine   string // 非交互跳过时上屏的一行（自带换行）；空 = 只留痕、不上屏
+}
+
+// Confirm 全工具唯一的 yes/no 入口。提问语、回车缺省、留痕文案都走参数，
+// 非交互（--yes）判定收在函数内——不再让每个调用方各写一套「跳过时该干什么」，
+// 后面再加确认项也不会漏掉留痕。
+//
+// 三个出口：
+//   - 非交互（--yes）：不打屏、不读输入，按 Trace 留痕（SkipLine 非空则再上屏一行），视为已确认；
+//   - 读到 EOF：打印「输入结束，操作已取消」并返回 ErrCancelled（Ctrl+C 由 main 级信号处理接管）；
+//   - 正常：回车取 DefaultYes，答否返回 false，由调用方决定怎么处置。
+func (i *Interactor) Confirm(req ConfirmReq) (bool, error) {
 	if i.Disinteractive {
+		i.trace(req.Trace)
+		if req.SkipLine != "" {
+			fmt.Fprint(i.Out, req.SkipLine)
+		}
 		return true, nil
 	}
 	hint := colorRed + "[y/N]" + colorReset
-	if defaultYes {
+	if req.DefaultYes {
 		hint = colorRed + "[Y/n]" + colorReset
 	}
-	fmt.Fprintf(i.Out, "%s %s: ", prompt, hint)
+	fmt.Fprintf(i.Out, "%s %s: ", req.Prompt, hint)
 	line, ok := i.readLine()
 	if !ok {
 		fmt.Fprint(i.Out, "\n"+colorYellow+"输入结束，操作已取消"+colorReset+"\n")
@@ -104,9 +123,16 @@ func (i *Interactor) Confirm(prompt string, defaultYes bool) (bool, error) {
 	}
 	line = strings.ToLower(strings.TrimSpace(line))
 	if line == "" {
-		return defaultYes, nil
+		return req.DefaultYes, nil
 	}
 	return line == "y" || line == "yes", nil
+}
+
+// trace 往工具日志写一条留痕；无日志口（测试）或文案为空时静默。
+func (i *Interactor) trace(text string) {
+	if text != "" && i.Log != nil {
+		i.Log.Warn(text)
+	}
 }
 
 // readLine 从注入的输入流读一行；流结束时返回 ok=false。

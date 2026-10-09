@@ -58,6 +58,9 @@ type Args struct {
 	AnswerFile  string
 	Match       ssh.MatchOptions // [interactive] 的匹配口径：管触发词与中止词
 	Interpreter string           // 本次执行用的解释器（配置推导；-c/-s 模式才有值）
+	// EnvPrefix 是本次下发命令开头那段 `export …;`（由 [execution] env 拼成，见 ssh.ExportPrefix）。
+	// 与 Interpreter 同一口径：解析时算好一次，执行侧直接取用；空串 = 配置里没给环境变量。
+	EnvPrefix string
 	// Downlink 是 -a 交互分支的下发行（正文经 base64 编入命令行的那条）。与 Interpreter
 	// 同一口径：参数合规检查阶段算好一次，执行侧直接取用，不再自己拼——长度检查量的串
 	// 与实际发出去的串因此是同一个值（ADR-0010）。非 -a 运行为空串。
@@ -281,13 +284,13 @@ func Parse(cfg *config.Config, version string, raw []string) (*Args, error) {
 	fs.StringVarP(&a.Download, "download", "d", "", "从服务器下载文件或目录到本地")
 	fs.StringVarP(&a.CsvFile, "csv-file", "f", "", "节点清单：CSV 文件路径，或内联一行节点信息")
 	fs.StringVarP(&a.Path, "path", "p", "", "目标路径：上传到服务器的目录 / 下载到的本地目录")
-	fs.BoolVar(&sudoFlag, "sudo", false, "这次以 root 身份执行")
+	fs.BoolVar(&sudoFlag, "sudo", false, "这次以 root 身份执行（需目标节点已配免密 sudo）")
 	fs.BoolVar(&noSudoFlag, "no-sudo", false, "这次以登录用户身份执行")
 	fs.StringVarP(&a.timeoutRaw, "timeout", "t", "", "命令跑完、文件传完的最长等待（秒）")
 	fs.StringVarP(&a.connectTimeoutRaw, "connect-timeout", "T", "", "连上服务器的最长等待（秒）")
 	fs.StringVarP(&a.numberRaw, "number", "n", "", "并发数：同时操作几台服务器")
 	fs.StringVarP(&a.Remark, "remark", "r", "", "备注，用作历史记录文件夹名（不填自动生成）")
-	fs.BoolVar(&a.NoShell, "no-shell", false, "命令模式专用: 不套工具的外壳，命令原样下发")
+	fs.BoolVar(&a.NoShell, "no-shell", false, "不套工具的外壳、不设环境：命令/脚本原样下发")
 	fs.BoolVar(&a.Disinteractive, "yes", false, "跳过所有确认提示直接执行")
 	fs.StringVar(&a.ChangePassword, "change-password", "", "批量改密：把清单里密码过期的账号改成同一个新密码")
 	fs.StringVarP(&a.Answer, "answer", "a", "", "代填：看到触发词就自动填内容")
@@ -369,6 +372,8 @@ func Parse(cfg *config.Config, version string, raw []string) (*Args, error) {
 	// 解释器取自配置（[interpreter]）：-c 用 command，-s 按后缀查 script、没命中回退 command。
 	// 回退是否被用户点头由启动阶段的 ConfirmInterpreterFallback 把关，这里只算终值。
 	a.Interpreter = interpreterOf(&a, cfg)
+	// 下发前缀同样在这里拼一次：键名排序保证每次一样，执行侧只取用（与 Interpreter 同口径）。
+	a.EnvPrefix = ssh.ExportPrefix(cfg.Execution.Env)
 	// 凭据加密开关：--change-password 的取值按它解释（明文 / 密文文件路径）
 	a.credentialEncrypted = cfg.Credential.Encrypt
 
@@ -536,11 +541,11 @@ func helpEntries(cfg *config.Config) []helpEntry {
 		groupRow("执行参数"),
 		opt("-n", "--number", "[默认: 全部]", "并发数：同时操作几台，不填=全部并行"),
 		opt("-r", "--remark", "", "备注，用作历史记录文件夹名（不填自动生成）"),
-		opt("", "--sudo", sudoTag, "这次以 root 身份执行"),
+		opt("", "--sudo", sudoTag, "这次以 root 身份执行（需目标节点已配免密 sudo）"),
 		opt("", "--no-sudo", "", noSudoDesc),
 		opt("", "--yes", "", "跳过所有确认直接执行（自动化用，用它之前先手动跑通一次）"),
 		opt("-a", "--answer", "", "代填：看到触发词就自动填内容（值形如「代填内容,触发词,触发词」，多条用 \\n 分行），也可给 CSV 文件的路径（每行一条）"),
-		opt("", "--no-shell", "", "命令模式：不套工具的外壳（默认会先设好环境再执行），命令原样下发"),
+		opt("", "--no-shell", "", "不套工具的外壳、不设环境：命令原样下发；脚本直接交给解释器跑"),
 		opt("-t", "--timeout", fmt.Sprintf("[默认: %d/%d]", cfg.Execution.TimeoutExecute, cfg.Execution.TimeoutTransfer), "命令跑完、文件传完的最长等待（秒）"),
 		opt("-T", "--connect-timeout", fmt.Sprintf("[默认: %d]", cfg.Execution.TimeoutConnect), "连上服务器的最长等待（秒）"),
 

@@ -5,6 +5,32 @@ import (
 	"testing"
 )
 
+// validateEnv：键名必须是合法 shell 变量名（挡 123 / A-B）；空键与空值一律丢弃。
+func TestValidateEnv(t *testing.T) {
+	ok := map[string]string{"LC_ALL": "en_US.UTF-8", "PATH": "/bin:/usr/bin", "_X1": "v"}
+	if err := validateEnv(ok); err != nil {
+		t.Fatalf("正常配置不该报错：%v", err)
+	}
+	if len(ok) != 3 {
+		t.Fatalf("合法条目不该被丢，实际 %v", ok)
+	}
+
+	// 空键 / 空值 = 没有这一条
+	drop := map[string]string{"A": "1", "B": "", "": "x"}
+	if err := validateEnv(drop); err != nil {
+		t.Fatalf("空键空值应放行（按不存在处理）：%v", err)
+	}
+	if len(drop) != 1 || drop["A"] != "1" {
+		t.Fatalf("空键空值应被丢弃，实际 %v", drop)
+	}
+
+	for _, bad := range []string{"123", "1A", "A-B", "A B", "A.B"} {
+		if err := validateEnv(map[string]string{bad: "v"}); err == nil || !strings.Contains(err.Error(), "不是合法的环境变量名") {
+			t.Fatalf("%q 应被拦下，实际 %v", bad, err)
+		}
+	}
+}
+
 // validateInterpreter：命令项与脚本映射都必须"配了就有值"；后缀带点、不重复（忽略大小写）；
 // 解释器重复放行；后缀键归一为小写。
 func TestValidateInterpreter(t *testing.T) {

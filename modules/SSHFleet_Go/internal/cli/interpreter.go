@@ -62,11 +62,15 @@ func ConfirmInterpreterFallback(a *Args, cfg *config.Config, in *common.Interact
 		return nil
 	}
 	ext := path.Ext(a.Script)
-	ok, err := in.Confirm(fmt.Sprintf(
-		"脚本后缀 %q 没有配置解释器\n"+
-			"  想换别的解释器：在 %s 的 [interpreter.script] 里加一行，如 %q = \"解释器名\"\n"+
-			"  继续用 %s 作为解释器吗？",
-		ext, configShown, ext, cfg.Interpreter.Command), false)
+	ok, err := in.Confirm(common.ConfirmReq{
+		Prompt: fmt.Sprintf(
+			"脚本后缀 %q 没有配置解释器\n"+
+				"  想换别的解释器：在 %s 的 [interpreter.script] 里加一行，如 %q = \"解释器名\"\n"+
+				"  继续用 %s 作为解释器吗？",
+			ext, configShown, ext, cfg.Interpreter.Command),
+		DefaultYes: false,
+		Trace:      fmt.Sprintf("非交互模式（--yes）跳过确认：脚本后缀 %q 未配解释器，直接回退到 %s", ext, cfg.Interpreter.Command),
+	})
 	if err != nil {
 		return err
 	}

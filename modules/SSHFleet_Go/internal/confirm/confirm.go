@@ -36,13 +36,30 @@ func Confirm(args *cli.Args, nodes *nodelist.Nodes, cfg *config.Config, logger *
 		args.Number = nodes.Len()
 	}
 
+	// --no-shell 会忽略 sudo：sudo 是工具替命令加的那层东西，而 --no-shell 的要求正是
+	// "工具不附加任何东西"——丢掉不算错，静默丢掉才算。所以先提醒一句、让用户确认。
+	// 两种模式都走：非交互（--yes）下留痕 + 上屏一行。
+	if args.NoShell && args.Sudo {
+		if err := warnNoShellDropsSudo(in, logger); err != nil {
+			return err
+		}
+	}
+
+	// 参数确认的入参：Prompt 给交互用，Trace / SkipLine 给非交互（--yes）跳过用。
+	confirmReq := common.ConfirmReq{
+		Prompt:     "\n" + colorBrightYellow + "以上确认无误，开始执行？" + colorReset,
+		DefaultYes: true,
+		Trace:      "非交互模式（--yes）跳过执行参数确认，直接执行",
+		SkipLine:   fmt.Sprintf("%s [非交互模式] 跳过执行参数确认环节，直接执行%s\n\n", colorYellow, colorReset),
+	}
+
 	// 非交互模式：不出参数屏、不提问，但上传并发建议照旧生效（Confirm 直接返回已确认）
 	if in.Disinteractive {
 		if _, err := suggestUploadConcurrency(args, cfg, in, nodes.Len()); err != nil {
 			return err
 		}
-		fmt.Printf("%s [非交互模式] 跳过执行参数确认环节，直接执行%s\n\n", colorYellow, colorReset)
-		return nil
+		_, err := in.Confirm(confirmReq)
+		return err
 	}
 
 	// 并发数的括号注：第一次屏说清这个数从哪来（不指定 -n = 全部并行），
@@ -74,7 +91,7 @@ func Confirm(args *cli.Args, nodes *nodelist.Nodes, cfg *config.Config, logger *
 	}
 
 	fmt.Println("\n" + strings.Repeat("═", 60))
-	confirmed, err := in.Confirm("\n"+colorBrightYellow+"以上确认无误，开始执行？"+colorReset, true)
+	confirmed, err := in.Confirm(confirmReq)
 	if err != nil {
 		return err
 	}
@@ -85,6 +102,33 @@ func Confirm(args *cli.Args, nodes *nodelist.Nodes, cfg *config.Config, logger *
 	}
 	fmt.Printf("SSHFleet工具%s开始执行%s......\n", colorBlue, colorReset)
 	fmt.Println(strings.Repeat("=", 50))
+	return nil
+}
+
+// warnNoShellDropsSudo --no-shell 与 sudo 同时生效时的提醒门（默认 y，回车即继续；
+// 答 n 中止本次，让用户回命令行去掉 --no-shell 或 --sudo 重跑，不替他偷改参数）。
+// 交互下先打一段说明再问一句；非交互（--yes）下由 Confirm 留痕 + 上屏一行。
+func warnNoShellDropsSudo(in *common.Interactor, logger *log.Logger) error {
+	if !in.Disinteractive {
+		fmt.Printf("%s⚠ --sudo 与 --no-shell 同时给出%s\n", colorYellow, colorReset)
+		fmt.Println("  --no-shell 是原样下发、工具不附加任何东西，所以 --sudo 不生效：")
+		fmt.Println("  本次将以【登录用户】身份执行，命令里不会带 sudo。")
+		fmt.Println("  要 root 身份，请去掉 --no-shell；要原样跑，请去掉 --sudo。")
+	}
+	ok, err := in.Confirm(common.ConfirmReq{
+		Prompt:     "\n" + colorYellow + "继续执行？" + colorReset,
+		DefaultYes: true,
+		Trace:      "--sudo 被 --no-shell 忽略：本次以登录用户身份执行，命令里不含 sudo",
+		SkipLine:   fmt.Sprintf("%s⚠ --sudo 被 --no-shell 忽略：本次以登录用户身份执行，命令里不含 sudo（要 root 请去掉 --no-shell）%s\n", colorYellow, colorReset),
+	})
+	if err != nil {
+		return err
+	}
+	if !ok {
+		fmt.Println(colorYellow + "操作已取消" + colorReset)
+		logger.Warn("执行已取消（--no-shell 与 sudo 同时给出）")
+		return common.ErrCancelled
+	}
 	return nil
 }
 
@@ -107,6 +151,10 @@ func buildInfoTable(args *cli.Args, nodes *nodelist.Nodes, note string) [][2]str
 	identity := "登录用户"
 	if args.Sudo {
 		identity = "root"
+		// --no-shell 原样下发、工具不附加任何东西，sudo 会被丢掉——别让屏上写 root、实跑登录用户。
+		if args.NoShell {
+			identity = "登录用户（--no-shell 忽略 sudo）"
+		}
 	}
 	t := [][2]string{{"执行身份", identity}}
 	// 解释器行：只在命令 / 脚本模式出现，且只在配置的解释器不是 bash（归一判断）时才占一行
@@ -227,7 +275,11 @@ func suggestUploadConcurrency(args *cli.Args, cfg *config.Config, in *common.Int
 	}
 	fmt.Printf("\n%s上传总大小 %s，按配置里的阈值建议同时传 %d 个（当前是 %d 个）。%s\n",
 		colorYellow, common.FormatBytes(size), allowed, args.Number, colorReset)
-	yes, err := in.Confirm(fmt.Sprintf("改成 %d 个？", allowed), true)
+	yes, err := in.Confirm(common.ConfirmReq{
+		Prompt:     fmt.Sprintf("改成 %d 个？", allowed),
+		DefaultYes: true,
+		Trace:      fmt.Sprintf("非交互模式（--yes）自动采纳上传并发建议：%d 个（当前 %d 个）", allowed, args.Number),
+	})
 	if err != nil {
 		// EOF/取消：返回 ErrCancelled 交由 main 统一退出（不在子模块内自行 os.Exit）
 		return false, err

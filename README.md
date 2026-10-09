@@ -325,6 +325,8 @@ SSHFleet -f nodes.csv -c "uptime" -T 15 -t 60
 SSHFleet -f nodes.csv -s deploy.sh --yes
 ```
 
+**`--sudo` 的前提**：目标节点上这个登录账号得已配免密 sudo（`NOPASSWD`）——工具只发 `sudo <命令>`，不代你输 sudo 密码。没配的话命令会停在 `sudo: a password is required`，按执行失败计。配置方法 → [配置手册](docs/配置手册.md) 的 sudo 一节。
+
 **危险命令防护**：执行前工具会分析命令内容（命令模式分析 `-c`，脚本模式分析脚本全文），命中规则时列出每一条——来源、行号、内容、规则、级别。**禁止级**直接拒绝执行并退出；其余级别需要你确认一次。规则写在 `config/keywords_dangerous.conf` 里，不想被某条打扰就把它改成 `enabled = false`，或用 `#` 注释掉。
 
 危险命令这一屏每条字段的含义、非交互模式下的行为 → [使用手册](docs/使用手册.md)。
@@ -417,21 +419,22 @@ SSHFleet -f nodes.csv -s deploy.pl
 
 ### 6.7 命令在远端是怎么执行的（`--no-shell` 关的是哪层壳）
 
-工具**不把命令原文直接交给目标机**：默认在远端套一层外壳，先设好 locale 与 PATH，再把你的命令交给解释器；用了 `-a` 代填，正文还得换条通道走。下表就是远端实际收到的东西。
+工具**不把命令原文直接交给目标机**：默认在远端套一层外壳，先按配置文件 `[execution] env` 导入环境变量，再把你的命令交给解释器；用了 `-a` 代填，正文还得换条通道走。下表就是远端实际收到的东西。
 
 | 怎么跑 | 远端收到的命令行 | 命令正文走哪 |
 | --- | --- | --- |
 | `-c "hostname"` | `sh -c 'export LC_ALL=… LANG=… PATH=…; bash'` | 会话 stdin |
 | `-s deploy.sh` | `sh -c 'export …; bash -c ". /dev/stdin" "deploy.sh"'` | 会话 stdin |
 | 上面两条加 `-a` | `sh -c 'export …; bash -c "$(printf %s <base64> \| base64 -d)" "deploy.sh"'`（末尾的脚本名只在脚本模式出现） | 编进命令行 |
-| 再加 `--sudo` | 左边各条里的 `bash` 前多一个 `sudo ` | 不变 |
-| 加 `--no-shell` | **命令原文，一个字不加** | 不喂 stdin |
+| 任意一条加 `--sudo` | 左边各条里的 `bash` 前多一个 `sudo ` | 不变 |
+| `-c` 加 `--no-shell` | **命令原文，一个字不加** | 不喂 stdin |
+| `-s` 加 `--no-shell` | `<解释器> -c ". /dev/stdin" "<脚本名>"`，不套外壳、不设环境 | 会话 stdin |
 
-**为什么套这层壳**：非交互拉起的命令，PATH 常只剩 `/usr/bin:/bin`——`sudo` 在 `/usr/sbin`、`python3` 常在 `/usr/local/bin`，就是 command not found。靠登录 shell 读 `/etc/profile` 补环境，则要求目标机有 bash、shell 认 `-l`、profile 还得是它解析得了的语法——三样都不保证。工具直接写死一组标准目录，`/bin/sh` 在就能跑。
+**为什么套这层壳**：非交互拉起的命令，PATH 常只剩 `/usr/bin:/bin`——`sudo` 在 `/usr/sbin`、`python3` 常在 `/usr/local/bin`，就是 command not found。靠登录 shell 读 `/etc/profile` 补环境，则要求目标机有 bash、shell 认 `-l`、profile 还得是它解析得了的语法——三样都不保证。出厂配置直接给一组标准目录，`/bin/sh` 在就能跑（具体给哪几条、怎么改 → [配置手册](docs/配置手册.md) 的 env 一节）。
 
 **为什么 `-a` 要换通道**：一次会话只有一条 stdin，代填要独占它，正文只能编进命令行（base64，不落盘）。代价是**长度上限**——正文约 90KB，超了开跑前本地就拦下。
 
-**`--no-shell` 关掉的只是最外层那层 `sh -c`**：它只对 `-c` 有意义（`-s` 与它互斥）。加上它，命令原样下发，环境不再由工具设，PATH 靠目标机自己。
+**`--no-shell` 关掉的是一整层外壳**：不套 `sh -c`、不导入环境变量、也不加 `sudo`——命令原样下发，环境与身份都归目标机自己。`-c` 与 `-s` 都支持（脚本模式只剩解释器自己那条调用，正文照旧走 stdin）；它与 `-a` 互斥（代填要独占会话）。
 
 上传 / 下载 / 改密没有"你的命令"要下发，不走这套。
 
