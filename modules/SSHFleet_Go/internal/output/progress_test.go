@@ -26,7 +26,7 @@ func newTestProgress(mode cli.Mode, total int) progressModel {
 // 命令模式：单行，含台数、成败与耗时。
 func TestCommandViewIsSingleLineWithCounts(t *testing.T) {
 	m := newTestProgress(cli.ModeCommand, 5)
-	m.applySnapshot(batch.Snapshot{Total: 5, Completed: 3, Succeeded: 2, Failed: 1})
+	m.applySnapshot(batch.Snapshot{Completed: 3, Succeeded: 2, Failed: 1})
 
 	view := m.render()
 	for _, want := range []string{"总进度", "已完成 3/5", "成功 2", "失败 1"} {
@@ -44,7 +44,7 @@ func TestCommandViewIsSingleLineWithCounts(t *testing.T) {
 func TestTransferViewListsActiveNodesOnly(t *testing.T) {
 	m := newTestProgress(cli.ModeUpload, 3)
 	m.applySnapshot(batch.Snapshot{
-		Total: 3, Completed: 1, Succeeded: 1, BytesDone: 512, BytesTotal: 1024,
+		Completed: 1, Succeeded: 1, BytesDone: 512, BytesTotal: 1024,
 		Nodes: []batch.NodeSnapshot{
 			{Seq: 0, IP: "10.0.0.1", Bytes: 512, TotalBytes: 1024, TotalFiles: 4, SuccessFiles: 4, Done: true},
 			{Seq: 1, IP: "10.0.0.2", Bytes: 128, TotalBytes: 1024, TotalFiles: 4},
@@ -76,7 +76,7 @@ func TestTransferVisibleNodesCapped(t *testing.T) {
 		})
 	}
 	m := newTestProgress(cli.ModeUpload, total)
-	m.applySnapshot(batch.Snapshot{Total: total, Nodes: nodes})
+	m.applySnapshot(batch.Snapshot{Nodes: nodes})
 	m.syncBars()
 
 	visible := 0
@@ -107,7 +107,7 @@ func TestViewLeavesSacrificialTrailingLine(t *testing.T) {
 // 逐步打印进度值。（用户 2026-09-15 反馈看到「先 100% 又回落」，这里先把数据层钉死。）
 func TestExecuteProgressSequenceMonotonic(t *testing.T) {
 	total := 8
-	agg := batch.NewAggregator(total, nil)
+	agg := batch.NewAggregator(nil)
 	m := newTestProgress(cli.ModeCommand, total)
 
 	m.applySnapshot(agg.Snapshot())
@@ -137,7 +137,7 @@ func TestExecuteProgressSequenceMonotonic(t *testing.T) {
 // tag 认领，快照比帧密时每帧都被下一次重设目标作废，显示值完全冻结；改为直出后不存在。）
 func TestBarsRenderTargetImmediately(t *testing.T) {
 	m := newTestProgress(cli.ModeCommand, 4)
-	m.applySnapshot(batch.Snapshot{Total: 4, Completed: 4})
+	m.applySnapshot(batch.Snapshot{Completed: 4})
 
 	if got := m.render(); !strings.Contains(got, "100.0%") {
 		t.Fatalf("命令模式的条与百分比应立刻等于目标值 100.0%%，实际：\n%s", got)
@@ -146,7 +146,7 @@ func TestBarsRenderTargetImmediately(t *testing.T) {
 	// 传输模式的三条（总进度 / 节点进度 / 逐节点）同样直出
 	tr := newTestProgress(cli.ModeUpload, 2)
 	tr.applySnapshot(batch.Snapshot{
-		Total: 2, Completed: 2, BytesDone: 100, BytesTotal: 100,
+		Completed: 2, BytesDone: 100, BytesTotal: 100,
 		Nodes: []batch.NodeSnapshot{{Seq: 0, IP: "10.0.0.1", Bytes: 50, TotalBytes: 50, SuccessFiles: 1, TotalFiles: 1}},
 	})
 	tr.syncBars()
@@ -175,7 +175,7 @@ func TestProgressWeightsByNodeCount(t *testing.T) {
 	}
 	// 字节口径下这里会算出 1000/1000 = 1.0
 	m.applySnapshot(batch.Snapshot{
-		Total: 50, Completed: 10, BytesDone: 1000, BytesTotal: 1000, Nodes: nodes,
+		Completed: 10, BytesDone: 1000, BytesTotal: 1000, Nodes: nodes,
 	})
 	if got := m.progress(); got != 0.2 {
 		t.Fatalf("10/50 完成时进度应为 0.2（按字节算会得到 1.0），实际 %v", got)
@@ -183,7 +183,7 @@ func TestProgressWeightsByNodeCount(t *testing.T) {
 
 	// 在传的节点按自身进度计入
 	m2 := newTestProgress(cli.ModeUpload, 4)
-	m2.applySnapshot(batch.Snapshot{Total: 4, Completed: 1, Nodes: []batch.NodeSnapshot{
+	m2.applySnapshot(batch.Snapshot{Completed: 1, Nodes: []batch.NodeSnapshot{
 		{Seq: 0, Bytes: 10, TotalBytes: 10, Done: true},
 		{Seq: 1, Bytes: 5, TotalBytes: 10},
 	}})
@@ -193,7 +193,7 @@ func TestProgressWeightsByNodeCount(t *testing.T) {
 
 	// 命令模式：完成的台数 / 总数
 	c := newTestProgress(cli.ModeCommand, 10)
-	c.applySnapshot(batch.Snapshot{Total: 10, Completed: 9})
+	c.applySnapshot(batch.Snapshot{Completed: 9})
 	if got := c.progress(); got != 0.9 {
 		t.Fatalf("命令模式 9/10 应为 0.9，实际 %v", got)
 	}
@@ -202,7 +202,7 @@ func TestProgressWeightsByNodeCount(t *testing.T) {
 // 快照消息不该回吐命令：条是直出的，渲染不再需要"再转一圈"的事件循环。
 func TestSnapshotUpdateIssuesNoCommand(t *testing.T) {
 	m := newTestProgress(cli.ModeCommand, 4)
-	if _, cmd := m.Update(batch.Snapshot{Total: 4, Completed: 2}); cmd != nil {
+	if _, cmd := m.Update(batch.Snapshot{Completed: 2}); cmd != nil {
 		t.Fatal("快照处理不该产生后续命令（直出渲染没有动画帧）")
 	}
 }
@@ -213,7 +213,7 @@ func TestDisplayTracksProgressUnderBurst(t *testing.T) {
 	const total = 300
 	m := newTestProgress(cli.ModeCommand, total)
 	for i := 1; i <= total; i++ {
-		updated, _ := m.Update(batch.Snapshot{Total: total, Completed: i})
+		updated, _ := m.Update(batch.Snapshot{Completed: i})
 		m = updated.(progressModel)
 		if i%50 == 0 {
 			got := percentIn(t, m.render())
@@ -233,7 +233,7 @@ func TestDisplayedPercentNeverGoesBackwards(t *testing.T) {
 	m := newTestProgress(cli.ModeCommand, total)
 	last := 0.0
 	for i := 0; i <= total; i++ {
-		updated, _ := m.Update(batch.Snapshot{Total: total, Completed: i})
+		updated, _ := m.Update(batch.Snapshot{Completed: i})
 		m = updated.(progressModel)
 		got := percentIn(t, m.render())
 		if got < last {

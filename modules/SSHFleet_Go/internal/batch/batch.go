@@ -104,7 +104,7 @@ func Run(ctx context.Context, a *cli.Args, cfg *config.Config, nodes *nodelist.N
 		logger.Success(line)
 	}
 
-	agg := NewAggregator(len(tasks), hooks.OnProgress)
+	agg := NewAggregator(hooks.OnProgress)
 	// 先渲染一次 0% 的初始界面：命令模式没有字节级进度回调，首个进度事件要等
 	// 第一个节点完成才来，此前屏幕上没有任何「执行中」的反馈（用户 2026-09-15 裁定）。
 	// 采集期提示已在上面下发完毕，此刻建界面不会把它顶掉。
