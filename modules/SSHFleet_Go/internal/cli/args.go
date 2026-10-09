@@ -538,7 +538,7 @@ func helpEntries(cfg *config.Config) []helpEntry {
 
 		blankRow,
 
-		groupRow("执行参数"),
+		groupRow("执行选项"),
 		opt("-n", "--number", "[默认: 全部]", "并发数：同时操作几台，不填=全部并行"),
 		opt("-r", "--remark", "", "备注，用作历史记录文件夹名（不填自动生成）"),
 		opt("", "--sudo", sudoTag, "这次以 root 身份执行（需目标节点已配免密 sudo）"),
