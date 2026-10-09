@@ -98,7 +98,9 @@ func checkAnswerInterpreter(a *Args) error {
 	}
 	return fmt.Errorf(
 		"-a 代填不支持解释器 %q\n"+
-			"目前支持：bash、sh、dash、ksh、zsh、mksh、ash、python、perl、ruby、node、lua、php\n"+
+			"目前支持：%s\n"+
 			"提示：请改 %s 的 [interpreter]，换成上面这些；或去掉 -a 后重跑",
-		a.Interpreter, configShown)
+		a.Interpreter,
+		strings.Join(ssh.SupportedInterpreters(), "、"),
+		configShown)
 }
