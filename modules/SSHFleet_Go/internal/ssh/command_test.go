@@ -42,15 +42,34 @@ func TestBuildCommandEmptyEnvPrefix(t *testing.T) {
 	}
 }
 
-// ExportPrefix：空表返回空串；键名排序；值按需加引号（安全字符裸拼）。
+// ExportPrefix：空表返回空串；键名排序；值一律双引号包裹，只转义值里的双引号，
+// 其余字符（`$`、反斜杠）原样交目标节点按 shell 双引号语义处理。
 func TestExportPrefix(t *testing.T) {
 	if got := ExportPrefix(nil); got != "" {
 		t.Fatalf("空表应返回空串，实际 %q", got)
 	}
-	got := ExportPrefix(map[string]string{"PATH": "/a:/b", "LC_ALL": "en_US.UTF-8", "MY": "a b"})
-	want := `export LC_ALL=en_US.UTF-8 MY='a b' PATH=/a:/b;`
-	if got != want {
-		t.Fatalf("拼装不符\n want %q\n got  %q", want, got)
+	cases := []struct {
+		what string
+		in   map[string]string
+		want string
+	}{
+		{"键名排序 + 值一律双引号",
+			map[string]string{"PATH": "/a:/b", "LC_ALL": "en_US.UTF-8", "MY": "a b"},
+			`export LC_ALL="en_US.UTF-8" MY="a b" PATH="/a:/b";`},
+		{"$ 不转义，留给目标节点展开",
+			map[string]string{"MYPATH": "/opt/bin:$PATH"},
+			`export MYPATH="/opt/bin:$PATH";`},
+		{"值里的双引号转义",
+			map[string]string{"Q": `say "hi"`},
+			`export Q="say \"hi\"";`},
+		{"反斜杠原样（\\$ 落地是字面 $）",
+			map[string]string{"L": `a\$b`, "W": `C:\dir`},
+			`export L="a\$b" W="C:\dir";`},
+	}
+	for _, c := range cases {
+		if got := ExportPrefix(c.in); got != c.want {
+			t.Fatalf("%s\n want %q\n got  %q", c.what, c.want, got)
+		}
 	}
 }
 

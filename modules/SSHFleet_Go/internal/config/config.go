@@ -245,7 +245,9 @@ var envNameRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 // validateEnv 校验 [execution] env 并就地归一：
 //   - 键名必须是合法 shell 变量名——`export` 只认这种名字，写别的（123、A-B）到远端会报
 //     not a valid identifier、变量静默不生效，所以在启动阶段就拦下、点名；
-//   - 空键或空值一律丢弃：空值 = 把这条临时关掉，按「没有这一条键值对」处理。
+//   - 空键或空值一律丢弃：空值 = 把这条临时关掉，按「没有这一条键值对」处理；
+//   - 值不能以奇数个反斜杠结尾——值会被包进双引号下发，那个反斜杠会吃掉收尾的引号，
+//     远端整条命令变成语法错（`unexpected EOF`），本地拦下比远端排查省事。
 func validateEnv(env map[string]string) error {
 	for name, value := range env {
 		if name == "" || value == "" {
@@ -257,8 +259,22 @@ func validateEnv(env map[string]string) error {
 				"原因：shell 的 export 只认「字母或下划线开头，后接字母、数字、下划线」的名字，写别的到远端会报 not a valid identifier、变量不生效\n"+
 				"提示：改成一个合法名字，例如 MY_VAR", name)
 		}
+		if trailingBackslashes(value)%2 == 1 {
+			return fmt.Errorf("execution.env 里的 %q 取值不能以反斜杠结尾，当前值：%q\n"+
+				"原因：值会被包进双引号下发，结尾的反斜杠会吃掉那个收尾引号，远端整条命令变成语法错\n"+
+				"提示：要一个反斜杠就写两个", name, value)
+		}
 	}
 	return nil
+}
+
+// trailingBackslashes 值末尾连续反斜杠的个数（偶数个是安全的：两个凑成一个字面反斜杠）。
+func trailingBackslashes(s string) int {
+	n := 0
+	for i := len(s) - 1; i >= 0 && s[i] == '\\'; i-- {
+		n++
+	}
+	return n
 }
 
 // validateInterpreter 校验解释器配置，并把脚本后缀键归一为小写（匹配时忽略大小写）。
