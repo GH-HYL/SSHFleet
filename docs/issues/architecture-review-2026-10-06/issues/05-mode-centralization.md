@@ -1,0 +1,46 @@
+# 05: 模式判定与模式文案集中化（形状已定，见 ADR-0013）
+
+Status: resolved
+Blocked by: None
+
+**目标**：把「这次是哪种模式」这一个事实的**全部叫法与派生判断**，收进 `cli.Args.ModeName()` 旁边；别处不再 `switch args.Command != ""` 各自重判。
+
+**背景**：ADR-0003 的《2026-09-29 推翻》节已裁定**重开**此事——拒绝集中化的唯一前提「模式集合已封闭」被 ADR-0011 打破（改密成了第 5 档）；结论（维持分散判定）当日仍照办，但「后续审查不必再提」一句作废，并明确「后续审查**可以（且应当）提**」。代价已被实测一次：落地改密那一档动了 **28 文件 / 8 包**，模式相关核对点 7 处、要手改 4 处。
+
+**现状：8 套叫法，散在 9 个文件**
+
+| 叫法 | 定义处 | 取值 |
+| --- | --- | --- |
+| 判定 | `cli/args.go:93` `ModeName()` | passwd / command / script / upload / download |
+| 日志中文名 | `batch/batch.go:231` `execModeName` | 命令 / 脚本 / 上传 / 下载 / 改密 |
+| 归档目录名 | `output/archive.go:208` | 直接用 `ModeName()` |
+| 报告段落 | `output/report.go:48` | switch 五路 |
+| 统计四档名 | `result/statistics.go:53` `ModeOf` | execute / upload / download /（改密落 default） |
+| 「算不算传输类」 | `statistics.go:69` vs `terminal.go:84` | **两套判法**（工单 02 先对齐） |
+| 超时行措辞 | `confirm.go:128`、`report.go:84` | 执行 / 传输 /（改密落空，工单 01 先补） |
+| 参数屏模式行 | `confirm/confirm.go:104` | switch 五路 |
+| ssh 下发行 | `ssh/command.go:137,152` | 只看 Command / Script |
+
+`ModeName()` 目前有 5 个消费方（`batch:110/:232`、`archive:208`、`report:48`、`statistics:54`）；**其余十几处仍在自己重判**。本轮工单 01、02 只把两个漏格补上，**不消除这套重判**。
+
+**形状已定（`docs/adr/0013`，2026-10-07）**——ADR-0003 文末三个待定项的定答：
+
+1. 集中到**哪一层** → **只集中「一档模式的全部名字」**，判定仍留 `Args.ModeName()` 单点。
+2. `ModeName()` 与新枚举的关系 → **不引新枚举**，名字挂在既有的 `cli.Mode` 类型上。
+3. 第六档 → 可预见范围内没有、但**不能断言没有**，故做成可扩展形状。
+
+另加一条：**漏改不静默**用**启动期自检**兜底——Go 没有编译期穷尽检查（已实测：显式长度数组字面量允许少给元素、`switch` 从不要求穷尽），故改为启动时遍历模式全集，见空格即停下并报出漏了谁。不引外部 lint 工具。
+
+**不动的**：`cli/check.go` 里数「指定了几个模式」的互斥校验——它要报个数、不是取哪一档，ADR-0003 明写它不该被合并。`ssh/command.go` 那两处**也不收**：那是输入契约判断、不是模式叫法，且 `ssh` 刻意不认识参数载体。
+
+**实施前**：把本票拆成实现工单。按作者口径，`Mode` 类型一动算**大改动**，需先**纸面走查五个模式**、再**上真机跑一遍**。
+
+- [x] 三件待定项各有结论（见上）
+- [x] 新 ADR 立好：`docs/adr/0013-centralize-execution-mode-naming.md`
+- [x] 拆成实现工单：`docs/issues/mode-centralization/`（`spec.md` + `issues/01`–`04`）
+- [x] 实施后回填本票与 ADR-0013 的状态
+
+## Comments
+- 2026-10-07 形状定答，落地为 `docs/adr/0013-centralize-execution-mode-naming.md`（作者当日拍板：集中化做；只集中名字；漏改用启动期自检兜底）。本票转 `ready-for-human`。
+- 2026-10-07 实现工单已拆出：`docs/issues/mode-centralization/`（`spec.md` + `issues/01`–`04`）。本票自此只作来源记录。
+- 2026-10-07 实施完成，提交 `b2956d5`（01–03 已 resolved，04 待作者真机复验）。本票结。

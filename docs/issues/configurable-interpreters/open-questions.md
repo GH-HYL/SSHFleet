@@ -1,0 +1,61 @@
+# 已收口：正文交付通道、`-a` 的程序文本参数、`$0` 补名机制
+
+Status: resolved（2026-10-07 全部落地）
+Type: research
+
+「解释器可配置」这次改动（见 [ADR-0014](../../adr/0014-configurable-interpreters.md)）暴露出来的三个口子，**均已收口**：第一节（正文交付通道）定为"没有第四条通道"，论证并入 **ADR-0010 的补充节**；第二节（`-a` 的程序文本参数）按"内部小表 + 表外报错"实施；第三节（`$0` 补名）改用 `. /dev/stdin` 实施。下面逐节留结论与实测记录，供后来人不必重走。
+
+---
+
+## 一、`-a` 下正文为什么只能走命令行（根因，已确认）
+
+作者的原话复述与代码一致：
+
+1. 一次 SSH 会话**只有一条 stdin**。`-a` 代填要独占它（按触发词往里喂内容），所以脚本正文 / 命令原文**不能再占用 stdin**。
+2. 于是 `-a` 的正文改走 **base64 编入命令行**，远端 `base64 -d` 后作内层解释器的 `-c` 参数。
+3. 代价：正文进 argv → 受 Linux `MAX_ARG_STRLEN`（`PAGE_SIZE × 32 = 131072`）约束，base64 膨胀 4/3 → **原文约 96KB 封顶**；超限在本地参数合规阶段拦下。
+
+以上三条的完整论证与实测见 **ADR-0010**（`docs/adr/0010-deliver-command-body-in-argv.md`），本文件不重复。
+
+**已收口（2026-10-07）**：**没有第四条通道**——一次 SSH 会话往远端送数据的入口只有 stdin 与 argv 两个，stdin 已整条让给代填，于是正文只能走 argv。新候选（`/dev/shm` + argv、`/dev/shm` + stdin 分时复用、由第一个消费者从 stdin 拆段转交、第二条 SSH 会话 / SFTP 通道、gzip 压缩）**逐一否掉**，完整论证与理由见 **ADR-0010 的「补充（2026-10-07）」一节**。现状即最优；代价是正文超约 96KB 在本地拦下。
+
+---
+
+## 二、`-a` 的「程序文本参数」不是统一的
+
+- `-a` 的内层是 `<解释器> -c "<正文>"`；为什么正文要进命令行，见第一节。
+- 但"**用一段字符串跑程序**"这个参数**各家不一样**：
+
+| 解释器                            | 跑一段程序文本 | 备注                          |
+| ------------------------------ | ------- | --------------------------- |
+| shell 家族（bash/sh/dash/ksh/zsh） | `-c`    | 现在能直接用                      |
+| python / python3               | `-c`    | 现在能直接用                      |
+| **perl**                       | `-e`    | `perl -c` 是**只做语法检查**，会静默跑空 |
+| **ruby / node**                | `-e`    | 同上                          |
+
+- 后果：把 `.pl` / `.rb` 之类配进 `[interpreter.script]` 后，用 `-a` 会**静默不对**（perl 甚至是"检查完就退"）——这是"静默错误"，比报错更糟。
+
+**已定并实施（2026-10-07）**：**(甲) 内部小表 + 表外报错**。表在 `internal/ssh/command.go` 的 `programTextArgTable`（`ProgramTextArg` 取参数）——shell 家族 / python → `-c`，perl / ruby / node / lua → `-e`，php → `-r`；表外的解释器在参数合规检查阶段当场报错并列出支持范围（`internal/cli` 的 `checkAnswerInterpreter`），不加任何配置项。
+
+实测（本机，2026-10-07）：`bash / zsh / ksh -c`、`python3 -c`、`perl / ruby / node / lua -e`、`php -r` 都能执行程序文本；`perl -c`（把文本当文件名）、`node -c`（需要文件）则不对——印证"非 shell/python 语言不能用 `-c`"。
+
+后续备选（未采用）：(乙) 只写文档声明支持范围；(丙) 每个后缀条目再加一列"程序文本参数"。
+
+---
+
+## 三、已实施（2026-10-07）
+
+**`. /dev/stdin` 替换 `exec -a`**（用于 `$0` 补名；只涉及"正文走 stdin"的那条路，即无 `-a`）：
+
+- 节点实测：`bash -c '. /dev/stdin' 'probe.sh'`、`dash -c '. /dev/stdin' 'probe.sh'` 都能让 `$0` = `probe.sh`；而 `dash -c 'exec -a "$0" dash' 'probe.sh'` 报 `exec: -a: not found`。
+- `/dev/stdin` 在节点上是 `/proc/self/fd/0` 的软链；等价写法还有 `/dev/fd/0`、`/proc/self/fd/0`。
+- 好处：命令更短，且**不挑 shell**（把 `.sh` 配成 `dash` 也能补回 `$0`，去掉 `exec -a` 的短板）。
+- 落点：`internal/ssh/command.go` 的 `scriptStdinInner`（一行）+ 该文件注释、`internal/ssh/command_test.go`、ADR-0014 同步。
+- **已实施（2026-10-07）**：`scriptStdinInner` 改为 `<解释器> -c '. /dev/stdin' '<脚本名>'`，`exec -a` 退场。
+- 代价（记档）：`.` 是"在当前 shell 里执行"，脚本顶层 `return` 会静默返回（当文件跑会报错）；`$BASH_SOURCE` 变成 `/dev/stdin`。
+
+---
+
+## Comments
+
+（暂无）
