@@ -18,7 +18,7 @@
 !.gitignore
 !.gitattributes
 
-# 许可证：随发布包分发（build-windows.bat 打进两个平台），README 也指向根目录这份
+# 许可证：随发布包分发（构建脚本打进两个平台），README 也指向根目录这份
 !LICENSE
 
 # 文档（决策：ADR；仓库级说明与词表；面向用户的手册；个人开发规范）
@@ -36,8 +36,12 @@
 !modules/
 !modules/**
 
-# 构建脚本（build-windows.bat）为个人使用工具，不进版本控制——
-# 他人按 README 的 go build 自行编译即可
+# 构建脚本
+# build-linux.sh 随仓库跟踪：它是发布用的脚本，他人 clone 后照它就能出两个平台的包；
+# 它读的两份出厂配置模板（modules/SSHFleet_Go/config/SSHFleet-for-*.conf）也随仓库走
+!build-linux.sh
+# build-windows.bat 刻意不跟踪（个人使用、仅本机）。
+# 他人不自己打包时，按 README 的 go build 自行编译即可
 
 # 以下几类在 modules/ 里天然存在、但都不进版本控制。
 # 注意：放在 !modules/** 之后才能生效——白名单里后写的规则覆盖先写的。
@@ -57,8 +61,7 @@ modules/build/
 #   tools/                        辅助脚本、离线依赖包等（全部不纳入）
 #   test/                         本地测试语料与样本
 #   build/  release/              构建中间产物与发布产物
-#   build-windows.bat             构建脚本（个人使用，不进版本控制）
-#   build-linux.sh                构建脚本（个人使用，不进版本控制；已废弃，打包已并入 .bat）
+#   build-windows.bat             构建脚本（个人使用，不进版本控制；build-linux.sh 已跟踪）
 #   根目录临时脚本（.bat 等）      按需补白名单
 #
 # 另有「过程文档」刻意不纳入追踪（白名单已天然排除，此处仅作说明）：
