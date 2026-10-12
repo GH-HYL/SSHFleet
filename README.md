@@ -88,16 +88,16 @@ SSHFleet 是一个 **SSH 批量运维工具**：一条命令，批量操作清�
 3. 修改 `config/SSHFleet.conf` 里的登录用户、SSH 端口、密码三项（都在基础配置），详见 [2 基础配置手册](docs/2-基础配置手册.md) 的「1 基础配置」。
 4. **在这个目录里**运行它。最小用法就是连一台机器、跑一条命令：
 
-   Windows（命令提示符 / PowerShell）：
-
-   ```bat
-   SSHFleet.exe -f 192.168.1.10 -c "uptime"
-   ```
-
    Linux / macOS（bash）：
 
    ```bash
    ./SSHFleet -f 192.168.1.10 -c "uptime"
+   ```
+
+   Windows（命令提示符 / PowerShell）：
+
+   ```bat
+   SSHFleet.exe -f 192.168.1.10 -c "uptime"
    ```
 
    想把 `SSHFleet` 装成随处能敲的命令：复制到 `PATH` 里的目录（如 `/usr/local/bin`）再 `chmod +x`。
@@ -322,7 +322,7 @@ SSHFleet -f nodes.csv -s install.sh -a "1,请选择架构\ndeb,请选择包格�
 SSHFleet -f nodes.csv --change-password "你的新密码"
 
 # 开了加密时：后面写密文文件的绝对路径
-SSHFleet -f nodes.csv --change-password "C:/keys/newpw.sec"
+SSHFleet -f nodes.csv --change-password "/home/ops/.keys/newpw.sec"
 ```
 
 **你不用配任何触发词**：远端会依次问「当前的密码」「新的密码」「重新输入」，工具自己匹配提示词、自己填。密码没到期的机器不会被改，单独归一类「密码未过期」并计入失败数。
