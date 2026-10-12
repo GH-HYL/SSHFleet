@@ -1,8 +1,8 @@
 # SSHFleet 工作区忽略规则（白名单）
 #
 # 本仓库将对外推送，只保留「代码 + 文档」两类内容。
-# 文档 = docs/adr/ 下的 ADR、仓库级说明与词表、面向使用者的六册手册、个人开发规范；
-# 规格（spec）、工单（issues）属过程物，不进仓库。
+# 文档 = docs/ 下的 ADR、agent 约定（agents）、规格与工单（issues）、仓库级说明与词表、
+# 面向使用者的六册手册、个人开发规范。
 # 工作区会不断产生过程文件（草稿、临时数据、中间产物），用黑名单要反复维护；
 # 因此改为白名单：默认全部忽略，只明确列出需要跟踪的几处。
 # 需要新增追踪时，在下面补一行即可。
@@ -29,6 +29,10 @@
 !docs/
 !docs/adr/
 !docs/adr/**
+!docs/agents/
+!docs/agents/**
+!docs/issues/
+!docs/issues/**
 # docs/ 下的 md：六册手册（README 在仓库根）与个人开发规范，一并纳入追踪
 !docs/*.md
 
@@ -36,12 +40,10 @@
 !modules/
 !modules/**
 
-# 构建脚本
-# build-linux.sh 随仓库跟踪：它是发布用的脚本，他人 clone 后照它就能出两个平台的包；
-# 它读的两份出厂配置模板（modules/SSHFleet_Go/config/SSHFleet-for-*.conf）也随仓库走
+# 构建脚本：两个平台各一个，都随仓库跟踪——他人 clone 后照它就能出包。
+# build-linux.sh 读的两份出厂配置模板（modules/SSHFleet_Go/config/SSHFleet-for-*.conf）也随仓库走
 !build-linux.sh
-# build-windows.bat 刻意不跟踪（个人使用、仅本机）。
-# 他人不自己打包时，按 README 的 go build 自行编译即可
+!build-windows.bat
 
 # 以下几类在 modules/ 里天然存在、但都不进版本控制。
 # 注意：放在 !modules/** 之后才能生效——白名单里后写的规则覆盖先写的。
@@ -61,12 +63,6 @@ modules/build/
 #   tools/                        辅助脚本、离线依赖包等（全部不纳入）
 #   test/                         本地测试语料与样本
 #   build/  release/              构建中间产物与发布产物
-#   build-windows.bat             构建脚本（个人使用，不进版本控制；build-linux.sh 已跟踪）
-#   根目录临时脚本（.bat 等）      按需补白名单
-#
-# 另有「过程文档」刻意不纳入追踪（白名单已天然排除，此处仅作说明）：
-#   docs/issues/                    规格与工单（每轮开发的过程物）
-#   docs/agents/                    给 agent 的约定文件（随工作区使用，不进对外仓库）
-#                                  → 注意 AGENTS.md 里指向它们的引用，对外仓库中会失效
+#   根目录临时脚本（.bat / .sh）   按需补白名单
 #
 # 另：modules/ 下按上述规则排除 history/ 与 *_bak*/，其余一律追踪。
