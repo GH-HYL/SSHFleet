@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 # SSHFleet 构建脚本（Ubuntu / Linux，跑一次出齐两个平台的发布包）
 #
+# ⚠️ 本脚本连同打包、发布流程（含 release/ 目录）都是**开发者本人手动使用**的，
+#    与 AI coding、测试无关：改代码、跑测试、验证功能**都不涉及**这里，
+#    除非开发者在本轮明确要求打包或发布，否则不要跑本脚本、不要动 release/、
+#    也不要因为「产物没更新」而去重跑它。
+#
 #   ./build-linux.sh
 #   不带参数直接走完全部流程：编译 windows/amd64 + linux/amd64（产物落工作区根 build/）
 #   → 用同一个时间戳出两套包：release/SSHFleet_<时间戳>_windows.zip 与
@@ -143,3 +148,12 @@ echo "[发布] 完成：release/$LNAME.tar.gz"
 echo
 echo "全部完成，发布产物（release/）："
 ls -lh --time-style='+%Y-%m-%d %H:%M' "$REL" | tail -n +2
+
+# 双击运行或从文件管理器启动时，终端窗口会随脚本结束立刻关闭，看不到上面的清单。
+# 非交互式调用（CI、管道）不阻塞，避免卡住自动化流程。
+if [ -t 0 ]; then
+  echo
+  printf '按任意键退出...'
+  read -rsn1 || true
+  echo
+fi
