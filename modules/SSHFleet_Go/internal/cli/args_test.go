@@ -2,6 +2,8 @@ package cli
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -330,10 +332,13 @@ func TestUsageTextGroupsOptions(t *testing.T) {
 		}
 	}
 
-	// 用法两行：批量执行一行、密钥管理一行
+	// 用法两行：批量执行一行、密钥管理一行。
+	// 程序名与实现同源（args.go 取 filepath.Base(os.Args[0])），不写死平台后缀——
+	// 测试二进制在 Windows 叫 cli.test.exe、Linux 叫 cli.test。
+	progName := filepath.Base(os.Args[0])
 	usageLines := 0
 	for _, ln := range strings.Split(text, "\n") {
-		if strings.HasPrefix(strings.TrimSpace(ln), "cli.test.exe") {
+		if strings.HasPrefix(strings.TrimSpace(ln), progName) {
 			usageLines++
 		}
 	}
