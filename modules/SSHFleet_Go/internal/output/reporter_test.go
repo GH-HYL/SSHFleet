@@ -415,6 +415,64 @@ func TestStepsNote(t *testing.T) {
 	}
 }
 
+// 中间步骤那段的取舍（改密未过期那一路的回归）。
+//
+// 背景：改密路径把收尾 `:` 的退出码无条件记进 Steps，干净收场时就是 0。未过期的机器正是
+// 这种收场（判定给「密码未过期」= 这台本来就不用改），失败行里却只剩一句
+// 「中间步骤：改密收尾（:） 退出码 0」——一句退出码 0 的事实被摆在「错误详情」下。
+// 现在的口径：整段按「有没有一步真的没跑成」取或舍。
+func TestErrTextOmitsAllZeroSteps(t *testing.T) {
+	zero, ten := 0, 10
+
+	// 全是 0：整段不取，四段全空 → 落到 fallback
+	res := ssh.Result{
+		Verdict: verdict.Other, Category: "密码未过期",
+		Steps: []ssh.StepResult{{Name: ssh.StepPasswd, ExitCode: &zero}},
+	}
+	if got := errText(res, nil, ""); got != "" {
+		t.Fatalf("中间步骤全是退出码 0 时不该进错误详情，实际：%q", got)
+	}
+
+	// 非 0：照常取（真失败那一路靠它给出「哪一步没跑成」）
+	res = ssh.Result{
+		Verdict: verdict.Other, Category: "新密码不合规",
+		Error: ptr("passwd：密码未更改"),
+		Steps: []ssh.StepResult{{Name: ssh.StepPasswd, ExitCode: &ten}},
+	}
+	got := errText(res, nil, "")
+	if !strings.Contains(got, "中间步骤：改密收尾（:） 退出码 10") {
+		t.Fatalf("有非 0 退出码时中间步骤应照常显示：%q", got)
+	}
+
+	// 混合（一步 0、一步非 0）：整段照常取，不把 0 的那条挑掉
+	res = ssh.Result{
+		Verdict: verdict.Other, Category: "远程路径不存在",
+		Error: ptr("远程路径不存在: /home/u/missing.txt"),
+		Steps: []ssh.StepResult{
+			{Name: ssh.StepPasswd, ExitCode: &zero},
+			{Name: ssh.StepPrecheck, ExitCode: &ten},
+		},
+	}
+	got = errText(res, nil, "")
+	if !strings.Contains(got, "改密收尾（:） 退出码 0") || !strings.Contains(got, "下载预检（test -e） 退出码 1") {
+		t.Fatalf("混有非 0 时整段应照常显示（含那条 0）：%q", got)
+	}
+
+	// 退出码缺席（超时 / 中断）：不是「非 0」，整段不取——真原因在报错原文里
+	res = ssh.Result{
+		Verdict: verdict.Other, Category: "改密未完成",
+		Error: ptr("改密没有完成：等到超时也没喂出一句"),
+		Steps: []ssh.StepResult{{Name: ssh.StepPasswd, ExitCode: nil}},
+	}
+	got = errText(res, nil, "")
+	if strings.Contains(got, "中间步骤") {
+		t.Fatalf("退出码缺席时不该取中间步骤段：%q", got)
+	}
+	if !strings.Contains(got, "改密没有完成") {
+		t.Fatalf("报错原文应照常显示：%q", got)
+	}
+}
+
 // DisplayCommand：报告与工具日志里的命令行必须能照抄重跑。
 //
 // argv 里早没了引号（本机 shell 剥掉了），平铺拼接会让 `-c 'who -b'` 变成

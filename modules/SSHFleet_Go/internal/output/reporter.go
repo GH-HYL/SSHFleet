@@ -309,9 +309,13 @@ func (r *Reporter) successDetail(res ssh.Result) string {
 // 前两段的合成沿用 ADR-0005 时代的顺序（原文在前、提示换行追加在后），D34 把提示
 // 独立成字段后在这里合回一处；后两段是结构事实的细节（D35 / W10）。四段都空时给 fallback。
 // 只在失败行调用——正常行不显示服务端提示（MOTD / 法务声明这类公告不该出现在成功的行里）。
+//
+// 「中间步骤」那段的取舍在这里，不在 stepsNote 里：stepsNote 的职责是如实汇报工具在远端
+// 跑了什么、结果如何（它自己也只陈述事实），而「这一步算不算失败信息」是呈现决策。
+// 所以 stepsNote 保持纯净，由本函数决定取不取它（将来别处要用它也不必再拆）。
 func errText(res ssh.Result, answers []ssh.Answer, fallback string) string {
 	parts := make([]string, 0, 4)
-	for _, s := range []string{deref(res.Error), strings.TrimSpace(res.ServerBanner), missedNote(res, answers), stepsNote(res)} {
+	for _, s := range []string{deref(res.Error), strings.TrimSpace(res.ServerBanner), missedNote(res, answers), stepsIfFailed(res)} {
 		if s != "" {
 			parts = append(parts, s)
 		}
@@ -320,6 +324,26 @@ func errText(res ssh.Result, answers []ssh.Answer, fallback string) string {
 		return fallback
 	}
 	return strings.Join(parts, "\n")
+}
+
+// stepsIfFailed 中间步骤那段事实，按「有没有一步真的没跑成」取或舍。
+//
+// 判据是**整段**的：Steps 里但凡有一个非 0 退出码，整段照常显示（同一段里既有 0 又有非 0
+// 时不能只挑非 0 的——「改密收尾 0、另一步 10」这种拼起来才看得出前后关系）；全是 0
+// 或压根没有 Steps 时整段不取。
+//
+// 为什么要这层取舍：改密路径把收尾那条 `:` 的退出码**无条件**记进 Steps，而它干净收场时
+// 就是 0。未过期的机器正是这种收场——判定给出的分类是「密码未过期」（这台机器本来就不用
+// 改），失败行里却只剩一句「中间步骤：改密收尾（:） 退出码 0」，一句退出码 0 的事实被摆在
+// 「错误详情」下，读起来像出了错又看不出错在哪。下载侧的两条中间步骤（预检 / 枚举）本来
+// 就只在失败时才记，这里对齐的正是那个口径。
+func stepsIfFailed(res ssh.Result) string {
+	for _, st := range res.Steps {
+		if st.ExitCode != nil && *st.ExitCode != 0 {
+			return stepsNote(res)
+		}
+	}
+	return ""
 }
 
 // missedNote 「未送出的代填」那行事实（D35）：把结果里的序号还原成触发词原文。
