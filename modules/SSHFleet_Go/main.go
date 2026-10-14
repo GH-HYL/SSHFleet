@@ -34,7 +34,7 @@ import (
 // 版本号：单一出处（显示在帮助信息首行下方，经 cli.Parse 传入 Usage）。
 // 与 CHANGELOG 顶部当天段落的段头**同一个号**——开段、抬号时在同一次提交里同步改，
 // 两处不一致即为错误。同一天的改动共用一个号，不因改动多而另起号。
-const appVersion = "9.1.3"
+const appVersion = "9.1.4"
 
 // versionWithBuildID 版本号拼上**构建标识**：git 短提交号（仓库内编译时由 go build
 // 自动注入 vcs.revision；工作区有未提交改动时加 -dirty）+ HEAD 提交时间。
@@ -407,8 +407,9 @@ func main() {
 	// 懒创建、上打提示都收在 output 的呈现器里；main 只构造并接上 batch 的三个事件。
 	// （呈现器只做呈现，不控制生命周期——主干与退出权仍在本函数手里。）
 	reporter := output.NewReporter(execLog, outputFile, mode, args.Answers, nodes.Len(), execStart, in.Disinteractive)
-	// 改密的入场信号为空 = 整场不喂、每台机器都干等到超时：这种配置要在开工前拦住
-	if args.ChangePassword != "" && len(errorKeywords.KeywordsOf("密码过期")) == 0 {
+	// 改密的入场信号为空 = 整场不喂、每台机器都干等到超时：这种配置要在开工前拦住。
+	// 取的判据与执行侧同一处（Keywords.PasswordExpired），守卫与被守的东西不会各说各话。
+	if args.ChangePassword != "" && len(errorKeywords.PasswordExpired()) == 0 {
 		fatal("ssh", fmt.Errorf("改密缺少入场信号\n"+
 			"原因：判据文件里「密码过期」分类没有关键词，工具认不出哪台机器要改密\n"+
 			"提示：该分类在 config/keywords_error.conf，别删它"))

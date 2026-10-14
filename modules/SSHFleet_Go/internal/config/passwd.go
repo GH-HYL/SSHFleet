@@ -15,10 +15,18 @@ import (
 // 被两个包各解析一遍的话，各自都会把对方那段当成「未识别字段」。在本层读一次、
 // 各自取自己那部分，严格校验照样保得住。
 
+// 提示词表 step 的 value 两个合法取值。定义放这里（配置文件格式归本层管），
+// 执行侧的 ssh.PasswdValue 枚举引用它们——「喂哪个值」这份知识只此一份，
+// 两侧不会各自改名后靠巧合对上。
+const (
+	PasswdValueCurrent = "current" // 喂清单里那台机器的登录密码
+	PasswdValueNew     = "new"     // 喂 --change-password 给的新密码
+)
+
 // PasswdStep 一条提示：提示原文 + 该喂哪个值 + 最多喂几次。
 type PasswdStep struct {
 	Keywords []string `toml:"keywords"`
-	Value    string   `toml:"value"` // current / new
+	Value    string   `toml:"value"` // current / new，取值见上面两个常量
 	Max      int      `toml:"max"`
 }
 
@@ -82,11 +90,12 @@ func (s PasswdStep) validate() error {
 			return fmt.Errorf("keywords 里有空项")
 		}
 	}
-	// 值与 max 都与执行侧的两个枚举/边界对齐，写错在启动时就拦下
+	// 值与 max 都与执行侧的两个枚举/边界对齐，写错在启动时就拦下。
+	// 取值本身引用本包的常量（不是手打），执行侧枚举也取它——两侧不会各改各的。
 	switch s.Value {
-	case "current", "new":
+	case PasswdValueCurrent, PasswdValueNew:
 	default:
-		return fmt.Errorf("value 只能写 current 或 new，当前值：%s", s.Value)
+		return fmt.Errorf("value 只能写 %s 或 %s，当前值：%s", PasswdValueCurrent, PasswdValueNew, s.Value)
 	}
 	if s.Max < 1 {
 		return fmt.Errorf("max 必须是正整数，当前值：%d", s.Max)

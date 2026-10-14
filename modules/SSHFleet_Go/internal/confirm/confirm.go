@@ -148,15 +148,9 @@ func printParamScreen(args *cli.Args, nodes *nodelist.Nodes, highlight, note str
 // buildInfoTable 构建显示信息的表格数据（行序与旧版一致）。
 // note 非空时跟在并发数后面，让用户知道这个数从哪来（不指定 -n 的默认，或被建议改过）。
 func buildInfoTable(args *cli.Args, nodes *nodelist.Nodes, note string) [][2]string {
-	identity := "登录用户"
-	if args.Sudo {
-		identity = "root"
-		// --no-shell 原样下发、工具不附加任何东西，sudo 会被丢掉——别让屏上写 root、实跑登录用户。
-		if args.NoShell {
-			identity = "登录用户（--no-shell 忽略 sudo）"
-		}
-	}
-	t := [][2]string{{"执行身份", identity}}
+	// 身份取 a.Identity().ScreenLabel()（判定与叫法都只此一份），不再在本函数里重判一次开关
+	// ——2026-10-14 前这里与 batch 的日志各判各的，`--sudo --no-shell` 下两者说反话。
+	t := [][2]string{{"执行身份", args.Identity().ScreenLabel(args.NoShell)}}
 	// 解释器行：只在命令 / 脚本模式出现，且只在配置的解释器不是 bash（归一判断）时才占一行
 	// ——默认值不必提醒（2026-10-07 定）。--no-shell 时解释器配置不参与执行，
 	// 这一行改放提示（2026-10-08 作者定：提个醒就放行，不该硬拦）。

@@ -31,11 +31,14 @@ const (
 // 这些名字与 config/keywords_error.conf、keywords_passwd.conf 里的同名分类对应——
 // 改名会让终端统计把它们当兜底原文单排一行。
 const (
-	catPasswordExpired  = "密码过期"    // 中止词命中（CONTEXT「中止词」：归类「密码过期」是约定）
-	catTriggerMiss      = "触发词未命中"  // 代填还有没送出去的
-	catExhaustedTimeout = "代填用尽后超时" // 代填全部送出后仍等到超时
-	catPartialSuccess   = "部分成功"    // 传输有成功有失败
-	catPasswdNotExpired = "密码未过期"   // 改密整场没出现过期信号
+	// CategoryPasswordExpired 中止词命中的分类名（CONTEXT「中止词」：归类「密码过期」是约定）。
+	// 导出：它同时是对外契约——改密的入场信号与守卫都按这个分类名取关键词
+	// （见 Keywords.PasswordExpired），名字只活在这一处。
+	CategoryPasswordExpired = "密码过期"
+	catTriggerMiss          = "触发词未命中"  // 代填还有没送出去的
+	catExhaustedTimeout     = "代填用尽后超时" // 代填全部送出后仍等到超时
+	catPartialSuccess       = "部分成功"    // 传输有成功有失败
+	catPasswdNotExpired     = "密码未过期"   // 改密整场没出现过期信号
 	// 外部中断（Ctrl+C / 上级取消）按"中断在哪一步"分两档：连接都没建成的机器
 	// 压根没被执行到，跟"跑到一半被中断"混为一谈会让人以为它跑过。
 	catCanceled        = "任务已取消" // 已连上，命令 / 传输 / 改密跑到中途被中断
@@ -61,7 +64,7 @@ func Judge(res *ssh.Result, mode cli.Mode, kw *Keywords) {
 		// 会话里执行命令的三类（命令 / 脚本 / 代填）共用同一条成功规则（4.5）：
 		// 没配代填时 AnswersMissed / AbortLine 天然为空，条件自然退化。
 		if res.AbortLine != "" {
-			res.Category = catPasswordExpired
+			res.Category = CategoryPasswordExpired
 			res.ExitCode = res.CommandExitCode // 中止即收场，通常是 nil
 			return
 		}
