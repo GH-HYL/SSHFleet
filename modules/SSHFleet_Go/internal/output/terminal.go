@@ -23,12 +23,9 @@ const (
 	ansiReset  = "\x1b[0m"
 	ansiGreen  = "\x1b[32m"
 	ansiCyan   = "\x1b[36m"
-	ansiBlue   = "\x1b[34m"
 	ansiRed    = "\x1b[31m"
 	ansiDim    = "\x1b[90m"
 	ansiYellow = "\x1b[33m"
-	ansiBGreen = "\x1b[92m"
-	ansiBRed   = "\x1b[91m"
 	ansiWhite  = "\x1b[37m"
 )
 
