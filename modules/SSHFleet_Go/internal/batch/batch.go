@@ -83,11 +83,14 @@ func Run(ctx context.Context, a *cli.Args, cfg *config.Config, nodes *nodelist.N
 		concurrency = len(tasks)
 	}
 	// 执行参数：两个超时与执行身份。`-t` / `-T` 未显式给值时由选项/参数解析按模式填配置默认值，
-	// 事后光看命令行原文看不出实际生效的是多少；执行身份由 `--sudo` / `--no-sudo` 与配置
-	// 共同决定，终值同样不在命令行原文里。记在这里（单线程区、协程未起），与「开始执行任务」
+	// 事后光看命令行原文看不出实际生效的是多少；执行身份由 `--sudo` / `--no-sudo`、`--no-shell`
+	// 与配置共同决定，终值同样不在命令行原文里。记在这里（单线程区、协程未起），与「开始执行任务」
 	// 一起构成这一轮的现场。
+	//
+	// 身份取 a.Identity()（实际生效的结果），不取 a.Sudo（用户要的那个）——两者在
+	// `--sudo --no-shell` 下不同，这里必须记前者。
 	logger.Info(fmt.Sprintf("执行参数：执行超时 %d 秒，连接超时 %d 秒，执行身份 %s",
-		a.Timeout, a.ConnectTimeout, identityLabel(a.Sudo)))
+		a.Timeout, a.ConnectTimeout, a.Identity().Label()))
 
 	logger.Info(fmt.Sprintf("开始执行任务：节点 %d 个，并发 %d，模式 %s", len(tasks), concurrency, a.ModeName().Info().LogName))
 
@@ -167,7 +170,8 @@ func buildTasks(a *cli.Args, nodes *nodelist.Nodes, prompts *ssh.PasswdPrompts, 
 	tasks := make([]*task, 0, nodes.Len())
 	var notices []string
 	// 「密码过期」分类的关键词，两条路共用：代填拿它当中止词，改密拿它当入场信号。
-	expiredKeywords := kw.KeywordsOf("密码过期")
+	// 分类名由 verdict 包给出（不在这里手打），改名只改那一处。
+	expiredKeywords := kw.PasswordExpired()
 
 	switch {
 	case a.ChangePassword != "":
@@ -298,14 +302,6 @@ func scriptName(a *cli.Args) string {
 		return ""
 	}
 	return filepath.Base(a.Script)
-}
-
-// identityLabel 执行身份的中文名（与参数屏「执行身份」行同口径）。
-func identityLabel(sudo bool) string {
-	if sudo {
-		return "root"
-	}
-	return "登录用户"
 }
 
 // answerTable -a 代填表的逐条明细（内容 → 触发词）；非 -a 没有表，返回 nil。

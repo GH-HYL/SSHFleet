@@ -125,6 +125,17 @@ func (k *Keywords) KeywordsOf(name string) []string {
 	return out
 }
 
+// PasswordExpired 判据表里「密码过期」分类的关键词。改密与代填都只从这里取。
+//
+// 为什么立一个具名方法，而不是让调用方写 KeywordsOf("密码过期")：这个分类名是**跨包约定**
+// ——它既是代填的中止词、又是改密的入场信号，consumer 在 batch 与 main 两处。
+// 名字写在调用方时，任何一处改字都会静默取到空表（KeywordsOf 未命中返回 nil，不报错）：
+// 守卫以为配置正常、执行侧拿不到入场信号，每台机器干等到超时——正是守卫要拦的那个故障，
+// 守卫却和故障一起失灵。收在这里之后，改名的落点只有一处。
+func (k *Keywords) PasswordExpired() []string {
+	return k.KeywordsOf(CategoryPasswordExpired)
+}
+
 // TipOf 取某分类的提示语（统计块里跟着分类名显示的那句排查建议）。
 // 没写 tip 的分类返回空串。同名分类跨两块时，取先出现且非空的那条。
 func (k *Keywords) TipOf(name string) string {

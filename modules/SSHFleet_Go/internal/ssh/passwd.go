@@ -1,5 +1,7 @@
 package ssh
 
+import "sshfleet/internal/config"
+
 // 批量改密（--change-password）的提示词表：认出远端在问什么，就喂对应的值。
 //
 // 值不在这张表里——当前密码取清单里那台机器的登录密码，新密码取命令行参数。
@@ -8,15 +10,18 @@ package ssh
 // 表的来源与校验不在这里：它由 `config.LoadPasswdConfig` 从 `config/keywords_passwd.conf` 读出来
 //（同一个文件里还装着失败分类，那份给 result 用），见 `internal/config/passwd.go`。
 // 本包只消费——`PasswdPrompts` 由装配层从配置填好再传进来。
+//
+// 下面两个枚举值取自 config（配置文件格式归它管）：合法取值集合只定义一次，
+// 装配层的 PasswdValue 转换也就不会把两侧各写一遍的字串碰巧对上当依据。
 
 // PasswdValue 一条 step 该喂的值从哪来。只能是下面两个取值之一。
 type PasswdValue string
 
 const (
 	// PasswdValueCurrent 喂清单里那台机器的登录密码。
-	PasswdValueCurrent PasswdValue = "current"
+	PasswdValueCurrent PasswdValue = config.PasswdValueCurrent
 	// PasswdValueNew 喂 --change-password 给的新密码。
-	PasswdValueNew PasswdValue = "new"
+	PasswdValueNew PasswdValue = config.PasswdValueNew
 )
 
 // PasswdStep 一条提示：提示原文 + 该喂哪个值 + 最多喂几次。

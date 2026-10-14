@@ -114,6 +114,46 @@ func (a *Args) ModeName() Mode {
 	return ModeNone
 }
 
+// Identity 本次实际生效的执行身份。零值即登录用户。
+type Identity int
+
+const (
+	IdentityLogin Identity = iota
+	IdentityRoot
+)
+
+// Identity 本次实际生效的执行身份。
+//
+// 与 a.Sudo 的区别：a.Sudo 是「用户要没要 root」，这里是「root 到底生没生效」。
+// `--no-shell` 要求原样下发、工具不附加任何东西，sudo 正属于「附加的东西」，故被丢掉。
+//
+// 判定只此一份，参数屏 / 执行日志 / 命令与脚本的说明文案都读它。
+// 2026-10-14 修：此前日志只看 a.Sudo，`--sudo --no-shell` 下归档日志写「执行身份 root」，
+// 而那次执行实际是登录用户（ID 也确实是登录账号），排查权限问题的人会被自己的工具带偏。
+func (a *Args) Identity() Identity {
+	if !a.Sudo || a.NoShell {
+		return IdentityLogin
+	}
+	return IdentityRoot
+}
+
+// Label 身份的中文名（不带括注），供日志与报告这类一行到底的地方用。
+func (i Identity) Label() string {
+	if i == IdentityRoot {
+		return "root"
+	}
+	return "登录用户"
+}
+
+// ScreenLabel 参数屏「执行身份」行的值：比 Label 多一句 no-shell 的提醒。
+// 提醒只在「要了 root 却没生效」时出现——那正是使用者最需要知道的一句话。
+func (i Identity) ScreenLabel(noShell bool) string {
+	if noShell && i == IdentityLogin {
+		return "登录用户（--no-shell 忽略 sudo）"
+	}
+	return i.Label()
+}
+
 // allModes 执行模式全集。新增第 6 档时，必须同时加到这里与 modeTable——
 // 只加一处会被 init 自检在启动时拦下。
 var allModes = []Mode{ModePasswd, ModeCommand, ModeScript, ModeUpload, ModeDownload}
