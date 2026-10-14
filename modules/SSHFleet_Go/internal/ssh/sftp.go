@@ -94,7 +94,8 @@ func (c *Client) UploadFiles(ctx context.Context, files []LocalFile, skipped []s
 	for _, f := range files {
 		select {
 		case <-ctx.Done():
-			result.Error = strPtr("上传被取消")
+			// 只记结构事实（Canceled），不写「上传被取消」这类结论文案：判定侧读
+			// Canceled 直接定性，文案既进不了分类、提示里也已经把话说全了。
 			result.Canceled = true
 			result.SuccessFiles, result.FailedFiles = success, failed
 			result.TotalBytes, result.ExecCostTime = uploadedBytes, costTotal
@@ -305,7 +306,7 @@ func (c *Client) DownloadFiles(ctx context.Context, remotePath, localPath string
 	for _, file := range files {
 		select {
 		case <-ctx.Done():
-			result.Error = strPtr("下载被取消")
+			// 同上传侧：只记结构事实，不写结论文案（见上传循环处说明）。
 			result.Canceled = true
 			result.SuccessFiles, result.FailedFiles = success, failed
 			result.TotalBytes, result.TotalFiles, result.ExecCostTime = downloadedBytes, totalFiles, costTotal
