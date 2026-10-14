@@ -81,6 +81,10 @@ type Result struct {
 	EnterSignalSeen bool
 	// PasswdEarlyClose 改密：远端当场重问（早收场）。
 	PasswdEarlyClose bool
+	// PasswdFedAny 改密：有没有往会话里喂进去过至少一句（工具认出了远端在问什么、并答了）。
+	// 它把「工具没认出远端在问什么」与「喂了但远端没反应」这两类失败分开——判定层据此给出
+	// 不同分类，不必去读 Error 里那句结论文案（D3：执行侧只写事实，不编结论）。
+	PasswdFedAny bool
 
 	// 传输类字段（命令模式下为零值）
 	TotalBytes   int64

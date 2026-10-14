@@ -16,20 +16,12 @@ import (
 // 命令跑完 shell 自己退出，也不会留一个还在等输入的登录 shell。
 const passwdCommand = ":"
 
-// 兜底文案：三种「拿不到远端原因」的形态共用「改密没有完成」这个前缀——判据文件按它
-// 一起归到「改密未完成」，tip 指的就是该往哪儿查。它们不是原因分类，是"原因没认出来"。
-const (
-	// passwdNoPrompt 一句都没喂出去、也没等到点：远端的提示措辞不在提示词表里。
-	passwdNoPrompt = "改密没有完成：远端的提示没认出来（提示词表里没有那句话的措辞）"
-	// passwdQuiet 等到超时也一句都没喂出去：要么提示措辞不在表里，要么远端一直没出声
-	//（连接hang住、sshd 有去无回都算）。两种都拿不到远端的原因，只能都点出来。
-	passwdQuiet = "改密没有完成：等到超时也没喂出一句——远端的提示措辞不在提示词表里，或它一直没出声"
-	// passwdGaveUp 远端反复重问，工具的答案已经喂满。
-	passwdGaveUp = "改密没有完成：远端反复重问，工具的答案已经给完了"
-	// passwdStalled 收下密码后一直没回应——多半卡在读写密码文件上（2026-09-29 实测：
-	// 另一个进程占着 /etc/.pwd.lock 时，passwd 不报错也不退出，只是静默等着）。
-	passwdStalled = "改密没有完成：新密码已经递出去，远端一直没有回应（多半卡在读写 /etc/shadow 上，例如文件被占用）"
-)
+// passwdCommand 下发的那条命令见上。
+//
+// 这里不再有「改密没有完成：…」那几句兜底文案（2026-10-14 删）：它们是执行侧自己编的
+// **结论**，而执行侧只该记事实（结果统一规格 D3）。四句各自对应的形态改成结构字段
+//（PasswdFedAny / TimedOut / PasswdEarlyClose），由判定层直接定性——分类不再依赖那句
+// 文案，改措辞也就不会让分类静默失效。
 
 // PasswdInput 改密会话的入场值。
 //
@@ -111,6 +103,9 @@ func (c *Client) RunPasswdChange(ctx context.Context, in PasswdInput, seq int) *
 	result.Canceled = f.canceled
 	result.PasswdEarlyClose = outcome.aborted
 	result.EnterSignalSeen = hook.sawEnter()
+	// 有没有喂进去过——「工具没认出远端在问什么」与「喂了但远端没反应」由此分开，
+	// 判定层据此给不同分类。读到此刻为止的计数（会话已结束、写侧也已收场）。
+	result.PasswdFedAny = hook.fedAny()
 	// passwd 自己以非 0 收场：那个码只说明「没改成」，原因在它的输出里——
 	// 归 Steps 留痕，不顶成结果退出码（否则判定会给出「执行失败(退出码N)」，
 	// 把远端说的原因整个盖掉，2026-09-29 修）。
@@ -118,44 +113,27 @@ func (c *Client) RunPasswdChange(ctx context.Context, in PasswdInput, seq int) *
 		result.Steps = append(result.Steps, StepResult{Name: StepPasswd, ExitCode: f.exitCode})
 	}
 
-	// 失败原因（报错原文，不是结论）：远端当场说了原因就用它的原话，分类靠判据表；
-	// 超时 / 早收场与「passwd 非 0 收场」共用一份兜底文案。连接层 / 会话层的错误
-	//（连不上、会话建不起来、命令没能开始）没有可读的远端输出，保留原文。
+	// 失败原因：只写**远端自己说的原话**（事实），分类靠判据表按关键词分；远端没说、
+	// 或压根轮不到它说（超时 / 中断 / 连接层错误）时不写 Error——那种形态由上面那几个
+	// 结构字段表达，判定层直接定性，执行侧不编「改密没有完成：…」这类结论（D3）。
 	// 「超时 / 中断先判、否则盖掉远端原因」的次序警示写在 endFactsOf 的注释里（单点），此处不重复。
-	if outcome.aborted || f.timedOut {
-		result.Error = strPtr(passwdNote(note, hook, outcome))
-	} else if outcome.err != nil {
+	//
+	// 注意成功路径（outcome.err == nil 且未超时未早收场）整段不进来：那时 note 里是
+	// 「passwd：已成功更新密码」这类**成功**回执，当成失败原因写进去会让判定把它当失败
+	//（2026-10-14 实测踩过）。
+	if outcome.err != nil {
 		if f.exitCode != nil {
-			result.Error = strPtr(passwdNote(note, hook, outcome))
+			// passwd 自己以非 0 收场：有原话就照实写，没有就留空由判定层按结构事实定性。
+			if reason := passwdReason(note); reason != "" {
+				result.Error = strPtr(reason)
+			}
 		} else {
 			// 连接层 / 会话层的错误（连不上、会话建不起来、命令没能开始）：没有可读的
-			// 远端输出，保留原文——盖成「改密没有完成」只会把真原因丢掉。
+			// 远端输出，保留原文——这是事实（SSH 库自己的报错），也是分类依据。
 			result.Error = f.errText
 		}
 	}
 	return result
-}
-
-// passwdNote 一次失败的收尾文案：远端当场说了原因就用它的原话——分类靠判据文件的关键词
-// 去分（「密码未被更改」/「BAD PASSWORD」/「认证令牌操作错误」…），工具不另造一个笼统的桶；
-// 它没说的才用下面那三个兜底句，三句都表示「具体原因没认出来」，只是形状不同。
-//
-// note 是「最后一次喂入之后」那一段采集文本（见 passwdHook.replyTail）——原因只可能在里面，
-// 往前找会捡到警告行与对话开场白，那些不是原因。
-func passwdNote(note string, hook *passwdHook, outcome interactiveOutcome) string {
-	if !hook.fedAny() {
-		if outcome.timedOut {
-			return passwdQuiet // 等到点也没喂出去：措辞没认出来与远端没出声都混在这里
-		}
-		return passwdNoPrompt // 对话压根没起来，没有可读的原因
-	}
-	if reason := passwdReason(note); reason != "" {
-		return reason
-	}
-	if outcome.timedOut {
-		return passwdStalled // 递出去了，远端不吭声
-	}
-	return passwdGaveUp // 反复重问，答案喂满了
 }
 
 // passwdReasonLines error 里最多带几行远端原话。
