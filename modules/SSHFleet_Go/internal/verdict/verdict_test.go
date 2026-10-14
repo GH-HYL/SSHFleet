@@ -192,6 +192,74 @@ func TestJudgeStructuralFacts(t *testing.T) {
 		t.Fatalf("改密未过期判定不对，实为 %+v", res)
 	}
 
+	// 改密卡住的几种形态，由 PasswdFedAny / TimedOut / PasswdEarlyClose / passwd 退出码
+	// 这几个结构事实定性（2026-10-14）。此前靠执行侧编的四句「改密没有完成：…」文案 +
+	// 判据表关键词认回来，改措辞即失配。用例按"执行侧真会写出的字段组合"给。
+	nonzero := 1
+	for _, c := range []struct {
+		name      string
+		fedAny    bool
+		timedOut  bool
+		earlyClse bool
+		passwdBad bool
+		want      string
+	}{
+		{"没喂出去、到点 → 没等到提示", false, true, false, false, "没等到提示"},
+		{"喂出去了、到点 → 远端无响应", true, true, false, false, "远端无响应"},
+		{"早收场 → 改密未完成", false, false, true, false, "改密未完成"},
+		{"没喂出去、passwd 非 0 收场 → 提示词没认出", false, false, false, true, "提示词没认出"},
+		{"喂出去了、passwd 非 0 收场 → 改密未完成", true, false, false, true, "改密未完成"},
+	} {
+		res = ssh.Result{
+			ConnectSuccess: true, SessionBegun: true, EnterSignalSeen: true,
+			PasswdFedAny: c.fedAny, TimedOut: c.timedOut, PasswdEarlyClose: c.earlyClse,
+		}
+		if c.passwdBad {
+			res.Steps = []ssh.StepResult{{Name: ssh.StepPasswd, ExitCode: &nonzero}}
+		}
+		Judge(&res, cli.ModePasswd, kw)
+		if res.Category != c.want {
+			t.Fatalf("%s：应得 %q，实为 %q", c.name, c.want, res.Category)
+		}
+		if res.Verdict != Other {
+			t.Fatalf("%s：应判失败，实为 %q", c.name, res.Verdict)
+		}
+	}
+
+	// 干净收场：喂过、没异常、passwd 退出码 0 → 成功（不被上面那些兜底形态误伤）
+	res = ssh.Result{
+		ConnectSuccess: true, SessionBegun: true, EnterSignalSeen: true, PasswdFedAny: true,
+		Steps: []ssh.StepResult{{Name: ssh.StepPasswd, ExitCode: &zero}},
+	}
+	Judge(&res, cli.ModePasswd, kw)
+	if res.Verdict != Success {
+		t.Fatalf("改密干净收场应判成功，实为 %+v", res)
+	}
+
+	// 次序：**超时优先于远端原话**。超时时 err 上带的是「命令执行超时(Ns)」这类通用描述，
+	// 远端在此之前说的半句原因不能拿来做定论——原执行侧也是这个次序（endFactsOf 注释有记）。
+	res = ssh.Result{
+		ConnectSuccess: true, SessionBegun: true, EnterSignalSeen: true,
+		PasswdFedAny: true, TimedOut: true,
+		Error: strPtrOf("passwd：密码未更改。"),
+	}
+	Judge(&res, cli.ModePasswd, kw)
+	if res.Category != "远端无响应" {
+		t.Fatalf("超时应盖过远端原话，得 %q", res.Category)
+	}
+
+	// 没有超时/早收场时，远端当场说了原因才让位给判据表：分类按它的措辞走，不被兜底形态盖掉。
+	res = ssh.Result{
+		ConnectSuccess: true, SessionBegun: true, EnterSignalSeen: true,
+		PasswdFedAny: true,
+		Error:        strPtrOf("passwd：密码未更改。"),
+		Steps:        []ssh.StepResult{{Name: ssh.StepPasswd, ExitCode: &one}},
+	}
+	Judge(&res, cli.ModePasswd, kw)
+	if res.Category == "改密未完成" || res.Category == "提示词没认出" {
+		t.Fatalf("远端说了原因时不该被兜底形态盖掉，实为 %q", res.Category)
+	}
+
 	// 目的命令退非 0 → 第二组（选组纯字段判定，D33）；定论退出码保留
 	res = ssh.Result{
 		ConnectSuccess: true, SessionBegun: true, CommandExitCode: &one,

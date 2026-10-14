@@ -39,6 +39,13 @@ const (
 	catExhaustedTimeout     = "代填用尽后超时" // 代填全部送出后仍等到超时
 	catPartialSuccess       = "部分成功"    // 传输有成功有失败
 	catPasswdNotExpired     = "密码未过期"   // 改密整场没出现过期信号
+	// 改密卡住的四种形态（2026-10-14 由结构事实定性，此前是执行侧编的四句
+	//「改密没有完成：…」文案 + 判据表关键词认回来）。两个布尔量就够了：
+	// PasswdFedAny＝工具有没有认出远端在问什么并答过一句；TimedOut＝是不是等到点。
+	catPasswdNoPrompt = "提示词没认出" // 一句都没喂出去、也没等到点：远端问的话提示词表里没有
+	catPasswdNoSignal = "没等到提示"  // 一句都没喂出去、等到点了：远端没出声，或问的话没认出来
+	catPasswdNoReply  = "远端无响应"  // 喂进去了、等到点也没下文（多半卡在读写密码文件）
+	catPasswdGiveUp   = "改密未完成"  // 喂进去了、远端还在重问而已给的答案用完；也是这一族的兜底
 	// 外部中断（Ctrl+C / 上级取消）按"中断在哪一步"分两档：连接都没建成的机器
 	// 压根没被执行到，跟"跑到一半被中断"混为一谈会让人以为它跑过。
 	catCanceled        = "任务已取消" // 已连上，命令 / 传输 / 改密跑到中途被中断
@@ -97,7 +104,12 @@ func Judge(res *ssh.Result, mode cli.Mode, kw *Keywords) {
 		}
 
 	case cli.ModePasswd:
-		cleanStop := !res.PasswdEarlyClose && !res.TimedOut && !res.Canceled && derefString(res.Error) == ""
+		// 「干净收场」＝会话正常结束、没超时没中断没早收场、没有报错，
+		// **且 passwd 自己也不是以非 0 收的场**——它非 0 就是"没改成"，退码归在 Steps 里
+		//（StepPasswd）。此前这一条藏在 Error 的兜底文案里（执行侧会为它编一句
+		//「改密没有完成」），2026-10-14 改成读结构事实，不再依赖那句话。
+		cleanStop := !res.PasswdEarlyClose && !res.TimedOut && !res.Canceled &&
+			derefString(res.Error) == "" && !passwdExitedNonzero(res)
 		if cleanStop {
 			if res.EnterSignalSeen {
 				res.Verdict = Success
@@ -106,6 +118,36 @@ func Judge(res *ssh.Result, mode cli.Mode, kw *Keywords) {
 			// 整场没出现过期信号 = 这台机器不需要改密（原执行侧收尾判定搬到这里）
 			res.Category = catPasswdNotExpired
 			return
+		}
+		// 卡住了：按结构事实定性，不看 Error 里的文案（D3）。
+		//
+		// 两类分开：
+		//   · 超时 / 早收场——**无条件覆盖**文案。这两种形态下 Error 里那点内容多半是
+		//     「命令执行超时(5s)」这类通用描述，照它分类只会给出「执行超时」，盖掉
+		//     "改密卡在哪一步"这个更有用的信息（原执行侧也是无条件覆盖的）。
+		//   · 其余（passwd 自己非 0 收场）——远端说了原因就让位给判据表，按它的措辞分；
+		//     没说话才用兜底的名。
+		if !res.Canceled {
+			switch {
+			case res.PasswdEarlyClose:
+				res.Category = catPasswdGiveUp
+				return
+			case res.TimedOut:
+				if res.PasswdFedAny {
+					res.Category = catPasswdNoReply
+				} else {
+					res.Category = catPasswdNoSignal
+				}
+				return
+			case derefString(res.Error) == "" && !res.PasswdFedAny:
+				// passwd 非 0 收场又一言不发，且工具没喂出去过：提示词表没认出远端在问什么
+				res.Category = catPasswdNoPrompt
+				return
+			case derefString(res.Error) == "" && passwdExitedNonzero(res):
+				// 同上但喂过了：远端收了密码却没下文
+				res.Category = catPasswdGiveUp
+				return
+			}
 		}
 	}
 
@@ -173,8 +215,24 @@ func IsExitCodeCategory(category string) bool {
 	return strings.HasPrefix(category, exitCodeFailPrefix)
 }
 
+// passwdExitedNonzero 改密下发的 `:` 是不是以非 0 收的场（那个码记在 Steps 的 StepPasswd 上）。
+//
+// 它是「这次改密到底成没成」的关键事实之一：passwd 非 0 就是没改成，哪怕它一个字都没说。
+// 执行侧不再为这种情况编一句「改密没有完成」（D3），改由这里读结构字段判断。
+func passwdExitedNonzero(res *ssh.Result) bool {
+	for _, s := range res.Steps {
+		if s.Name == ssh.StepPasswd && s.ExitCode != nil && *s.ExitCode != 0 {
+			return true
+		}
+	}
+	return false
+}
+
 // IsFallbackCategory 判断分类名是否为「关键词未命中时的兜底原文」。
 // 必须覆盖判据表两组的名字（Has 取并集），漏掉一组会把覆盖出来的分类误判成兜底原文。
+//
+// 另外要放过**由代码按结构事实定性、配置表里没有登记**的那几个名字——判据表是
+// 「文案 → 分类」的表，而这些分类压根不是查表得来的，不放过就会被上屏成「未归类」。
 func IsFallbackCategory(category string, kw *Keywords) bool {
 	if category == "" || category == Unclassified {
 		return false
@@ -182,7 +240,9 @@ func IsFallbackCategory(category string, kw *Keywords) bool {
 	if kw.Has(category) {
 		return false
 	}
-	if category == catPartialSuccess {
+	switch category {
+	case catPartialSuccess,
+		catPasswdNoPrompt, catPasswdNoSignal, catPasswdNoReply, catPasswdGiveUp:
 		return false
 	}
 	return !IsExitCodeCategory(category)
