@@ -49,8 +49,8 @@ func Confirm(args *cli.Args, nodes *nodelist.Nodes, cfg *config.Config, logger *
 	confirmReq := common.ConfirmReq{
 		Prompt:     "\n" + colorBrightYellow + "以上确认无误，开始执行？" + colorReset,
 		DefaultYes: true,
-		Trace:      "非交互模式（--yes）跳过执行参数确认，直接执行",
-		SkipLine:   fmt.Sprintf("%s [非交互模式] 跳过执行参数确认环节，直接执行%s\n\n", colorYellow, colorReset),
+		Trace:      "非交互模式（--yes）跳过执行选项/参数确认，直接执行",
+		SkipLine:   fmt.Sprintf("%s [非交互模式] 跳过执行选项/参数确认环节，直接执行%s\n\n", colorYellow, colorReset),
 	}
 
 	// 非交互模式：不出参数屏、不提问，但上传并发建议照旧生效（Confirm 直接返回已确认）
@@ -68,7 +68,7 @@ func Confirm(args *cli.Args, nodes *nodelist.Nodes, cfg *config.Config, logger *
 	if !args.NumberGiven() {
 		note = "（全部并行）"
 	}
-	printParamScreen(args, nodes, "", note)
+	fmt.Print(paramScreenText(args, nodes, "", note))
 
 	if args.Upload != "" {
 		if err := showUploadContent(args.Upload); err != nil {
@@ -86,7 +86,7 @@ func Confirm(args *cli.Args, nodes *nodelist.Nodes, cfg *config.Config, logger *
 			return err
 		}
 		if changed {
-			printParamScreen(args, nodes, "并发数", "（已按建议修改）")
+			fmt.Print(paramScreenText(args, nodes, "并发数", "（已按建议修改）"))
 		}
 	}
 
@@ -132,17 +132,22 @@ func warnNoShellDropsSudo(in *common.Interactor, logger *log.Logger) error {
 	return nil
 }
 
-// printParamScreen 打印参数屏（横幅 + 信息表）。
-// highlight 非空时把该标签那一行凸显；note 是并发数后面的括号注（"（全部并行）" / "（已按建议修改）"）。
-func printParamScreen(args *cli.Args, nodes *nodelist.Nodes, highlight, note string) {
-	title := "           SSHFleet - 执行参数确认           "
+// paramScreenText 渲染参数屏（横幅 + 信息表）。
+//
+// 打印侧直接 fmt.Print 这个返回值（与 cli.UsageText 同形：渲染成字符串，打印交给调用方）。
+// 之所以要一个能拿到文本的口子：屏上每一行都是使用者可见面，得能被断言——
+// 而 Confirm 要 *config.Config + *log.Logger + *common.Interactor，中途还会真实提问，
+// 从它外面拿不到稳定文本。
+func paramScreenText(args *cli.Args, nodes *nodelist.Nodes, highlight, note string) string {
+	title := "           SSHFleet - 执行选项/参数确认           "
 	border := strings.Repeat("═", len([]rune(title))+10)
 
-	fmt.Printf("\n%s╔%s╗%s\n", colorCyan, border, colorReset)
-	fmt.Printf("%s║  %s  ║%s\n", colorCyan, title, colorReset)
-	fmt.Printf("%s╚%s╝%s\n\n", colorCyan, border, colorReset)
-
-	printInfoTable(buildInfoTable(args, nodes, note), highlight)
+	var b strings.Builder
+	fmt.Fprintf(&b, "\n%s╔%s╗%s\n", colorCyan, border, colorReset)
+	fmt.Fprintf(&b, "%s║  %s  ║%s\n", colorCyan, title, colorReset)
+	fmt.Fprintf(&b, "%s╚%s╝%s\n\n", colorCyan, border, colorReset)
+	b.WriteString(infoTableText(buildInfoTable(args, nodes, note), highlight))
+	return b.String()
 }
 
 // buildInfoTable 构建显示信息的表格数据（行序与旧版一致）。
@@ -167,7 +172,10 @@ func buildInfoTable(args *cli.Args, nodes *nodelist.Nodes, note string) [][2]str
 	modeLabel := [2]string{"执行模式", args.ModeName().Info().ScreenLabel}
 	switch args.ModeName() {
 	case cli.ModeCommand:
-		t = append(t, modeLabel, [2]string{"执行命令", args.Command}, [2]string{"", ""})
+		// 标签取「命令内容」而非「执行命令」：-c 收的是**一段命令文本**，
+		// 「执行命令」既读得通「内容是这个」也读得通「去执行这个」，把文件名误敲给
+		// -c 时扫一眼就过去了。与「脚本路径」「本地路径」同构后，一眼看得出这格是什么。
+		t = append(t, modeLabel, [2]string{"命令内容", args.Command}, [2]string{"", ""})
 	case cli.ModeScript:
 		t = append(t, modeLabel, [2]string{"脚本路径", args.Script}, [2]string{"", ""})
 	case cli.ModeUpload:
@@ -217,19 +225,20 @@ func concurrentText(args *cli.Args, note string) string {
 	return fmt.Sprintf("%d%s", args.Number, note)
 }
 
-// printInfoTable 打印信息表格，对齐用 common.DisplayWidth（全角标点按 2 列计，不错位）。
+// infoTableText 把信息表渲染成文本，对齐用 common.DisplayWidth（全角标点按 2 列计，不错位）。
 // highlight 非空时，标签等于它的那一行加粗——用于"并发数被建议改了"的重显。
 // 颜色不换：值一律亮橙，换色反而让那一行比别处暗（2026-10-07 作者定）。
-func printInfoTable(table [][2]string, highlight string) {
+func infoTableText(table [][2]string, highlight string) string {
 	maxLabelWidth := 0
 	for _, r := range table {
 		if w := common.DisplayWidth(r[0]); w > maxLabelWidth {
 			maxLabelWidth = w
 		}
 	}
+	var b strings.Builder
 	for _, r := range table {
 		if r[0] == "" && r[1] == "" {
-			fmt.Println()
+			b.WriteString("\n")
 			continue
 		}
 		bold := ""
@@ -237,8 +246,9 @@ func printInfoTable(table [][2]string, highlight string) {
 			bold = colorBold
 		}
 		label := r[0] + strings.Repeat(" ", maxLabelWidth-common.DisplayWidth(r[0]))
-		fmt.Printf("%s▶ %s-→%s   %s%s%s%s\n", colorBrightCyan, label, colorReset, bold, colorBrightOrange, r[1], colorReset)
+		fmt.Fprintf(&b, "%s▶ %s-→%s   %s%s%s%s\n", colorBrightCyan, label, colorReset, bold, colorBrightOrange, r[1], colorReset)
 	}
+	return b.String()
 }
 
 // suggestUploadConcurrency 按配置阈值给出上传并发建议，返回是否采纳（采纳=并发数被改）。
@@ -285,23 +295,39 @@ func suggestUploadConcurrency(args *cli.Args, cfg *config.Config, in *common.Int
 	return true, nil
 }
 
+// uploadTreeTitle 上传内容清单的标题。
+// 按规范口径称「选项」——`-x` 这类开关一律称选项，只有选项后面跟的值才叫参数（CHANGELOG 9.1.0）。
+const uploadTreeTitle = "📁 上传文件/目录内容 (-u 选项):"
+
 // showUploadContent 显示上传文件/目录内容（一层树，与旧版一致）。
 // 读取失败返回错误交由 main 统一退出——不在子模块内自行 os.Exit（2026-09-14 审计修复）。
 func showUploadContent(uPath string) error {
-	fmt.Printf("\n%s📁 上传文件/目录内容 (-u 参数):%s\n", colorYellow, colorReset)
+	text, err := uploadTreeText(uPath)
+	if err != nil {
+		return err
+	}
+	fmt.Print(text)
+	return nil
+}
+
+// uploadTreeText 渲染上传内容清单。抽成能拿到文本的口子：这棵树是使用者可见面
+// （他靠它核对「这次到底要传什么」），得能被断言；而 showUploadContent 直接写 stdout。
+func uploadTreeText(uPath string) (string, error) {
 	info, err := os.Stat(uPath)
 	if err != nil {
-		return fmt.Errorf("无法解析上传路径内容：%v\n请检查 -u 指定的路径是否存在且可访问", err)
+		return "", fmt.Errorf("无法解析上传路径内容：%v\n请检查 -u 指定的路径是否存在且可访问", err)
 	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "\n%s%s%s\n", colorYellow, uploadTreeTitle, colorReset)
 	name := filepath.Base(uPath)
 	if !info.IsDir() {
-		fmt.Printf("└── %s (文件)\n", name)
-		return nil
+		fmt.Fprintf(&b, "└── %s (文件)\n", name)
+		return b.String(), nil
 	}
-	fmt.Printf("└── %s/\n", name)
+	fmt.Fprintf(&b, "└── %s/\n", name)
 	entries, err := os.ReadDir(uPath)
 	if err != nil {
-		return fmt.Errorf("无法解析上传路径内容：%v\n请检查 -u 指定的路径是否存在且可访问", err)
+		return "", fmt.Errorf("无法解析上传路径内容：%v\n请检查 -u 指定的路径是否存在且可访问", err)
 	}
 	for i, item := range entries {
 		prefix := "    ├──"
@@ -309,12 +335,12 @@ func showUploadContent(uPath string) error {
 			prefix = "    └──"
 		}
 		if item.IsDir() {
-			fmt.Printf("%s %s/\n", prefix, item.Name())
+			fmt.Fprintf(&b, "%s %s/\n", prefix, item.Name())
 		} else {
-			fmt.Printf("%s %s\n", prefix, item.Name())
+			fmt.Fprintf(&b, "%s %s\n", prefix, item.Name())
 		}
 	}
-	return nil
+	return b.String(), nil
 }
 
 // calculateUploadSize 上传大小：单文件取大小，目录取总大小（排除符号链接）。

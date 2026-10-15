@@ -523,8 +523,16 @@ func normalizePath(p string) string {
 
 func isDriveLetter(b byte) bool { return (b >= 'A' && b <= 'Z') || (b >= 'a' && b <= 'z') }
 
-// defaultRemark 未指定 -r 时自动生成：命令取首词前 8 字符（特殊字符换下划线），
-// 脚本 / 上传 / 下载取路径文件名。
+// defaultRemark 未指定 -r 时自动生成：命令取首词，脚本 / 上传 / 下载取路径文件名。
+//
+// **不截断长度**。8 字符截断是 M1 骨架时加的，那时备注只喂 history 目录名；
+// M2 把确认屏加进来、把备注也原样显示了出来，屏上于是出现「afile.txt → afile.tx」
+// 这种半截名字，看着像文件全名。目录名侧本就不需要这条：操作系统对单段长度的上限
+// 是 255 字节，命令行给不出那么长的。
+//
+// **字符处理按运行平台分**（sanitizeRemark，见 remark_unix.go / remark_windows.go）：
+// 能用的直接用，不能用的才换下划线。Linux 上只有 `/` 要换，冒号星号等原样留着；
+// Windows 上另有九个禁用字符与一组保留设备名要挡。
 func defaultRemark(a *Args) string {
 	if a.Remark != "" {
 		return a.Remark
@@ -535,20 +543,13 @@ func defaultRemark(a *Args) string {
 		if len(fields) == 0 {
 			return ""
 		}
-		first := []rune(fields[0])
-		if len(first) > 8 {
-			first = first[:8]
-		}
-		return strings.NewReplacer(
-			" ", "_", "/", "_", ":", "_", "*", "_", "?", "_",
-			"\"", "_", "<", "_", ">", "_", "|", "_", "\\", "_",
-		).Replace(string(first))
+		return SanitizeRemark(fields[0])
 	case a.Script != "":
-		return path.Base(a.Script)
+		return SanitizeRemark(path.Base(a.Script))
 	case a.Upload != "":
-		return path.Base(a.Upload)
+		return SanitizeRemark(path.Base(a.Upload))
 	case a.Download != "":
-		return path.Base(a.Download)
+		return SanitizeRemark(path.Base(a.Download))
 	}
 	return ""
 }

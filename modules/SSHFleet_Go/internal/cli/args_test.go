@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -543,6 +544,57 @@ func TestSummaryKeepsRawValue(t *testing.T) {
 	a := &Args{Command: "echo 'hi'"}
 	if got := a.Summary(); !strings.Contains(got, `c='echo 'hi''`) {
 		t.Fatalf("命令应原样打印，实际：%s", got)
+	}
+}
+
+// 自动生成的备注不截断：它既进归档目录名，也**原样显示在确认屏上**——
+// 屏上显示半截（如 afile.txt → afile.tx）使用者会以为那就是文件全名。
+//
+// 8 字符截断是 M1 骨架时加的，那时备注只喂 history 目录名；M2 把确认屏加进来、
+// 把备注也显示了出来，却没人回头问「现在还要截吗」。目录名侧没有问题：
+// 手工给的 -r 本就不截断，操作系统单段上限 255 字节远够用。
+// 清洗（把 / : * ? 等换成 _）保留——那是目录名的实际约束，与长度无关。
+func TestDefaultRemarkKeepsFullFirstWord(t *testing.T) {
+	a := &Args{Command: "afile.txt --verbose"}
+	got := defaultRemark(a)
+	if got != "afile.txt" {
+		t.Fatalf("自动备注应取首词全串，实际：%q", got)
+	}
+}
+
+// 清洗仍然生效：路径分隔符照旧换成下划线（两边平台都要处理它）。
+//
+// 注意别把这条写成「所有特殊字符都换」——那样会把 Linux 上合法可用的字符也断言成
+// 必须换掉。哪些字符该换由平台定，见下面那条。
+func TestDefaultRemarkStillSanitizes(t *testing.T) {
+	a := &Args{Command: `/usr/bin/env`}
+	got := defaultRemark(a)
+	if strings.Contains(got, "/") {
+		t.Fatalf("路径分隔符 / 应被换成下划线，实际：%q", got)
+	}
+}
+
+// 自动备注的字符处理按**运行平台**分：能用的直接用，不能用的才换下划线。
+//
+// 依据 File Name Portability（glibc 手册）：POSIX 下「任何字符（除 NUL）都可用于文件名，
+// 且无长度限制」——所以 Linux 侧真正要处理的只有 `/`（它是路径分隔符，会把备注拆成多层
+// 目录），其余（空格、冒号、星号…）一律原样留着。Windows 侧另有禁用集与保留设备名。
+func TestDefaultRemarkKeepsCharsValidOnPlatform(t *testing.T) {
+	a := &Args{Command: `deploy:prod*2`}
+	got := defaultRemark(a)
+
+	// `:` 与 `*` 在 POSIX 下是合法文件名字符，Windows 下不是。
+	wantColonStar := runtime.GOOS != "windows"
+	hasColon := strings.Contains(got, ":")
+	hasStar := strings.Contains(got, "*")
+	if hasColon != wantColonStar || hasStar != wantColonStar {
+		t.Fatalf("平台 %s：冒号/星号保留应为 %v，实际备注：%q", runtime.GOOS, wantColonStar, got)
+	}
+
+	// `/` 两边都必须处理：它是路径分隔符，留着会把备注拆成多层目录。
+	b := &Args{Command: "a/b"}
+	if strings.Contains(defaultRemark(b), "/") {
+		t.Fatalf("路径分隔符 / 必须换掉，实际：%q", defaultRemark(b))
 	}
 }
 

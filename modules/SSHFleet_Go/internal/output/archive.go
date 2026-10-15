@@ -197,6 +197,10 @@ func absoluteOrSelf(p string) string {
 
 // archiveDirName 归档目录名：<时间>_<模式>[_备注]（对位旧命名）。
 // 模式段取自模式名字表，此处不再重判 Args 的字段。
+//
+// 备注过 cli.SanitizeRemark：**显式 -r 与自动生成都要过**。只在自动生成那条路上过滤
+// 会漏掉显式 -r——实测 `-r a/b` 会被内核按路径解释，归档目录平白多出一层
+// `..._command_a/b/`（2026-10-15）。哪些字符要换由运行平台定，见 cli 的 remark_*.go。
 func archiveDirName(a *cli.Args) (string, error) {
 	dirName := a.ModeName().Info().DirName
 	if dirName == "" {
@@ -204,7 +208,7 @@ func archiveDirName(a *cli.Args) (string, error) {
 	}
 	name := fmt.Sprintf("%s_%s", time.Now().Format("2006-01-02_15-04-05"), dirName)
 	if remark := strings.TrimSpace(a.Remark); remark != "" {
-		name += "_" + remark
+		name += "_" + cli.SanitizeRemark(remark)
 	}
 	return filepath.Join(config.BuiltinPaths.Historys, name), nil
 }
