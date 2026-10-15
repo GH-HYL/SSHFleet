@@ -418,27 +418,38 @@ func Parse(cfg *config.Config, version string, raw []string) (*Args, error) {
 	a.credentialEncrypted = cfg.Credential.Encrypt
 
 	// -f 的值也可以是内联清单文本（不是路径）：先定来源。是文本就原样留着——
-	// 空格禁令与路径规范化都只管路径，而 `\`→`/` 会把文本里的 `\n` 分行符弄坏。
+	// 路径规范化只管路径，而 `\`→`/` 会把文本里的 `\n` 分行符弄坏。
 	if a.CsvFile != "" {
 		src := resolveSource(a.CsvFile)
 		a.FIsInline = !src.IsFile
 		if src.IsFile {
-			if err := pathWithoutSpace(src.Path); err != nil {
-				return nil, err
-			}
 			a.CsvFile = normalizePath(src.Path)
 		}
 	}
 
-	// 其余路径参数：中间不能含空格；再做字符串层规范化（顺序与旧版一致）。
+	// 本地路径参数：只做字符串层规范化（顺序与旧版一致）。
+	//
+	// 空格检查**不在这里**：本地路径能靠存在性验证给出准确答案（「文件不存在：X」比
+	// 「取值中间不能有空格」准得多），拿空格去拦反而把更准的报错截胡。见下面的远端检查。
 	for _, val := range []*string{&a.Script, &a.Upload, &a.Path, &a.Download} {
 		if *val == "" {
 			continue
 		}
-		if err := pathWithoutSpace(*val); err != nil {
+		*val = normalizePath(*val)
+	}
+
+	// 远端路径：验不了存在性，只能靠匹配拦——路径中间有空格说明引号漏了或参数打错了。
+	// 两处：上传的 -p（远端目录）、下载的 -d（远端路径）。
+	// -p 的性质随模式变：配 -u 时是远端（拦），配 -d 时是本地（走存在性验证，不拦）。
+	if a.Upload != "" && a.Path != "" {
+		if err := pathWithoutSpace("-p", a.Path); err != nil {
 			return nil, err
 		}
-		*val = normalizePath(*val)
+	}
+	if a.Download != "" {
+		if err := pathWithoutSpace("-d", a.Download); err != nil {
+			return nil, err
+		}
 	}
 
 	a.Remark = defaultRemark(&a)
@@ -456,12 +467,36 @@ func toInt(raw string) (int, bool) {
 	return v, false
 }
 
-// pathWithoutSpace 路径参数中间不能含空格（含空格说明引号漏了，或参数打错了）。
-func pathWithoutSpace(p string) error {
-	if strings.Contains(strings.TrimSpace(p), " ") {
-		return fmt.Errorf("路径参数中间不能包含空格\n提示：路径里有空格时用引号包起来，例如 -u \"D:/my dir/app\"")
+// pathFlagWhat 远端路径选项（按当前模式）→ 它收的是什么。
+//
+// **只有验不了存在性的远端参数才在这里。** 本地参数（-s / -u / -f / -d 的 -p）能直接
+// 存在性验证，「文件不存在：X」比「取值中间不能有空格」准得多——拿空格去拦只会把更准的
+// 报错截胡（2026-10-15 审计实测：七条真错被截）。这条线原始版本就划过，见旧注释
+// 「路径中间不能包含空格，**不是路径不能包括空格**」（SSHFleet_py/src/core.py:96）。
+//
+// **`-p` 的含义随执行模式反转**（见 CONTEXT.md「目标位置」）：上传时它是**目的地**
+// （服务器上的目录），下载时它才是**本地的目录**。表里写的是**会走到这条检查的那个语境**——
+// 调用点 `a.Upload != "" && a.Path != ""` 只在**上传模式**下成立，此时 `-p` 必然是
+// 服务器上的目录，所以这一格写「服务器上的」是准的；下载模式的 `-p` 是本地路径，
+// 走存在性验证、根本不到这里。别把这一格当成 `-p` 的**全部**含义。
+//
+// 只放「是什么」，不放「怎么办」：怎么办各家不同，写在报错里现拼。
+var pathFlagWhat = map[string]string{
+	"-p": "上传目的地，即服务器上的目录",
+	"-d": "下载源，即服务器上的路径",
+}
+
+// pathWithoutSpace 远端路径参数中间不能含空格。flag 是当前选项（用于点名），p 是它的值。
+//
+// 只在**远端**参数上调用：那两处验不了存在性，路径中间的空白是「引号漏了 / 参数打错了」
+// 唯一能捕捉到的信号。本地参数不走这里，交给各自的存在性验证。
+func pathWithoutSpace(flag, p string) error {
+	if !strings.Contains(strings.TrimSpace(p), " ") {
+		return nil
 	}
-	return nil
+	what := pathFlagWhat[flag]
+	return fmt.Errorf("%s 的取值中间不能有空格：%s\n提示：%s 收的是%s，确认一下是不是漏了引号、或者参数写错了",
+		flag, p, flag, what)
 }
 
 // normalizePath 字符串层面的路径规范化（对位旧 args_normalize_path）：

@@ -15,6 +15,58 @@ import (
 // CSV 解析口径与 -f 同构（两处都走 common.ReadCSVRows），这里测的是代填自己的
 // 列语义与门控；解析口径本身由 common 侧的单测覆盖。
 
+// 代填报错必须点名 -a / 代填，并说清是文件还是内联值。
+// 此前几条只甩一个文件名（如「X 是二进制文件」），使用者不知道是哪个参数带进来的
+// （2026-10-15 审计实测）。
+func TestAnswerErrorsNameAnswerFlag(t *testing.T) {
+	dir := t.TempDir()
+	binPath := filepath.Join(dir, "a.bin")
+	if err := os.WriteFile(binPath, []byte{0x00, 0x01, 0x02}, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cases := []struct {
+		name string
+		args []string
+	}{
+		{"代填文件是二进制", []string{"-f", "172.28.118.49,22,root,pw", "-c", "sh x.sh", "-a", binPath}},
+		{"代填文件不可读", []string{"-f", "172.28.118.49,22,root,pw", "-c", "sh x.sh", "-a", filepath.Join(dir, "nope.csv")}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			a, err := Parse(helpTestCfg(), "test", c.args)
+			if err != nil {
+				t.Fatalf("Parse 不该在这里报错：%v", err)
+			}
+			err = CheckArguments(a)
+			if err == nil {
+				t.Fatal("应报错，实际通过")
+			}
+			if !strings.Contains(err.Error(), "-a") {
+				t.Fatalf("报错应点名 -a，实际：%v", err)
+			}
+		})
+	}
+}
+
+// 内联值的一条不合规时，报错要说清是 -a 的值、第几行。
+func TestAnswerInlineLineErrorNamesFlagAndLine(t *testing.T) {
+	// 只有一列，缺触发词（-c 与 -a 的组合能通过模式互斥检查，走到 -a 的解析）
+	a, err := Parse(helpTestCfg(), "test", []string{
+		"-f", "172.28.118.49,22,root,pw", "-c", "sh x.sh", "-a", "1",
+	})
+	if err != nil {
+		t.Fatalf("Parse 不该在这里报错：%v", err)
+	}
+	err = CheckArguments(a)
+	if err == nil {
+		t.Fatal("只有一列的代填应报错")
+	}
+	if !strings.Contains(err.Error(), "-a") {
+		t.Fatalf("报错应点名 -a，实际：%v", err)
+	}
+}
+
 // 内联值：字面 \n 分行、一行一条；注释行与空行跳过；一条可挂多个触发词。
 func TestCheckAnswerInlineMultiline(t *testing.T) {
 	a := &Args{Command: "sh x.sh", Answer: `1,请选择架构\n#注释\n\n2,deb/rpm,包格式`}

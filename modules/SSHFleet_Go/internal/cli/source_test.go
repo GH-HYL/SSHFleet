@@ -72,8 +72,12 @@ func TestParseListFileIsNotInline(t *testing.T) {
 	}
 }
 
-// 文件形态仍受空格禁令约束（内联形态不受——见上一条）。
-func TestParseRejectsListPathWithSpace(t *testing.T) {
+// 文件形态不再受空格禁令约束（内联形态本来就不受——见上一条）。
+//
+// 2026-10-15 口径收窄：空格检查只作用于验不了存在性的**远端**参数。`-f` 是本地文件，
+// 存在性验证能给出准确答案（「文件不存在：X」），拿空格去拦反而把更准的报错截胡。
+// 带空格的路径只要能找到就正常当文件用。
+func TestParseAcceptsListPathWithSpace(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "my dir")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
@@ -82,7 +86,11 @@ func TestParseRejectsListPathWithSpace(t *testing.T) {
 	if err := os.WriteFile(file, []byte("127.0.0.1\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Parse(helpTestCfg(), "9.9.9", []string{"-f", file, "-c", "uptime"}); err == nil {
-		t.Fatal("路径含空格应报错")
+	a, err := Parse(helpTestCfg(), "9.9.9", []string{"-f", file, "-c", "uptime"})
+	if err != nil {
+		t.Fatalf("路径含空格的已存在文件应正常接受：%v", err)
+	}
+	if a.FIsInline {
+		t.Fatal("已存在的文件（哪怕路径含空格）不该标成内联清单")
 	}
 }

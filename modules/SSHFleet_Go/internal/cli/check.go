@@ -133,10 +133,10 @@ func CheckArguments(a *Args) error {
 			return fmt.Errorf("-s 参数指定的脚本文件为空：%s\n提示：请先写入内容再执行", a.Script)
 		}
 		if bytes.IndexByte(data, 0) >= 0 {
-			return fmt.Errorf("%s 是二进制文件\n提示：请换一个文本格式的脚本", a.Script)
+			return fmt.Errorf("-s 参数指定的脚本是二进制文件：%s\n提示：请换一个文本格式的脚本", a.Script)
 		}
 		if !utf8ValidExceptBOM(data) {
-			return fmt.Errorf("%s 不是 UTF-8 编码\n提示：请把脚本转成 UTF-8 后再执行", a.Script)
+			return fmt.Errorf("-s 参数指定的脚本不是 UTF-8 编码：%s\n提示：请把脚本转成 UTF-8 后再执行", a.Script)
 		}
 		// 脚本内容里的 CRLF 不改写本地文件：上传时在内存内转换。
 		scriptText = data
@@ -169,7 +169,7 @@ func CheckArguments(a *Args) error {
 				return fmt.Errorf("-f 参数指定的 CSV 文件为空：%s\n提示：一行写一台机器，只写 IP 就能跑（端口、用户名、密码走配置）", a.CsvFile)
 			}
 			if common.IsBinaryContent(data) {
-				return fmt.Errorf("%s 是二进制文件\n提示：清单要是文本文件（CSV）", a.CsvFile)
+				return fmt.Errorf("-f 参数指定的清单是二进制文件：%s\n提示：清单要是文本文件（CSV）", a.CsvFile)
 			}
 		}
 	}

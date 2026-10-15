@@ -566,3 +566,144 @@ func TestParsePasswdModeDefaultsTimeout(t *testing.T) {
 		t.Fatalf("显式 -t 不该被默认值覆盖：应为 5，实际：%d", a.Timeout)
 	}
 }
+
+// 远端路径带空格：文案必须点名**当前这个选项**。
+// 此前 pathWithoutSpace 被多个选项共用，文案里没有选项名、举例写死 -u，
+// 于是别的选项出问题也提示 -u，使用者对着提示改不动自己的命令行（2026-10-15 审计实测）。
+//
+// 2026-10-15 口径收窄后，本检查只作用于两个远端参数（-u 的 -p、-d）——
+// 本地四个能验存在性，不走这条。
+func TestParsePathSpaceErrorNamesCurrentFlag(t *testing.T) {
+	cfg := helpTestCfg()
+	cases := []struct {
+		flag string
+		args []string
+	}{
+		{"-d", []string{"-f", "172.28.118.49,22,root,pw", "-d", "/var/my log", "-p", "./logs/"}},
+		{"-p", []string{"-f", "172.28.118.49,22,root,pw", "-u", "afile.txt", "-p", "/opt/my dir/"}},
+	}
+	for _, c := range cases {
+		_, err := Parse(cfg, "test", c.args)
+		if err == nil {
+			t.Fatalf("%s 带空格应报错，实际通过", c.flag)
+		}
+		if !strings.Contains(err.Error(), c.flag) {
+			t.Fatalf("%s 带空格的报错应点名 %s，实际：%v", c.flag, c.flag, err)
+		}
+	}
+}
+
+// 远端路径带空格的提示里不能出现**别的**选项。
+func TestParsePathSpaceErrorHasNoWrongFlag(t *testing.T) {
+	cfg := helpTestCfg()
+	_, err := Parse(cfg, "test", []string{"-f", "172.28.118.49,22,root,pw", "-d", "/var/my log", "-p", "./logs/"})
+	if err == nil {
+		t.Fatal("-d 带空格应报错，实际通过")
+	}
+	msg := err.Error()
+	for _, other := range []string{"-s", "-u", "-f"} {
+		if strings.Contains(msg, other) {
+			t.Fatalf("-d 的报错不该出现别的选项 %s，实际：%v", other, err)
+		}
+	}
+}
+
+// 内容有问题的报错（二进制 / 非 UTF-8 / 清单不是文本）必须点名是哪个参数带进来的。
+// 此前这几条只甩一个文件名，同一个「%s 是二进制文件」在 -s、-f、-a 三处复用、
+// 只有提示段不同，使用者看不出是谁出的事（2026-10-15 审计实测）。
+func TestCheckErrorsNameTheirFlag(t *testing.T) {
+	dir := t.TempDir()
+
+	bin := filepath.Join(dir, "b.bin")
+	if err := os.WriteFile(bin, []byte{0x00, 0x01, 0x02}, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	notUTF8 := filepath.Join(dir, "u.sh")
+	if err := os.WriteFile(notUTF8, []byte{0xff, 0xfe, 'x'}, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cases := []struct {
+		name string
+		args []string
+		flag string
+	}{
+		{"-s 是二进制", []string{"-f", "172.28.118.49,22,root,pw", "-s", bin}, "-s"},
+		{"-s 非 UTF-8", []string{"-f", "172.28.118.49,22,root,pw", "-s", notUTF8}, "-s"},
+		{"-f 是二进制", []string{"-f", bin, "-c", "uptime"}, "-f"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			a, err := Parse(helpTestCfg(), "test", c.args)
+			if err != nil {
+				t.Fatalf("Parse 不该在这里报错：%v", err)
+			}
+			err = CheckArguments(a)
+			if err == nil {
+				t.Fatal("应报错，实际通过")
+			}
+			if !strings.Contains(err.Error(), c.flag) {
+				t.Fatalf("报错应点名 %s，实际：%v", c.flag, err)
+			}
+		})
+	}
+}
+
+// 空格检查只该管**远端**参数——远端验不了存在性，只能靠匹配拦。
+// 本地四个（-s / -u / -f / -d 的 -p）能验存在性，报「不存在」比报「有空格」准得多，
+// 且空格检查会把更准的报错截胡（2026-10-15 审计实测：七条真错被截）。
+func TestPathSpaceCheckSkipsLocalPaths(t *testing.T) {
+	cfg := helpTestCfg()
+
+	local := []struct {
+		name string
+		args []string
+	}{
+		{"-s 带空格的命令", []string{"-f", "172.28.118.49,22,root,pw", "-s", "cat /etc/os-release"}},
+		{"-u 带空格的值", []string{"-f", "172.28.118.49,22,root,pw", "-u", "my file.txt", "-p", "/opt/"}},
+		{"-f 带空格的路径", []string{"-f", "my list.csv", "-c", "uptime"}},
+		{"-d 的本地 -p 带空格", []string{"-f", "172.28.118.49,22,root,pw", "-d", "/var/log", "-p", "./my dir/"}},
+	}
+	for _, c := range local {
+		t.Run(c.name, func(t *testing.T) {
+			a, err := Parse(cfg, "test", c.args)
+			if err != nil {
+				// 解析阶段就不该拿空格拦本地路径
+				if strings.Contains(err.Error(), "不能有空格") {
+					t.Fatalf("本地路径不该被空格检查拦下：%v", err)
+				}
+				return // 别的原因报错不管——本条只测空格检查
+			}
+			if err := CheckArguments(a); err != nil && strings.Contains(err.Error(), "不能有空格") {
+				t.Fatalf("本地路径不该被空格检查拦下：%v", err)
+			}
+		})
+	}
+}
+
+// 远端两个参数必须保留空格检查：它们验不了存在性，「路径带空格」是唯一能拦的信号。
+func TestPathSpaceCheckKeepsRemotePaths(t *testing.T) {
+	cfg := helpTestCfg()
+
+	remote := []struct {
+		name string
+		args []string
+	}{
+		{"-u 的远端 -p 带空格", []string{"-f", "172.28.118.49,22,root,pw", "-u", "afile.txt", "-p", "/opt/my dir/"}},
+		{"-d 的远端值带空格", []string{"-f", "172.28.118.49,22,root,pw", "-d", "/var/my log", "-p", "./logs/"}},
+	}
+	for _, c := range remote {
+		t.Run(c.name, func(t *testing.T) {
+			a, err := Parse(cfg, "test", c.args)
+			if err == nil {
+				err = CheckArguments(a)
+			}
+			if err == nil {
+				t.Fatal("远端路径带空格应报错，实际通过")
+			}
+			if !strings.Contains(err.Error(), "不能有空格") {
+				t.Fatalf("远端路径带空格应报空格，实际：%v", err)
+			}
+		})
+	}
+}
