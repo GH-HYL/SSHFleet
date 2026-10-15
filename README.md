@@ -311,6 +311,8 @@ SSHFleet -f nodes.csv -s deploy.sh --yes
 SSHFleet -f nodes.csv -s install.sh -a "1,请选择架构\ndeb,请选择包格式"
 ```
 
+`-c` 和 `-s` 都能配 `-a`，写法完全一样；这里用脚本举例，因为需要中途答题的多半是安装脚本。
+
 值的完整写法、CSV 文件形式、两类收尾失败的含义 → [1 使用手册](docs/1-使用手册.md) 的「4 代填 `-a`」；照着抄的完整例子 → [6 示例](docs/6-示例.md)。
 
 ### 6.5 批量改密 `--change-password`
