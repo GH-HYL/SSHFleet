@@ -88,7 +88,7 @@ func answerText(src source) (string, error) {
 		return "", fmt.Errorf("-a 参数指定的文件不可读：%s\n提示：请检查文件是否存在、当前用户有没有读权限", src.Path)
 	}
 	if common.IsBinaryContent(data) {
-		return "", fmt.Errorf("%s 是二进制文件\n提示：代填要写成文本（CSV）", src.Path)
+		return "", fmt.Errorf("-a 参数指定的代填文件是二进制文件：%s\n提示：代填要写成文本（CSV）", src.Path)
 	}
 	return string(data), nil
 }
@@ -98,13 +98,13 @@ func answerText(src source) (string, error) {
 func answerReadError(src source, err error) error {
 	var parseErr *csv.ParseError
 	if !errors.As(err, &parseErr) {
-		return fmt.Errorf("读取代填失败：%v", err)
+		return fmt.Errorf("-a 参数指定的代填读不了：%v", err)
 	}
 	if src.IsFile {
-		return fmt.Errorf("读取代填失败：代填文件 %s 第 %d 行格式读不了——CSV 的双引号要成对出现\n"+
+		return fmt.Errorf("-a 参数指定的代填文件 %s 第 %d 行格式读不了——CSV 的双引号要成对出现\n"+
 			"提示：值里要用引号时，把里面的引号写成两个", src.Path, parseErr.Line)
 	}
-	return fmt.Errorf("读取代填失败：第 %d 行格式读不了——CSV 的双引号要成对出现\n"+
+	return fmt.Errorf("-a 的值第 %d 行格式读不了——CSV 的双引号要成对出现\n"+
 		"提示：值里要用引号时，把里面的引号写成两个", parseErr.Line)
 }
 
@@ -113,7 +113,7 @@ func answerReadError(src source, err error) error {
 func answerLineError(src source, row common.CSVRow, err error) error {
 	rowText := strings.Join(row.Fields, ",")
 	if src.IsFile {
-		return fmt.Errorf("代填文件 %s 第 %d 行不合规：%s\n%v", src.Path, row.Line, rowText, err)
+		return fmt.Errorf("-a 参数指定的代填文件 %s 第 %d 行不合规：%s\n%v", src.Path, row.Line, rowText, err)
 	}
 	return fmt.Errorf("-a 的值第 %d 行不合规：%s\n%v", row.Line, rowText, err)
 }
@@ -121,7 +121,7 @@ func answerLineError(src source, row common.CSVRow, err error) error {
 // answerEmptyError 一份取值里一条代填都没有：报出来，不静默跑空表。
 func answerEmptyError(src source) error {
 	if src.IsFile {
-		return fmt.Errorf("代填文件 %s 里没有一条代填\n"+
+		return fmt.Errorf("-a 参数指定的代填文件 %s 里没有一条代填\n"+
 			"提示：一行一条，第 1 列是代填内容、第 2 列起是触发词；空行与 # 开头会被跳过", src.Path)
 	}
 	return fmt.Errorf("-a 的值里没有一条代填\n" +
