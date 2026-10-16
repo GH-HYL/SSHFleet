@@ -169,7 +169,7 @@ func (c *Client) runWithTimeoutAndCancel(parent context.Context, session *ssh.Se
 }
 
 // extractExitCode 仅 *ssh.ExitError（命令以非 0 退出）返回真实退出码；
-// 超时 / 中断等非命令执行错误返回 nil（CONTEXT「退出码」）。
+// 超时 / 中断等非命令执行错误返回 nil（GLOSSARY「退出码」）。
 func extractExitCode(err error) *int {
 	var exitErr *ssh.ExitError
 	if errors.As(err, &exitErr) {

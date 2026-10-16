@@ -1,6 +1,6 @@
 // Package verdict 承载结果判定：执行侧只记录事实，成败与分类只在这里产生一次。
 //
-// 术语见 CONTEXT.md「结果判定（verdict）」；设计依据与逐条决策见
+// 术语见 GLOSSARY.md「结果判定（verdict）」；设计依据与逐条决策见
 // docs/issues/result-verdict/spec.md（两级判定 D6、选组判据 4.3、成功规则 4.5）。
 //
 // 依赖边界：本包只允许引用 ssh（结果结构体）与 cli（模式枚举）——
@@ -31,7 +31,7 @@ const (
 // 这些名字与 config/keywords_error.conf、keywords_passwd.conf 里的同名分类对应——
 // 改名会让终端统计把它们当兜底原文单排一行。
 const (
-	// CategoryPasswordExpired 中止词命中的分类名（CONTEXT「中止词」：归类「密码过期」是约定）。
+	// CategoryPasswordExpired 中止词命中的分类名（GLOSSARY「中止词」：归类「密码过期」是约定）。
 	// 导出：它同时是对外契约——改密的入场信号与守卫都按这个分类名取关键词
 	// （见 Keywords.PasswordExpired），名字只活在这一处。
 	CategoryPasswordExpired = "密码过期"

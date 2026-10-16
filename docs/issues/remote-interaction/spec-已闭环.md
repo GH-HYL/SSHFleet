@@ -242,7 +242,7 @@ printf %s <base64> | base64 -d | bash
 | `config/error_keywords.conf` | ① 第一组「密码过期」keywords 补两条实测原文：`'WARNING: Your password has expired.'`、`'You must change your password now and log in again!'`（中止词归类的落点）；② `[[categories]]` **末尾**加一条：`name = '触发词未命中'`、`keywords = ['触发词未命中']`、`tip = …`（文案待拟，按"简洁干练准确"的口径） |
 | 帮助文案 | `-a, --answer   代填：看到触发词就自动填内容（值形如「代填内容,触发词,触发词」）`，另加"值也可给 CSV 文件路径"与"代填内容与触发词都不能含逗号"两句 |
 | 文档五处 | `README.md`、`docs/使用手册.md`、`docs/示例.md`、`docs/常见问题.md`，加 **`docs/配置手册.md`**（新增的 `[interactive]` 段要补进它的「进阶配置」；使用手册的选项表 `:146` 起要加 `-a` 一行）。**必须写明"多条代填是并行匹配"**（用户 2026-09-28 明确要求），并带上"未命中序号里最小者即第一个出错点"这条诊断规则，另写明**中止词行为**（密码过期的机器会在会话开始即被终止并归为「密码过期」） |
-| `CONTEXT.md` | 已加 6 条词条：远端交互 / 代填 / 代填内容 / 触发词 / 触发词未命中 / 中止词 |
+| `GLOSSARY.md` | 已加 6 条词条：远端交互 / 代填 / 代填内容 / 触发词 / 触发词未命中 / 中止词 |
 | `CHANGELOG.md` + 版本常量 | 配置文件新增必填字段 → 不兼容改动 → 当天段落抬**主版本**（规范四） |
 
 
@@ -287,7 +287,7 @@ printf %s <base64> | base64 -d | bash
 
 ## 七、关联
 
-- `CONTEXT.md` —— 已并入词条「远端交互」「代填」「代填内容」「触发词」「触发词未命中」「中止词」
+- `GLOSSARY.md` —— 已并入词条「远端交互」「代填」「代填内容」「触发词」「触发词未命中」「中止词」
 - `docs/issues/remote-password-change/spec-已闭环.md` —— 改密（拆分出的独立功能）：实测事实与未决项
 - `docs/adr/0010-deliver-command-body-in-argv.md` —— 内容承载形态的 ADR
 - `交接-远端交互代填.md`（工作区根） —— 给实施会话的交接稿

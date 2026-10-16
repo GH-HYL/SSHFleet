@@ -151,7 +151,7 @@ README 既有用法写的是 `~/.MyPW/pw.txt`（受 `~` 展开，两版一致）
 
 | # | 决策 | 与旧实现的差异 |
 | --- | --- | --- |
-| D41 | `-k` 三态语义以文档为准：**off（不写 `-k`）= 强制空密钥**，清单第 5/6 列整体忽略；default（裸 `-k`）才用清单/配置密钥；universal（`-k` 带路径）强制改用参数私钥 | 旧：off 态下清单第 5 列有值时仍会读取使用（且绕过 PEM 预检），与 CONTEXT 词表「强制空密钥」及 help 文案「不指定=纯密码」矛盾。用户 2026-09-11 裁定：以文档为准，旧代码此处为缺陷 |
+| D41 | `-k` 三态语义以文档为准：**off（不写 `-k`）= 强制空密钥**，清单第 5/6 列整体忽略；default（裸 `-k`）才用清单/配置密钥；universal（`-k` 带路径）强制改用参数私钥 | 旧：off 态下清单第 5 列有值时仍会读取使用（且绕过 PEM 预检），与 GLOSSARY 词表「强制空密钥」及 help 文案「不指定=纯密码」矛盾。用户 2026-09-11 裁定：以文档为准，旧代码此处为缺陷 |
 | D43 | **所有配置字段必填，全工具不写死任何默认值**：超时值（10/60/300）、开关（true）、`password_security`（2）等原默认值全部取消；`execution.mode` 的默认值只来自配置文件。配置预检查（缺字段 + 取值合规）通过即代表配置自足，运行期一律取配置值 | 旧：超时与开关由 pydantic 默认值兜底（D6 亦照抄该口径）。用户 2026-09-14 裁定：全部取消写死默认值，改为配置预检查覆盖「有没有配、配得合不合规」 |
 | D42 | 私钥与私钥口令**成对绑定**，三来源不跨用：`-k 路径` → 口令**手动输入**；清单 → 第 5 列配第 6 列；配置 → `account.key` 配 `account.key_passphrase` | 旧：口令取自「清单第 6 列优先、缺省用配置全局口令」的混搭；且配置口令在 default 态被无条件读取（哪怕没有节点用配置私钥）。用户 2026-09-11 裁定：成对获取，不混用 |
 
@@ -281,8 +281,8 @@ README 既有用法写的是 `~/.MyPW/pw.txt`（受 `~` 展开，两版一致）
 | # | 决策 | 说明 |
 | --- | --- | --- |
 | D7 | 工作区 `D:\Desktop\Code\SSHFleet` | 新工程 `modules/SSHFleet_Go/`；旧工程位于 `modules/SSHFleet_bak/`（只读、无 `.git`，历史由 GitHub / Gitee 远程保存） |
-| D27 | 工作区根 `.gitignore` 采用白名单 | 默认全忽略，只列出 `docs/`、`modules/`、根目录 `build-windows.bat` / `build-linux.sh`、`CONTEXT.md`、`AGENTS.md`、`README.md`、`CHANGELOG.md`。个人文件（`个人开发规范.md`）、`tools/` 全部内容、`test/` 刻意不纳入——本仓库将对外推送，只保留「代码 + 决策文档 + 构建脚本」 |
-| D9 | 文档基线 | 旧 `CONTEXT.md` 与 ADR-0001–0013 全部作废，新仓库重写；`CHANGELOG.md` 版本号从 **5.0.0** 起（不兼容重写） |
+| D27 | 工作区根 `.gitignore` 采用白名单 | 默认全忽略，只列出 `docs/`、`modules/`、根目录 `build-windows.bat` / `build-linux.sh`、`GLOSSARY.md`、`AGENTS.md`、`README.md`、`CHANGELOG.md`。个人文件（`个人开发规范.md`）、`tools/` 全部内容、`test/` 刻意不纳入——本仓库将对外推送，只保留「代码 + 决策文档 + 构建脚本」 |
+| D9 | 文档基线 | 旧 `GLOSSARY.md` 与 ADR-0001–0013 全部作废，新仓库重写；`CHANGELOG.md` 版本号从 **5.0.0** 起（不兼容重写） |
 
 ### 主干十步与承载目录
 
@@ -353,7 +353,7 @@ README 既有用法写的是 `~/.MyPW/pw.txt`（受 `~` 展开，两版一致）
 | 调用方式 | **不变**（平级选项维持原样） |
 | 主密钥环境变量 | 统一为 `SSHFLEET_KEY`，已持久化该名的环境无需改动 |
 | 版本号 | `CHANGELOG.md` 从 **5.0.0** 起（不兼容重写） |
-| 文档 | 旧 `CONTEXT.md` 与 ADR-0001–0013 全部作废 |
+| 文档 | 旧 `GLOSSARY.md` 与 ADR-0001–0013 全部作废 |
 
 ---
 
@@ -362,7 +362,7 @@ README 既有用法写的是 `~/.MyPW/pw.txt`（受 `~` 展开，两版一致）
 | 用途 | 位置 |
 | --- | --- |
 | 旧代码本体 | `modules/SSHFleet_bak/modules/` |
-| 旧决策记录 | `modules/SSHFleet_bak/docs/adr/`、`CONTEXT.md`、`CHANGELOG.md`、`README.md` |
+| 旧决策记录 | `modules/SSHFleet_bak/docs/adr/`、`GLOSSARY.md`、`CHANGELOG.md`、`README.md` |
 | 危险检测测量工具与基线 | `modules/SSHFleet_bak/.scratch/danger-rm-structured/`（`measure_recognition.py`、`verify_old_rules.py`、`old_dk_baseline.yaml`、`v1_baseline.yaml`） |
 | 危险检测 / 错误分类语料 | `modules/SSHFleet_bak/test/` |
 | 完整备份（安全网） | 工作区外的 `Old-Code_Bak/SSHFleet_old`（1252 文件） |

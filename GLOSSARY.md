@@ -1,4 +1,4 @@
-# CONTEXT.md
+# GLOSSARY.md
 
 SSHFleet 工程领域上下文（单一上下文布局）。
 

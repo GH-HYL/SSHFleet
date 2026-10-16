@@ -33,7 +33,7 @@
 
 行为越界有专门约束（红线 6）：得知越界**立刻停手**，走分析（对照五定式）→ 询问用户（附建议、原因、**约束代价**）→ 用户定了才留档到 `docs/越界记录/`。**触发式，不必主动找越界**；细则见规范第零节。
 
-**停手之后也不许顺手改约束文件**——`AGENTS.md`、`CONTEXT.md` 等「未经授权不得修改」（红线 2），处置中的改规范建议**只能提给用户**，等他选定才算授权。
+**停手之后也不许顺手改约束文件**——`AGENTS.md`、`GLOSSARY.md` 等「未经授权不得修改」（红线 2），处置中的改规范建议**只能提给用户**，等他选定才算授权。
 
 ### 说不清时：调 `/grilling`，别自己拿主意
 
@@ -45,7 +45,7 @@
 
 主干流程（想法 → 规格 → 工单 → 实现 → 复查 → 回灌）**以规范第五节为准**，本节只留载体：
 
-**不要另建一套**——规格与工单在 `docs/issues/<slug>/`，决策在 `docs/adr/`，词表在 `CONTEXT.md`。字段口径见下面「Agent skills」。
+**不要另建一套**——规格与工单在 `docs/issues/<slug>/`，决策在 `docs/adr/`，词表在 `GLOSSARY.md`。字段口径见下面「Agent skills」。
 
 ### 两条目录规矩（不知道就会出事，故常驻）
 
@@ -86,7 +86,7 @@ Issues、spec 和 ticket 以仓库内 `docs/issues/<feature-slug>/` 下的 markd
 
 ### Domain docs
 
-单上下文（single-context）：根目录 `CONTEXT.md` + `docs/adr/`。详见 `docs/agents/domain.md`。
+单上下文（single-context）：根目录 `GLOSSARY.md` + `docs/adr/`。详见 `docs/agents/domain.md`。
 
 ### 技能与规范的关系
 

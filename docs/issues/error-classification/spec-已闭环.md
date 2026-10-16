@@ -157,7 +157,7 @@ keywords = ['Password change required but no TTY available']
 
 ### 4.7 机制 B 的匹配范围（边界声明）
 
-凡退出码非 `0` 的结果都会进机制 B，**包括「预处理失败」**（上传/下载建连之后、逐文件传输之前的命令失败，以真实非 `0` 退出码表达，见 `CONTEXT.md` 同名词条）。实测该路径的文案不命中任何判据，行为不变——此条只是把边界写清。
+凡退出码非 `0` 的结果都会进机制 B，**包括「预处理失败」**（上传/下载建连之后、逐文件传输之前的命令失败，以真实非 `0` 退出码表达，见 `GLOSSARY.md` 同名词条）。实测该路径的文案不命中任何判据，行为不变——此条只是把边界写清。
 
 ### 4.8 明确不做的两件事
 
@@ -210,7 +210,7 @@ keywords = ['Password change required but no TTY available']
 ## 六、与既有决策的关系
 
 - **D11**（`rewrite-to-go/spec-已闭环.md`）约束的是**迁移时** YAML → TOML 逐字节平移；本轮是迁移完成后的语义修正，不构成违反。文档上明示：**关键词表的语义自此不再冻结**。
-- **`classify.go` 文件头把退出码语义引作「ADR-0003 退出码语义」是误引** —— ADR-0003 的主题是「执行模式判定不做集中化」。退出码语义此前只存在于 `CONTEXT.md` 词表与该注释里，已由 ADR-0004 正式承接，实施时一并修掉那句注释。
+- **`classify.go` 文件头把退出码语义引作「ADR-0003 退出码语义」是误引** —— ADR-0003 的主题是「执行模式判定不做集中化」。退出码语义此前只存在于 `GLOSSARY.md` 词表与该注释里，已由 ADR-0004 正式承接，实施时一并修掉那句注释。
 - **`AuthFailure`（D44）**仍是"由 SSH 层直接给短分类文案"的既有先例；本轮的 banner 走"原文入结果 + 关键词外置"的路子，两者不冲突：前者判据是库文案、结论固定；后者判据是服务端自由文本、分类靠词表。
 
 ## 七、改动点清单（已实施 · 2026-09-16）
@@ -287,5 +287,5 @@ printf 'Match User sftest2\n    ForceCommand internal-sftp\n' > /etc/ssh/sshd_co
 
 - `docs/adr/0004-keyword-override-under-nonzero-exit-code.md` —— 机制 B 的 ADR（含备选方案与拒绝理由）
 - `docs/adr/0005-capture-server-banner-for-failure-reason.md` —— 机制 A 的 ADR
-- `CONTEXT.md` —— 词条「会话被拒」「退出码」「服务端提示」
+- `GLOSSARY.md` —— 词条「会话被拒」「退出码」「服务端提示」
 - `docs/issues/rewrite-to-go/spec-已闭环.md` D11 / D44 —— 关键词表迁移约束与认证失败分类的既有决策

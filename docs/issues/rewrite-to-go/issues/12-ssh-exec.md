@@ -19,7 +19,7 @@ Blocked by: 11
   - sudo 由 `-m sudo` 决定（脚本模式为 `sudo <interpreter>`）
   - stdout/stderr 合并写入同一带锁缓冲（顺序保持）；输出**不再 base64 编码**（spec M3 差异）
   - 超时改 `context.WithTimeout` + `defer cancel()`（旧 `select + time.After`）；执行超时文案「命令执行超时(…s)」
-  - 退出码：仅 `*ssh.ExitError` → 真实码；超时/中断 → nil（CONTEXT「退出码」定义）
+  - 退出码：仅 `*ssh.ExitError` → 真实码；超时/中断 → nil（GLOSSARY「退出码」定义）
 - 结果结构：单一 `Result` 类型承载四种模式（旧三个形状相同的 struct 合并，D8 全面择优）
 
 ## 验证

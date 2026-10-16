@@ -16,7 +16,7 @@ Blocked by: 12
   - 文件清单来自本地收集（扁平化：只用文件名，不保留子目录结构——旧行为，保持）
 - **下载**：连接 → SFTP 客户端 → `test -e`（sudo 模式 `sudo test -e`）预检 → `Stat` → 目录时 `find -printf '%s %P\n'` 取文件清单（GNU find 假设，保持）→ 空目录报「远程目录为空」→ 逐文件下载到 `本地目录/IP/…`（按 IP 分目录，对位旧实现）
 - **进度读写器**：`io.Writer`（上传）/ `io.Reader`（下载）包裹，累计字节并 500ms 节流回调；`callback != nil` 判空补齐（旧 `progressWriter.Write` 未判空会 panic，spec 已定）
-- 退出码语义：传输失败**不设**退出码（保持 nil），全部成功置 0（CONTEXT「传输失败」）
+- 退出码语义：传输失败**不设**退出码（保持 nil），全部成功置 0（GLOSSARY「传输失败」）
 
 ## 验证
 
