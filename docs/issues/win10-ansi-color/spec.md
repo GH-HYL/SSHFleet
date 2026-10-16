@@ -1,6 +1,6 @@
 # Win10 颜色外泄整改 · 规格稿
 
-Status: ready-for-agent
+Status: 已实施（2026-10-16，提交 `ea5cec1`）——工单 01 已做完。
 
 > **事实依据**：同目录 `findings-2026-10-16.md`（2026-10-16 实测，全部输出为实机抓取，非代码推断）。
 > **决策依据**：`docs/adr/0017-program-adapts-console-not-user.md`。
