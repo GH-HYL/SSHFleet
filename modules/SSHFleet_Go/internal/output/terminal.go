@@ -19,14 +19,15 @@ import (
 // ANSI 颜色片段（对位 rich 的配色）。原先定义在 progress.go，进度界面改用
 // bubbletea + lipgloss 之后搬到这儿——统计块、危险命令警告框、归档与 xlsx 的
 // 告警行仍按老办法直接拼这些转义序列。
-const (
-	ansiReset  = "\x1b[0m"
-	ansiGreen  = "\x1b[32m"
-	ansiCyan   = "\x1b[36m"
-	ansiRed    = "\x1b[31m"
-	ansiDim    = "\x1b[90m"
-	ansiYellow = "\x1b[33m"
-	ansiWhite  = "\x1b[37m"
+// var 而非 const：值经 common.ANSI 取，颜色能力不可用时为空串。
+var (
+	ansiReset  = common.ANSI("\x1b[0m")
+	ansiGreen  = common.ANSI("\x1b[32m")
+	ansiCyan   = common.ANSI("\x1b[36m")
+	ansiRed    = common.ANSI("\x1b[31m")
+	ansiDim    = common.ANSI("\x1b[90m")
+	ansiYellow = common.ANSI("\x1b[33m")
+	ansiWhite  = common.ANSI("\x1b[37m")
 )
 
 // 常见退出码含义（Unix 通用语义，对位旧 EXIT_CODE_HINTS）。

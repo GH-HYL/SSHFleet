@@ -34,9 +34,10 @@ var keySource = &KeySource{
 }
 
 // 提示配色（与其它模块一致的黄/红）。
-const (
-	colorReset  = "\x1b[0m"
-	colorYellow = "\x1b[33m"
+// var 而非 const：值经 common.ANSI 取，颜色能力不可用时为空串。
+var (
+	colorReset  = common.ANSI("\x1b[0m")
+	colorYellow = common.ANSI("\x1b[33m")
 )
 
 // ReadKeySources 读主密钥的两处来源：进程环境变量 + 本机持久值。

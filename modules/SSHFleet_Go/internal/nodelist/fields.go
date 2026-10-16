@@ -10,10 +10,11 @@ import (
 )
 
 // 输出配色：提示黄、[INFO] 青配黄 function。
-const (
-	colorReset  = "\x1b[0m"
-	colorCyan   = "\x1b[36m"
-	colorYellow = "\x1b[33m"
+// var 而非 const：值经 common.ANSI 取，颜色能力不可用时为空串。
+var (
+	colorReset  = common.ANSI("\x1b[0m")
+	colorCyan   = common.ANSI("\x1b[36m")
+	colorYellow = common.ANSI("\x1b[33m")
 )
 
 // resolveNodes 逐节点解析：字段补全（清单 > 配置，缺了就报错，不再询问）。
