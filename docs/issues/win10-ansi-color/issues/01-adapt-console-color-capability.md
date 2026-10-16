@@ -1,6 +1,6 @@
 # 01: 颜色能力由程序自己适配（探测 + 开 VT + 降级）
 
-Status: ready-for-agent
+Status: resolved（2026-10-16 实施，提交 `ea5cec1`）
 Blocked by: 无
 
 **对应规格**：`../spec.md`「实施决定」「验收」两节。
@@ -57,15 +57,15 @@ Blocked by: 无
 
 判据与命令见规格「验收」一节。逐条勾：
 
-- [ ] `go build ./...` 通过；`go vet ./...` 干净
-- [ ] 非 Windows 分支能编译（`color_other.go` 生效）——可用 `GOOS=linux go build ./...` 纸面验证
-- [ ] **改前基线**：`probe7` 跑 Go 版，期望「跑之前 VT=false、跑之后 VT=false、读回含 ESC=true」
-- [ ] **改后**：同一命令，期望「跑之后 VT=true、读回含 ESC=false」
-- [ ] **重定向行为未变**：`printf 'n\n' | ./SSHFleet.exe … > raw.txt 2>&1`，`raw.txt` 里 ESC 计数 **仍 > 0**（本次不碰该场景）
-- [ ] 26 个常量已全部改为 `var` 并接上 `ANSI(...)`（逐文件核对，等于上表）
-- [ ] 145 处引用点零改动（`git diff` 里不含任何调用点）
-- [ ] 本次不写测试（作者指示：「测试的事儿现在不用你管」）
-- [ ] CHANGELOG 已按规范第四节记（版本档位由作者定）
+- [x] `go build ./...` 通过；`go vet ./...` 干净
+- [x] 非 Windows 分支能编译（`color_other.go` 生效）——`GOOS=linux go build ./...` 通过
+- [x] **改前基线**：`probe7` 跑 Go 版——跑之前 VT=false、跑之后 VT=false、读回含 ESC=true（实测见 Comments）
+- [x] **改后**：同一命令——跑之后 VT=true、读回含 ESC=false（实测见 Comments）
+- [x] **重定向行为未变**：`printf 'n\n' | ./SSHFleet.exe … > raw.txt 2>&1`，`raw.txt` 里 ESC 计数仍为 48（与改前一致）
+- [x] 26 个常量已全部改为 `var` 并接上 `ANSI(...)`（逐文件核对，等于上表）
+- [x] 145 处引用点零改动（`git diff` 里不含任何调用点）
+- [x] 本次不写测试（作者指示：「测试的事儿现在不用你管」）
+- [x] CHANGELOG 已按规范第四节记（`[9.1.6] - 2026-10-16`，修订档）
 
 **证据要求**：改前 / 改后各跑一遍，把两次实际输出贴进本工单 `Comments`。
 只写「已修复」不算交付（规范第五节「交付要给证据」）。
@@ -86,4 +86,48 @@ Blocked by: 无
 
 ## Comments
 
-（暂无）
+**2026-10-16 · 已实施，提交 `ea5cec1`。** 三件事一次做完（探测 + 主动开 VT + 取值跟着探测走），引用点零改动。
+
+改前基线（`build/atest-8/`，`./probe7.exe ./fleet/SSHFleet.exe -c "echo hi" -f ./fleet/nodes.csv`）：
+
+```text
+=== 跑之前  mode=0x0003  VT-OUT=false（已强制关闭）
+=== 跑之后  mode=0x0003  VT-OUT=false
+=== 【判定】它没有动 VT
+--- 读回第 0 行 ---
+"\x1b[31m[ERROR]\x1b[0m\x1b[33m [function:config]\x1b[0m 加载配置文件失败：config/SSHFleet.conf"
+=== 读回内容含 ESC(U+001B) = true
+```
+
+改后（同一条命令）：
+
+```text
+=== 跑之前  mode=0x0003  VT-OUT=false（已强制关闭）
+=== 跑之后  mode=0x0007  VT-OUT=true
+=== 【判定】是它把 VT 打开的
+--- 读回第 0 行 ---
+"[ERROR] [function:config] 加载配置文件失败：config/SSHFleet.conf"
+=== 读回内容含 ESC(U+001B) = false
+```
+
+重定向行为未变（`cd build/atest-8/fleet`）：
+
+```text
+$ printf 'n\n' | ./SSHFleet.exe -c "echo hi" -f nodes.csv > ../raw_after.txt 2>&1
+$ grep -o $'\x1b' ../raw_after.txt | wc -l
+48
+```
+
+改前同一命令同样是 48 次——本议题不碰该场景，行为与改动前一致。
+
+构建与静态检查：
+
+```text
+gofmt -l .                    无输出
+go build ./...                OK
+go vet ./...                  OK
+GOOS=linux go build ./...     OK
+```
+
+改动范围：`git diff --stat` 六个文件（38+/32-），全部落在上表那六个常量块内；145 处引用点一处未碰。
+改前的二进制留档在 `build/atest-8/fleet/SSHFleet_before.exe`，可复跑上面对照。
