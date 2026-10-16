@@ -96,8 +96,6 @@ mkdir "%PKGDIR%\config"
 copy /y "%OUT%\SSHFleet.exe" "%PKGDIR%\" >nul
 copy /y "%~dp0README.md" "%PKGDIR%\" >nul
 copy /y "%~dp0CHANGELOG.md" "%PKGDIR%\" >nul
-rem LICENSE 随包：拿到二进制的人也能看到许可证条款
-copy /y "%~dp0LICENSE" "%PKGDIR%\" >nul
 copy /y "%~dp0modules\SSHFleet_Go\config\keywords_dangerous.conf" "%PKGDIR%\config\" >nul
 copy /y "%~dp0modules\SSHFleet_Go\config\keywords_error.conf" "%PKGDIR%\config\" >nul
 copy /y "%~dp0modules\SSHFleet_Go\config\keywords_passwd.conf" "%PKGDIR%\config\" >nul
@@ -138,8 +136,6 @@ mkdir "%LPKGDIR%\config"
 copy /y "%OUT%\SSHFleet" "%LPKGDIR%\" >nul
 copy /y "%~dp0README.md" "%LPKGDIR%\" >nul
 copy /y "%~dp0CHANGELOG.md" "%LPKGDIR%\" >nul
-rem LICENSE 随包（同 Windows 包）
-copy /y "%~dp0LICENSE" "%LPKGDIR%\" >nul
 copy /y "%~dp0modules\SSHFleet_Go\config\keywords_dangerous.conf" "%LPKGDIR%\config\" >nul
 copy /y "%~dp0modules\SSHFleet_Go\config\keywords_error.conf" "%LPKGDIR%\config\" >nul
 copy /y "%~dp0modules\SSHFleet_Go\config\keywords_passwd.conf" "%LPKGDIR%\config\" >nul
