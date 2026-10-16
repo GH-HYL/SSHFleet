@@ -18,10 +18,11 @@ import (
 var ErrCancelled = errors.New("用户取消输入")
 
 // 取消提示与 yes/no 掐示的配色（对位旧 constants.py / interaction.py：提示红、取消黄）。
-const (
-	colorReset  = "\x1b[0m"
-	colorRed    = "\x1b[31m"
-	colorYellow = "\x1b[33m"
+// var 而非 const：值经 ANSI 取，颜色能力不可用时为空串（见 color.go）。
+var (
+	colorReset  = ANSI("\x1b[0m")
+	colorRed    = ANSI("\x1b[31m")
+	colorYellow = ANSI("\x1b[33m")
 )
 
 // Interactor 是全工具唯一的用户交互入口（需注入依赖的类型，spec D32 条件 4）。

@@ -34,7 +34,7 @@ import (
 // 版本号：单一出处（显示在帮助信息首行下方，经 cli.Parse 传入 Usage）。
 // 与 CHANGELOG 顶部当天段落的段头**同一个号**——开段、抬号时在同一次提交里同步改，
 // 两处不一致即为错误。同一天的改动共用一个号，不因改动多而另起号。
-const appVersion = "9.1.5"
+const appVersion = "9.1.6"
 
 // versionWithBuildID 版本号拼上**构建标识**：git 短提交号（仓库内编译时由 go build
 // 自动注入 vcs.revision；工作区有未提交改动时加 -dirty）+ HEAD 提交时间。
@@ -90,10 +90,11 @@ const (
 )
 
 // 危险命令确认提示与 [ERROR] 前缀的配色（对位旧 constants.py / error_handler.py）。
-const (
-	colorReset  = "\x1b[0m"
-	colorRed    = "\x1b[31m"
-	colorYellow = "\x1b[33m"
+// var 而非 const：值经 common.ANSI 取，颜色能力不可用时为空串（见 internal/common/color.go）。
+var (
+	colorReset  = common.ANSI("\x1b[0m")
+	colorRed    = common.ANSI("\x1b[31m")
+	colorYellow = common.ANSI("\x1b[33m")
 )
 
 // toolLog / execLogRef 是 fatal 写日志用的两个落点：工具日志在步骤 2 建好之后赋值，

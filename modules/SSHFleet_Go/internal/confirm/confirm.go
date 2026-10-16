@@ -18,15 +18,16 @@ import (
 )
 
 // ANSI 配色（对位旧 constants.py：横幅青 / 字段名亮青 / 值亮橙 / 确认亮黄 / 取消与提示黄）。
-const (
-	colorReset        = "\x1b[0m"
-	colorBold         = "\x1b[1m"
-	colorCyan         = "\x1b[36m"
-	colorYellow       = "\x1b[33m"
-	colorBlue         = "\x1b[34m"
-	colorBrightYellow = "\x1b[93m"
-	colorBrightCyan   = "\x1b[96m"
-	colorBrightOrange = "\x1b[38;5;214m"
+// var 而非 const：值经 common.ANSI 取，颜色能力不可用时为空串。
+var (
+	colorReset        = common.ANSI("\x1b[0m")
+	colorBold         = common.ANSI("\x1b[1m")
+	colorCyan         = common.ANSI("\x1b[36m")
+	colorYellow       = common.ANSI("\x1b[33m")
+	colorBlue         = common.ANSI("\x1b[34m")
+	colorBrightYellow = common.ANSI("\x1b[93m")
+	colorBrightCyan   = common.ANSI("\x1b[96m")
+	colorBrightOrange = common.ANSI("\x1b[38;5;214m")
 )
 
 // Confirm 主干第 7 步入口。
