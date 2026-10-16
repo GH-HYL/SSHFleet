@@ -40,7 +40,7 @@ type StepResult struct {
 //   - 结论区：只由结果判定（internal/verdict.Judge）写，执行侧一个字都不碰——
 //     成败、分类、定论退出码全工程只在这里产生一次。
 //
-// 退出码语义见 CONTEXT「退出码」。
+// 退出码语义见 GLOSSARY「退出码」。
 type Result struct {
 	// —— 事实区 ——
 	Seq             int

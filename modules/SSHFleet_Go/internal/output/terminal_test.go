@@ -101,7 +101,7 @@ func TestResultLinePassesOutputThrough(t *testing.T) {
 
 // 「未送出的代填」这一行事实的细节（D35，作者 2026-10-03 裁定）：失败行要把序号与
 // 触发词原文渲染回来——只陈述事实，不写结论词（「触发词未命中」四个字仍只由分类列表达）。
-// CONTEXT「触发词未命中」词条里那句"序号里最小的那个就是第一个出错点"，指的就是这里的序号。
+// GLOSSARY「触发词未命中」词条里那句"序号里最小的那个就是第一个出错点"，指的就是这里的序号。
 func TestResultLineRendersMissedAnswers(t *testing.T) {
 	answers := []ssh.Answer{
 		{Value: "zhangsan", Triggers: []string{"Your full name"}},

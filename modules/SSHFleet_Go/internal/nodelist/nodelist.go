@@ -10,7 +10,7 @@ import (
 	"sshfleet/internal/config"
 )
 
-// NodeInfo 单台目标主机的连接要素（纯数据载体，CONTEXT.md「节点信息」）。
+// NodeInfo 单台目标主机的连接要素（纯数据载体，GLOSSARY.md「节点信息」）。
 type NodeInfo struct {
 	IP            string
 	Port          int

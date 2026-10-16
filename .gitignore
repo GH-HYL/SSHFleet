@@ -22,7 +22,7 @@
 !LICENSE
 
 # 文档（决策：ADR；仓库级说明与词表；面向用户的手册；个人开发规范）
-!CONTEXT.md
+!GLOSSARY.md
 !AGENTS.md
 !README.md
 !CHANGELOG.md

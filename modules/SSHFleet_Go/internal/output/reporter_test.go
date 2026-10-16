@@ -153,7 +153,7 @@ func TestReporterConnectFailure(t *testing.T) {
 		t.Fatalf("output.txt 应含错误原文：\n%s", txt)
 	}
 	if strings.Contains(txt, "退出码") {
-		t.Fatalf("连接失败不该出现退出码（退出码语义见 CONTEXT）：\n%s", txt)
+		t.Fatalf("连接失败不该出现退出码（退出码语义见 GLOSSARY）：\n%s", txt)
 	}
 
 	logText := readExecLog(t, execLogPath)
