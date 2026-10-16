@@ -82,22 +82,40 @@ P2（`interactor.go` 的 `Prompt` / `PromptPassword` 无调用者）、T1（batc
 
 ---
 
-## 四、本轮：`win10-ansi-color` 已定案、待实施
+## 四、本轮：`win10-ansi-color` —— 当天已闭环
 
-**位置**：`docs/issues/win10-ansi-color/`（`spec.md` + `issues/01-adapt-console-color-capability.md`）
+**位置**：`docs/issues/win10-ansi-color/`
 
-最新一批里**唯一形态齐备**的：规格 + 工单 + 本地可复现的探针（`build/atest-8/probe7`）+ 已接受的 ADR-0017。
-**作者 2026-10-16 决定：本轮只做这一件**，其余留待后续。
+规格 + 工单 + 本地可复现的探针（`build/atest-8/probe7`）+ ADR-0017 齐备，
+已于 2026-10-16 当天实施并复查完：`ea5cec1`（实施，含 CHANGELOG `[9.1.6]`）、
+`c44048f`（工单与规格回填）、`00e3770`（复查报告）。
 
-**开工前需要先处理的一点**：该目录与 ADR-0017 **尚未进版本库**——
+**本节不再有待办**，留在这里只说明它已闭环（原先记的「文档尚未进版本库」也已由 `c16afaa` 提交解决）。
 
-```text
-$ git status --short
-?? docs/adr/0017-program-adapts-console-not-user.md
-?? docs/issues/win10-ansi-color/
-```
+---
 
-先把这批文档提交，免得实施时的 `git diff` 混进未跟踪的文档。
+## 五、本轮收尾时冒出的待处理项（2026-10-16）
+
+### F1 · `docs/条款体检-2026-10-13.md:188` 引用了规范的旧标题
+
+规范第七节的标题当天由「文档与决策的更新」改为「文档与决策的创建与更新」，
+条款体检里那句仍写着旧名。**只是标题名过时**——它描述的内容（细节修正 vs 决策取代）没变。
+
+**未改的理由**：那是一份 10-13 的体检记录，记的是当时看到的规范样子；改它等于改历史。
+
+### F2 · `win10-ansi-color/` 下两份文档的 `Status:` 没跟到实际
+
+| 文件 | 现在挂着 | 实际 |
+| --- | --- | --- |
+| `findings-2026-10-16.md` | `ready-for-human` | 排查已完成，实施也已完成 |
+| `handoff.md` | `needs-info` | 历史交接背景，其中若干前提已被 findings 推翻 |
+
+归入第一节「`Status:` 不代表现状」，这里只把具体位置点出来。
+
+### F3 · `build/` 下的沙盒该按天清一遍
+
+`build/` 下有 `atest-1` 至 `atest-8` 八个沙盒。按规范第一节的按天清理规则（当天与昨天留着，
+前前天及更早的整个删掉），开工前该扫一眼哪些已过期。本轮复现用的 `atest-8` 是当天建的，不动它。
 
 ---
 
@@ -128,3 +146,5 @@ git config --global --add safe.directory D:/Desktop/Code/SSHFleet
 ## Comments
 
 - 2026-10-16：作者点名登记第一节（`Status:` 失真），并指示把 `win10-ansi-color` 以外的遗留一并记入本文件。
+- 2026-10-16（收尾）：第四节改为「当天已闭环」；新增第五节，登记收尾时冒出的三条（规范旧标题引用、
+  `win10-ansi-color` 下两份文档的状态、`build/` 沙盒按天清理）。
