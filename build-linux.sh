@@ -22,8 +22,6 @@
 #     与 bat 侧 .NET ZipFile 的行为一致（2026-10-12 用 zipfile 核对 flag_bits 实测确认：
 #     zip -UN=UTF8 读到 0x0000，zipfile 读到 0x0800）。
 #   - tar.gz 直接用 GNU tar 的 --mode=755，不必像 bat 那样绕道 Git 的 bash。
-#   另：build-windows.bat 没有同步「出厂配置按平台取模板」这处改动，本机已不使用它；
-#   若日后重新启用，需一并改它那两处 copy。
 #
 # 构建的临时目录指到 build/tmp（工作区内）。Go 的编译缓存仍走默认位置——它可复用、
 # 不是产物，不受「构建产物不出工作区」约束。
