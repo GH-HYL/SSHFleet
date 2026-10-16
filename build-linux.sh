@@ -88,9 +88,9 @@ case "$REL" in "$ROOT"/*) ;; *) die "release 目录不在工作区内，拒绝�
 rm -rf "$REL"
 mkdir -p "$WPKG/config" "$WPKG/docs" "$LPKG/config" "$LPKG/docs"
 
-# 两个平台共同的随包内容：README / CHANGELOG / LICENSE / 三份关键词规则 / 六册手册
+# 两个平台共同的随包内容：README / CHANGELOG / 三份关键词规则 / 六册手册
 for d in "$WPKG" "$LPKG"; do
-  cp -f "$ROOT/README.md" "$ROOT/CHANGELOG.md" "$ROOT/LICENSE" "$d/"
+  cp -f "$ROOT/README.md" "$ROOT/CHANGELOG.md" "$d/"
   cp -f "$CFG/keywords_dangerous.conf" "$CFG/keywords_error.conf" \
         "$CFG/keywords_passwd.conf" "$d/config/"
   cp -f "$DOCS_SRC"/[0-9]-*.md "$d/docs/"
