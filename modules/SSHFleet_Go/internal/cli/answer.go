@@ -146,14 +146,17 @@ func checkAnswerExclusive(a *Args) error {
 // （有几个触发词就是几列）。
 //
 // 第 1 段留空是合法写法：代表只发一个回车。
+//
+// 报错文案写给使用者看：调用方（answerLineError）已经把「哪个文件、第几行」说过了，
+// 这里只补「这一行差在哪、该怎么改」——不重复列的含义，也不重复选项名。
 func parseAnswerRow(fields []string) (ssh.Answer, error) {
 	entry := ssh.Answer{Value: fields[0], Triggers: fields[1:]}
 	if len(entry.Triggers) == 0 {
-		return ssh.Answer{}, fmt.Errorf("只有一列：缺触发词（第 1 列是代填内容，第 2 列起是触发词）")
+		return ssh.Answer{}, fmt.Errorf("这一行缺触发词，至少要两列：第 1 列写代填内容，第 2 列起写触发词")
 	}
-	for _, trigger := range entry.Triggers {
+	for i, trigger := range entry.Triggers {
 		if strings.TrimSpace(trigger) == "" {
-			return ssh.Answer{}, fmt.Errorf("触发词不能为空")
+			return ssh.Answer{}, fmt.Errorf("第 %d 列的触发词是空的：触发词决定这一行在什么提示出现时发出，留空等于无条件盲填", i+2)
 		}
 	}
 	return entry, nil

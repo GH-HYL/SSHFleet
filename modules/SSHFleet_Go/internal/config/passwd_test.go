@@ -31,14 +31,15 @@ func TestLoadPasswdConfig(t *testing.T) {
 	}
 
 	bad := map[string]string{
-		"一条 step 都没有":         ``,
-		"缺 keywords":          "[[step]]\nvalue = 'new'\nmax = 1\n",
-		"value 写错":            "[[step]]\nkeywords = ['x']\nvalue = 'newest'\nmax = 1\n",
-		"max 为 0":             "[[step]]\nkeywords = ['x']\nvalue = 'new'\nmax = 0\n",
-		"keywords 里有空项":       "[[step]]\nkeywords = ['x', ' ']\nvalue = 'new'\nmax = 1\n",
-		"多写了个不认识的字段":          "[[step]]\nkeywords = ['x']\nvalue = 'new'\nmax = 1\nwat = 1\n",
-		"category 缺 name":     "[[step]]\nkeywords = ['x']\nvalue = 'new'\nmax = 1\n\n[[category]]\nkeywords = ['y']\n",
-		"category 缺 keywords": "[[step]]\nkeywords = ['x']\nvalue = 'new'\nmax = 1\n\n[[category]]\nname = '甲'\n",
+		"一条 step 都没有":   ``,
+		"缺 keywords":    "[[step]]\nvalue = 'new'\nmax = 1\n",
+		"value 写错":      "[[step]]\nkeywords = ['x']\nvalue = 'newest'\nmax = 1\n",
+		"max 为 0":       "[[step]]\nkeywords = ['x']\nvalue = 'new'\nmax = 0\n",
+		"keywords 里有空项": "[[step]]\nkeywords = ['x', ' ']\nvalue = 'new'\nmax = 1\n",
+		"多写了个不认识的字段":    "[[step]]\nkeywords = ['x']\nvalue = 'new'\nmax = 1\nwat = 1\n",
+		"category 缺 name": "[[step]]\nkeywords = ['x']\nvalue = 'new'\nmax = 1\n\n[[category]]\nkeywords = ['y']\n",
+		// category 的 keywords 允许省略（分类名由程序按结构事实给出），但写了空串算写错
+		"category 的 keywords 里有空项": "[[step]]\nkeywords = ['x']\nvalue = 'new'\nmax = 1\n\n[[category]]\nname = '甲'\nkeywords = [' ']\n",
 	}
 	for name, body := range bad {
 		if _, err := LoadPasswdConfig(writePasswdConf(t, body)); err == nil {
@@ -49,6 +50,17 @@ func TestLoadPasswdConfig(t *testing.T) {
 	// 失败分类可以为空：空即改密失败一律落回通用判据表
 	if _, err := LoadPasswdConfig(writePasswdConf(t, "[[step]]\nkeywords = ['x']\nvalue = 'new'\nmax = 1\n")); err != nil {
 		t.Fatalf("没有 category 时应能加载：%v", err)
+	}
+
+	// category 只写名字与提示语、不写 keywords：合法（分类名由程序按结构事实给出）
+	noKw := writePasswdConf(t, "[[step]]\nkeywords = ['x']\nvalue = 'new'\nmax = 1\n\n"+
+		"[[category]]\nname = '甲'\ntip = '说明'\n")
+	file2, err := LoadPasswdConfig(noKw)
+	if err != nil {
+		t.Fatalf("category 省略 keywords 时应能加载：%v", err)
+	}
+	if len(file2.Categories) != 1 || file2.Categories[0].Name != "甲" || file2.Categories[0].Tip != "说明" {
+		t.Fatalf("省略 keywords 的 category 解析结果不对：%+v", file2.Categories)
 	}
 }
 
