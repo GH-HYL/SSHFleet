@@ -170,4 +170,4 @@ git config --global --add safe.directory D:/Desktop/Code/SSHFleet
 
   **删除的文件均留了去向**：`review-2026-10-16.md`→工单 01、`recheck.md`→spec Comments、`deferred.md`→spec 第六节、`plan-coverage-已闭环.md`→spec 第七节、`backlog-2026-10-13/findings.md`→`defect-scan-2026-10-17/findings-2026-10-13.md`、`open-questions.md`→spec D43/D44（Q6 另补 D52）。
 
-- 2026-10-17（收口后补记）：上条收口核对里的三个数（17 个目录 / 81 份文档 / done 78 + needs-triage 3）是**收口当时**的快照。其后 `defect-scan-2026-10-17/spec.md` 的 D2 拆出为独立议题 `yes-mode-danger-visible/`，故目录数由 16 增至 17、`needs-triage` 由 2 增至 3。**下次核数请以实际为准，别照抄本节。**
+- 2026-10-17（收口后补记）：上条收口核对里的数（17 个目录 / 81 份文档 / done 78 + needs-triage 3）是**收口当时**的快照。**下次核数请以实际为准，别照抄本节。**
