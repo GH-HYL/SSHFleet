@@ -41,6 +41,11 @@
 # 这里显式排除并写明——防止将来补白名单时误放行。
 docs/越界记录/
 
+# 技能参考包（mattpocock-skills）：第三方 skill 集合，供 Agent 技能对照与选型时查阅，整包追踪。
+# 父目录被 * 排除时子文件无法重新纳入，故两层都要单独放行。
+!mattpocock-skills/
+!mattpocock-skills/**
+
 # 代码
 !modules/
 !modules/**
