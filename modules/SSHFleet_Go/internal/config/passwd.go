@@ -105,8 +105,7 @@ func (s PasswdStep) validate() error {
 
 // validate 单条 category 的校验。
 //
-// keywords 允许为空：有的分类名由程序按结构事实直接给出（不靠认远端文案），
-// 配置里只为它留名字与提示语。写了 keywords 却留空串，仍按写错处理。
+// keywords 允许为空：校验只针对写出来的空串（那是写错了，不是没写）。
 func (c PasswdCategory) validate() error {
 	if strings.TrimSpace(c.Name) == "" {
 		return fmt.Errorf("缺少 name（分类名）")

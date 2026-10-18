@@ -52,7 +52,7 @@ func TestLoadPasswdConfig(t *testing.T) {
 		t.Fatalf("没有 category 时应能加载：%v", err)
 	}
 
-	// category 只写名字与提示语、不写 keywords：合法（分类名由程序按结构事实给出）
+	// category 省略 keywords 时，其余字段照常解析出来（校验只针对写出来的空串）
 	noKw := writePasswdConf(t, "[[step]]\nkeywords = ['x']\nvalue = 'new'\nmax = 1\n\n"+
 		"[[category]]\nname = '甲'\ntip = '说明'\n")
 	file2, err := LoadPasswdConfig(noKw)
