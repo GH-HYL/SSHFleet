@@ -248,6 +248,18 @@ success_files = 0
 failed_files = 0
 expected = "账号过期"
 
+# 中文环境：这句提示由 PAM 发出，会按目标机语言翻译。
+# 译文取自 RHEL 系 / openEuler 的 pam 包里 zh_CN 的 Linux-PAM.mo 原文（2026-10-18 查证）。
+[[cases]]
+name = "账号过期（服务端提示，中文环境）"
+banner = "您的帐户已过期；请联系您的系统管理员。"
+error = "建立连接失败 - ssh: handshake failed: EOF"
+output = ""
+mode = "execute"
+success_files = 0
+failed_files = 0
+expected = "账号过期"
+
 [[cases]]
 name = "连接被断开（只有 EOF，服务端没说原因）"
 error = "建立连接失败 - ssh: handshake failed: EOF"

@@ -67,6 +67,35 @@ func TestAnswerInlineLineErrorNamesFlagAndLine(t *testing.T) {
 	}
 }
 
+// 一列与空触发词这两种错误，内层要说清这一行差在哪、该怎么改。
+// 外层已由 answerLineError 带上了 -a、文件与行号，这里断言的是内层那句话。
+func TestAnswerRowErrorsSayWhatIsMissing(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+		want string
+	}{
+		{"只有一列", "1\n", "这一行缺触发词，至少要两列"},
+		// `1,架构,,` 的第 3、4 列都是空触发词；报第一个，即第 3 列
+		{"触发词为空", "1,架构,,\n", "第 3 列的触发词是空的"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			file := filepath.Join(t.TempDir(), "answer.csv")
+			if err := os.WriteFile(file, []byte(c.body), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			err := checkAnswer(&Args{Command: "sh x.sh", Answer: file}, nil)
+			if err == nil {
+				t.Fatal("应报错")
+			}
+			if !strings.Contains(err.Error(), c.want) {
+				t.Fatalf("报错应含 %q，实际：%v", c.want, err)
+			}
+		})
+	}
+}
+
 // 内联值：字面 \n 分行、一行一条；注释行与空行跳过；一条可挂多个触发词。
 func TestCheckAnswerInlineMultiline(t *testing.T) {
 	a := &Args{Command: "sh x.sh", Answer: `1,请选择架构\n#注释\n\n2,deb/rpm,包格式`}
