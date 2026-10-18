@@ -260,6 +260,28 @@ success_files = 0
 failed_files = 0
 expected = "账号过期"
 
+# 批量改密走的是同一张判据表（改密分类被插在最前面），所以这条路径也要单独覆盖：
+# 给已过期账号跑 --change-password，中文环境下的提示同样要认成「账号过期」。
+[[cases]]
+name = "账号过期（改密模式，中文环境）"
+banner = "您的帐户已过期；请联系您的系统管理员。"
+error = "建立连接失败 - ssh: handshake failed: EOF"
+output = ""
+mode = "passwd"
+success_files = 0
+failed_files = 0
+expected = "账号过期"
+
+[[cases]]
+name = "账号过期（改密模式，英文环境）"
+banner = "Your account has expired; please contact your system administrator."
+error = "建立连接失败 - ssh: handshake failed: EOF"
+output = ""
+mode = "passwd"
+success_files = 0
+failed_files = 0
+expected = "账号过期"
+
 [[cases]]
 name = "连接被断开（只有 EOF，服务端没说原因）"
 error = "建立连接失败 - ssh: handshake failed: EOF"

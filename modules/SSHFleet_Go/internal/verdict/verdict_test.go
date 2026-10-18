@@ -9,6 +9,7 @@ import (
 	"github.com/BurntSushi/toml"
 
 	"sshfleet/internal/cli"
+	"sshfleet/internal/config"
 	"sshfleet/internal/ssh"
 )
 
@@ -38,6 +39,17 @@ func loadKeywords(t *testing.T) *Keywords {
 	if err != nil {
 		t.Fatalf("关键词文件应可加载: %v", err)
 	}
+	// 与 main 同一条装法：改密分类插在判据表最前面，改密模式命中的是它。
+	// 少了这一步，改密路径的用例会误用通用表——测出来的绿不代表改密那条链是通的。
+	pc, err := config.LoadPasswdConfig(filepath.Join("..", "..", "config", "keywords_passwd.conf"))
+	if err != nil {
+		t.Fatalf("改密配置应可加载: %v", err)
+	}
+	cats := make([]Category, 0, len(pc.Categories))
+	for _, x := range pc.Categories {
+		cats = append(cats, Category{Name: x.Name, Keywords: x.Keywords, Tip: x.Tip})
+	}
+	kw.PrependCategories(cats)
 	return kw
 }
 
@@ -59,6 +71,8 @@ func judgeCorpus(c corpusCase, kw *Keywords) string {
 		mode = cli.ModeUpload
 	case "download":
 		mode = cli.ModeDownload
+	case "passwd":
+		mode = cli.ModePasswd
 	}
 	Judge(&res, mode, kw)
 	if res.Verdict == Success {

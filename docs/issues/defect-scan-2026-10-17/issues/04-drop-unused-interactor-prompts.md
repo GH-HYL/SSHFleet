@@ -36,4 +36,5 @@ Blocked by: None（可立即开工）
 
 ## Comments
 
-- 2026-10-18 完成。开工前核过：包外零命中，`interactor_test.go` 也没有针对这两个方法的用例。删除时连带移除了随之不再使用的 `golang.org/x/term` 导入；`readLine` 仍被 `Confirm` 使用，保留。构建、vet、`internal/common` 测试均通过。
+- 2026-10-18 完成。开工前核过：包外零命中，`interactor_test.go` 也没有针对这两个方法的用例。删除时连带移除了 `interactor.go` 里随之不再使用的 `golang.org/x/term` 导入；`readLine` 仍被 `Confirm` 使用，保留。构建、vet、`internal/common` 测试均通过。
+- 2026-10-18 补记依赖核对（工单「要做的事」第 3 条）：`golang.org/x/term` **仍被 `internal/cli/args.go` 使用**（读终端宽度），`go.mod` 里的直接依赖因此照旧保留，不从 `go.mod` 摘除。
