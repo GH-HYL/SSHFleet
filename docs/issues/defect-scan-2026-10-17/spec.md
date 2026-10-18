@@ -1,8 +1,10 @@
 # 代码缺陷清点 2026-10-17 · 规格
 
-Status: needs-triage
+Status: done（2026-10-19）
 
-> 2026-10-18：本议题的登记与分诊已完成，D2/D4/D7/D9 四张工单已实施完毕，D8 已修，D5/D6 已在原工单补订正，D10 定为 wontfix，D1 移交重构议题。剩下 D1 的修复在 `docs/issues/dangercheck-text-regex/` 跟踪。
+> 2026-10-19：本议题处理完毕。D2/D4/D7/D9 四张工单实施完成，D8 已修，D5/D6 已在原工单补记录订正，D10 定为 wontfix，D11 改为设计边界，D1 的修复移交 `docs/issues/dangercheck-text-regex/`（不属于本议题）。
+>
+> **顺带查出、不属本议题的一条**：`internal/nodelist` 有两个测试长期是红的，根因是内联清单把路径里的 `\n` 当成换行切开了——已另立 `docs/issues/inline-list-backslash-newline/`。本议题的五张工单里没有一条把测试弄红。
 
 > **来源**：2026-10-17 核对全仓议题目录的「记录与事实」时，另行查出的代码层缺陷，集中登记于此，供开发者择期集中处理。
 >
