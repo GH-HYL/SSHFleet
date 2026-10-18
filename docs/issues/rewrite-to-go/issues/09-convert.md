@@ -1,7 +1,7 @@
 # M2-09 credential：--convert-password
 
 Type: task
-Status: resolved
+Status: done
 Resolved: 2026-09-11
 Blocked by: 08
 

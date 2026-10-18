@@ -1,7 +1,7 @@
 # M6-26 README 重写（面向全新安装）
 
 Type: task
-Status: resolved
+Status: done
 Resolved: 2026-09-14
 Blocked by: 25
 
@@ -9,7 +9,7 @@ Blocked by: 25
 
 仓库根 `README.md`（此前不存在）。
 
-用户 2026-09-14 裁定：**面向全新安装写一份，不考虑升级/旧版本内容**——重构带来的变化由 `CHANGELOG.md` 承担，README 不写迁移章节。
+开发者 2026-09-14 裁定：**面向全新安装写一份，不考虑升级/旧版本内容**——重构带来的变化由 `CHANGELOG.md` 承担，README 不写迁移章节。
 
 - 结构与旧版 README 对齐（九章 + 附录）：① 这是什么 ② 安装 ③ 快速上手 ④ 核心概念 ⑤ 四种模式与参数 ⑥ 进阶用法 ⑦ 结果与历史 ⑧ 技术架构 ⑨ FAQ
 - 内容全部按 5.0.0 的实现重写，事实来源：`cli/args.go` 的 `Usage`（选项与提示文案）、`config/SSHFleet.conf`（配置全解）、spec 决策表（行为差异）
@@ -25,5 +25,5 @@ Blocked by: 25
 
 ## Comments
 
-- 2026-09-14 完成。发布包里的 `config/SSHFleet.conf` 按用户裁定**沿用现有那份**（含作者环境的默认值），故 README 的「安装」一节特意提示：配置里 `password_security = 3` 时首次使用前要先 `--gen-key`。
+- 2026-09-14 完成。发布包里的 `config/SSHFleet.conf` 按开发者裁定**沿用现有那份**（含作者环境的默认值），故 README 的「安装」一节特意提示：配置里 `password_security = 3` 时首次使用前要先 `--gen-key`。
 - 同一段还强调两个「必须」：配置必须与可执行文件同目录（工具从当前工作目录读 `./config/SSHFleet.conf`）、所有字段必须写出。

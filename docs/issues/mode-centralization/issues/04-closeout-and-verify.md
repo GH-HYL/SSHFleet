@@ -1,8 +1,8 @@
 # 04: 收尾与验证
 
-Status: resolved
+Status: done
 
-**闭环说明（2026-10-08 复核）**：已收口。作者已用非 root 账号真机复跑五条路径，重构前 / 后二进制 A/B 逐字一致（见 Comments）；ADR-0013 状态已置「已实施」。工单状态按本仓 issue tracker 约定记为 `resolved`（`-已闭环` 是文件名层的标记，不作为 Status 值）。
+**闭环说明（2026-10-08 复核）**：已收口。作者已用非 root 账号真机复跑五条路径，重构前 / 后二进制 A/B 逐字一致（见 Comments）；ADR-0013 状态已置「已实施」。工单状态记为 `done`（2026-10-17 统一：此前的 `-已闭环` 文件名后缀与 `resolved` 说法已作废，见 `docs/agents/triage-labels.md`）。
 Blocked by: 02, 03
 
 **要做的**：把这次改动验到位，并回填状态。作者口径：`Mode` 类型一动算**大改动**，必须分两步验。
@@ -29,14 +29,14 @@ Blocked by: 02, 03
 
 - `go vet ./...` 干净、`go test ./...` 全绿。
 - **CHANGELOG 不记**：这是纯重构，用户可见输出一字不变，按《个人开发规范》四不记。若走查发现显示有变，那一处按 bug 修，不是要记的优化项。
-- 回填状态：`docs/adr/0013` 的《状态》改「已实施」；`docs/issues/architecture-review-2026-10-06/issues/05-mode-centralization.md` 与本目录各票标 `resolved` 并记提交号。
+- 回填状态：`docs/adr/0013` 的《状态》改「已实施」；`docs/issues/architecture-review-2026-10-06/issues/05-mode-centralization.md` 与本目录各票标 `done` 并记提交号。
 
 - [x] 纸面走查表 5×9 格填满，无一格与改动前不同
 - [x] 真机五条路径跑过，显示与归档目录名不变
 - [x] `go vet ./...` 干净、`go test ./...` 全绿
 - [x] CHANGELOG 未新增条目（纯重构不记）
 - [x] `docs/adr/0013` 状态已回填为「已实施」
-- [x] 本目录 01–03 与 `05-mode-centralization` 已标 `resolved` 并记提交号
+- [x] 本目录 01–03 与 `05-mode-centralization` 已标 `done` 并记提交号
 
 ## Comments
 - 2026-10-07 **纸面走查完成**（提交 `b2956d5`），做法与结论：

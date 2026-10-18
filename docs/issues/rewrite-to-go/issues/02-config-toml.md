@@ -1,7 +1,7 @@
 # M1-02 internal/config：TOML 配置加载 + 模板
 
 Type: task
-Status: resolved
+Status: done
 Resolved: 2026-09-11
 Blocked by: 01
 

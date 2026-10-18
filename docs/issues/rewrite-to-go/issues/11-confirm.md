@@ -1,7 +1,7 @@
 # M2-11 confirm：参数确认交互
 
 Type: task
-Status: resolved
+Status: done
 Resolved: 2026-09-11
 Blocked by: 10
 

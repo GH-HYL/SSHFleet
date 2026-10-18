@@ -1,7 +1,7 @@
 # M6-23 Windows 上的 latest_history 等价方案：目录联接
 
 Type: task
-Status: resolved
+Status: done
 Resolved: 2026-09-14
 Blocked by: 22
 

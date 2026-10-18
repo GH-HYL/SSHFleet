@@ -1,6 +1,6 @@
 # 01: 改密模式的超时行补上
 
-Status: resolved
+Status: done
 Blocked by: None
 
 **要做的**：把改密模式的超时行补进参数确认屏与报告文件。

@@ -1,7 +1,7 @@
 # M4-18 result：统计 + 错误分类
 
 Type: task
-Status: resolved
+Status: done
 Resolved: 2026-09-14
 Blocked by: 17
 

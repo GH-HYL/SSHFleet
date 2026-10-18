@@ -1,7 +1,7 @@
 # M5-22 output：归档目录 / 资源备份 / latest_history
 
 Type: task
-Status: resolved
+Status: done
 Resolved: 2026-09-14
 Blocked by: 21
 
@@ -10,7 +10,7 @@ Blocked by: 21
 - **归档目录**：`historys/<YYYY-MM-DD_HH-MM-SS>_<模式>[_备注]/`（对位旧命名；无备注时不追加下划线）
 - **资源备份** `assets/`：只备份清单与脚本，**不备份上传文件**（spec D38）；内联清单（`-f` 为文本）无文件可备份时跳过
 - **latest_history 软链接**：POSIX 下建软链接指向最新归档目录（重名符号链接先删；同名普通文件告警跳过）；**Windows 跳过并提示**（需开发者模式/管理员权限）——用户要求留到收尾阶段再尝试 Windows 等价方案
-- 归档只放执行日志，工具日志保持 `historys/<paths.tool>` 单一滚动文件（用户 2026-09-14 裁定）
+- 归档只放执行日志，工具日志保持 `historys/<paths.tool>` 单一滚动文件（开发者 2026-09-14 裁定）
 
 ## 验证
 

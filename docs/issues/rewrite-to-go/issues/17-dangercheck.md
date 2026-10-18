@@ -1,7 +1,7 @@
 # M4-17 dangercheck：解析层 + 判定层 + 规则文件 TOML
 
 Type: task
-Status: resolved
+Status: done
 Resolved: 2026-09-14
 Blocked by: 16
 

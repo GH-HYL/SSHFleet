@@ -1,17 +1,17 @@
 # M4-19 语料迁入新工程并常驻为回归测试
 
 Type: task
-Status: resolved
+Status: done
 Resolved: 2026-09-14
 Blocked by: 18
 
 ## 范围
 
-用户 2026-09-14 裁定：旧工程语料迁入新工程、常驻为 Go 回归测试（而非临时跑一遍删除）。
+开发者 2026-09-14 裁定：旧工程语料迁入新工程、常驻为 Go 回归测试（而非临时跑一遍删除）。
 
 - `testdata/dangerous_cases.tsv`：81 例（命令 / 期望级别 / 期望分类名），自 `test/test_dangerous_detection.py` 的 CASES **程序化抽取**（AST 取值，不手抄）
 - `testdata/error_classification_cases.toml`：24 例（classify 入参 + 期望分类），自 `test/test_error_classification.py` 的 `check(classify(...))` 调用程序化抽取
-- 常驻测试：`internal/dangercheck/dangercheck_test.go`（语料 + 规则校验 + 未知字段）、`internal/result/result_test.go`（语料 + 归类断言 + 兜底判定 + AuthFailure 优先级）
+- 常驻测试：`internal/dangercheck/dangercheck_test.go`（语料 + 规则校验 + 未知字段）、`internal/verdict/verdict_test.go`（语料 + 归类断言 + 兜底判定 + AuthFailure 优先级；错误分类的测试 2026-10 从 `result` 包迁到 `verdict` 包）
 - 规则文件本身也在仓库内（`config/*.toml`），测试直接加载，改规则后跑测试即知是否退化
 
 ## 验证

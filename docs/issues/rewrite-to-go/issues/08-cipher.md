@@ -1,7 +1,7 @@
 # M2-08 credential：加解密引擎 + 凭据读盘校验
 
 Type: task
-Status: resolved
+Status: done
 Resolved: 2026-09-11
 Blocked by: 07
 

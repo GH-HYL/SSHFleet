@@ -1,6 +1,6 @@
 # 01: 在 cli.Mode 上建名字表 + 启动期自检（地基）
 
-Status: resolved
+Status: done
 Blocked by: None
 
 **要做的**：在 `cli` 包给 `Mode` 加名字表与启动期自检。本票**不迁任何消费方**——产出是「表可用、漏格会被当场拦住」。

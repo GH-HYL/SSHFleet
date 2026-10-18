@@ -1,6 +1,6 @@
 # 02: 提示词表加载与匹配喂入
 
-Status: resolved
+Status: done
 Blocked by: 01
 
 **要做的**：让改密真正改得动一台机器。加载 `config/passwd_keywords.conf`（随包提供，缺失即报错），按表认出远端的提问并按序喂值，直到会话自己结束。
@@ -21,6 +21,6 @@ Blocked by: 01
 - [ ] `go vet ./...` 干净、`go test ./...` 全绿
 
 ## Comments
-- 2026-09-29 完成，提交 577b93b。
+- 2026-09-29 完成，提交 4e62fae。
 - 2026-09-29（后续）：提示词表与失败分类合并进同一份 `config/passwd_keywords.conf`，由 `internal/config` 统一解析——
   `internal/ssh` 与 `internal/result` 都走严格字段校验，同一文件被两个包各读一遍会互相报「未识别字段」。

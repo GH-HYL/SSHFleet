@@ -1,13 +1,13 @@
 # M6-28 打包：两个构建脚本加 release 模式
 
 Type: task
-Status: resolved
+Status: done
 Resolved: 2026-09-14
 Blocked by: 27
 
 ## 范围
 
-`build-windows.bat` / `build-linux.sh` 增加 `release` 参数（用户 2026-09-14 裁定：**用现有脚本加参数，不新增文件**，因此不涉及 `.gitignore` 白名单变更）。
+`build-windows.bat` / `build-linux.sh` 增加 `release` 参数（开发者 2026-09-14 裁定：**用现有脚本加参数，不新增文件**，因此不涉及 `.gitignore` 白名单变更）。
 
 - 不带参数：只编译（行为与之前一致）
 - 带 `release`：编译 → 组装 `release/SSHFleet_<版本>_<平台>/` → 压缩
@@ -18,7 +18,7 @@ Blocked by: 27
 **发布目录内容**：可执行文件 + `README.md` + `config/`（`SSHFleet.conf` + `dangerous_keywords.toml` + `error_keywords.toml`）。
 > spec 的 M6 表原来只写了「可执行文件 + config/SSHFleet.conf 模板 + README.md」——**漏了两个规则文件**，而缺了它们工具起不来（配置里的 `paths.*` 指向它们）。已按实际需求补齐并同步 spec。
 
-**分平台打包（用户裁定：分平台惯例）**：
+**分平台打包（开发者裁定：分平台惯例）**：
 
 | 平台 | 容器 | 工具 | 理由 |
 | --- | --- | --- | --- |

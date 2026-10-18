@@ -1,7 +1,7 @@
 # M6-24 构建脚本路径修正 + 跨平台编译修复
 
 Type: task
-Status: resolved
+Status: done
 Resolved: 2026-09-14
 Blocked by: 23
 
@@ -50,5 +50,5 @@ Blocked by: 23
 
 ## Comments
 
-- 2026-09-14 完成。**新规矩**：每次动代码后都要跑一次 `GOOS=linux GOARCH=amd64 go build ./...`（已写入 HANDOVER 第三节与第六节坑表）。
+- 2026-09-14 完成。**新规矩**：每次动代码后都要跑一次 `GOOS=linux GOARCH=amd64 go build ./...`（当时记在交接稿 HANDOVER 里，该文件现已不存在；这条规矩仍在有效，见 `build-linux.sh` 与 `build-windows.bat`）。
 - `build-windows.bat` 未受影响：它用 `%~dp0build`（原生 Windows 路径），本身是对的；但本环境 cmd 被沙箱禁用，无法再执行验证，仅作静态确认。

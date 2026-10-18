@@ -1,6 +1,6 @@
 # 03: 单引号转义规则收成一份
 
-Status: resolved
+Status: done
 Blocked by: None
 
 **要做的**：把 `'\''` 这个转义规则从两处字面收成一个函数（原报告候选五）。

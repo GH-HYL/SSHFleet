@@ -1,7 +1,7 @@
 # M1-03 internal/log：zap 日志 + SUCCESS 级别
 
 Type: task
-Status: resolved
+Status: done
 Resolved: 2026-09-11
 Blocked by: 01
 

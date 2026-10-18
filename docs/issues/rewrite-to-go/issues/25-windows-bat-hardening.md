@@ -1,7 +1,7 @@
 # M6-25 build-windows.bat 加固（cd 守卫 / go 前置检查 / 暂停开关 / 代码页还原）
 
 Type: task
-Status: resolved
+Status: done
 Resolved: 2026-09-14
 Blocked by: 24
 
