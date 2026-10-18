@@ -76,6 +76,10 @@
 
 ## Agent skills
 
+### Document formats
+
+写 ADR / spec / 工单时**照着内容规范办**：`docs/agents/doc-formats.md`（什么时候写、模板字段、竖切与宽重构怎么拆）。**不要靠翻旧文件猜格式。**
+
 ### Issue tracker
 
 Issues、spec 和 ticket 以仓库内 `docs/issues/<feature-slug>/` 下的 markdown 文件存放。详见 `docs/agents/issue-tracker.md`。
