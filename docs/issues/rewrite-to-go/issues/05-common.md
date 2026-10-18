@@ -1,7 +1,7 @@
 # M1-05 internal/common：跨功能无状态小工具
 
 Type: task
-Status: resolved
+Status: done
 Resolved: 2026-09-11
 Blocked by: 01
 

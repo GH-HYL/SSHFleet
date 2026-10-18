@@ -1,6 +1,6 @@
 # 05: 模式判定与模式文案集中化（形状已定，见 ADR-0013）
 
-Status: resolved
+Status: done
 Blocked by: None
 
 **目标**：把「这次是哪种模式」这一个事实的**全部叫法与派生判断**，收进 `cli.Args.ModeName()` 旁边；别处不再 `switch args.Command != ""` 各自重判。

@@ -1,7 +1,7 @@
 # M5-21 output：执行日志 / output.txt / report.txt / 两个 xlsx
 
 Type: task
-Status: resolved
+Status: done
 Resolved: 2026-09-14
 Blocked by: 20
 

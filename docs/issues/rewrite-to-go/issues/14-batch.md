@@ -1,7 +1,7 @@
 # M3-14 batch：任务构建 + worker pool + 进度聚合
 
 Type: task
-Status: resolved
+Status: done
 Resolved: 2026-09-14
 Blocked by: 13
 

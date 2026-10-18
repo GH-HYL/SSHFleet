@@ -1,7 +1,7 @@
 # M2-07 credential：主密钥（SSHFLEET_KEY / --gen-key）
 
 Type: task
-Status: resolved
+Status: done
 Resolved: 2026-09-11
 Blocked by: 01
 

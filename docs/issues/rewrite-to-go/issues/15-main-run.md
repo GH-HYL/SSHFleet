@@ -1,7 +1,7 @@
 # M3-15 main：第 8 步接线 + 中断语义
 
 Type: task
-Status: resolved
+Status: done
 Resolved: 2026-09-14
 Blocked by: 14
 

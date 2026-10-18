@@ -1,6 +1,6 @@
 # 02: 统计与呈现侧改用名字表（删 ModeOf、签名换 cli.Mode）
 
-Status: resolved
+Status: done
 Blocked by: 01
 
 **要做的**：把统计与呈现侧的叫法与签名收敛到名字表。本票与 03 改的文件不重叠，可并行；两票同属**一次**改动，一起验收。
