@@ -44,7 +44,14 @@ func writeReportTo(t *testing.T, stats *result.Stats) string {
 }
 
 // reportCategoryOrder 取「节点清单统计」段里分类出现的先后。
-// 分类行形如 `连接超时（2）：`，段头之后、成功分类那一行之前。
+//
+// 分类行形如 `连接超时（2）：`，后面跟该分类的 IP 行，段与段之间空一行。但**分类名
+// 本身可能跨行、甚至含空行**——兜底分类名由 banner 与报错原文用 "\n" 拼成（见 verdict
+// 的 joinText），原文里带什么换行都原样落进名字。所以既不能按「单行结尾是：」认分类行
+// （会截掉名字的前半截），也不能按空行切段（名字里的空行会把一段切成两段）。
+//
+// 分类行唯一的硬定界是末尾那个 `（N）：`——「（」后跟十进制数字、再跟「）：」收到行尾。
+// 本函数从每个块的首行起找到这个结尾，合起来即完整分类名。
 func reportCategoryOrder(t *testing.T, report string) []string {
 	t.Helper()
 	lines := strings.Split(report, "\n")
@@ -60,15 +67,66 @@ func reportCategoryOrder(t *testing.T, report string) []string {
 	}
 
 	var order []string
-	for _, ln := range lines[start:] {
-		if ln == "" || !strings.HasSuffix(ln, "：") || !strings.Contains(ln, "（") {
+	// 报告里每个分类块由 report.go 的 `"\n%s（%d）：\n"` 写出：**块前必有一个空行**，
+	// 其后是名字的若干行（名字最后一行带 `（N）：`），再是该分类的 IP 行，再空行。
+	// 于是「空行之后的第一行」就是名字的第一行，往后找到 `（N）：` 收尾即得完整名字。
+	//
+	// 名字内部可能含空行（兜底分类名由 verdict.joinText 用 "\n" 拼成），出现空行后
+	// 不能就地当成下一个块——必须先把本块读完、跳到它的 IP 区之后再说。
+	//
+	// 已知界限：名字**首行是空行**时，那一个空行与块分隔空行在文本上无法区分，
+	// 还原出的名字会少掉开头的空行。这是报告格式不可逆丢的信息，不是本辅助的疏漏。
+	i := start
+	for i < len(lines) {
+		if lines[i] == "" {
+			i++
 			continue
 		}
-		// 段末还会出现成功分类那一行（形如 `执行成功（1）：`），它不属于失败分类段——由
-		// 调用方给出的期望值里不含它来兜底，这里只负责按出现顺序收集。
-		order = append(order, ln[:strings.LastIndex(ln, "（")])
+		// lines[i] 是某个分类名的第一行；找它的结尾行。
+		end := -1
+		for k := i; k < len(lines); k++ {
+			if isCategoryTail(lines[k]) {
+				end = k
+				break
+			}
+		}
+		if end < 0 {
+			break
+		}
+		name := strings.Join(lines[i:end+1], "\n")
+		order = append(order, name[:strings.LastIndex(name, "（")])
+		// 跳到本块的 IP 区之后：结尾行之后的所有非空行都是 IP。
+		i = end + 1
+		for i < len(lines) && lines[i] != "" {
+			i++
+		}
 	}
 	return order
+}
+
+// isCategoryTail 这一行是不是分类行的结尾，即 `（N）：` 收到行尾、N 是十进制数字。
+func isCategoryTail(ln string) bool {
+	if !strings.HasSuffix(ln, "）：") {
+		return false
+	}
+	idx := strings.LastIndex(ln, "（")
+	if idx < 0 {
+		return false
+	}
+	return isAllDigits(ln[idx+len("（") : len(ln)-len("）：")])
+}
+
+// isAllDigits 非空且全是 0-9。
+func isAllDigits(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 // 报告里同数量的分类按首现序：手写字面量，期望值独立于被测代码。
@@ -116,25 +174,26 @@ func TestWriteReportCategorySetMatchesStats(t *testing.T) {
 	report := writeReportTo(t, stats)
 	got := reportCategoryOrder(t, report)
 
-	// 清单段末尾还会列出成功分类，它不算失败分类。
-	wantCat := map[string]bool{"连接超时": true, "原因未知": true}
-	seen := map[string]bool{}
+	// 清单段末尾还会列出成功分类，它不算失败分类：整段一次判定，既查「失败分类齐不齐」，
+	// 也查「成功分类没混进失败分类段」——后者必须在收集时留痕，不能先跳过再断言。
+	var gotFail, gotSuccess []string
 	for _, c := range got {
-		if c == "执行成功" {
+		if c == stats.SuccessCategory {
+			gotSuccess = append(gotSuccess, c)
 			continue
 		}
-		seen[c] = true
+		gotFail = append(gotFail, c)
 	}
-	if len(seen) != len(wantCat) {
-		t.Fatalf("报告里的失败分类 = %v，期望 %v", got, wantCat)
+	wantCat := []string{"连接超时", "原因未知"}
+	if !equalStringSet(gotFail, wantCat) {
+		t.Fatalf("报告里的失败分类 = %v，期望 %v", gotFail, wantCat)
 	}
-	for c := range wantCat {
-		if !seen[c] {
-			t.Errorf("报告里缺少失败分类 %q：%v", c, got)
-		}
+	if len(gotSuccess) != 1 {
+		t.Errorf("清单段里成功分类应恰好出现 1 次（末尾那段），实际 %d 次：%v", len(gotSuccess), got)
 	}
-	if seen["执行成功"] {
-		t.Errorf("成功分类不该出现在失败分类段：%v", got)
+	// 失败分类段在前、成功分类段在最后：成功那行必须是全段最后一条分类行。
+	if len(got) > 0 && got[len(got)-1] != stats.SuccessCategory {
+		t.Errorf("成功分类应排在清单段最后，实际次序 %v", got)
 	}
 }
 
@@ -177,4 +236,46 @@ func equalStrings(a, b []string) bool {
 		}
 	}
 	return true
+}
+
+// equalStringSet 比两个字符串切片的元素集合（不看次序、不看重复）。
+func equalStringSet(got []string, want []string) bool {
+	if len(got) != len(want) {
+		return false
+	}
+	seen := make(map[string]bool, len(want))
+	for _, w := range want {
+		seen[w] = true
+	}
+	for _, g := range got {
+		if !seen[g] {
+			return false
+		}
+	}
+	return true
+}
+
+// 分类名可能跨行：兜底分类名由 banner 与报错原文用 "\n" 拼成（verdict.joinText），
+// 报告里那一行就成了两行物理文本。这里钉住两件事——报告照样把它写成一段带计数的
+// 分类行，解析辅助也认得出完整分类名（不会被截成后半截）。
+func TestWriteReportMultilineCategoryName(t *testing.T) {
+	const cat = "SSH-2.0-OddServer_9.9\nwombat protocol meltdown zzz"
+	stats := &result.Stats{
+		NodesTotal: 1, ResultsTotal: 1, Verify: "通过", FailCounts: 1,
+		SuccessCategory:      "执行成功",
+		SortedFailCategories: []result.CategoryCount{{Category: cat, Count: 1}},
+		CategoryIPMap:        map[string][]string{cat: {"10.0.0.1"}},
+	}
+
+	report := writeReportTo(t, stats)
+
+	// 报告原文：分类名整段照写，"（1）：" 跟在名字最后一行后面。
+	wantLine := cat + "（1）："
+	if !strings.Contains(report, wantLine) {
+		t.Errorf("报告里没有 %q 这一行\n报告全文：\n%s", wantLine, report)
+	}
+	// 解析辅助认出的是完整分类名，不是后半截。
+	if got := reportCategoryOrder(t, report); !equalStrings(got, []string{cat}) {
+		t.Errorf("解析出的分类 = %q，期望 %q", got, []string{cat})
+	}
 }
