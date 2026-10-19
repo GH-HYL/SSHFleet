@@ -2,7 +2,7 @@
 
 > **这是一份自足的交接文档。新会话不需要任何上文，读它就能接手。**
 >
-> 现在状态：**工单 01–08 已完成并提交。09 收口，外加一轮「按开发者最新口味再砍规则」的调整，都还没做。**
+> 现在状态：**工单 01–08 已完成并提交。还剩两件事没做：①「三点五」的规则再调整（重启族与清空防火墙升禁止、强制删包降中、取消条数下限）；② 09 收口。**
 > 开发者在 2026-10-19 傍晚决定开新会话继续，并明确「本会话后面不再实施，只维护文档交接」——所以本文不假设你知道之前的任何讨论，同时**新会话要做的活比原来多一块**。
 >
 > ⚠️ **临时文档，09 收口完成后删除**，不归档、不补 `Status:`。
@@ -45,7 +45,7 @@ cd modules/SSHFleet_Go
 export GOTMPDIR=/home/hyl/桌面/Code/SSHFleet/build/atest-1/tmp TMP=$GOTMPDIR TEMP=$GOTMPDIR
 go vet ./...                        # 应无输出
 go test ./...                       # 应 11 个包全 ok
-go test ./internal/dangercheck/ -run TestRuleBoundaries   # 17 条规则的边界
+go test ./internal/dangercheck/ -run TestRuleBoundaries   # 每条规则的边界
 go test ./internal/dangercheck/ -run TestDangerousCorpus  # 语料应 162/162
 ```
 
@@ -56,11 +56,11 @@ go test ./internal/dangercheck/ -run TestDangerousCorpus  # 语料应 162/162
 | `internal/dangercheck/judge.go` | `Analyze`（**测试接缝，签名不许变**）、`Match`（`Lines []int` 多行号）、`riskOrder` 四档 |
 | `internal/dangercheck/text.go` | 纯文本整备：去注释（保行数）、路径片段归一（保行数，行尾补一个空格给词边界） |
 | `internal/dangercheck/rules.go` | 规则加载与校验（定案 N/O）、逐行匹配（**不跨行**） |
-| `internal/dangercheck/boundary_test.go` | 17 条规则的「必须命中 / 必须不命中」 |
+| `internal/dangercheck/boundary_test.go` | 每条规则的「必须命中 / 必须不命中」 |
 | `internal/dangercheck/corpus_test.go` | 语料读取（制表符 CSV、带引号处理）+ 逐条比对 |
 | `internal/dangercheck/judge_test.go` | 判据测试，**自带规则集、不读配置** |
 | `internal/output/danger.go` | 警告框：每块七行、多行号 `行号: 1, 2, 3`、内容超宽截断 |
-| `config/keywords_dangerous.conf` | 17 条规则（禁止 6 / 高 5 / 中 6），`regex` 是数组，另有 `reason` |
+| `config/keywords_dangerous.conf` | **当前** 17 条规则（禁止 6 / 高 5 / 中 6）；「三点五」做完后是 18 条（禁止 8 / 高 3 / 中 7） |
 
 `parse.go` 已删除，`mvdan.cc/sh` 依赖已摘除。语料在 `modules/SSHFleet_Go/testdata/dangerous_cases.tsv`。
 
@@ -154,8 +154,15 @@ init 6                     → 高 / 系统重启
 - `删除账户·用户组` 保持中：可回滚（重建账号），但会连带家目录与权限配置，略重于普通操作。
 - `删除关键路径文件` 保持中：删 `/etc`、`/var/log` 下的具体文件，可恢复但要动配置 / 丢日志，中档合适。
 - 这四条都不进「高」：高档留给「执行了就打断整批、且几乎不可能是本意」的动作（递归删除、屏蔽关键服务）。
+- `强制删包` 是唯一降档的一条；其余三条本来就在中档，不动档位。
 
-调整后档位分布：**禁止 8、高 3、中 7**（共 18 条）。如果实施时发现这个分布和 3.5.3 的下限规则冲突，按下限口径办（下限已取消，无冲突）。
+调整后档位分布：**禁止 8 条、高 3 条、中 7 条，共 18 条**。
+
+| 档位 | 规则 |
+| --- | --- |
+| 禁止（8） | 递归删除根目录、递归删除系统目录、格式化主盘、抹盘 dd、关机停机、杀死所有进程、**系统重启**（由高升来）、**清空防火墙**（由高升来） |
+| 高（3） | 递归删除、屏蔽关键服务 |
+| 中（7） | **强制删包**（由高降来）、删除关键路径文件、停止·禁用服务、删除账户·用户组、权限修改、SUID·SGID、清空系统日志 |
 
 ### 3.5.2 开发者原话（留档，别再问）
 
@@ -178,6 +185,8 @@ init 6                     → 高 / 系统重启
 - **语料**（`testdata/dangerous_cases.tsv`）：重启族与 iptables 的期望改成 `forbidden`；`强制删包` 的期望改成 `medium`；被删规则的行（没有的话跳过）；每行理由同步。
 - **边界表**（`boundary_test.go`）：`系统重启`、`清空防火墙` 挪到 forbidden 组，`强制删包` 挪到 medium 组。
 - **手册**（`docs/1-使用手册.md`、`4-进阶知识手册.md`）：涉及级别分布、示例规则名的段落跟着改；「`reboot` 是高档」这类说法不能留。
+- **`docs/5-常见问题.md:96`**：08 实施时补了一句「规则文件至少有 10 条启用的规则……否则拒绝运行」，随下限取消一并删掉。
+- **`config/keywords_dangerous.conf` 第 5 行**：现在写「共 17 条：禁止 6、高 5、中 6」，调整后改成 18 条与新分布。
 - **CHANGELOG**：10.0.0 段当天未封口，就地改描述，不另起段。
 - **ADR**：`docs/adr/0019-danger-detection-matches-raw-text.md` 文末「更新记录」追加两条（重启族升禁止、取消条数下限），每条按规范写「日期 / 新决策 / 上文哪段不再约束 / 替代见哪里」；**不改正文**。
 
