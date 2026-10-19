@@ -45,14 +45,41 @@ func TestReadCSVRowsLineNumbers(t *testing.T) {
 	}
 }
 
-// 内联值的字面 \n 是行分隔符：命令行里写不出真实换行。
-func TestExpandEscapedNewlines(t *testing.T) {
-	rows, err := ReadCSVRows(ExpandEscapedNewlines(`1,请选择架构\ndeb,请选择包格式`))
+// 内联值的行分隔符是 `;;`：命令行里写不出真实换行，多行只能这么写。
+// 清单与代填共用这一个记号，内联不在别处另设转义（ADR-0020）。
+func TestInlineTextSplitsOnSemicolonPair(t *testing.T) {
+	rows, err := ReadCSVRows(InlineText(`1,请选择架构;;deb,请选择包格式`))
 	if err != nil {
 		t.Fatalf("应解析通过：%v", err)
 	}
 	if len(rows) != 2 || rows[0].Fields[0] != "1" || rows[1].Fields[1] != "请选择包格式" {
-		t.Fatalf("字面 \\n 应分成两行：%+v", rows)
+		t.Fatalf("`;;` 应分成两行：%+v", rows)
+	}
+}
+
+// 单个分号是普通字符，只有连续两个才算行分隔。
+func TestInlineTextKeepsSingleSemicolon(t *testing.T) {
+	rows, err := ReadCSVRows(InlineText(`1;a,b;c`))
+	if err != nil {
+		t.Fatalf("应解析通过：%v", err)
+	}
+	if len(rows) != 1 || rows[0].Fields[0] != "1;a" || rows[0].Fields[1] != "b;c" {
+		t.Fatalf("单个分号应原样保留：%+v", rows)
+	}
+}
+
+// 内联值里的字面 \n 是普通字符：Windows 路径满是反斜杠，任何替换都会把
+// D:\new\pw.bin 这类路径切断（ADR-0020）。分行只认 `;;`。
+func TestInlineTextKeepsLiteralBackslashN(t *testing.T) {
+	rows, err := ReadCSVRows(InlineText(`10.0.0.1,22,root,D:\new\pw.bin`))
+	if err != nil {
+		t.Fatalf("应解析通过：%v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("含 \\n 的路径不该被切成多行：%+v", rows)
+	}
+	if got := rows[0].Fields[3]; got != `D:\new\pw.bin` {
+		t.Fatalf("路径应原样保留，实际 %q", got)
 	}
 }
 
@@ -105,7 +132,7 @@ func TestReadCSVRowsEmptyText(t *testing.T) {
 	if len(rows) != 0 {
 		t.Fatalf("应没有记录，实际：%+v", rows)
 	}
-	rows, err = ReadCSVRows(ExpandEscapedNewlines(`\n\n`))
+	rows, err = ReadCSVRows(InlineText(";;\n;;\n"))
 	if err != nil || len(rows) != 0 {
 		t.Fatalf("全空行应没有记录，实际：%+v（%v）", rows, err)
 	}

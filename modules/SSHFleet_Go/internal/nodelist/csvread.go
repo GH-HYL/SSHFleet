@@ -14,7 +14,7 @@ import (
 //
 // 解析走 common.ReadCSVRows——与 `-a` 代填的取值共用同一份实现，所以 CSV 口径
 // （双引号、BOM、注释行、空行、变长列）两处天然一致，不存在第二套规则。
-// 清单自己的两件事留在本函数里：内联值的字面 `\n` 补成换行、第一行是不是表头。
+// 清单自己的两件事留在本函数里：内联值按 `;;` 分行、第一行是不是表头。
 //
 // 提示经 in 落注入的输出流（不再直写 os.Stdout，便于测试捕获）。
 func readCSVRows(csvPath string, isInline bool, in *common.Interactor) ([][]string, error) {
@@ -57,11 +57,11 @@ func readCSVRows(csvPath string, isInline bool, in *common.Interactor) ([][]stri
 
 // csvText 按来源取到要解析的文本。
 //
-// 内联值先把字面 `\n`（反斜杠 + n）补成真实换行——命令行里传不进换行，多行
-// 清单只能这么写；文件内容是原样读进来的。补完之后两者走同一条解析路径。
+// 内联值先把 `;;` 换成分行符——命令行里传不进换行，多行清单只能这么写；
+// 文件内容是原样读进来的。整备之后两者走同一条解析路径。
 func csvText(csvPath string, isInline bool) (string, error) {
 	if isInline {
-		return common.ExpandEscapedNewlines(csvPath), nil
+		return common.InlineText(csvPath), nil
 	}
 	data, err := os.ReadFile(csvPath)
 	if err != nil {

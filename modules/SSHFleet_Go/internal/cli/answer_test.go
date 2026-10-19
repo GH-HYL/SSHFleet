@@ -96,9 +96,9 @@ func TestAnswerRowErrorsSayWhatIsMissing(t *testing.T) {
 	}
 }
 
-// 内联值：字面 \n 分行、一行一条；注释行与空行跳过；一条可挂多个触发词。
+// 内联值：`;;` 分行、一行一条；注释行与空行跳过；一条可挂多个触发词。
 func TestCheckAnswerInlineMultiline(t *testing.T) {
-	a := &Args{Command: "sh x.sh", Answer: `1,请选择架构\n#注释\n\n2,deb/rpm,包格式`}
+	a := &Args{Command: "sh x.sh", Answer: `1,请选择架构;;#注释;;;;2,deb/rpm,包格式`}
 	if err := checkAnswer(a, nil); err != nil {
 		t.Fatalf("多行内联值应解析通过：%v", err)
 	}
@@ -116,14 +116,42 @@ func TestCheckAnswerInlineMultiline(t *testing.T) {
 	}
 }
 
-// 真实换行与字面 \n 等价（有些 shell 会把真实换行放进引号里传进来）。
+// 真实换行与 `;;` 等价（有些 shell 会把真实换行放进引号里传进来）。
 func TestCheckAnswerInlineRealNewline(t *testing.T) {
 	a := &Args{Command: "sh x.sh", Answer: "1,请选择架构\n2,请选择包格式"}
 	if err := checkAnswer(a, nil); err != nil {
-		t.Fatalf("真实换行应与 \\n 等价：%v", err)
+		t.Fatalf("真实换行应与 ;; 等价：%v", err)
 	}
 	if len(a.Answers) != 2 {
 		t.Fatalf("应解析出 2 条代填，实际 %d 条", len(a.Answers))
+	}
+}
+
+// 分行只认 `;;`，字面 `\n` 在同一行里原样保留：两者同时出现时各管各的。
+func TestCheckAnswerInlineSeparatorAndLiteralBackslashN(t *testing.T) {
+	a := &Args{Command: "sh x.sh", Answer: `D:\new\tool.exe,请输入路径;;1,请选择架构`}
+	if err := checkAnswer(a, nil); err != nil {
+		t.Fatalf("应解析通过：%v", err)
+	}
+	if len(a.Answers) != 2 {
+		t.Fatalf("`;;` 应分出 2 条，实际 %d 条：%+v", len(a.Answers), a.Answers)
+	}
+	if got := a.Answers[0].Value; got != `D:\new\tool.exe` {
+		t.Fatalf("第 1 条的 \\n 应原样保留，实际 %q", got)
+	}
+	if got := a.Answers[1].Triggers[0]; got != "请选择架构" {
+		t.Fatalf("第 2 条的触发词不对：%q", got)
+	}
+}
+
+// 代填内容里的反斜杠是普通字符：Windows 路径常含 `\n`，不能当分行（ADR-0020）。
+func TestCheckAnswerInlineKeepsBackslashN(t *testing.T) {
+	a := &Args{Command: "sh x.sh", Answer: `D:\new\tool.exe,请输入安装路径`}
+	if err := checkAnswer(a, nil); err != nil {
+		t.Fatalf("含 \\n 的代填内容应合法：%v", err)
+	}
+	if len(a.Answers) != 1 || a.Answers[0].Value != `D:\new\tool.exe` {
+		t.Fatalf("代填内容应原样保留，实际：%+v", a.Answers)
 	}
 }
 
@@ -146,7 +174,7 @@ func TestCheckAnswerNoEntries(t *testing.T) {
 		t.Fatal(err)
 	}
 	for name, raw := range map[string]string{
-		"内联": `#只有注释,也在注释里\n\n`,
+		"内联": `#只有注释,也在注释里;;;;`,
 		"文件": file,
 	} {
 		a := &Args{Command: "sh x.sh", Answer: raw}
@@ -208,6 +236,27 @@ func TestCheckAnswerCSVFile(t *testing.T) {
 	}
 	if a.AnswerFile != file {
 		t.Fatalf("文件来源应记进 AnswerFile（归档备份用），实际：%s", a.AnswerFile)
+	}
+}
+
+// 代填文件里的换行是内容的一部分：一条代填要打两行再回车，只能写成文件
+// （内联用 `;;` 分行，不另设转义）。这里钉住文件这条路没被内联侧改动波及。
+func TestCheckAnswerCSVFileKeepsRealNewline(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "answer.csv")
+	if err := os.WriteFile(file, []byte("\"第一行\n第二行\",请选择架构\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	a := &Args{Command: "sh x.sh", Answer: file}
+	if err := checkAnswer(a, nil); err != nil {
+		t.Fatalf("带真换行的代填文件应解析通过：%v", err)
+	}
+	if len(a.Answers) != 1 {
+		t.Fatalf("引号里的换行不另算一条，实际 %d 条", len(a.Answers))
+	}
+	if got := a.Answers[0].Value; got != "第一行\n第二行" {
+		t.Fatalf("内容里的换行应原样保留，实际 %q", got)
 	}
 }
 

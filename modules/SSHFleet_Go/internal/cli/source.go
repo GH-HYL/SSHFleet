@@ -20,7 +20,7 @@ type source struct {
 //
 // 探测先试原值、再试规范化后的形态：`\` 与 `/` 通用是文档承诺的，Windows 风格的
 // 路径在 Linux/macOS 上只有规范化之后才找得到。规范化只用在探测这一步——真当路径
-// 用时才把它写回 Args，内联文本必须原样留着（`\`→`/` 会把里面的 `\n` 分行符弄坏）。
+// 用时才把它写回 Args，内联文本必须原样留着（`\`→`/` 会改掉里面 Windows 路径的反斜杠）。
 func resolveSource(raw string) source {
 	if _, err := os.Stat(raw); err == nil {
 		return source{IsFile: true, Path: raw, Raw: raw}
