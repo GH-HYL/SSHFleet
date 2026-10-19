@@ -134,8 +134,8 @@ func TestCorpusLoads(t *testing.T) {
 func TestDangerousCorpus(t *testing.T) {
 	// 规则文件 17 条规则的判定内容由工单 04–08 逐族改写，在此之前不逐条比对：
 	// 这一条从 09 起生效。语料的读取与自检（TestCorpusLoads）已经生效。
-	if os.Getenv("SSHFLEET_CORPUS_STRICT") != "1" {
-		t.Skip("规则内容由工单 04–08 落定后再逐条比对（设置 SSHFLEET_CORPUS_STRICT=1 可提前跑）")
+	if os.Getenv("SSHFLEET_CORPUS_STRICT") == "0" {
+		t.Skip("已按 SKIP 跳过：只在排查时临时用")
 	}
 	rules := loadRulesOrFail(t)
 	rows := readCorpus(t)

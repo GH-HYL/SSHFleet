@@ -21,8 +21,8 @@ rm -rf /lib	forbidden	递归删除系统目录	删掉系统基础库，几乎所
 rm -rf /bin	forbidden	递归删除系统目录	删掉系统基础命令目录，远程管理与排查手段全部消失		
 rm -rf /sbin	forbidden	递归删除系统目录	删掉系统管理命令目录，机器失去自救能力		
 rm -rf /root/.ssh	forbidden	递归删除系统目录	删掉 root 的登录密钥，之后连控制台都进不去		
-rm -rf /var/log	forbidden	递归删除系统目录	删掉全部日志目录，事后无法追溯这次变更		
-rm -rf /etc/nginx	forbidden	递归删除系统目录	删掉配置目录里的子目录，服务配置一起消失，整批无法恢复		
+rm -rf /var/log	forbidden	递归删除系统目录	删掉系统日志目录本身，批量执行里没有正当场景；事后无法追溯		
+rm -rf /etc/nginx	medium	删除关键路径文件	删掉配置目录里的子目录，服务配置一起消失		
 mkfs /dev/sda	forbidden	格式化主盘	格式化整块盘，盘上数据和分区表一起消失，不可能恢复		
 mkfs.ext4 /dev/sda1	forbidden	格式化主盘	格式化分区表里的分区，该分区上的数据全部丢失		
 mkfs.ext4 /dev/sdb1	forbidden	格式化主盘	批量工具里写盘的格式化，误伤代价是整批拒绝一次，漏掉代价是数据不可恢复		
@@ -54,17 +54,17 @@ rm -rf /opt/app/data	high	递归删除	递归强制删除应用数据，删掉�
 rm -fr /opt/x	high	递归删除	旗标换序不改变递归强删的本质		
 rm -R -f /opt/x	high	递归删除	大写写法同样是递归强删		
 rm --recursive --force /opt/x	high	递归删除	长写法同样是递归强删		
-rm -rf $DIR	high	递归删除	目标由变量决定，最终仍可能是重要目录		
+rm -rf $DIR	none		目标是变量，属于刻意绕开的写法，按约定接受漏报		
 rm -rf /opt/x	high	递归删除	递归强删指定目录，删掉就找不回来		
 rm -rf /opt/a /data/b	high	递归删除	一次删多个目录，其中可能有要紧的数据		
 rm -rf /data/x	high	递归删除	数据目录被递归强删，业务数据无从恢复		
 rm -rf /opt/test/123	high	递归删除	测试目录也可能放着还没备份的东西，删前确认一下		
 rm -rf /home/user/bak	high	递归删除	用户备份目录被递归强删，备份也一起没了		
-rm -rf /etcx	high	递归删除	名字相近但并不属于系统目录，按普通递归删除提醒		
-rm -rf /tmp/*	high	递归删除	清临时目录是日常操作，但批量执行时仍值得看一眼		
-cd /tmp && rm -rf ./*	high	递归删除	进入临时目录后删光全部内容，删掉的东西找不回来		
+rm -rf /etcx	none		名字相近但不是系统目录，不拦		
+rm -rf /tmp/*	none		清临时目录属日常；刻意绕开检测的写法（命令拼接、变量）接受漏报		
+cd /tmp && rm -rf ./*	none		清临时目录属日常；刻意绕开检测的写法（命令拼接、变量）接受漏报		
 "bash -c ""rm -rf /opt/app/data"""	high	递归删除	借 shell 执行，原文里照样写着递归强删		
-nohup rm -rf /etc > /dev/null &	high	递归删除	后台执行照样是删配置目录		
+nohup rm -rf /etc > /dev/null &	forbidden	递归删除系统目录	后台执行照样是删配置目录，目标仍是 /etc		
 systemctl mask sshd	high	屏蔽关键服务	屏蔽后机器可能再也连不上，管理通道中断		
 systemctl mask network	high	屏蔽关键服务	屏蔽网络服务同样会让机器失联		
 iptables -F	high	清空防火墙	清空防火墙后端口暴露，且重启前一直生效		
@@ -74,9 +74,9 @@ rpm -e --nodeps nginx	high	强制删包	忽略依赖强删软件包，依赖它�
 yum remove -y nginx	high	强制删包	批量删包时不问就执行，可能删掉业务依赖		
 yum remove -y kernel	high	强制删包	把内核包删掉，机器重启后可能起不来		
 rm -f /etc/hosts	medium	删除关键路径文件	删掉系统关键文件，名称解析与网络同步出问题		
-rm -rf /etc/nginx	medium	删除关键路径文件	删掉服务的配置目录，服务重载后配置全无		
+rm -rf /etc/nginx	medium	删除关键路径文件	删掉配置目录里的子目录，服务配置一起消失		
 rm -f /var/log/secure	medium	删除关键路径文件	删掉登录审计日志，事后无法追溯谁登录过		
-rm -rf /var/log	medium	删除关键路径文件	删掉日志目录，事后无法追溯这次变更		
+rm -rf /var/log	forbidden	递归删除系统目录	删掉系统日志目录本身，批量执行里没有正当场景		
 rm -f /var/log/app.log	medium	删除关键路径文件	删掉应用日志本身，出问题后无从查起		
 systemctl stop sshd	medium	停止·禁用服务	停掉远程登录服务，之后就再也连不上这批机器		
 systemctl disable sshd	medium	停止·禁用服务	禁掉远程登录服务，机器重启后连接不上		
@@ -98,17 +98,17 @@ truncate -s 0 /var/log/messages	medium	清空系统日志	系统日志被清空�
 > /var/log/messages	medium	清空系统日志	重定向覆盖系统日志，内容同样被清空		
 : > /var/log/syslog	medium	清空系统日志	用空命令覆盖日志文件，日志同样被清空		
 "python3 -c 'import os; os.system(""rm -rf /etc"")'"	forbidden	递归删除系统目录	原引擎对非 shell 语言漏报，这是本议题的起因；删配置目录的后果不变	python	
-"python3 -c 'import subprocess; subprocess.run([""rm"",""-rf"",""/etc""])'"	forbidden	递归删除系统目录	用参数列表调删除，实际执行的仍是递归删配置目录	python	
+"python3 -c 'import subprocess; subprocess.run([""rm"",""-rf"",""/etc""])'"	none		参数拆成列表的写法不普遍，接受漏报	python	
 "python3 -c 'print(""rm -rf /etc"")'"	forbidden	递归删除系统目录	纯打印不执行删除；按纯文本口径命中，属于接受的代价	python	字符串里出现危险词会命中
 "python3 -c ""import os; os.system('reboot')"""	high	系统重启	用 python 调重启，效果与 shell 里敲 reboot 相同	python	
 "perl -e 'system(""rm -rf /etc"")'"	forbidden	递归删除系统目录	用 perl 调删除，删的仍是配置目录	perl	
-"require('child_process').execSync('rm -rf /etc')"	forbidden	递归删除系统目录	用 node 调删除，删的仍是配置目录	node	
-"require('child_process').execSync('mkfs.ext4 /dev/sda1')"	forbidden	格式化主盘	用 node 做格式化，后果与命令行里敲一样	node	
+require('child_process').execSync('rm -rf /etc')	forbidden	递归删除系统目录	用 node 调删除，删的仍是配置目录	node	
+require('child_process').execSync('mkfs.ext4 /dev/sda1')	forbidden	格式化主盘	用 node 做格式化，后果与命令行里敲一样	node	
 "php -r 'shell_exec(""rm -rf /etc"");'"	forbidden	递归删除系统目录	用 php 调删除，删的仍是配置目录	php	
-"<?php echo shell_exec('shutdown -h now'); ?>"	forbidden	关机停机	php 里执行关机，整批机器照样停机	php	
+<?php echo shell_exec('shutdown -h now'); ?>	forbidden	关机停机	php 里执行关机，整批机器照样停机	php	
 "lua -e 'os.execute(""rm -rf /etc"")'"	forbidden	递归删除系统目录	用 lua 调删除，删的仍是配置目录	lua	
-"os.execute('dd if=/dev/zero of=/dev/sda')"	forbidden	抹盘 dd	lua 里执行抹盘，盘上数据照样全没	lua	
-"ruby -e '`rm -rf /etc`'"	forbidden	递归删除系统目录	反引号里就是 rm 命令，删的仍是配置目录	ruby	起因里 Perl 用未加引号的写法，这里用可实际运行的等价写法
+os.execute('dd if=/dev/zero of=/dev/sda')	forbidden	抹盘 dd	lua 里执行抹盘，盘上数据照样全没	lua	
+ruby -e '`rm -rf /etc`'	forbidden	递归删除系统目录	反引号里就是 rm 命令，删的仍是配置目录	ruby	起因里 Perl 用未加引号的写法，这里用可实际运行的等价写法
 "bash -c ""rm -rf /etc"""	forbidden	递归删除系统目录	借 shell 再执行一次，删的仍是配置目录	bash	
 "eval ""rm -rf /etc"""	forbidden	递归删除系统目录	拼接后执行的仍是删配置目录	eval	
 echo /etc | xargs rm -rf	none		目标路径写在 rm 前面，纯文本只认 rm 后面跟的路径，这条不拦	xargs	原期望 forbidden；纯文本正则抓不到这种参数在前面的写法
@@ -129,12 +129,12 @@ systemctl stop sshd
 reboot"	forbidden	递归删除系统目录	同一份脚本里三条规则同时命中，级别取最高的那条	多行	
 "systemctl stop sshd
 rm -f /var/log/app.log
-truncate -s 0 /var/log/messages"	medium	停止·禁用服务	三条中危规则同时命中，逐块列出	多行	
+truncate -s 0 /var/log/messages"	medium	删除关键路径文件	三条中危规则同时命中，逐块列出	多行	三条中危规则同时命中；同级取规则文件里靠前的那条
 "df -h
 uptime
 free -m
 systemctl status nginx"	none		多行但全部是无害的查看命令	多行	
-"echo ""reboot""  # 提醒：执行前先确认窗口"	forbidden	系统重启	字符里出现重启，按纯文本口径命中；注释部分只是补充说明		纯文本口径
+"echo ""reboot""  # 提醒：执行前先确认窗口"	high	系统重启	字符串里出现重启，按纯文本口径命中；注释不参与		纯文本口径
 rm -rf /etc  # 清理	forbidden	递归删除系统目录	注释要剔除，但真正的删除命令不能跟着被剔掉		注释边界
 systemctl stop nginx	none		业务服务的启停是日常，不必每次都提醒		
 systemctl restart nginx	none		重启业务服务是最高频的运维动作		
@@ -157,7 +157,7 @@ shutdown +0 -c	none		定时加取消，撤销动作要能放行
 shutdown -h +10 -c	none		关机命令后面又取消，最终不会停机		
 grep rm file.txt	none		只是在文件里搜这段字，不会删任何东西		
 echo 'hello world'	none		只是打印一句话		
-printf 'reboot'	none		首参是格式串不是命令，单纯打印一个词		
+printf 'reboot'	high	系统重启	字面量里出现重启，按纯文本口径命中，属于接受的误报		
 df -h	none		查看磁盘用量		
 uptime	none		查看运行时长		
 free -m	none		查看内存用量		

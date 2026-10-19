@@ -1,6 +1,6 @@
 # 01: 判定引擎改为纯文本正则匹配
 
-Status: ready-for-agent
+Status: done
 Blocked by: None（可立即开工）
 
 **要做的**：把判定引擎从「按 shell 语法解析成命令段再判定」换成「拿整份原文直接跑正则」。做完之后，同一条 `rm -rf /etc` 不管写在 bash 里、python 里还是 perl 里，都能被同一条规则命中——不再是写 bash 拦得住、换种语言就整条溜过去。

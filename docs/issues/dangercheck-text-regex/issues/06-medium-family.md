@@ -1,6 +1,6 @@
 # 06: medium 族重写
 
-Status: ready-for-agent
+Status: done
 Blocked by: 01, 02, 03
 
 **要做的**：把 medium 档从 13 条收成 6 条。做完之后，会「让这一批机器同时变样」的动作照样提醒一次，而日常的包管理、改属主、调内核参数不再每次都弹。
@@ -74,3 +74,4 @@ medium 与 high 的处置**完全一样**（打印警告 → 问一次 → `--ye
 ## Comments
 
 - 2026-10-19：建立。第 2 条的名单反转是实测发现的真缺陷（`audit.md` 8.2），重写时必须顺手修正。
+- 2026-10-19：**已落地**。关键路径文件只认 `/etc/`、`/var/log/`、`/boot/` 之下的删除；`/etc/nginx`、`/var/log/app.log` 归本条，`/tmp` 下不认。`firewalld` 的 `mask` 与 `disable` 同在本条，`sshd`/`network` 的 `mask` 在 05。`chmod -R 777`、`o+w`、`a+rwx` 与数字形式都覆盖，755/775 不认。
