@@ -194,7 +194,10 @@ SSHFleet -f nodes.csv -s deploy.sh --yes
 
 ```bash
 SSHFleet -f "192.168.1.10,22,root,你的密码" -c "uptime"
+SSHFleet -f "192.168.1.10;;192.168.1.11;;192.168.1.12" -c "uptime"
 ```
+
+内联写多台用 `;;` 分开；反斜杠是普通字符，Windows 路径照常写。
 
 六列的取值规则、每台不同的写法、各列留空时的取值顺序 → [1 使用手册](docs/1-使用手册.md) 的「1 节点清单」。
 
@@ -308,7 +311,7 @@ SSHFleet -f nodes.csv -s deploy.sh --yes
 #   请选择包格式 (deb/rpm):            → 敲 deb
 # -a 就是把这两下预先写下来：一行一条（格式与 -f 的清单相同），
 # 第 1 列是要填进去的值，第 2 列起是从提示原文抄的触发词
-SSHFleet -f nodes.csv -s install.sh -a "1,请选择架构\ndeb,请选择包格式"
+SSHFleet -f nodes.csv -s install.sh -a "1,请选择架构;;deb,请选择包格式"
 ```
 
 `-c` 和 `-s` 都能配 `-a`，写法完全一样；这里用脚本举例，因为需要中途答题的多半是安装脚本。

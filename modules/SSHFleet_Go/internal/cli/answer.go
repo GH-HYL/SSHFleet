@@ -15,7 +15,7 @@ import (
 // -a（代填）的取值处理：来源判定、解析、门控、互斥与长度检查，都在选项/参数合规检查阶段一次做完。
 //
 // 取值形态与 -f 完全同构：给一个 CSV 文件路径，或直接写同样格式的内联文本
-// （命令行里用 `\n` 分行）。解析走 common.ReadCSVRows——与清单同一份实现，
+// （命令行里用 `;;` 分行）。解析走 common.ReadCSVRows——与清单同一份实现，
 // `#` 注释行、空行、BOM、双引号、变长列的口径全部一致，没有第二套规则。
 //
 // 列语义是代填自己的：第 1 列是代填内容，第 2 列起是触发词，列数自适应。
@@ -77,11 +77,11 @@ func checkAnswer(a *Args, scriptText []byte) error {
 
 // answerText 按来源取到要解析的文本。
 //
-// 内联值先把字面 `\n` 补成真实换行——命令行里传不进换行，这是唯一的补齐动作；
-// 补完之后与文件内容走完全同一条解析路径。
+// 内联值先把 `;;` 换成分行符——命令行里传不进换行，这是唯一的整备动作；
+// 整备之后与文件内容走完全同一条解析路径。
 func answerText(src source) (string, error) {
 	if !src.IsFile {
-		return common.ExpandEscapedNewlines(src.Raw), nil
+		return common.InlineText(src.Raw), nil
 	}
 	data, err := os.ReadFile(src.Path)
 	if err != nil {

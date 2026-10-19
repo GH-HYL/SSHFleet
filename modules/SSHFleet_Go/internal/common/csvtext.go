@@ -5,8 +5,8 @@
 // 链路必须逐字一致：`#` 注释行、空行、BOM、双引号、变长列的容忍口径，一处定、两处用。
 //
 // 内联值与文件内容唯一的不同在装载阶段：命令行里传不进真实换行，内联值先经
-// ExpandEscapedNewlines 把字面 `\n` 补成真换行。补完之后两者走同一个
-// ReadCSVRows，解析上没有任何分叉——内联不是另一套格式。
+// InlineText 把 `;;` 换成分行符。之后两者走同一个 ReadCSVRows，解析上没有任何
+// 分叉——内联不是另一套格式。
 package common
 
 import (
@@ -16,12 +16,17 @@ import (
 	"strings"
 )
 
-// ExpandEscapedNewlines 把字面 `\n`（反斜杠 + n）换成真实换行。
+// InlineText 把命令行里给的内联值整备成 CSV 文本。
 //
-// 只给内联值用：命令行要写多行只能这么写。文件内容是原样读进来的，
-// `\n` 在文件里就是两个普通字符，不要对它调这个。
-func ExpandEscapedNewlines(text string) string {
-	return strings.ReplaceAll(text, `\n`, "\n")
+// 内联值与文件内容只差一件事：命令行里传不进真实换行，多行要用 `;;`（两个连续
+// 分号）分开。除此之外一个字符都不动——尤其是反斜杠。
+//
+// 为什么不是 `\n`（ADR-0020）：Windows 路径满是反斜杠，`D:\new\pw.bin` 里的 `\n`
+// 与「用户想换行」在文本层面同形，任何替换规则都分不开；`-a` 的代填内容里要写换行，
+// 也会跟这个替换抢字符。`;;` 在路径、密码、触发词里几乎不出现。含 `;;` 的内容走
+// 文件，不另设转义。
+func InlineText(raw string) string {
+	return strings.ReplaceAll(raw, ";;", "\n")
 }
 
 // IsBinaryContent 判断内容算不算二进制：出现 NUL 字节即算。

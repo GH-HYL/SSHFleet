@@ -20,7 +20,7 @@ func TestResolveSourceFile(t *testing.T) {
 }
 
 func TestResolveSourceInline(t *testing.T) {
-	raw := `127.0.0.1,22,root,pw\n127.0.0.2,22,root,pw`
+	raw := `127.0.0.1,22,root,pw;;127.0.0.2,22,root,pw`
 	src := resolveSource(raw)
 	if src.IsFile {
 		t.Fatalf("路径不存在时应判成内联文本，实际：%+v", src)
@@ -30,10 +30,9 @@ func TestResolveSourceInline(t *testing.T) {
 	}
 }
 
-// -f 的内联值必须原样进 Args：路径规范化会把 `\n` 弄成 `/n`，
-// 那会让多行清单静默缩成一行、字段整体错位。
+// -f 的内联值必须原样进 Args：路径规范化会把 `\` 换成 `/`，Windows 路径会因此变形。
 func TestParseKeepsInlineListRaw(t *testing.T) {
-	raw := `127.0.0.1,22,root,pw\n127.0.0.2,22,root,pw`
+	raw := `127.0.0.1,22,root,pw;;127.0.0.2,22,root,pw`
 	a, err := Parse(helpTestCfg(), "9.9.9", []string{"-f", raw, "-c", "uptime"})
 	if err != nil {
 		t.Fatalf("内联清单应解析通过：%v", err)
