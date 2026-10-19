@@ -31,12 +31,12 @@ func TestLoadPasswdConfig(t *testing.T) {
 	}
 
 	bad := map[string]string{
-		"一条 step 都没有":   ``,
-		"缺 keywords":    "[[step]]\nvalue = 'new'\nmax = 1\n",
-		"value 写错":      "[[step]]\nkeywords = ['x']\nvalue = 'newest'\nmax = 1\n",
-		"max 为 0":       "[[step]]\nkeywords = ['x']\nvalue = 'new'\nmax = 0\n",
-		"keywords 里有空项": "[[step]]\nkeywords = ['x', ' ']\nvalue = 'new'\nmax = 1\n",
-		"多写了个不认识的字段":    "[[step]]\nkeywords = ['x']\nvalue = 'new'\nmax = 1\nwat = 1\n",
+		"一条 step 都没有":     ``,
+		"缺 keywords":      "[[step]]\nvalue = 'new'\nmax = 1\n",
+		"value 写错":        "[[step]]\nkeywords = ['x']\nvalue = 'newest'\nmax = 1\n",
+		"max 为 0":         "[[step]]\nkeywords = ['x']\nvalue = 'new'\nmax = 0\n",
+		"keywords 里有空项":   "[[step]]\nkeywords = ['x', ' ']\nvalue = 'new'\nmax = 1\n",
+		"多写了个不认识的字段":      "[[step]]\nkeywords = ['x']\nvalue = 'new'\nmax = 1\nwat = 1\n",
 		"category 缺 name": "[[step]]\nkeywords = ['x']\nvalue = 'new'\nmax = 1\n\n[[category]]\nkeywords = ['y']\n",
 		// category 的 keywords 允许省略（分类名由程序按结构事实给出），但写了空串算写错
 		"category 的 keywords 里有空项": "[[step]]\nkeywords = ['x']\nvalue = 'new'\nmax = 1\n\n[[category]]\nname = '甲'\nkeywords = [' ']\n",
