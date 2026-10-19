@@ -111,10 +111,14 @@ func WriteReport(archiveDir string, stats *result.Stats, a *cli.Args, cfg *confi
 	}
 
 	b.WriteString("\n【节点清单统计】\n")
-	// 失败分类按 IP 数量升序排列（对位旧报告）
-	catKeys := make([]string, 0, len(stats.CategoryIPMap))
-	for k := range stats.CategoryIPMap {
-		catKeys = append(catKeys, k)
+	// 失败分类按 IP 数量升序排列（对位旧报告）。同数量的先后取分类首次出现的先后：
+	// 次序来源是 SortedFailCategories，它已按「数量降序、同数量首现序」排好；这里只做
+	// 一次按数量升序的稳定重排，那层首现序就接得住。**不要改回遍历 CategoryIPMap 取键**
+	//——那是 map，遍历顺序随机，同数量分类的先后会随每次运行变（2026-10-19）。
+	// 两者键集相同：同一批失败分类，成功分类两处都已剔除。
+	catKeys := make([]string, 0, len(stats.SortedFailCategories))
+	for _, c := range stats.SortedFailCategories {
+		catKeys = append(catKeys, c.Category)
 	}
 	for i := 1; i < len(catKeys); i++ {
 		for j := i; j > 0 && len(stats.CategoryIPMap[catKeys[j-1]]) > len(stats.CategoryIPMap[catKeys[j]]); j-- {
