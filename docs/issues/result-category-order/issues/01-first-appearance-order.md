@@ -30,9 +30,13 @@ Blocked by: 无
   go test -count=1 -run TestStatisticsFailCategoriesSortedByCountDesc ./internal/result/
   ```
   改前 43 跑 6 红（约 14%）；改后 20 跑 0 红。
-- **新测试抓得住原缺陷**：把 `report.go` 还原成改前版本（`git show HEAD:…`）后跑新测试，`TestWriteReportCategoryOrderStableAcrossWrites` 在第 6 次写入时红——
+- **新测试抓得住原缺陷**：把 `report.go` 还原成改前版本（`git show beefb0a^:modules/SSHFleet_Go/internal/output/report.go > internal/output/report.go`）后跑新测试，`TestWriteReportCategoryOrderStableAcrossWrites` 在第 6 次写入时红——
   `第 6 次写入的次序变了：[拒绝网络连接 原因未知 连接超时]，首次是 [连接超时 拒绝网络连接 原因未知]`。
 - **端到端实测**（沙盒 `build/atest-9/`，清单里两两同台数）：清单序「拒绝网络连接的地址在前」连跑 12 次，统计块 12 次全是 `拒绝网络连接 ×2  连接超时 ×2`；把清单反序后连跑 12 次，12 次全是 `连接超时 ×2  拒绝网络连接 ×2`。**次序严格跟随清单首现序，不是恰好固定成字母序**——这一条排除了「碰巧稳定成另一种确定序」的误判。归档 `report.txt` 的「节点清单统计」段同一次运行里也是同序（`连接超时（2）` 段在 `拒绝网络连接（2）` 段之前）。
 - **报告侧判据与终端不同、未混为一谈**：终端按台数**降序**、报告按台数**升序**（对位旧报告），本次只改「同数量时谁在前」，两个方向都保持原样。
 - **未新增导出字段**：`Stats` 结构未动，报告侧复用 `SortedFailCategories` 的次序（Q1 选定方案 A），「两者键集相同」由 `TestWriteReportCategorySetMatchesStats` 钉住。
 - **越界以外的发现（只报告）**：工作区里 `.dsh/skills/pick-and-explain/` 于 11:07 出现，不在本轮改动范围内，未动。
+- 2026-10-19：**只读审计后的修补**。逐条结论落在 `spec.md` 的 Comments，这边只记与本工单直接相关的三条：
+  - **证据命令失效**：上面「新测试抓得住原缺陷」原本写 `git show HEAD:…`，提交后 HEAD 已前移，该命令现在取到的是**修复版**、不再复现缺陷。已改为 `git show beefb0a^:…`。
+  - **勾选项复核**：「已扫过全仓其余产出次序的地方…确认无同类问题」这条经审计复核**成立**——分类次序的读写点只有 `statistics.go`（构造）、`report.go`（读图）、`terminal.go`（读切片），`xlsx.go` 无分类聚合，全仓无第三处排序。
+  - **「两者键集相同由一条测试钉住」这句要补正**：原 `TestWriteReportCategorySetMatchesStats` 里「成功分类不该混进失败分类段」是条**永不触发的死断言**（收集时先 `continue` 掉、再判它），故那层不变量当时并未真被钉住。现在它真的钉住了——收集时留痕，另断「成功段必须是清单段最后一条」；两条注入探针（成功分类混进失败段、成功段整段缺失）实测都能报错。
