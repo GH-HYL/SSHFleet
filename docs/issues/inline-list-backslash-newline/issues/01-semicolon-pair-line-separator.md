@@ -5,7 +5,7 @@
 Status: done（2026-10-19 实施——内联改用 `;;` 分行，反斜杠恢复为普通字符）
 Blocked by: 无
 
-- [x] 复现先跑过一次：`TMPDIR=$'/tmp/a\nb' go test -count=1 -run 'TestReadRowPassphraseNeverValidated|TestReadPrecheckErrorsAggregated' ./internal/nodelist/` 为红，报错里能看到临时目录被切成两行
+- [x] 复现先跑过一次：`GOTMPDIR=$PWD/../../build/gotmp TMPDIR=$'/tmp/a\nb' go test -count=1 -run 'TestReadRowPassphraseNeverValidated|TestReadPrecheckErrorsAggregated' ./internal/nodelist/` 为红，报错里能看到临时目录被切成两行（审计订正：补 `GOTMPDIR`——`TMPDIR` 含真换行时 Go 自己的构建缓存先坏，跑不到测试）
 - [x] 改完后同一条命令变绿，两个测试不再依赖临时目录名里有没有换行
 - [x] `-f` 内联写 `10.0.0.1,22,root,D:\new\pw.bin` 时，第 4 列原样是 `D:\new\pw.bin`，没有被当作两行
 - [x] `-f` 内联写 `1.1.1.1;;2.2.2.2` 时解析出两台，行为与文件方式的多行清单一致
