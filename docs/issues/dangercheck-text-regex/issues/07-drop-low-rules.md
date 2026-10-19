@@ -1,6 +1,6 @@
 # 07: 移除出厂配置的 low 规则
 
-Status: ready-for-agent
+Status: done
 Blocked by: 01, 02, 03
 
 **要做的**：把出厂配置里 6 条 `low` 规则删掉。做完之后，默认规则文件里不再出现 `low`；但 `low` **仍是合法档位**，使用者自己加一条 `low` 规则能正常加载、正常显示。
@@ -54,3 +54,4 @@ Blocked by: 01, 02, 03
 - 2026-10-19（开发者定）：**定位由「取消 low 档」改为「移除出厂配置的 low 规则」**——`low` 保留为合法取值，加载不报错，验收从「写 `low` 要报错」改成「写 `low` 要能正常跑」。依据见 `spec.md` 定案 M。
 
 - 2026-10-19：改名 `07-drop-low-level.md` → `07-drop-low-rules.md`：档位保留后，旧名「drop low level」不再准确。
+- 2026-10-19：**已确认**：出厂 17 条里没有 `low`；`riskOrder` 四档未动，写 `low` 的规则正常加载（`TestLowRiskLevelLoads` 覆盖）。

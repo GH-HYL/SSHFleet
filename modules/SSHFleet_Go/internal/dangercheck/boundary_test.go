@@ -40,7 +40,7 @@ func TestRuleBoundaries(t *testing.T) {
 		{
 			rule:   "递归删除系统目录",
 			hits:   []string{`rm -rf /etc`, `rm -rf /etc/`, `rm -rf /etc/*`, `rm -rf /usr`, `rm -rf /boot`},
-			misses: []string{`rm -rf /etc/nginx`, `rm -rf /var/log`, `rm -f /etc/hosts`, `rm -rf /opt/x`},
+			misses: []string{`rm -rf /etc/nginx`, `rm -rf /var/log/app.log`, `rm -f /etc/hosts`, `rm -rf /opt/x`},
 		},
 		{
 			rule:   "格式化主盘",
@@ -70,7 +70,7 @@ func TestRuleBoundaries(t *testing.T) {
 		{
 			rule:   "递归删除",
 			hits:   []string{`rm -rf /opt/x`, `rm -fr /opt/x`, `rm -r -f /opt/x`, `rm -R -f /opt/x`, `rm --recursive --force /opt/x`},
-			misses: []string{`rm -f /opt/x`}, // TODO(05)：`rm -rf /tmp/x`、`rm -rf /etc` 的排除待定
+			misses: []string{`rm -f /opt/x`, `rm -rf /tmp/x`, `rm -rf /etc`},
 		},
 		{
 			rule:   "屏蔽关键服务",

@@ -1,6 +1,6 @@
 # 04: forbidden 族重写——六条必须封住
 
-Status: ready-for-agent
+Status: done
 Blocked by: 01, 02, 03
 
 **要做的**：把 `forbidden` 档收成 6 条，每条都**堵住实测确认会漏的写法**。做完之后，真正会毁机器的动作一条都跑不掉，而正当运维动作不会再被整批拒绝。
@@ -90,3 +90,4 @@ Blocked by: 01, 02, 03
 
 - 2026-10-19：建立。开发者指定单开，理由是「内容一定要封堵住」。验收按「必须封住 / 必须不封」双向列，不只测该拦的。
 - 2026-10-19（开发者定）：**盘符不分主次**——`mkfs` / `dd` 一律 forbidden，`/dev/sda` 与 `/dev/nvme0n1` 一视同仁（`spec.md` 定案 J）。连带：原 `high` 的「格式化非主盘」「dd 覆盖非主盘」两条**整条删除**，最终条数由 19 改 17。
+- 2026-10-19：**已按边界表落地**。系统目录按「目标是不是目录本身」分段枚举：`/etc`、`/usr`、`/var`、`/var/log`、`/usr/lib`、`/root` 归本条；更深一层（`/etc/nginx`、`/var/log/app.log`）不计。`--no-preserve-root` 单独写出也当删根；`/root/.ssh` 这类管理密钥归本条；反引号里的 `rm -rf /etc` 也认。`shutdown -c` 系列撤销写法按 05 的边界全部放行。边界表 `TestRuleBoundaries` 全绿，语料 162/162。

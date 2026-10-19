@@ -1,6 +1,6 @@
 # 03: 测试语料补齐非 shell 与注释用例
 
-Status: ready-for-agent
+Status: done
 Blocked by: 01, 02
 
 **要做的**：把测试语料从「81 例全 shell 写法」扩成「能证明新引擎真的封住了非 shell 与注释的语料」。做完之后，任何人改规则都能立刻知道有没有把漏报又改回去。
