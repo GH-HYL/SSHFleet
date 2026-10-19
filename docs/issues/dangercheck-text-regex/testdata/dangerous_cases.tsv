@@ -1,0 +1,142 @@
+命令	期望级别	期望规则名	理由	翻译自	备注
+rm -rf /	forbidden	递归删除根目录	整条根文件系统被递归强删，200 台同时执行等于全部业务当场消失且无回滚，不能执行		
+rm -fr /	forbidden	递归删除根目录	旗标顺序颠倒但语义相同，仍是递归强删根目录，不能因为写法不同就放过		
+rm -r -f /	forbidden	递归删除根目录	旗标分开写是手误最常见的形态，删除目标依然是根目录，必须拦		
+rm --recursive --force /	forbidden	递归删除根目录	长选项形式的递归强删根目录，批量下发的命令常由脚本拼成这种形式		
+rm -rf /*	forbidden	递归删除根目录	根下所有顶层内容被清空，系统随即无法启动，与删根同等灾难		
+rm -rf /etc	forbidden	递归删除系统目录	删掉系统配置目录本身，200 台同时执行后网络、账户、服务配置全丢，机器基本只能重装		
+rm -rf /usr	forbidden	递归删除系统目录	系统二进制与程序库目录，删掉后连基础命令都跑不起来，生产机当场失联		
+rm -rf /var	forbidden	递归删除系统目录	日志、数据、数据库文件通常放在 /var，删掉即同时失去业务数据和排障依据		
+rm -rf /etc/	forbidden	递归删除系统目录	末尾带斜杠仍指向配置目录本身，删除效果与不带斜杠完全一样		
+rm -rf /etc/*	forbidden	递归删除系统目录	通配展开后等于删掉配置目录下全部内容，与删目录本身危害等同		
+mkfs /dev/sda	forbidden	格式化主盘	在系统主盘上建文件系统会连分区表带数据一起抹掉，200 台同时执行即全体不可恢复		
+mkfs.ext4 /dev/sda1	forbidden	格式化主盘	对主盘上的根分区重新格式化，操作系统当场被覆盖，属于不可逆灾难		
+mkfs.xfs /dev/nvme0n1	forbidden	格式化主盘	新型号机器系统盘常是 NVMe，格式化系统盘同样不可恢复，不能只认 sda 命名		
+dd if=/dev/zero of=/dev/sda	forbidden	抹盘 dd	向系统主盘写零会覆盖引导区与分区表，200 台同时执行即集群整体报废		
+shutdown -h now	forbidden	关机停机	批量下发的关机命令会让所有机器立刻停机，生产业务全面中断		
+shutdown -P now	forbidden	关机停机	P 参数同样是关机加断电，属于批量停机操作		
+kill -9 -1	forbidden	杀死所有进程	杀进程号为负一表示本机全部进程，等于把机器打死，业务和 sshd 一起没		
+kill -KILL -1	forbidden	杀死所有进程	用信号名写法的杀全部进程，效果与数字写法相同，属于自毁操作		
+reboot	high	系统重启	批量重启会让所有服务同时中断，需要人工确认窗口，但不毁数据，所以是高危而非禁止		
+sudo reboot	high	系统重启	提权重启与直接重启后果相同，批量执行仍要确认停机窗口		
+shutdown -r now	high	系统重启	立即重启，批量执行时全体业务同时中断，需要确认		
+shutdown -r +10	high	系统重启	十分钟后重启，仍需运维确认停机窗口		
+"echo ""reboot"""	forbidden	系统重启	误报：只是打印一个词，不执行任何操作；但纯文本匹配下原文出现重启命令，按设计约定判禁止，属于接受代价		与专项 1 同一口径：字符串里出现危险词会命中
+rm -rf /opt/app/data	high	递归删除	递归强删应用数据目录，删掉的是业务数据本身，通常希望先确认是否已备份		
+"bash -c ""rm -rf /opt/app/data"""	high	递归删除	包一层 shell 后递归强删应用数据，删除对象和目的都没变		专项 4：间接执行
+rm -rf /opt/x	high	递归删除	旗标写法变了语义不变，递归强删应用目录就是高危；这一条是基准写法		专项 3：旗标变体
+rm -r -f /opt/x	high	递归删除	旗标分开写，仍是递归加强制，语义完全一致		专项 3：旗标变体
+rm --recursive --force /opt/x	high	递归删除	两个长选项分词书写，语义与合并短旗标完全相同		专项 3：旗标变体
+systemctl mask sshd	high	屏蔽关键服务	屏蔽 sshd 会让本机 SSH 服务彻底不可用，运维自己的管理通道当场断掉		
+iptables -F	high	清空防火墙	清空防火墙规则会把生产机所有访问控制同时抹掉，安全边界瞬间消失		
+iptables -F -t nat	high	清空防火墙	清空 nat 表规则会打断端口映射和转发，业务链路可能直接不通		
+ip6tables -F	high	清空防火墙	清空 IPv6 防火墙规则，双栈环境下同样让访问控制失效		
+"node -e ""require('child_process').exec('iptables -F')"""	high	清空防火墙	Node 脚本清空防火墙，安全边界同样消失	node	专项 1：非 shell 语言
+rpm -e --nodeps nginx	high	强制删包	nodeps 强删会跳过依赖检查，可能留下半坏的依赖树，生产机上很难收拾		
+yum remove -y nginx	high	强制删包	y 参数让删除在无人值守下直接执行，批量删包后服务立刻失效		
+mkfs.ext4 /dev/sdb1	forbidden	格式化主盘	格式化块设备会清空盘上全部数据；工具不知道各机盘符谁是系统盘，批量下发给错对象即整批不可恢复，一律拦截		2026-10-19 按定案 J 由 medium/high 改为 forbidden
+dd if=file.img of=/dev/sdb1	forbidden	抹盘 dd	用 dd 直接覆盖块设备会抹掉整盘数据；盘符在各机指代不同，无法确认是否系统盘，批量下即不可恢复，一律拦截		2026-10-19 按定案 J 由 medium/high 改为 forbidden
+rm -f /etc/hosts	medium	删除关键路径文件	删掉 hosts 会立刻影响本机域名解析，老系统上常有手工配置的解析记录		
+systemctl stop sshd	medium	停止·禁用服务	停掉 sshd 会切断当前和后续所有人的 SSH 登录，批量执行等于把运维和同事锁在门外		
+systemctl disable sshd	medium	停止·禁用服务	禁用 sshd 开机自启，机器重启后就再也连不进去，只能靠控制台救援		
+systemctl stop network	medium	停止·禁用服务	停掉网络服务会让机器断网，远端的批量工具也就失去控制通道		
+systemctl mask firewalld	medium	停止·禁用服务	清单把它列在中危，它确实阻断后续启停能力，比单纯禁用更难恢复		
+systemctl stop nginx	none		业务服务启停属于日常运维，停 nginx 不切断管理通道，不该打扰		
+systemctl restart nginx	none		重启业务服务是日常变更标准动作，否则会淹没在告警里		
+systemctl enable nginx	none		设置业务服务开机自启是常规装机步骤，没有危险		
+userdel testuser	medium	删除账户·用户组	删账户不可逆，批量执行会一次性清掉一批登录身份，必须确认名单没错		
+userdel -r testuser	medium	删除账户·用户组	连同家目录一起删，用户数据也消失，比只删账户影响更大		
+groupdel testgroup	medium	删除账户·用户组	删掉用户组后，依赖该组权限的文件访问会同时失效，可能影响业务		
+chmod 777 log	medium	权限修改	任何人可读写执行，是生产环境最常见的安全隐患，批量放开风险被成倍放大		
+chmod -R 777 /var/www	medium	权限修改	递归放开整个站点权限，一旦有漏洞就等于把写权限交给所有人		
+chmod o+w file	medium	权限修改	给其他用户开放写权限，配合定时任务等场景很容易被利用提权		
+chmod u+s /usr/bin/x	medium	SUID·SGID	加 SUID 位后执行时以文件属主身份运行，通常是提权的关键一步		
+chmod g+s /usr/bin/x	medium	SUID·SGID	SGID 位会让程序以文件属组身份运行，同样能获得额外权限		
+chmod 4755 x	medium	SUID·SGID	四位八进制以 4 开头就是 SUID，批量设置等于批量留下提权入口		
+chmod 2755 x	medium	SUID·SGID	四位八进制以 2 开头就是 SGID，属于需要确认的权限变更		
+truncate -s 0 /var/log/messages	medium	清空系统日志	把系统主日志清零，事后追查完全失去依据，生产上应当先转存再截断		
+> /var/log/messages	medium	清空系统日志	用重定向清空日志比 truncate 更隐蔽，但同样抹掉了全部历史记录		
+: > /var/log/syslog	medium	清空系统日志	冒号加重定向是脚本里清空日志的惯用写法，效果与清空日志相同		
+systemctl daemon-reload	none		改完单元文件后重载是必要步骤，频繁执行且无害		
+systemctl restart sshd	none		重启 sshd 是改配置后的标准动作，已有会话通常保留，与停服务性质不同		
+systemctl reload nginx	none		平滑重载业务服务是生产发布的标准做法，不该拦		
+systemctl mask myapp-worker	none		屏蔽业务侧的后台 worker 单元常用于临时停掉某个任务，不在关键服务名单里		
+yum update	none		批量打补丁是运维常态，属于要定期执行的正经工作		
+yum install -y nginx	none		安装软件是日常操作，y 只是免交互，不构成危险		
+rpm -i --force a.rpm	none		force 安装用于覆盖重装，虽然要小心但目的是让软件可用，与强删包不是一回事		
+chmod 755 /var/www	none		755 是最常见的安全权限设置，不属于宽松放权		
+chown -R www:www /var/www	none		递归改属主是部署网站的标准步骤，不涉及权限位放宽		
+passwd -l olduser	none		锁定账户是离职处置的安全动作，不删数据也不影响其他账户		
+useradd -m deploy	none		新建部署账户是日常开户，与删账户性质相反		
+shutdown -c	none		这是取消已排定关机的救火动作，判成关机等于在最要紧的时候卡住救援		
+grep rm file.txt	none		只是在文件里搜 rm 这个词，没有执行任何删除		
+echo 'hello world'	none		纯输出，没有任何危险动作		
+printf 'reboot'	none		printf 首参是格式串不是命令，单纯打印一个词，不构成重启		
+df -h	none		查磁盘用量是巡检常客，必须安静通过		
+tail -f /var/log/messages	none		跟踪日志是排障第一步，不能因为出现日志路径就报警		
+"bash -c ""echo hello"""	none		包一层 shell 只是打印文本，无危险		专项 4：间接执行但不危险
+# rm -rf /	none		整行注释不执行；如果按注释报致命警告，任何被注释掉的备忘命令都会让批量作业直接失败		专项 2：整行注释
+ls -la  # rm -rf /	none		注释里的内容是给人看的说明，实际只执行 ls；按注释报禁止会让正常巡检无法通过		专项 2：行尾注释
+ls -la # 清理脚本示例：shutdown -h now	none		注释里写着关机字样只是说明文字，整条命令实际只列目录		专项 2：中文行尾注释
+cat deploy.conf # 里面写了 reboot 的时机	none		只是查看文件，注释里提到重启只是文档描述		专项 2：注释含危险词
+"echo ""issue #123"""	none		引号里的井号是正文不是注释，但整句也没有危险词，无论如何都该静默通过		专项 2：引号内井号不是注释
+echo $#	none		这是取参数个数的变量，不是注释也不是危险命令		专项 2：位置参数变量不是注释
+curl http://x/#a	none		井号后面是网址片段，不是 shell 注释，整条命令是正常下载		专项 2：URL 片段不是注释
+"python3 -c 'import os; os.system(""rm -rf /etc"")'"	forbidden	递归删除系统目录	Python 调起系统 shell 删配置目录，实际效果与直接在 shell 里敲完全一样，200 台同时执行即灾难；纯文本匹配能看到原文就应命中	python	专项 1：旧引擎对非 shell 语言全部漏报，这是本议题起因
+"python3 -c 'import subprocess; subprocess.run([""rm"",""-rf"",""/etc""])'"	forbidden	递归删除系统目录	subprocess 用参数列表调用 rm，写法变了但拼起来仍是在删配置目录，不能因为写法变化就放过	python	
+"python3 -c 'print(""rm -rf /etc"")'"	forbidden	递归删除系统目录	误报：纯打印不执行删除；但纯文本匹配下原文里出现了删配置目录，按设计约定判禁止，这是接受的代价	python	专项 1：字符串里出现危险词会命中，期望按纯文本口径而非程序语义写
+"python3 -c ""import os; os.system('reboot')"""	high	系统重启	Python 脚本触发重启，批量执行同样全体中断	python	专项 1：非 shell 语言
+"perl -e 'system(""rm -rf /etc"")'"	forbidden	递归删除系统目录	Perl 调系统 shell 删配置目录，效果与 shell 直写相同	perl	专项 1：起因里 Perl 用未加引号写法，此处用可实际运行的等价写法
+require('child_process').execSync('rm -rf /etc')	forbidden	递归删除系统目录	Node 通过 execSync 调 shell，删配置目录的后果与直接敲命令相同	node	专项 1：非 shell 语言
+require('child_process').execSync('mkfs.ext4 /dev/sda1')	forbidden	格式化主盘	Node 脚本里格式化系统盘分区，批量执行即全体报废	node	专项 1：非 shell 语言
+"php -r 'shell_exec(""rm -rf /etc"");'"	forbidden	递归删除系统目录	PHP 调 shell 删配置目录，Web 环境下的批量脚本经常这么写，危害相同	php	专项 1：非 shell 语言
+<?php echo shell_exec('shutdown -h now'); ?>	forbidden	关机停机	PHP 里调关机命令，批量执行会让整批机器停机	php	专项 1：非 shell 语言
+"lua -e 'os.execute(""rm -rf /etc"")'"	forbidden	递归删除系统目录	Lua 调 shell 删配置目录，后果与 shell 直写一致	lua	专项 1：非 shell 语言
+os.execute('dd if=/dev/zero of=/dev/sda')	forbidden	抹盘 dd	Lua 里抹盘，效果与命令行相同	lua	专项 1：非 shell 语言
+ruby -e '`rm -rf /etc`'	forbidden	递归删除系统目录	Ruby 反引号执行 shell 命令，删的是配置目录本身	ruby	专项 1：非 shell 语言
+"bash -c ""rm -rf /etc"""	forbidden	递归删除系统目录	交给另一个 shell 执行，原文里整段可见，效果与直接敲删配置目录相同，应当命中		专项 4：间接执行
+"eval ""rm -rf /etc"""	forbidden	递归删除系统目录	eval 只是把字符串当命令执行，删除对象就在字符串里，按原文应当命中		专项 4：间接执行
+echo /etc | xargs rm -rf	forbidden	递归删除系统目录	xargs 把前面的路径拼成参数交给 rm，实际删除的就是配置目录		专项 4：间接执行；需要规则能跨无命令的管道左侧识别目标路径
+"ssh host ""rm -rf /etc"""	forbidden	递归删除系统目录	本地敲的这一条会把删配置目录的命令推到远端执行，批量工具里再套一层就放大 N 倍		专项 4：间接执行
+"sudo sh -c ""reboot"""	high	系统重启	通过 shell 包装执行重启，批量下照样全体重启		专项 4：间接执行
+"bash -c ""systemctl stop sshd"""	medium	停止·禁用服务	包装后停 sshd 仍会切断管理通道，不因多一层 shell 就变安全		专项 4：间接执行
+"set -e
+rm -rf /opt/app/cache
+rm -rf /opt/app/upload
+rm -rf /opt/app/logs
+echo done"	high	递归删除	同一个脚本里三处递归强删三个业务目录，期望按最高档报一次并列出三行行号，让运维一眼看清都删了什么		专项 5：同一规则命中多处，用于验证行号能列出来
+"rm -rf /opt/x
+rm -rf /opt/y
+rm -rf /tmp/z"	high	递归删除	三段递归强删里前两个是业务目录，第三个临时目录本可静默，整体仍应以高危提醒并列出前两行		专项 5：同一规则多处且混有明确不提醒的临时路径
+"echo start
+rm -rf /etc
+systemctl stop sshd
+reboot"	forbidden	递归删除系统目录	脚本同时踩中删配置目录、停 sshd、重启三类问题，按最高档取禁止，其余作为附带提示；这条验证跨规则汇总时报最严重的那条		专项 5：不同规则各命中一次，级别取最高
+"systemctl stop sshd
+rm -f /var/log/app.log
+truncate -s 0 /var/log/messages"	medium	停止·禁用服务	停 sshd、删日志、截断日志三条都是中危，期望报中危并列出全部行号		专项 5：不同中危规则同时命中
+"df -h
+uptime
+free -m
+systemctl status nginx"	none		整段都是巡检只读命令，多行脚本更不该有任何提示		专项 5：多行但全部无害
+"echo ""reboot""  # 提醒：执行前先确认窗口"	forbidden	系统重启	字符里出现重启，按纯文本口径命中；注释部分只是补充说明。理由同 print 带危险词的例子，属于接受代价		补充：字符串与注释叠加
+rm -rf /etc  # 清理	forbidden	递归删除系统目录	行尾注释只是说明文字，真正要执行的是删配置目录，剔除注释后危险依旧，不能因为带注释就降级		专项 2 的边界：注释要剔除，但真命令不能跟着被剔掉
+poweroff	forbidden	关机停机	直接断电关机，批量执行等于让整个机房业务停摆		
+sudo kill -9 -1	forbidden	杀死所有进程	提权后杀光全部进程，连系统守护进程都消失，机器只能硬重启		
+mkfs -t xfs /dev/sda	forbidden	格式化主盘	指定 xfs 仍是格式化主盘，文件系统类型不影响灾难性质		
+rm -rf /etc/nginx	medium	删除关键路径文件	这是删配置目录里的子目录，不属于禁止档，但删掉后服务再重启就起不来		
+rm -f /var/log/app.log	medium	删除关键路径文件	删日志文件会让排障证据消失，生产上更推荐截断或转存		
+systemctl disable firewalld	medium	停止·禁用服务	禁用防火墙开机自启等于永久关闭防护，安全合规上很难解释		
+chmod a+rwx /opt/app/config	medium	权限修改	符号写法给所有人全部权限，效果与数字写法相同，不能因为写法不同就漏判		
+rm -fr /opt/x	high	递归删除	递归和强制两个旗标换了顺序，删除效果相同，不能因为换了顺序就漏掉		专项 3：旗标变体
+rm -R -f /opt/x	high	递归删除	大写 R 是递归的另一种写法，必须与常见写法同样处理		专项 3：旗标变体
+mkfs.xfs /dev/vdb1	forbidden	格式化主盘	格式化块设备会清空盘上全部数据；工具不知道各机盘符谁是系统盘，批量下发给错对象即整批不可恢复，一律拦截		2026-10-19 按定案 J 由 medium/high 改为 forbidden
+dd if=/dev/zero of=/dev/sdb bs=4M	forbidden	抹盘 dd	用 dd 直接覆盖块设备会抹掉整盘数据；盘符在各机指代不同，无法确认是否系统盘，批量下即不可恢复，一律拦截		2026-10-19 按定案 J 由 medium/high 改为 forbidden
+yum remove -y kernel	high	强制删包	批量删掉内核包会让机器无法重启，属于典型误操作		
+chmod 775 f	none		组内可写是协作目录的常规设置，权限外溢风险有限		
+groupadd newgroup	none		新建用户组是开户流程的一步，没有破坏性		
+rm -f /tmp/cache.lock	none		删临时锁文件是显式约定不提醒的场景，提醒了只是噪音		
+uptime	none		查负载是最基础的巡检，必须放行		
+systemctl mask network	high	屏蔽关键服务	屏蔽网络管理服务后机器可能失去网络，批量执行会让一批机器集体失联		
+kill -1 -1	forbidden	杀死所有进程	负一作为进程号就是本机全部进程，与信号写什么无关；这条实际是非法信号打不出去，按场景仍判禁止		有争议：信号参数非法，但进程号负一的行为是全部杀掉
+halt	forbidden	关机停机	停机后不放行，部分系统直接断电，危害与关机相同		
