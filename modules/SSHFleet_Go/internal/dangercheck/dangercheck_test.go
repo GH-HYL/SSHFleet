@@ -1,15 +1,13 @@
 package dangercheck
 
 import (
-	"bufio"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
 
-// 语料回归（常驻）：旧工程 test/test_dangerous_detection.py 的 81 例 + 规则校验拦截。
-// 语料与规则文件都在仓库内（testdata/ 与 config/），换成 mvdan 解析层后识别率不得退化。
+// 语料回归见 corpus_test.go；本文件管规则文件的加载与校验。
 
 func rulesPath(t *testing.T) string {
 	t.Helper()
@@ -25,62 +23,20 @@ func loadRulesOrFail(t *testing.T) *Rules {
 	return rules
 }
 
-func TestDangerousCorpus(t *testing.T) {
-	rules := loadRulesOrFail(t)
-
-	f, err := os.Open(filepath.Join("..", "..", "testdata", "dangerous_cases.tsv"))
-	if err != nil {
+// 条数下限只在加载文件时生效：至少 minRules 条启用的规则。
+func TestLoadRulesEnforcesMinRules(t *testing.T) {
+	var b strings.Builder
+	for i := 0; i < minRules-1; i++ {
+		b.WriteString("[[rules]]\nname = '递归删除'\nexample = 'rm -rf /opt/app'\nreason = '删掉就找不回来'\nregex = ['\\brm -rf ']\nrisk_level = 'high'\n\n")
+	}
+	p := filepath.Join(t.TempDir(), "few.conf")
+	if err := os.WriteFile(p, []byte(b.String()), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	defer func() { _ = f.Close() }()
-
-	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-
-	total, passed := 0, 0
-	for scanner.Scan() {
-		line := scanner.Text()
-		if strings.TrimSpace(line) == "" {
-			continue
-		}
-		parts := strings.SplitN(line, "\t", 3)
-		if len(parts) < 2 {
-			t.Fatalf("语料行格式异常: %q", line)
-		}
-		cmd, wantLevel := parts[0], parts[1]
-		wantName := ""
-		if len(parts) == 3 {
-			wantName = parts[2]
-		}
-
-		matches := Analyze(cmd, rules)
-		gotLevel, gotName := highestMatch(matches)
-
-		total++
-		nameOK := wantName == "" || gotName == wantName
-		if gotLevel == wantLevel && nameOK {
-			passed++
-			continue
-		}
-		t.Errorf("语料不通过: %q\n  期望 %s/%s\n  实际 %s/%s", cmd, wantLevel, wantName, gotLevel, gotName)
+	_, err := LoadRules(p)
+	if err == nil || !strings.Contains(err.Error(), "至少要") {
+		t.Fatalf("启用规则不足下限时应报错，实为: %v", err)
 	}
-	if err := scanner.Err(); err != nil {
-		t.Fatal(err)
-	}
-
-	t.Logf("危险检测语料：%d/%d 通过（识别准确率 %.1f%%）", passed, total, float64(passed)/float64(total)*100)
-	if passed != total {
-		t.Fatalf("识别率退化：%d/%d", passed, total)
-	}
-}
-
-// highestMatch 取最高风险命中（对位旧语料脚本的 judge）。
-func highestMatch(matches []Match) (string, string) {
-	if len(matches) == 0 {
-		return "none", ""
-	}
-	best := matches[0] // Analyze 已按风险降序排列
-	return best.RiskLevel, best.RuleName
 }
 
 func TestRulesValidation(t *testing.T) {
@@ -88,33 +44,122 @@ func TestRulesValidation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	good := &Rules{items: base.items, patterns: base.patterns}
-	if _, err := compileRules(good.items); err != nil {
+	if _, err := compileRules(base.items); err != nil {
 		t.Fatalf("正常规则文件应通过校验: %v", err)
 	}
 
+	withBad := func(r Rule) []Rule {
+		return append(append([]Rule{}, base.items...), r)
+	}
 	cases := []struct {
 		name  string
 		rules []Rule
+		want  string // 报错里必须出现的内容：能定位
 	}{
-		{"规则清单为空", nil},
-		{"规则数量不足", base.items[:3]},
-		{"缺少 regex 字段", append(append([]Rule{}, base.items...), Rule{Name: "坏规则", Example: "x", RiskLevel: "high"})},
-		{"risk_level 非法", append(append([]Rule{}, base.items...), Rule{Name: "坏规则", Example: "x", RiskLevel: "超危", Regex: "x"})},
-		{"正则无法编译", append(append([]Rule{}, base.items...), Rule{Name: "坏规则", Example: "x", RiskLevel: "high", Regex: "([unclosed"})},
+		{"规则清单为空", nil, "规则为空"},
+
+		{"缺少 regex 字段", withBad(Rule{Name: "坏规则", Example: "x", Reason: "x", RiskLevel: "high"}), "没有写 regex"},
+		{"risk_level 非法", withBad(Rule{Name: "坏规则", Example: "x", Reason: "x", Regex: []string{"x"}, RiskLevel: "超危"}), "risk_level"},
+		{"正则无法编译", withBad(Rule{Name: "坏规则", Example: "x", Reason: "x", Regex: []string{"([unclosed"}, RiskLevel: "high"}), "无法编译"},
 	}
 	for _, c := range cases {
-		if _, err := compileRules(c.rules); err == nil {
+		_, err := compileRules(c.rules)
+		if err == nil {
 			t.Errorf("规则校验应拦截：%s", c.name)
+			continue
+		}
+		if !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%s 的报错没说清是哪一处（缺「%s」）：%v", c.name, c.want, err)
 		}
 	}
+}
+
+// 加载报错要「能定位、能理解、能处置」（定案 O）：指名是哪条规则，并给出可照抄的正确写法。
+func TestRuleLoadErrorsNameTheRuleAndShowTheFix(t *testing.T) {
+	extra := func(r string) string { return extraRules(r) }
+	cases := []struct {
+		name, body, wantRule, wantFix string
+	}{
+		{
+			"regex 写成字符串",
+			extra("[[rules]]\nname = '坏写法'\nexample = 'x'\nreason = 'x'\nregex = '\\brm'\nrisk_level = 'high'\n"),
+			"regex", "数组",
+		},
+		{
+			"reason 超过 30 个显示列",
+			extra("[[rules]]\nname = '说明太长'\nexample = 'x'\nreason = '" + strings.Repeat("删", 16) + "'\nregex = ['x']\nrisk_level = 'high'\n"),
+			"规则「说明太长」", "30",
+		},
+		{
+			"example 缺失",
+			extra("[[rules]]\nname = '缺示例'\nreason = 'x'\nregex = ['x']\nrisk_level = 'high'\n"),
+			"规则「缺示例」", "example",
+		},
+	}
+	for _, c := range cases {
+		p := filepath.Join(t.TempDir(), "r.conf")
+		if err := os.WriteFile(p, []byte(c.body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		_, err := LoadRules(p)
+		if err == nil {
+			t.Fatalf("%s 应报错", c.name)
+		}
+		for _, want := range []string{c.wantRule, c.wantFix, "出路"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Fatalf("%s 的报错缺「%s」：%v", c.name, want, err)
+			}
+		}
+	}
+}
+
+// low 是合法档位：写进去正常加载、正常参与判定（定案 M）。
+func TestLowRiskLevelLoads(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "r.conf")
+	if err := os.WriteFile(p, []byte(extraRules("[[rules]]\nname = '自己加的'\nexample = 'echo hi'\nreason = '只是想看看'\nregex = ['\\becho hi\\b']\nrisk_level = 'low'\n")), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	rules, err := LoadRules(p)
+	if err != nil {
+		t.Fatalf("low 档应能正常加载：%v", err)
+	}
+	got := Analyze("echo hi", rules)
+	if len(got) != 1 || got[0].RiskLevel != "low" || got[0].RuleName != "自己加的" {
+		t.Fatalf("low 规则应正常判定，实得 %+v", got)
+	}
+}
+
+// 停用的规则只校验 name（定案 N）：其余字段空着、写坏都能加载，且不参与判定。
+func TestDisabledRuleOnlyNeedsName(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "r.conf")
+	body := extraRules("[[rules]]\nname = '停用的'\nenabled = false\n")
+	if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	rules, err := LoadRules(p)
+	if err != nil {
+		t.Fatalf("停用的规则不应因为其他字段报错：%v", err)
+	}
+	if got := Analyze("echo hello", rules); len(got) != 0 {
+		t.Fatalf("停用的规则不应参与判定，实得 %+v", got)
+	}
+}
+
+// extraRules 拼一份够 10 条下限的规则文件正文，末尾追加一段。
+func extraRules(tail string) string {
+	one := "[[rules]]\nname = '递归删除'\nexample = 'rm -rf /opt/app'\nreason = '删掉就找不回来'\nregex = ['\\brm -rf ']\nrisk_level = 'high'\n\n"
+	var b strings.Builder
+	for i := 0; i < minRules; i++ {
+		b.WriteString(one)
+	}
+	b.WriteString(tail)
+	return b.String()
 }
 
 func TestUnknownFieldRejected(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "bad.toml")
-	content := "[[rules]]\nname='x'\nexample='x'\nregex='x'\nrisk_level='high'\nbogus=1\n"
+	content := "[[rules]]\nname='x'\nexample='x'\nregex=['x']\nrisk_level='high'\nbogus=1\n"
 	if err := os.WriteFile(p, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}

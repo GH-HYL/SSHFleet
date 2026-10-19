@@ -3,6 +3,7 @@ package output
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"sshfleet/internal/dangercheck"
@@ -75,11 +76,16 @@ func dangerBox(report *dangercheck.Report, forbidden bool) string {
 		if report.IsScript {
 			source = "脚本: " + report.ScriptPath
 		}
+		// 每块固定七行：来源 / 行号 / 内容 / 规则 / 示例 / 说明 / 级别。
+		// 内容只是「位置提示」，超宽截断——使用者按行号回原脚本看原文即可；
+		// 行号必显示、内容可截断（spec 定案 L）。示例与说明在加载时已限 30 列，不会撑框。
 		lines = append(lines,
 			line("║"+pad("    来源: "+trimToWidth(source, dangerFieldLimit))+"║"),
-			line("║"+pad(fmt.Sprintf("    行号: %d", m.Line))+"║"),
-			line("║"+pad("    内容: "+trimToWidth(m.Content, dangerFieldLimit))+"║"),
+			line("║"+pad("    行号: "+formatLines(m.Lines))+"║"),
+			line("║"+pad("    内容: "+trimToWidth(m.Content, dangerFieldLimit-2))+"║"),
 			line("║"+pad("    规则: "+trimToWidth(m.RuleName, dangerFieldLimit))+"║"),
+			line("║"+pad("    示例: "+trimToWidth(m.Example, dangerFieldLimit))+"║"),
+			line("║"+pad("    说明: "+trimToWidth(m.Reason, dangerFieldLimit))+"║"),
 			line("║"+pad("    级别: "+riskLevelText(m.RiskLevel))+"║"),
 			// 右端用 ╣（双竖 + 左横）而不是 ╢（单竖 + 左双横）：框的左右边框都是
 			// 双线，分隔行两端也得是双线，否则右边界在每一块结尾处断成单线，看着像框破了。
@@ -91,6 +97,26 @@ func dangerBox(report *dangercheck.Report, forbidden bool) string {
 		line("╚"+bar+"╝"),
 	)
 	return strings.Join(lines, "\n")
+}
+
+// formatLines 行号列：单行写数字，多行按 `3, 7, 12` 列出；超宽时只列出放得下的。
+func formatLines(lines []int) string {
+	const limit = dangerFieldLimit - 6 // 「    行号: 」占 10 列
+	if len(lines) == 0 {
+		return "-"
+	}
+	out := ""
+	for i, n := range lines {
+		part := strconv.Itoa(n)
+		if i > 0 {
+			part = ", " + part
+		}
+		if DisplayWidth(out+part) > limit {
+			return out + " 等"
+		}
+		out += part
+	}
+	return out
 }
 
 // PrintDangerWarning 打印危险命令警告框（前置一个空行，与旧版一致）。
