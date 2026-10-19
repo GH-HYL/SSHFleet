@@ -46,6 +46,13 @@ docs/越界记录/
 !mattpocock-skills/
 !mattpocock-skills/**
 
+# 项目级 Agent 技能（DSH skills）：随仓库跟踪，clone 后即可用。
+# 父目录被 * 排除时子文件无法重新纳入，故每层父目录都要单独放行。
+!.dsh/
+!.dsh/skills/
+!.dsh/skills/**
+!.dsh/skills/**/
+
 # 代码
 !modules/
 !modules/**
