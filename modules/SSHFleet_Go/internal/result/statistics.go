@@ -76,6 +76,11 @@ func Statistics(items []ssh.Result, nodes *nodelist.Nodes, a *cli.Args, start, s
 
 	counts := map[string]int{}
 	exitCodes := map[string]*int{}
+	// categoryOrder 是分类**首次出现**的先后（2026-10-19）。map 给不出它：Go 的 map
+	// 遍历顺序刻意随机化，若照它汇集，同分分类的先后会随每次运行变——同一批节点跑两次，
+	// 统计块与报告的次序可能不一样。首现序在扫描这一趟里顺手记下，下游排序稳定就能
+	// 兑现「数量相同时先出现者在前」。
+	var categoryOrder []string
 	for _, r := range items {
 		// 连接成败也在这里一并算：主干收尾行的四个数都读统计，各处不再自己数一遍。
 		if r.ConnectSuccess {
@@ -91,6 +96,9 @@ func Statistics(items []ssh.Result, nodes *nodelist.Nodes, a *cli.Args, start, s
 			stats.FailCounts++
 		}
 
+		if _, seen := counts[category]; !seen {
+			categoryOrder = append(categoryOrder, category)
+		}
 		counts[category]++
 		// 「执行失败(退出码N)」这个分类带退出码：从结果字段搬一格出来，呈现侧就不必解析分类名。
 		// 同一分类下各台的退出码必然相同（名字里就写着它），取第一次遇到的即可。
@@ -100,11 +108,14 @@ func Statistics(items []ssh.Result, nodes *nodelist.Nodes, a *cli.Args, start, s
 		stats.CategoryIPMap[category] = append(stats.CategoryIPMap[category], r.IP)
 	}
 
-	delete(counts, successCategory)
-	for category, count := range counts {
+	// 按首现序进入切片——稳定排序接住的就是它。这里不再遍历 counts：那是随机序。
+	for _, category := range categoryOrder {
+		if category == successCategory {
+			continue
+		}
 		stats.SortedFailCategories = append(stats.SortedFailCategories, CategoryCount{
 			Category: category,
-			Count:    count,
+			Count:    counts[category],
 			ExitCode: exitCodes[category],
 		})
 	}
