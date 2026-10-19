@@ -2,17 +2,15 @@ package dangercheck
 
 import (
 	"reflect"
+	"regexp"
 	"testing"
 )
 
 // 判定层的行为测试：从 Analyze 这个接缝进出（spec「测试决策」）。
-// 这里用的是独立构造的小规则集，期望值按「原文里该被看见什么」人写，
-// 不从 config/keywords_dangerous.conf 反推——那份规则文件本身由 04–08 改写。
+// 期望值按「原文里该被看见什么」人写，不从 config/keywords_dangerous.conf 反推。
 
-// testRules 按给定规则名/正则/等级构造规则集（绕开 config 里的内容）。
 func testRules(t *testing.T, specs ...Rule) *Rules {
 	t.Helper()
-	// 测试规则集不经过「条数下限」这道闸：那条校验只在加载文件时管用。
 	out, err := compileRulesWithRaw(specs, nil)
 	if err != nil {
 		t.Fatalf("构造测试规则失败: %v", err)
@@ -20,9 +18,10 @@ func testRules(t *testing.T, specs ...Rule) *Rules {
 	return out
 }
 
-func oneRule(t *testing.T, name, level string, patterns ...string) *Rules {
+// regexCompile 把规则里的正则单独编出来（测试里需要直接比对正则时用）。
+func regexCompile(t *testing.T, p string) *regexp.Regexp {
 	t.Helper()
-	return testRules(t, Rule{Name: name, Example: "x", Reason: "测试用", Regex: patterns, RiskLevel: level, Enabled: boolPtr(true)})
+	return regexp.MustCompile(p)
 }
 
 func boolPtr(b bool) *bool { return &b }
@@ -37,10 +36,8 @@ func linesOf(matches []Match) [][]int {
 
 // 同一规则命中多处 → 合成一条，行号全列（定案 B）。
 func TestAnalyzeMergesHitsOfOneRule(t *testing.T) {
-	rules := oneRule(t, "系统重启", "high", `\breboot\b`)
-	src := "echo 1\nreboot\necho 3\nreboot"
-
-	got := Analyze(src, rules)
+	rules := testRules(t, Rule{Name: "系统重启", Example: "x", Reason: "测试用", Regex: []string{`\breboot\b`}, RiskLevel: "high"})
+	got := Analyze("echo 1\nreboot\necho 3\nreboot", rules)
 	if len(got) != 1 {
 		t.Fatalf("同一规则命中两处应合成一条，实得 %d 条", len(got))
 	}
@@ -67,9 +64,9 @@ func TestAnalyzeListsEachRuleSeparately(t *testing.T) {
 	}
 }
 
-// 规则里写 (?s) 也不得跨行（定案 B：不加跨行）。
+// 规则里写 (?s) 也不得跨行（定案 B）。
 func TestAnalyzeDoesNotMatchAcrossLines(t *testing.T) {
-	rules := oneRule(t, "跨行", "high", `(?s)alpha.*omega`)
+	rules := testRules(t, Rule{Name: "跨行", Example: "x", Reason: "测试用", Regex: []string{`(?s)alpha.*omega`}, RiskLevel: "high"})
 	if got := Analyze("alpha\nomega", rules); len(got) != 0 {
 		t.Fatalf("不得跨行命中，实得 %v", linesOf(got))
 	}
@@ -81,18 +78,19 @@ func TestAnalyzeDoesNotMatchAcrossLines(t *testing.T) {
 // 路径片段归一：//x、/etc/、/a/../b 整备成规范形态，且不改变行数（行号不错位）。
 func TestAnalyzeNormalizesPathFragmentsKeepLineNumbers(t *testing.T) {
 	rules := testRules(t,
-		Rule{Name: "删系统目录", Example: "x", Reason: "测试用", Regex: []string{`\brm -rf /etc(?:\s|$)`}, RiskLevel: "forbidden"},
-		Rule{Name: "删根", Example: "x", Reason: "测试用", Regex: []string{`\brm -rf /(?:\s|$)`}, RiskLevel: "forbidden"},
+		// 行尾哨兵：整备后的文本在每行末尾补一个空格，路径写到行尾也落在词边界上。
+		Rule{Name: "删系统目录", Example: "x", Reason: "测试用", Regex: []string{`rm -rf /etc(?:\s|$)`}, RiskLevel: "forbidden"},
+		Rule{Name: "删根", Example: "x", Reason: "测试用", Regex: []string{`rm -rf /(?:\s|$)`}, RiskLevel: "forbidden"},
 	)
 	cases := []struct {
 		src  string
 		want string
 		line int
 	}{
-		{"echo 1\nrm -rf //etc", "删系统目录", 2},         // 重复斜杠合并
-		{"echo 1\necho 2\nrm -rf /etc/", "删系统目录", 3}, // 去尾斜杠
-		{"rm -rf /var/../etc/", "删系统目录", 1},          // 词法解 ..
-		{"echo 1\n\n\nrm -rf /", "删根", 4},            // 空行照常计行
+		{"echo 1\nrm -rf //etc", "删系统目录", 2},
+		{"echo 1\necho 2\nrm -rf /etc/", "删系统目录", 3},
+		{"rm -rf /var/../etc/", "删系统目录", 1},
+		{"echo 1\n\n\nrm -rf /", "删根", 4},
 	}
 	for _, c := range cases {
 		got := Analyze(c.src, rules)
@@ -105,9 +103,17 @@ func TestAnalyzeNormalizesPathFragmentsKeepLineNumbers(t *testing.T) {
 	}
 }
 
+// 匹配用的文本不能在「路径写到行尾」时丢词边界（曾因此在块内补空格）。
+func TestPreparedTextKeepsWordBoundaryAfterPath(t *testing.T) {
+	text := prepare(normalizeSrc("rm -rf /etc"))
+	if !regexCompile(t, `\s`).MatchString(text) {
+		t.Fatalf("整备后至少要有可匹配的空白：%q", text)
+	}
+}
+
 // 同一规则挂多条正则，命中任意一条即该规则命中（定案 A）。
 func TestAnalyzeRuleWithSeveralPatterns(t *testing.T) {
-	rules := oneRule(t, "递归删", "high", `\brm -rf `, `\brm -fr `, `\brm --recursive --force `)
+	rules := testRules(t, Rule{Name: "递归删", Example: "x", Reason: "测试用", Regex: []string{`\brm -rf `, `\brm -fr `, `\brm --recursive --force `}, RiskLevel: "high"})
 	for _, src := range []string{"rm -rf /x", "rm -fr /x", "rm --recursive --force /x"} {
 		if got := Analyze(src, rules); len(got) != 1 {
 			t.Fatalf("%q 应命中递归删，实得 %v", src, linesOf(got))
@@ -120,7 +126,7 @@ func TestAnalyzeRuleWithSeveralPatterns(t *testing.T) {
 
 // 判定的对象是原文：同一条 rm -rf /etc 写在六种语言里都命中（01 验收）。
 func TestAnalyzeMatchesSameCommandInSixLanguages(t *testing.T) {
-	rules := oneRule(t, "删系统目录", "forbidden", `\brm -rf /etc(?:\s|$|["'])`)
+	rules := testRules(t, Rule{Name: "删系统目录", Example: "x", Reason: "测试用", Regex: []string{`rm -rf /etc\b`}, RiskLevel: "forbidden"})
 	srcs := []string{
 		`rm -rf /etc`,
 		`python3 -c 'import os; os.system("rm -rf /etc")'`,
