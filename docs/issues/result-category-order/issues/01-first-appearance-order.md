@@ -2,7 +2,7 @@
 
 **要做的**：同一批节点跑两次，终端统计块的「失败分类统计」与归档报告 `report.txt` 的「节点清单统计」段里，分类的先后完全一致。数量不同的按台数排（终端降序、报告升序，与现在一致）；**数量相同时按该类在清单里第一次出现的先后**排——这条次序两次运行都相同，不再是碰运气。顺带把这条判据的两处出口分开：报告侧不再自己去遍历分类图取键，改用统计已排好的次序。
 
-Status: done（2026-10-19 实施，本轮提交）
+Status: done（2026-10-19 实施并提交 beefb0a）
 Blocked by: 无
 
 - [x] 复现先跑过一次：`GOTMPDIR=$PWD/../../build/gotmp-1019 TMP=$GOTMPDIR` 下连跑 `go test -count=1 -run TestStatisticsFailCategoriesSortedByCountDesc ./internal/result/`，见到 FAIL（改前 43 跑 6 红，约 14%）；报告侧用沙盒 `build/atest-9/` 里的桩见「同数量分类出现 3 种排列」
