@@ -34,7 +34,7 @@ import (
 // 版本号：单一出处（显示在帮助信息首行下方，经 cli.Parse 传入 Usage）。
 // 与 CHANGELOG 顶部当天段落的段头**同一个号**——开段、抬号时在同一次提交里同步改，
 // 两处不一致即为错误。同一天的改动共用一个号，不因改动多而另起号。
-const appVersion = "9.2.0"
+const appVersion = "10.0.0"
 
 // versionWithBuildID 版本号拼上**构建标识**：git 短提交号（仓库内编译时由 go build
 // 自动注入 vcs.revision；工作区有未提交改动时加 -dirty）+ HEAD 提交时间。
@@ -293,7 +293,7 @@ func main() {
 	}
 	errorKeywords.PrependCategories(passwdCategoriesOf(passwdCfg))
 	prompts := passwdPromptsOf(passwdCfg)
-	dangerReport, err := dangercheck.Check(args, dangerRules)
+	dangerReport, err := dangercheck.Check(args.Command, args.Script, dangerRules)
 	if err != nil {
 		fatal("dangercheck", fmt.Errorf("危险关键词内容检查未通过\n原因：%v", err))
 	}
@@ -309,8 +309,7 @@ func main() {
 		// 非 forbidden：不管交互与否都先把警告框打出来。--yes 只是替人回答了「y」，
 		// 不该连带把「这条命令有风险」这件事也从屏幕上抹掉；跳过确认时的留痕仍由 Confirm 写。
 		output.PrintDangerWarning(dangerReport, false)
-		autoNote := fmt.Sprintf("非交互模式放行危险命令（最高级别 %s，分类 %s，来源行 %d）：%s",
-			dangerReport.Highest(), dangerReport.Matches[0].RuleName, dangerReport.Matches[0].Line, dangerReport.Matches[0].Content)
+		autoNote := "非交互模式放行危险命令：" + dangerReport.Matches[0].Note()
 		confirmed, cerr := in.Confirm(common.ConfirmReq{
 			Prompt:     "\n" + colorYellow + "确定继续？" + colorReset,
 			DefaultYes: false,
@@ -331,7 +330,7 @@ func main() {
 		if in.Disinteractive {
 			dangerNote = autoNote
 		} else {
-			dangerNote = fmt.Sprintf("用户已确认风险继续执行（最高级别 %s）：%s", dangerReport.Highest(), dangerReport.Matches[0].Content)
+			dangerNote = "用户已确认风险继续执行：" + dangerReport.Matches[0].Note()
 			logger.Warn(dangerNote)
 		}
 	}

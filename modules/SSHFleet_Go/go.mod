@@ -17,7 +17,6 @@ require (
 	golang.org/x/term v0.46.0
 	golang.org/x/text v0.42.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
-	mvdan.cc/sh/v3 v3.14.1
 )
 
 require (

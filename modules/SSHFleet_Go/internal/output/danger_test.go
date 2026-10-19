@@ -17,7 +17,7 @@ func stripANSI(s string) string { return ansiRe.ReplaceAllString(s, "") }
 
 func dangerReport(content, rule string, level string) *dangercheck.Report {
 	return &dangercheck.Report{Matches: []dangercheck.Match{
-		{Line: 1, Content: content, RuleName: rule, RiskLevel: level},
+		{Lines: []int{1}, Content: content, RuleName: rule, RiskLevel: level, Example: "示例命令", Reason: "这是一条说明"},
 	}}
 }
 
@@ -50,8 +50,8 @@ func TestDangerBoxTruncatesLongCJKByDisplayWidth(t *testing.T) {
 			body := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(ln), "║"))
 			body = strings.TrimPrefix(strings.TrimSpace(body), "内容:")
 			body = strings.TrimSuffix(strings.TrimSpace(body), "║")
-			if got := DisplayWidth(strings.TrimSpace(body)); got != dangerFieldLimit {
-				t.Fatalf("中文内容应截断到 %d 列，实际 %d 列", dangerFieldLimit, got)
+			if got := DisplayWidth(strings.TrimSpace(body)); got != dangerFieldLimit-2 {
+				t.Fatalf("中文内容应截断到 %d 列，实际 %d 列", dangerFieldLimit-2, got)
 			}
 		}
 	}
