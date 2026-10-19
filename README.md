@@ -404,7 +404,7 @@ sh -c 'export LANG="en_US.UTF-8" LC_ALL="en_US.UTF-8" PATH="/usr/local/sbin:/usr
 
 - **执行**：本机直接连上目标机的 SSH 干活，传文件走 SFTP
 - **并发**：按清单节点数并行，可用 `-n` 限流；中断（Ctrl+C）时停止派发新任务，已经完成的节点结果照常整理归档
-- **危险命令分析**：把命令拆成语法结构再逐条判定，不是简单地找关键词
+- **危险命令分析**：按命令原文比对规则，写进脚本里的危险命令不论用什么语言写都认得出
 - **配置与规则**：配置文件用 TOML 写法，启动时校验，问题一次报清
 
 完整的处理链路 → [4 进阶知识手册](docs/4-进阶知识手册.md) 的「8 工具的内部骨架」。
@@ -443,7 +443,6 @@ sh -c 'export LANG="en_US.UTF-8" LC_ALL="en_US.UTF-8" PATH="/usr/local/sbin:/usr
 - `go.uber.org/zap`、`gopkg.in/natefinch/lumberjack.v2`（日志与轮转）
 - `github.com/BurntSushi/toml`（配置）
 - `github.com/spf13/pflag`（命令行解析）
-- `mvdan.cc/sh`（命令解析）
 - `github.com/xuri/excelize`（Excel）
 - `golang.org/x/term`（终端宽度）
 - `charmbracelet/bubbletea`、`bubbles`、`lipgloss`（进度界面）
