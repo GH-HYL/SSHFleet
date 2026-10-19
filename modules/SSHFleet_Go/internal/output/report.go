@@ -115,9 +115,15 @@ func WriteReport(archiveDir string, stats *result.Stats, a *cli.Args, cfg *confi
 	// 次序来源是 SortedFailCategories，它已按「数量降序、同数量首现序」排好；这里只做
 	// 一次按数量升序的稳定重排，那层首现序就接得住。**不要改回遍历 CategoryIPMap 取键**
 	//——那是 map，遍历顺序随机，同数量分类的先后会随每次运行变（2026-10-19）。
-	// 两者键集相同：同一批失败分类，成功分类两处都已剔除。
+	// 两者键集相同：同一批失败分类，成功分类两处都已剔除。**这是 Statistics 给的前置
+	// 条件，本函数不校验**——键集分叉时不得无声出错：切片里多出的分类（图上没有 IP）
+	// 就跳过，否则会打出「分类名（0）：」这种空段；图里多出的分类本就不在切片里，
+	// 不会被列出，与改前「map 里有什么列什么」的可见结果一致。
 	catKeys := make([]string, 0, len(stats.SortedFailCategories))
 	for _, c := range stats.SortedFailCategories {
+		if len(stats.CategoryIPMap[c.Category]) == 0 {
+			continue
+		}
 		catKeys = append(catKeys, c.Category)
 	}
 	for i := 1; i < len(catKeys); i++ {
