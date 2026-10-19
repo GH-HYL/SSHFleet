@@ -95,7 +95,7 @@ $ SSHFleet -f nodes.csv -s install.sh -a 'a\nb,请选择架构'
 - 2026-10-19：开发者定「`-a` 与 `-f` 一致，不单独制定规则，都用 `;;`」——内联不给代填开第二套转义；代填内容要换行走文件。
 - 2026-10-19：实现并验证完成（见工单 `issues/01-semicolon-pair-line-separator.md` 的 Comments）。
 
-## 审计（2026-10-19，按 docs/agents/audit-framework.md）
+## 审计（2026-10-19）
 
 **对象与范围**：提交 `4bc04fe` 涉及的全部文档——本 spec、工单 `issues/01-semicolon-pair-line-separator.md`、`docs/adr/0020`、`CHANGELOG.md` 的 `[9.2.0]` 段、README 与三份手册的改动段落。审计在提交之后进行，主 agent 执行（子 agent 跑的审计因限额中断，未出结论；下面每一条都由主 agent 实际核过）。
 
