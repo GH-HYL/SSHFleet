@@ -13,11 +13,11 @@ Status: ready-for-agent
 - [ ] `answer` 一摊：两件事改为发报文并由判据文件认领：
   - `sshfleet.answer.missed: <n> answers not delivered`
   - `sshfleet.answer.exhausted_timeout: all answers sent but no output before timeout`
-- [ ] `answer` 一摊的两条由 `interactive.go` 收尾处的导出纯函数产出（入参是未送出的条数、是否用尽、是否超时），与 02 立下的做法一致。
+- [ ] `answer` 一摊的两条由代填收尾处的导出纯函数产出（入参是未送出的条数、是否用尽、是否超时），与 02 立下的做法一致。
 - [ ] `abort` 一摊：确认 02 落下的 `sshfleet.abort.canceled` 与 `sshfleet.abort.connect_canceled` 两处在两种判定下都成立——**已连上被中断**（`abort.canceled`）与**还没连上就被中断**（`abort.connect_canceled`）分别对应今天的「任务已取消」「建连被取消」。
 - [ ] **中止词命中后不再由代码写死分类名**：删掉 `verdict.Judge` 里 `if res.AbortLine != "" { 分类 = "密码过期" }` 那条分支。`AbortLine` 仍然作为事实保留（呈现层据此说明会话为何提前结束），其原文**并入待匹配文本**，分类由第一组判据表给出。
 - [ ] 用例证明中止路径仍然给出「密码过期」：以 `AbortLine`（例如 `WARNING: Your password has expired.`）为输入，判据表第一组把它认成「密码过期」。
-- [ ] **代填的中止词在交互链路上按远端提示命中**（取 `Keywords.PasswordExpired()`）。这条链路**代码里已生效**（`batch.go` 取出后注入），本工单做端到端复核：把配置里「密码过期」那条的 `keywords` 换掉，中止行为随之变化；把它那条整组删掉，中止行为消失（不再有中止词）；改它的 `name` 后 `main.go` 的守卫应报错亮明，而不是静默干等到超时。
+- [ ] **代填的中止词在交互链路上按远端提示命中**（按分类名「密码过期」取关键词）。这条链路**代码里已生效**（调度侧取出后注入），本工单做端到端复核：把配置里「密码过期」那条的 `keywords` 换掉，中止行为随之变化；把它那条整组删掉，中止行为消失（不再有中止词）；改它的 `name` 后启动期的守卫应报错亮明，而不是静默干等到超时。
 - [ ] 分类语料全绿。
 
 ## Comments
