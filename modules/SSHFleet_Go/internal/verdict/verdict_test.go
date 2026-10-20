@@ -47,7 +47,7 @@ func loadKeywords(t *testing.T) *Keywords {
 	}
 	cats := make([]Category, 0, len(pc.Categories))
 	for _, x := range pc.Categories {
-		cats = append(cats, Category{Name: x.Name, Keywords: x.Keywords, Tip: x.Tip})
+		cats = append(cats, Category{Name: x.Name, Keywords: x.Keywords, Tip: x.Tip, CodeDefined: x.CodeDefined})
 	}
 	kw.PrependCategories(cats)
 	return kw
@@ -154,6 +154,38 @@ func TestFallbackCategory(t *testing.T) {
 			t.Errorf("IsFallbackCategory(%q) = %v，期望 %v", c.category, got, c.want)
 		}
 	}
+}
+
+// TestFallbackCategoryFollowsConfig 兜底判定只看配置登记：由程序按结构事实给出的分类名，
+// 登记了就是已知分类，没登记就与任何一段认不出来的报错原文一样，落到兜底那一行。
+// 判定包里不再有"这些名字豁免"的名单——那张名单就是"改配置不生效"的来源。
+func TestFallbackCategoryFollowsConfig(t *testing.T) {
+	cases := []struct {
+		category   string
+		registered []string
+		want       bool
+	}{
+		{"远端无响应", []string{"密码过期", "远端无响应"}, false},
+		{"远端无响应", []string{"密码过期"}, true},
+		{"提示词没认出", []string{"提示词没认出"}, false},
+		{"部分成功", []string{"部分成功"}, false},
+	}
+	for _, c := range cases {
+		kw := &Keywords{}
+		kw.PrependCategories(categoriesOf(c.registered...))
+		if got := IsFallbackCategory(c.category, kw); got != c.want {
+			t.Errorf("登记 %v 时 IsFallbackCategory(%q) = %v，期望 %v", c.registered, c.category, got, c.want)
+		}
+	}
+}
+
+// categoriesOf 按名字造一组"由程序定性"的分类（无关键词，只有名字）。
+func categoriesOf(names ...string) []Category {
+	out := make([]Category, 0, len(names))
+	for _, n := range names {
+		out = append(out, Category{Name: n, CodeDefined: true})
+	}
+	return out
 }
 
 // TestAuthFailureKeywordPath 认证失败分类优先于关键词推断（spec D44）。

@@ -17,10 +17,16 @@ import (
 
 // Category 一个分类及其关键词（顺序即匹配优先级）。
 // Tip 是可选的一句话排查建议：本次出现过该分类时，在统计块里跟着分类名提示一行。
+//
+// CodeDefined 标明这个分类名由程序按结构事实给出、不查表，配置这里只留名字与提示语。
+// 它让「登记即已知」这条规矩能自洽：兜底判定只看名字有没有登记（IsFallbackCategory），
+// 所以登记处必须能表达"这个分类没有可匹配的文案，但它是真的分类"——否则要么逼着写一个
+// 永远匹配不上的关键词，要么就得在代码里另养一张名单替配置做主。
 type Category struct {
-	Name     string   `toml:"name"`
-	Keywords []string `toml:"keywords"`
-	Tip      string   `toml:"tip"`
+	Name        string   `toml:"name"`
+	Keywords    []string `toml:"keywords"`
+	Tip         string   `toml:"tip"`
+	CodeDefined bool     `toml:"code_defined"`
 }
 
 // Keywords 加载后的判据表：两块，选组依据是"目的命令有没有给出退出码"（4.3）。
@@ -68,13 +74,18 @@ func LoadKeywords(path string) (*Keywords, error) {
 }
 
 // validateCategories 逐类校验：name 非空、关键词非空。label 用于标明是哪一块出的错。
+//
+// 关键词可以为空的唯一情形是标明了 code_defined（名字由程序给）。匹配不上的分类
+// 在启动时就拦下：它不会报错、也不会崩，只会让使用者看到一堆本该归类的"未归类"。
 func validateCategories(items []Category, label string) error {
 	for idx, c := range items {
 		if strings.TrimSpace(c.Name) == "" {
 			return fmt.Errorf("错误分类关键词%s第 %d 类缺少 name", label, idx+1)
 		}
-		if len(c.Keywords) == 0 {
-			return fmt.Errorf("错误分类%s没有任何关键词", label+c.Name)
+		if len(c.Keywords) == 0 && !c.CodeDefined {
+			return fmt.Errorf("错误分类%s既没有关键词、也没标明由程序定性，永远匹配不上\n"+
+				"改法：要么补上 keywords，要么写明 code_defined = true（适用于分类名由程序直接给出的分类）",
+				label+c.Name)
 		}
 	}
 	return nil
