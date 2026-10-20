@@ -54,7 +54,7 @@ func (c *Client) RunPasswdChange(ctx context.Context, in PasswdInput, seq int) *
 
 	session, err := c.conn.NewSession()
 	if err != nil {
-		result.Error = strPtr(Message("session", sessionCreateFailed, err.Error()))
+		result.Error = strPtr(Message(EnvSession, sessionCreateFailed, err.Error()))
 		return result
 	}
 	defer func() { _ = session.Close() }()
@@ -62,12 +62,12 @@ func (c *Client) RunPasswdChange(ctx context.Context, in PasswdInput, seq int) *
 	// tty 模式传 nil：用远端默认（onlcr、echo 都照开）。密码本身不回显（实测 M6），
 	// 警告行与提示行照旧进采集范围。
 	if err := session.RequestPty(ptyTerm, ptyRows, ptyCols, nil); err != nil {
-		result.Error = strPtr(Message("session", sessionPtyFailed, err.Error()))
+		result.Error = strPtr(Message(EnvSession, sessionPtyFailed, err.Error()))
 		return result
 	}
 	stdin, err := session.StdinPipe()
 	if err != nil {
-		result.Error = strPtr(Message("session", sessionChannelFailed, err.Error()))
+		result.Error = strPtr(Message(EnvSession, sessionChannelFailed, err.Error()))
 		return result
 	}
 

@@ -69,7 +69,7 @@ func connectStageOfHandshakeError(err error) string {
 // connectMessage 把一个已定好环节名的错误写成报文。
 func connectMessage(stage string, err error) string {
 	if err == nil {
-		return Message("connect", stage, "")
+		return Message(EnvConnect, stage, "")
 	}
-	return Message("connect", stage, err.Error())
+	return Message(EnvConnect, stage, err.Error())
 }

@@ -14,10 +14,10 @@ import "fmt"
 //   - 干净收场返回空串：报文只在「不该算干净成功」的形态下写；
 //   - 环节名只陈述现象（finished / canceled / give_up），不写 partial / failed。
 const (
-	envTransfer = "transfer"
-	envPasswd   = "passwd"
-	envAnswer   = "answer"
-	envAbort    = "abort"
+	envTransfer = EnvTransfer
+	envPasswd   = EnvPasswd
+	envAnswer   = EnvAnswer
+	envAbort    = EnvAbort
 )
 
 // FinishedMessage 传输收尾那句：这批里成了几个、一共几个。

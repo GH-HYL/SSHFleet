@@ -161,7 +161,7 @@ func (c *Client) RunInteractive(ctx context.Context, in InteractiveInput, downli
 
 	session, err := c.conn.NewSession()
 	if err != nil {
-		result.Error = strPtr(Message("session", sessionCreateFailed, err.Error()))
+		result.Error = strPtr(Message(EnvSession, sessionCreateFailed, err.Error()))
 		return result
 	}
 	defer func() { _ = session.Close() }()
@@ -169,13 +169,13 @@ func (c *Client) RunInteractive(ctx context.Context, in InteractiveInput, downli
 	// tty 模式传 nil：用远端默认（onlcr、echo 都照开）。回显也在采集范围内，
 	// 故触发词要有区分度（配置纪律，不是代码能兜住的）。
 	if err := session.RequestPty(ptyTerm, ptyRows, ptyCols, nil); err != nil {
-		result.Error = strPtr(Message("session", sessionPtyFailed, err.Error()))
+		result.Error = strPtr(Message(EnvSession, sessionPtyFailed, err.Error()))
 		return result
 	}
 
 	stdin, err := session.StdinPipe()
 	if err != nil {
-		result.Error = strPtr(Message("session", sessionChannelFailed, err.Error()))
+		result.Error = strPtr(Message(EnvSession, sessionChannelFailed, err.Error()))
 		return result
 	}
 
@@ -307,7 +307,7 @@ func (c *Client) driveSession(parent context.Context, d sessionDriver, command s
 				out.canceled = true
 				return out
 			}
-			out.err = errors.New(Message("run", runTimeout, fmt.Sprintf("exceeded %v", c.cfg.ExecTimeout)))
+			out.err = errors.New(Message(EnvRun, runTimeout, fmt.Sprintf("exceeded %v", c.cfg.ExecTimeout)))
 			out.timedOut = true
 			return out
 		}

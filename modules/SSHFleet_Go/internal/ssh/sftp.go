@@ -42,7 +42,7 @@ func (c *Client) UploadFiles(ctx context.Context, files []LocalFile, skipped []s
 
 	sftpClient, err := sftp.NewClient(c.conn)
 	if err != nil {
-		result.Error = strPtr(Message("transfer", transferClientFailed, err.Error()))
+		result.Error = strPtr(Message(EnvTransfer, transferClientFailed, err.Error()))
 		return result
 	}
 	defer func() { _ = sftpClient.Close() }()
@@ -61,11 +61,11 @@ func (c *Client) UploadFiles(ctx context.Context, files []LocalFile, skipped []s
 	if err != nil {
 		// 措辞与下载侧（下方"远程路径不存在"）及失败分类同名——分类按报错原文
 		// 匹配关键字，两处各写一套就会有一条永远归不了类。
-		result.Error = strPtr(Message("transfer", transferRemoteMissing, "remote path not found: "+remotePath))
+		result.Error = strPtr(Message(EnvTransfer, transferRemoteMissing, "remote path not found: "+remotePath))
 		return result
 	}
 	if !fi.IsDir() {
-		result.Error = strPtr(Message("transfer", transferRemoteNotDir, "remote target is not a directory: "+remotePath))
+		result.Error = strPtr(Message(EnvTransfer, transferRemoteNotDir, "remote target is not a directory: "+remotePath))
 		return result
 	}
 
@@ -73,7 +73,7 @@ func (c *Client) UploadFiles(ctx context.Context, files []LocalFile, skipped []s
 	for _, f := range files {
 		if _, err := os.Stat(f.Path); err != nil {
 			result.FailedFiles = len(files)
-			result.Error = strPtr(Message("transfer", transferLocalUnreadable, fmt.Sprintf("%s: %v", f.Rel, err)))
+			result.Error = strPtr(Message(EnvTransfer, transferLocalUnreadable, fmt.Sprintf("%s: %v", f.Rel, err)))
 			return result
 		}
 	}
@@ -114,7 +114,7 @@ func (c *Client) UploadFiles(ctx context.Context, files []LocalFile, skipped []s
 		// 远程文件已存在：该文件失败并终止本节点传输（不覆盖，旧行为）
 		if _, err := sftpClient.Stat(remoteFilePath); err == nil {
 			failed++
-			msg := fmt.Sprintf("%s: 上传失败 - %s", f.Rel, Message("transfer", transferRemoteExists, "file already exists on the remote host"))
+			msg := fmt.Sprintf("%s: 上传失败 - %s", f.Rel, Message(EnvTransfer, transferRemoteExists, "file already exists on the remote host"))
 			lines = append(lines, msg)
 			result.Error = strPtr(msg)
 			if onProgress != nil {
@@ -193,7 +193,7 @@ func (c *Client) DownloadFiles(ctx context.Context, remotePath, localPath string
 
 	sftpClient, err := sftp.NewClient(c.conn)
 	if err != nil {
-		result.Error = strPtr(Message("transfer", transferClientFailed, err.Error()))
+		result.Error = strPtr(Message(EnvTransfer, transferClientFailed, err.Error()))
 		return result
 	}
 	defer func() { _ = sftpClient.Close() }()
@@ -209,13 +209,13 @@ func (c *Client) DownloadFiles(ctx context.Context, remotePath, localPath string
 		// 预检查是中间步骤（D30）：它自己的退出码进 Steps，不顶成结果退出码——
 		// 判定据此走第一组、按报错原文归类（D27 消掉第二组同名补丁的根据就在这）
 		result.Steps = append(result.Steps, StepResult{Name: StepPrecheck, ExitCode: extractExitCode(err)})
-		result.Error = strPtr(Message("transfer", transferRemoteMissing, "remote path not found: "+remotePath))
+		result.Error = strPtr(Message(EnvTransfer, transferRemoteMissing, "remote path not found: "+remotePath))
 		return result
 	}
 
 	fi, err := sftpClient.Stat(remotePath)
 	if err != nil {
-		result.Error = strPtr(Message("transfer", transferRemoteUnreachable, "remote path not accessible: "+remotePath))
+		result.Error = strPtr(Message(EnvTransfer, transferRemoteUnreachable, "remote path not accessible: "+remotePath))
 		return result
 	}
 
@@ -252,7 +252,7 @@ func (c *Client) DownloadFiles(ctx context.Context, remotePath, localPath string
 		if err != nil {
 			// 枚举也是中间步骤：退出码进 Steps，理由同上
 			result.Steps = append(result.Steps, StepResult{Name: StepEnumerate, ExitCode: extractExitCode(err)})
-			result.Error = strPtr(Message("transfer", transferListFailed, err.Error()))
+			result.Error = strPtr(Message(EnvTransfer, transferListFailed, err.Error()))
 			return result
 		}
 		for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
@@ -284,16 +284,16 @@ func (c *Client) DownloadFiles(ctx context.Context, remotePath, localPath string
 	if totalFiles == 0 {
 		// 过滤后没有任何可传文件才报错（全文链接与目录本就为空，措辞分开）
 		if len(symlinks) > 0 {
-			result.Error = strPtr(Message("transfer", transferNoFiles, fmt.Sprintf("all %d entries are symlinks (filtered)", len(symlinks))))
+			result.Error = strPtr(Message(EnvTransfer, transferNoFiles, fmt.Sprintf("all %d entries are symlinks (filtered)", len(symlinks))))
 		} else {
-			result.Error = strPtr(Message("transfer", transferNoFiles, "no files to download under "+remotePath))
+			result.Error = strPtr(Message(EnvTransfer, transferNoFiles, "no files to download under "+remotePath))
 		}
 		return result
 	}
 
 	ipDir := filepath.Join(localPath, c.cfg.IP)
 	if err := os.MkdirAll(ipDir, 0o755); err != nil {
-		result.Error = strPtr(Message("transfer", transferLocalDirFailed, err.Error()))
+		result.Error = strPtr(Message(EnvTransfer, transferLocalDirFailed, err.Error()))
 		return result
 	}
 
@@ -334,7 +334,7 @@ func (c *Client) DownloadFiles(ctx context.Context, remotePath, localPath string
 
 		if err := os.MkdirAll(filepath.Dir(localFilePath), 0o755); err != nil {
 			failed++
-			msg := fmt.Sprintf("%s: 下载失败 - %s", file.relativePath, Message("transfer", transferLocalDirFailed, err.Error()))
+			msg := fmt.Sprintf("%s: 下载失败 - %s", file.relativePath, Message(EnvTransfer, transferLocalDirFailed, err.Error()))
 			lines = append(lines, msg)
 			result.Error = strPtr(msg)
 			if onProgress != nil {
@@ -384,19 +384,19 @@ func (c *Client) sftpUploadFile(sftpClient *sftp.Client, localPath, remoteFilePa
 	// 目标目录（-p）本身仍必须已存在——这里只建它下面的层级，不建它在远端的位置。
 	if dir := path.Dir(remoteFilePath); dir != "." {
 		if err := sftpClient.MkdirAll(dir); err != nil {
-			return 0, errors.New(Message("transfer", transferRemoteFileFailed, fmt.Sprintf("create remote dir %s: %v", dir, err)))
+			return 0, errors.New(Message(EnvTransfer, transferRemoteFileFailed, fmt.Sprintf("create remote dir %s: %v", dir, err)))
 		}
 	}
 
 	src, err := os.Open(localPath)
 	if err != nil {
-		return 0, errors.New(Message("transfer", transferLocalUnreadable, err.Error()))
+		return 0, errors.New(Message(EnvTransfer, transferLocalUnreadable, err.Error()))
 	}
 	defer func() { _ = src.Close() }()
 
 	dst, err := sftpClient.Create(remoteFilePath)
 	if err != nil {
-		return 0, errors.New(Message("transfer", transferRemoteFileFailed, err.Error()))
+		return 0, errors.New(Message(EnvTransfer, transferRemoteFileFailed, err.Error()))
 	}
 	defer func() { _ = dst.Close() }()
 
@@ -410,7 +410,7 @@ func (c *Client) sftpUploadFile(sftpClient *sftp.Client, localPath, remoteFilePa
 	}, onProgress == nil)
 	if err != nil {
 		_ = sftpClient.Remove(remoteFilePath) // 删除远程半成品
-		return 0, errors.New(Message("transfer", transferRemoteFileFailed, err.Error()))
+		return 0, errors.New(Message(EnvTransfer, transferRemoteFileFailed, err.Error()))
 	}
 	if err := sftpClient.Chmod(remoteFilePath, perm); err != nil {
 		// 权限设置失败不阻断（旧行为）
@@ -424,20 +424,20 @@ func (c *Client) sftpUploadWithSudo(sftpClient *sftp.Client, localPath, rel, rem
 	remoteFilePath := path.Join(remotePath, rel)
 	if dir := path.Dir(remoteFilePath); dir != remotePath {
 		if err := c.runCommand(fmt.Sprintf("sudo mkdir -p '%s'", escapeShellArg(dir))); err != nil {
-			return 0, errors.New(Message("transfer", transferRemoteFileFailed, fmt.Sprintf("create remote dir %s: %v", dir, err)))
+			return 0, errors.New(Message(EnvTransfer, transferRemoteFileFailed, fmt.Sprintf("create remote dir %s: %v", dir, err)))
 		}
 	}
 
 	tmpDir := tmpRoot + randomHex()
 	if err := c.runCommand(fmt.Sprintf("sudo mkdir -p '%s' && sudo chmod 777 '%s'", tmpDir, tmpDir)); err != nil {
-		return 0, errors.New(Message("transfer", transferTmpFailed, err.Error()))
+		return 0, errors.New(Message(EnvTransfer, transferTmpFailed, err.Error()))
 	}
 	cleanup := func() { _ = c.runCommand(fmt.Sprintf("sudo rm -rf '%s'", tmpDir)) }
 
 	src, err := os.Open(localPath)
 	if err != nil {
 		cleanup()
-		return 0, errors.New(Message("transfer", transferLocalUnreadable, err.Error()))
+		return 0, errors.New(Message(EnvTransfer, transferLocalUnreadable, err.Error()))
 	}
 	defer func() { _ = src.Close() }()
 
@@ -446,7 +446,7 @@ func (c *Client) sftpUploadWithSudo(sftpClient *sftp.Client, localPath, rel, rem
 	dst, err := sftpClient.Create(tmpFilePath)
 	if err != nil {
 		cleanup()
-		return 0, errors.New(Message("transfer", transferTmpFailed, err.Error()))
+		return 0, errors.New(Message(EnvTransfer, transferTmpFailed, err.Error()))
 	}
 	defer func() { _ = dst.Close() }()
 
@@ -460,7 +460,7 @@ func (c *Client) sftpUploadWithSudo(sftpClient *sftp.Client, localPath, rel, rem
 	}, onProgress == nil)
 	if err != nil {
 		cleanup()
-		return 0, errors.New(Message("transfer", transferTmpFailed, err.Error()))
+		return 0, errors.New(Message(EnvTransfer, transferTmpFailed, err.Error()))
 	}
 	if err := sftpClient.Chmod(tmpFilePath, perm); err != nil {
 		// 权限设置失败不阻断（旧行为）
@@ -470,7 +470,7 @@ func (c *Client) sftpUploadWithSudo(sftpClient *sftp.Client, localPath, rel, rem
 	// 基名，最终名是原路径 + 原文件名），任一边漏转义都会把远端命令拼坏。
 	if err := c.runCommand(fmt.Sprintf("sudo mv '%s' '%s'", escapeShellArg(tmpFilePath), escapeShellArg(remoteFilePath))); err != nil {
 		cleanup()
-		return 0, errors.New(Message("transfer", transferSudoFailed, err.Error()))
+		return 0, errors.New(Message(EnvTransfer, transferSudoFailed, err.Error()))
 	}
 	cleanup()
 	return written, nil
@@ -488,13 +488,13 @@ func escapeShellArg(s string) string {
 func (c *Client) sftpDownloadFile(sftpClient *sftp.Client, remoteFilePath, localFilePath string, seq int, totalBytes int64, totalFiles int, onProgress func(Progress)) (int64, error) {
 	src, err := sftpClient.Open(remoteFilePath)
 	if err != nil {
-		return 0, errors.New(Message("transfer", transferLocalFileFailed, err.Error()))
+		return 0, errors.New(Message(EnvTransfer, transferLocalFileFailed, err.Error()))
 	}
 	defer func() { _ = src.Close() }()
 
 	dst, err := os.Create(localFilePath)
 	if err != nil {
-		return 0, errors.New(Message("transfer", transferLocalFileFailed, err.Error()))
+		return 0, errors.New(Message(EnvTransfer, transferLocalFileFailed, err.Error()))
 	}
 	defer func() { _ = dst.Close() }()
 
@@ -508,7 +508,7 @@ func (c *Client) sftpDownloadFile(sftpClient *sftp.Client, remoteFilePath, local
 	}, onProgress == nil)
 	if err != nil {
 		_ = os.Remove(localFilePath)
-		return 0, errors.New(Message("transfer", transferLocalFileFailed, err.Error()))
+		return 0, errors.New(Message(EnvTransfer, transferLocalFileFailed, err.Error()))
 	}
 	return written, nil
 }
