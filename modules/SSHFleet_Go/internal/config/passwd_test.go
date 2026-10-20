@@ -52,16 +52,15 @@ func TestLoadPasswdConfig(t *testing.T) {
 		t.Fatalf("没有 category 时应能加载：%v", err)
 	}
 
-	// category 省略 keywords 时，其余字段照常解析出来——前提是标明了由程序定性
-	//（2026-10-20：没标明的这种分类永远匹配不上，改为加载时拦下，见下一条用例）
+	// category 省略 keywords 时照常加载：一条分类只要写了 name 就合法，
+	// 没有关键词就是永远匹配不上、结果落到「未归类」，由使用者自己负责。
 	noKw := writePasswdConf(t, "[[step]]\nkeywords = ['x']\nvalue = 'new'\nmax = 1\n\n"+
-		"[[category]]\nname = '甲'\ntip = '说明'\ncode_defined = true\n")
+		"[[category]]\nname = '甲'\ntip = '说明'\n")
 	file2, err := LoadPasswdConfig(noKw)
 	if err != nil {
-		t.Fatalf("标明由程序定性、省略 keywords 时应能加载：%v", err)
+		t.Fatalf("只写 name 的 category 应能加载：%v", err)
 	}
-	if len(file2.Categories) != 1 || file2.Categories[0].Name != "甲" || file2.Categories[0].Tip != "说明" ||
-		!file2.Categories[0].CodeDefined {
+	if len(file2.Categories) != 1 || file2.Categories[0].Name != "甲" || file2.Categories[0].Tip != "说明" {
 		t.Fatalf("省略 keywords 的 category 解析结果不对：%+v", file2.Categories)
 	}
 }
@@ -72,29 +71,5 @@ func TestLoadPasswdConfigNamesTheEntry(t *testing.T) {
 		"[[step]]\nkeywords = ['y']\nvalue = 'oops'\nmax = 1\n"
 	if _, err := LoadPasswdConfig(writePasswdConf(t, body)); err == nil || !strings.Contains(err.Error(), "第 2 条") {
 		t.Fatalf("应报出第 2 条，实际：%v", err)
-	}
-}
-
-// 写了名字、却没关键词也没标明由程序定性的分类，永远匹配不上——要能报出来。
-// 但它不是致命错误：旧配置里本来就没有这个标注，拦住等于让升级后起不来。
-func TestUnmatchedCategoriesAreReportedNotFatal(t *testing.T) {
-	step := "[[step]]\nkeywords = ['新的密码']\nvalue = 'new'\nmax = 1\n\n"
-	path := writePasswdConf(t, step+"[[category]]\nname = '远端无响应'\ntip = 'x'\n")
-	file, err := LoadPasswdConfig(path)
-	if err != nil {
-		t.Fatalf("缺标注的旧配置应当照常加载（不阻断启动）：%v", err)
-	}
-	got := UnmatchedCategories(file)
-	if len(got) != 1 || got[0] != "远端无响应" {
-		t.Fatalf("应当报出「远端无响应」，实际：%v", got)
-	}
-
-	ok := writePasswdConf(t, step+"[[category]]\nname = '远端无响应'\ntip = 'x'\ncode_defined = true\n")
-	file2, err := LoadPasswdConfig(ok)
-	if err != nil {
-		t.Fatalf("标明由程序定性的分类应加载通过：%v", err)
-	}
-	if got := UnmatchedCategories(file2); len(got) != 0 {
-		t.Fatalf("标明定性的分类不该被报出来：%v", got)
 	}
 }

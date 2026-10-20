@@ -27,6 +27,17 @@ type corpusCase struct {
 	SuccessFiles int    `toml:"success_files"`
 	FailedFiles  int    `toml:"failed_files"`
 	Expected     string `toml:"expected"`
+
+	// 结构事实。报文时代它们不再用来"给分类名"，只是把执行侧真会写出的字段组合如实造出来：
+	// 少了这些，语料就只能靠 error 里的文本碰巧命中，测不出形态本身。
+	SessionBegun     bool `toml:"session_begun"`
+	TimedOut         bool `toml:"timed_out"`
+	Canceled         bool `toml:"canceled"`
+	AnswersExhausted bool `toml:"answers_exhausted"`
+	PasswdFedAny     bool `toml:"passwd_fed_any"`
+	PasswdEarlyClose bool `toml:"passwd_early_close"`
+	EnterSignalSeen  bool `toml:"enter_signal_seen"`
+	PasswdExitCode   *int `toml:"passwd_exit_code"`
 }
 
 type corpusFile struct {
@@ -47,7 +58,7 @@ func loadKeywords(t *testing.T) *Keywords {
 	}
 	cats := make([]Category, 0, len(pc.Categories))
 	for _, x := range pc.Categories {
-		cats = append(cats, Category{Name: x.Name, Keywords: x.Keywords, Tip: x.Tip, CodeDefined: x.CodeDefined})
+		cats = append(cats, Category{Name: x.Name, Keywords: x.Keywords, Tip: x.Tip})
 	}
 	kw.PrependCategories(cats)
 	return kw
@@ -56,14 +67,23 @@ func loadKeywords(t *testing.T) *Keywords {
 // judgeCorpus 按语料字段造事实、跑判定，返回**展示用**分类名（成功行转中文）。
 func judgeCorpus(c corpusCase, kw *Keywords) string {
 	res := ssh.Result{
-		ConnectSuccess:  true,
-		Error:           strPtrOf(c.Error),
-		ServerBanner:    c.Banner,
-		Output:          c.Output,
-		SuccessFiles:    c.SuccessFiles,
-		FailedFiles:     c.FailedFiles,
-		CommandExitCode: c.ExitCode,
-		SessionBegun:    c.ExitCode != nil,
+		ConnectSuccess:   true,
+		Error:            strPtrOf(c.Error),
+		ServerBanner:     c.Banner,
+		Output:           c.Output,
+		SuccessFiles:     c.SuccessFiles,
+		FailedFiles:      c.FailedFiles,
+		CommandExitCode:  c.ExitCode,
+		SessionBegun:     c.ExitCode != nil || c.SessionBegun,
+		TimedOut:         c.TimedOut,
+		Canceled:         c.Canceled,
+		AnswersExhausted: c.AnswersExhausted,
+		PasswdFedAny:     c.PasswdFedAny,
+		PasswdEarlyClose: c.PasswdEarlyClose,
+		EnterSignalSeen:  c.EnterSignalSeen,
+	}
+	if c.PasswdExitCode != nil {
+		res.Steps = []ssh.StepResult{{Name: ssh.StepPasswd, ExitCode: c.PasswdExitCode}}
 	}
 	mode := cli.ModeCommand
 	switch c.Mode {
@@ -179,11 +199,11 @@ func TestFallbackCategoryFollowsConfig(t *testing.T) {
 	}
 }
 
-// categoriesOf 按名字造一组"由程序定性"的分类（无关键词，只有名字）。
+// categoriesOf 按名字造一组分类（只有名字、没有关键词：它们永远匹配不上，但登记了就是已知分类）。
 func categoriesOf(names ...string) []Category {
 	out := make([]Category, 0, len(names))
 	for _, n := range names {
-		out = append(out, Category{Name: n, CodeDefined: true})
+		out = append(out, Category{Name: n})
 	}
 	return out
 }
@@ -201,16 +221,21 @@ func TestAuthFailureKeywordPath(t *testing.T) {
 	}
 }
 
-// 判定与新结构事实的几个钉子（result-verdict spec 9.5 的纸面替身）：
+// 判定的几个钉子（result-verdict spec 9.5 的纸面替身）。
+//
+// 报文时代这里只剩**选组与退出码**这些仍然住在判定层的东西：
+// 「给一组布尔 → 期望一个中文分类名」那批已经搬到执行侧的纯函数用例（internal/ssh 的
+// shape_test.go），判定层不再按结构字段起名。所以下面凡是要分类名的用例，
+// 都按执行侧真会写出的形态**把报文放进原文**再去查表。
 func TestJudgeStructuralFacts(t *testing.T) {
 	kw := loadKeywords(t)
 	zero := 0
 	one := 1
 
-	// D1 活证：退出码 0 却计入失败（代填未命中）
+	// D1 活证：退出码 0 却计入失败（代填没送完）。失败原因来自报文，不来自退出码。
 	res := ssh.Result{
 		ConnectSuccess: true, SessionBegun: true, CommandExitCode: &zero,
-		AnswersMissed: []int{1},
+		Error: strPtrOf("sshfleet.answer.missed: 1 answer not delivered"),
 	}
 	Judge(&res, cli.ModeScript, kw)
 	if res.Verdict != Other || res.Category != "触发词未命中" || res.ExitCode == nil || *res.ExitCode != 0 {
@@ -224,55 +249,29 @@ func TestJudgeStructuralFacts(t *testing.T) {
 		t.Fatalf("中止词应密码过期/退出码空，实为 %+v", res)
 	}
 
-	// 传输部分成功不查表；定论退出码空
-	res = ssh.Result{ConnectSuccess: true, SuccessFiles: 2, FailedFiles: 1}
+	// 传输部分成功：报文由执行侧追加在逐文件失败原因之后；定论退出码空
+	res = ssh.Result{
+		ConnectSuccess: true, SuccessFiles: 2, FailedFiles: 1,
+		Error: strPtrOf("a.log: 上传失败 - sshfleet.transfer.remote_file_failed: disk quota exceeded\n" +
+			"sshfleet.transfer.finished: 2 of 3 files transferred"),
+	}
 	Judge(&res, cli.ModeUpload, kw)
 	if res.Category != "部分成功" || res.ExitCode != nil || res.Verdict != Other {
 		t.Fatalf("部分成功判定不对，实为 %+v", res)
 	}
 
 	// 改密未见过期信号 → 「密码未过期」；`:` 在 Steps、CommandExitCode 恒空
-	res = ssh.Result{ConnectSuccess: true, SessionBegun: true, Steps: []ssh.StepResult{{Name: ssh.StepPasswd, ExitCode: &zero}}}
+	res = ssh.Result{
+		ConnectSuccess: true, SessionBegun: true,
+		Error: strPtrOf("sshfleet.passwd.not_expired: no password-expiry prompt seen"),
+		Steps: []ssh.StepResult{{Name: ssh.StepPasswd, ExitCode: &zero}},
+	}
 	Judge(&res, cli.ModePasswd, kw)
 	if res.Category != "密码未过期" || res.ExitCode != nil {
 		t.Fatalf("改密未过期判定不对，实为 %+v", res)
 	}
 
-	// 改密卡住的几种形态，由 PasswdFedAny / TimedOut / PasswdEarlyClose / passwd 退出码
-	// 这几个结构事实定性（2026-10-14）。此前靠执行侧编的四句「改密没有完成：…」文案 +
-	// 判据表关键词认回来，改措辞即失配。用例按"执行侧真会写出的字段组合"给。
-	nonzero := 1
-	for _, c := range []struct {
-		name      string
-		fedAny    bool
-		timedOut  bool
-		earlyClse bool
-		passwdBad bool
-		want      string
-	}{
-		{"没喂出去、到点 → 没等到提示", false, true, false, false, "没等到提示"},
-		{"喂出去了、到点 → 远端无响应", true, true, false, false, "远端无响应"},
-		{"早收场 → 改密未完成", false, false, true, false, "改密未完成"},
-		{"没喂出去、passwd 非 0 收场 → 提示词没认出", false, false, false, true, "提示词没认出"},
-		{"喂出去了、passwd 非 0 收场 → 改密未完成", true, false, false, true, "改密未完成"},
-	} {
-		res = ssh.Result{
-			ConnectSuccess: true, SessionBegun: true, EnterSignalSeen: true,
-			PasswdFedAny: c.fedAny, TimedOut: c.timedOut, PasswdEarlyClose: c.earlyClse,
-		}
-		if c.passwdBad {
-			res.Steps = []ssh.StepResult{{Name: ssh.StepPasswd, ExitCode: &nonzero}}
-		}
-		Judge(&res, cli.ModePasswd, kw)
-		if res.Category != c.want {
-			t.Fatalf("%s：应得 %q，实为 %q", c.name, c.want, res.Category)
-		}
-		if res.Verdict != Other {
-			t.Fatalf("%s：应判失败，实为 %q", c.name, res.Verdict)
-		}
-	}
-
-	// 干净收场：喂过、没异常、passwd 退出码 0 → 成功（不被上面那些兜底形态误伤）
+	// 干净收场：喂过、没异常、passwd 退出码 0、原文里没有报文 → 成功
 	res = ssh.Result{
 		ConnectSuccess: true, SessionBegun: true, EnterSignalSeen: true, PasswdFedAny: true,
 		Steps: []ssh.StepResult{{Name: ssh.StepPasswd, ExitCode: &zero}},
@@ -282,28 +281,12 @@ func TestJudgeStructuralFacts(t *testing.T) {
 		t.Fatalf("改密干净收场应判成功，实为 %+v", res)
 	}
 
-	// 次序：**超时优先于远端原话**。超时时 err 上带的是「命令执行超时(Ns)」这类通用描述，
-	// 远端在此之前说的半句原因不能拿来做定论——原执行侧也是这个次序（endFactsOf 注释有记）。
-	res = ssh.Result{
-		ConnectSuccess: true, SessionBegun: true, EnterSignalSeen: true,
-		PasswdFedAny: true, TimedOut: true,
-		Error: strPtrOf("passwd：密码未更改。"),
-	}
+	// 干净收场但报错原文里有报文 → 不算成功（报文只在非成功形态下写，两条口径等价）
+	res.Error = strPtrOf("sshfleet.passwd.not_expired: no password-expiry prompt seen")
+	res.EnterSignalSeen = false
 	Judge(&res, cli.ModePasswd, kw)
-	if res.Category != "远端无响应" {
-		t.Fatalf("超时应盖过远端原话，得 %q", res.Category)
-	}
-
-	// 没有超时/早收场时，远端当场说了原因才让位给判据表：分类按它的措辞走，不被兜底形态盖掉。
-	res = ssh.Result{
-		ConnectSuccess: true, SessionBegun: true, EnterSignalSeen: true,
-		PasswdFedAny: true,
-		Error:        strPtrOf("passwd：密码未更改。"),
-		Steps:        []ssh.StepResult{{Name: ssh.StepPasswd, ExitCode: &one}},
-	}
-	Judge(&res, cli.ModePasswd, kw)
-	if res.Category == "改密未完成" || res.Category == "提示词没认出" {
-		t.Fatalf("远端说了原因时不该被兜底形态盖掉，实为 %q", res.Category)
+	if res.Verdict == Success {
+		t.Fatalf("原文里有报文时不该判成功，实为 %+v", res)
 	}
 
 	// 目的命令退非 0 → 第二组（选组纯字段判定，D33）；定论退出码保留
@@ -316,11 +299,22 @@ func TestJudgeStructuralFacts(t *testing.T) {
 		t.Fatalf("会话被拒应密码过期/退出码 1，实为 %+v", res)
 	}
 
+	// 退出码 0 但判失败、第二组又没命中：失败原因不在退出码里，
+	// 不许拼出「执行失败(退出码0)」，该按第一组显示原文。
+	res = ssh.Result{
+		ConnectSuccess: true, SessionBegun: true, CommandExitCode: &zero,
+		Error: strPtrOf("sshfleet.answer.missed: 1 answer not delivered"),
+	}
+	Judge(&res, cli.ModeCommand, kw)
+	if res.Category != "触发词未命中" {
+		t.Fatalf("退出码 0 的失败不该落到退出码分类，实为 %q", res.Category)
+	}
+
 	// 预检退出码进 Steps 的下载失败 → 第一组按报错原文归类（D27 消掉的第二组补丁）
 	step := 1
 	res = ssh.Result{
 		ConnectSuccess: true, Steps: []ssh.StepResult{{Name: "test -e", ExitCode: &step}},
-		Error: strPtrOf("远程路径不存在: /var/log/x"),
+		Error: strPtrOf("sshfleet.transfer.remote_missing: remote path not found: /var/log/x"),
 	}
 	Judge(&res, cli.ModeDownload, kw)
 	if res.Category != "远程路径不存在" || res.ExitCode != nil {

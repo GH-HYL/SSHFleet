@@ -19,44 +19,90 @@ func writeKeywordsConf(t *testing.T, body string) string {
 	return path
 }
 
-// 分类的两种合法形态：有关键词（查表得来），或标明了由程序定性（名字由代码给，配置只留名字与提示语）。
-// 两者都没有，这条分类就永远匹配不上——启动时就该报出来，而不是等使用者看到一堆"未归类"。
-func TestLoadKeywordsRejectsCategoryThatCanNeverMatch(t *testing.T) {
+// 一条分类只要写了 name 就合法：没有关键词就是永远匹配不上、结果落到「未归类」，
+// 由使用者自己负责。这条规矩是报文体系定下的——原先为"程序定性"单开的 code_defined
+// 通道已整体下线。
+func TestLoadKeywordsAcceptsCategoryWithoutKeywords(t *testing.T) {
 	body := "[[categories]]\nname = '远端无响应'\ntip = '多半卡在读写密码文件'\n"
-	_, err := LoadKeywords(writeKeywordsConf(t, body))
-	if err == nil {
-		t.Fatal("有名字、没关键词、又没标明由程序定性的分类，应当加载失败")
-	}
-	if !strings.Contains(err.Error(), "远端无响应") {
-		t.Fatalf("报错应当指出是哪个分类，实际：%v", err)
+	if _, err := LoadKeywords(writeKeywordsConf(t, body)); err != nil {
+		t.Fatalf("只写 name 的分类应加载通过：%v", err)
 	}
 }
 
-// 第二组（退出码归类用）同一套校验。
-func TestLoadKeywordsRejectsExitCodeCategoryThatCanNeverMatch(t *testing.T) {
+// 第二组同理。
+func TestLoadKeywordsAcceptsExitCodeCategoryWithoutKeywords(t *testing.T) {
 	body := "[[categories]]\nname = '连接超时'\nkeywords = ['timed out']\n\n" +
 		"[[exit_code_categories]]\nname = '仅允许 SFTP'\n"
+	if _, err := LoadKeywords(writeKeywordsConf(t, body)); err != nil {
+		t.Fatalf("退出码分块里只写 name 的分类也应加载通过：%v", err)
+	}
+}
+
+// 缺 name 仍然报错，并指出是第几类。
+func TestLoadKeywordsRejectsCategoryWithoutName(t *testing.T) {
+	body := "[[categories]]\ntip = '没有名字'\nkeywords = ['x']\n"
 	_, err := LoadKeywords(writeKeywordsConf(t, body))
 	if err == nil {
-		t.Fatal("退出码分块里同样不该放过匹配不上的分类")
+		t.Fatal("缺 name 的分类应当加载失败")
 	}
-	if !strings.Contains(err.Error(), "仅允许 SFTP") {
-		t.Fatalf("报错应当指出是哪个分类，实际：%v", err)
-	}
-}
-
-// 标明由程序定性的分类，名字是代码给的、没有可匹配的文案，加载应当通过。
-func TestLoadKeywordsAcceptsCodeDefinedCategory(t *testing.T) {
-	body := "[[categories]]\nname = '远端无响应'\ntip = '多半卡在读写密码文件'\ncode_defined = true\n"
-	if _, err := LoadKeywords(writeKeywordsConf(t, body)); err != nil {
-		t.Fatalf("标明由程序定性的分类应加载通过：%v", err)
+	if !strings.Contains(err.Error(), "缺少 name") {
+		t.Fatalf("报错应当指出缺 name，实际：%v", err)
 	}
 }
 
-// 由程序定性（不查表）的分类，名字在代码里、登记在配置里。两边任何一边漏了，
-// 该分类都会在统计块落到「未归类」——或者反过来，配置里登记得挺全、代码里早已改名。
-// 这里把「该由哪份配置登记」这份约定与随程序发布的两份真实配置逐条对账。
-func TestCodeDefinedCategoriesAreDeclaredInConfig(t *testing.T) {
+// code_defined 这个字段不再存在：配置里还写着它，按"未识别字段"报错——
+// 旧配置不能装作没事继续跑，否则使用者会以为那个字段还有用。
+func TestLoadKeywordsRejectsRetiredCodeDefinedField(t *testing.T) {
+	body := "[[categories]]\nname = '远端无响应'\ncode_defined = true\n"
+	_, err := LoadKeywords(writeKeywordsConf(t, body))
+	if err == nil {
+		t.Fatal("code_defined 已不存在，应当按未识别字段报错")
+	}
+	if !strings.Contains(err.Error(), "code_defined") {
+		t.Fatalf("报错应当指出是 code_defined，实际：%v", err)
+	}
+}
+
+// 报文可以当关键词用：一条分类挂上 `sshfleet.transfer.finished`，含这句话的文本就归它。
+func TestMessageCanBeAKeyword(t *testing.T) {
+	body := "[[categories]]\nname = '部分成功'\nkeywords = ['sshfleet.transfer.finished']\n"
+	kw, err := LoadKeywords(writeKeywordsConf(t, body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := "c.log: 下载失败 - permission denied\nsshfleet.transfer.finished: 3 of 5 files transferred"
+	if hit := kw.matchText(false, text); hit != "部分成功" {
+		t.Fatalf("报文当关键词应命中「部分成功」，实为 %q", hit)
+	}
+}
+
+// 环境前缀可以认领一整摊：`sshfleet.transfer.` 一条认下全部传输报文。
+func TestMessagePrefixClaimsWholeEnvironment(t *testing.T) {
+	body := "[[categories]]\nname = '传输没成'\nkeywords = ['sshfleet.transfer.']\n"
+	kw, err := LoadKeywords(writeKeywordsConf(t, body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, text := range []string{
+		"sshfleet.transfer.client_failed: ssh: subsystem request failed",
+		"sshfleet.transfer.remote_missing: remote path not found: /data",
+		"sshfleet.transfer.finished: 6 of 10 files transferred",
+	} {
+		if hit := kw.matchText(false, text); hit != "传输没成" {
+			t.Fatalf("%q 应被前缀认领，实为 %q", text, hit)
+		}
+	}
+	// 别的环境不受牵连
+	if hit := kw.matchText(false, "sshfleet.passwd.no_reply: password fed but no reply before timeout"); hit != "" {
+		t.Fatalf("别的环境不该被传输前缀认领，实为 %q", hit)
+	}
+}
+
+// 随程序发布的两份配置：报文时代的每一摊都要有分类认领它。
+//
+// 判的是"配置里有没有那种关键词"，不引用被测代码里的任何常量——期望值来自
+// spec《预算：全部报文清单》判给各分类的那几条。
+func TestShippedConfigsClaimEveryMessageFamily(t *testing.T) {
 	errKw, err := LoadKeywords(filepath.Join("..", "..", "config", "keywords_error.conf"))
 	if err != nil {
 		t.Fatalf("通用判据表应可加载：%v", err)
@@ -65,54 +111,53 @@ func TestCodeDefinedCategoriesAreDeclaredInConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("改密配置应可加载：%v", err)
 	}
-	// 与 main 同一条装法：改密分类插进判据表最前面
-	kw := &Keywords{}
-	kw.PrependCategories(errKw.items)
 	cats := make([]Category, 0, len(pc.Categories))
 	for _, x := range pc.Categories {
-		cats = append(cats, Category{Name: x.Name, Keywords: x.Keywords, Tip: x.Tip, CodeDefined: x.CodeDefined})
+		cats = append(cats, Category{Name: x.Name, Keywords: x.Keywords, Tip: x.Tip})
 	}
-	kw.PrependCategories(cats)
+	errKw.PrependCategories(cats)
 
-	for _, e := range codeDefinedNames {
-		if !kw.Has(e.name) {
-			t.Errorf("分类 %q 由程序定性，但两份配置里都没有登记它——上屏会落到「未归类」", e.name)
+	families := []struct {
+		keyword string
+		expect  string
+	}{
+		{"sshfleet.connect.refused", "拒绝网络连接"},
+		{"sshfleet.connect.handshake_timeout", "握手超时"},
+		{"sshfleet.connect.key_parse_failed", "密钥解析失败"},
+		{"sshfleet.session.create_failed", "无法建立会话"},
+		{"sshfleet.session.pty_failed", "无法建立会话"},
+		{"sshfleet.session.exit_missing", "会话被中断"},
+		{"sshfleet.run.timeout", "执行超时"},
+		{"sshfleet.transfer.client_failed", "SFTP失败"},
+		{"sshfleet.transfer.finished", "部分成功"},
+		{"sshfleet.transfer.local_unreadable", "本地文件错误"},
+		{"sshfleet.transfer.remote_missing", "远程路径不存在"},
+		{"sshfleet.transfer.no_files", "远端没有文件"},
+		{"sshfleet.abort.canceled", "任务已取消"},
+		{"sshfleet.abort.connect_canceled", "建连被取消"},
+		{"sshfleet.answer.missed", "触发词未命中"},
+		{"sshfleet.passwd.no_prompt", "提示词没认出"},
+		{"sshfleet.passwd.no_signal", "没等到提示"},
+		{"sshfleet.passwd.no_reply", "远端无响应"},
+		{"sshfleet.passwd.give_up", "改密未完成"},
+		{"sshfleet.passwd.not_expired", "密码未过期"},
+	}
+	for _, f := range families {
+		if !errKw.Has(f.expect) {
+			t.Errorf("配置里没有分类 %q", f.expect)
 			continue
 		}
-		if e.config == "passwd" && !hasPasswdTip(pc, e.name) {
-			t.Errorf("分类 %q 的提示语应在改密配置里（实际取到的是 %q）", e.name, kw.TipOf(e.name))
+		if !hasKeyword(errKw, f.expect, f.keyword) {
+			t.Errorf("分类 %q 没有认领报文 %q——那一摊失败会落到「未归类」", f.expect, f.keyword)
 		}
 	}
 }
 
-func hasPasswdTip(pc *config.PasswdConfig, name string) bool {
-	for _, c := range pc.Categories {
-		if c.Name == name && c.Tip != "" {
+func hasKeyword(kw *Keywords, category, keyword string) bool {
+	for _, k := range kw.KeywordsOf(category) {
+		if k == keyword {
 			return true
 		}
 	}
 	return false
-}
-
-// codeDefinedNames 「由程序定性（不查表）」的分类名，以及该由哪份配置登记它们
-// （error = 通用判据表，passwd = 改密配置）。
-//
-// 这份表**不是**被测代码的副本：被测的是"配置里登记了没有"，判据来自随程序发布的
-// 配置文件；这里只是"应该登记哪些"的期望值。名字引用判定包的常量，改名会编译不过。
-// 新增一个定性分类时，除了往这里加一行，还要在对应配置里登记同一名字——漏了测试会红。
-var codeDefinedNames = []struct {
-	name   string
-	config string
-}{
-	{CategoryPasswordExpired, "error"},
-	{CategoryPartialSuccess, "error"},
-	{CategoryTriggerMiss, "error"},
-	{CategoryExhaustedTimeout, "error"},
-	{CategoryCanceled, "error"},
-	{CategoryConnectCanceled, "error"},
-	{CategoryNotExpired, "passwd"},
-	{CategoryNoPrompt, "passwd"},
-	{CategoryNoSignal, "passwd"},
-	{CategoryNoReply, "passwd"},
-	{CategoryGiveUp, "passwd"},
 }
