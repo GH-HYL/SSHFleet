@@ -229,7 +229,7 @@ Status: done
 
 **一处都不能覆盖**：§九里标 `追加` 的报文，改造时必须有测试证明「原有原文还在」。
 
-## 九、出厂报文全集（31 条）
+## 九、出厂报文全集（38 条）
 
 spec《预算：全部报文清单》的核准与补全版。**本表是「出厂报文有哪些」的唯一来源。**
 
@@ -264,6 +264,8 @@ spec《预算：全部报文清单》的核准与补全版。**本表是「出�
 | M27 | `sshfleet.transfer.sudo_failed` | `transfer` | 同上 | `sudo mv` 到最终位置失败 | 整句 |
 | M28 | `sshfleet.transfer.remote_exists` | `transfer` | 上传逐文件检查 | 目标机已有同名文件（不覆盖） | 逐文件行 |
 | M29 | `sshfleet.transfer.finished` | `transfer` | 上传 / 下载 / 取消早退共用的收尾（见 §十） | 有成功也有失败 | **追加** |
+
+> **M29 已退役（2026-10-20）**：上传改为「失败即回滚」（ADR-0022）后，传输只剩全成 / 全不成两种形态，`finished` 不再产出；接替它的是 `sshfleet.transfer.rolled_back`（已清干净）与 `sshfleet.transfer.rollback_partial`（没清干净，报文带剩余路径）。表内保留原行是留档当时摸底的事实，最终清单以代码 `stages.go` 与 `keywords_error.conf` 为准。
 | M30 | `sshfleet.passwd.not_expired` | `passwd` | `RunPasswdChange` 收尾 | 干净收场但无入场信号 | **追加** |
 | M31 | `sshfleet.passwd.no_signal` | `passwd` | 同上 | 超时且没喂过 | **追加** |
 | M32 | `sshfleet.passwd.no_reply` | `passwd` | 同上 | 超时且喂过 | **追加** |
@@ -341,9 +343,12 @@ spec《预算：全部报文清单》的核准与补全版。**本表是「出�
 | 1 | 出厂报文 25 条（§九 框架表） | 核准并补全到 **38 条**（01 核准 36 条，02 实施时又补 `transfer.sudo_failed` 与 `transfer.remote_exists`） | §九 表下注 |
 | 2 | `transfer.*` 逐条给环节名（13 处 `fmt.Errorf`） | 归成 3 条：`remote_file_failed` / `local_file_failed` / `tmp_failed`，原始错误跟在冒号后保留区分度 | 工单 02 Comments |
 | 3 | 报文格式放「最底层的公共包」 | 实际放在 `internal/ssh`。放 `common` 会让 `ssh` 经 `common` 间接依赖 `log`；`ssh` 已被 `verdict`/`batch`/`output` 依赖，放这里环最浅 | 工单 02 Comments |
-| 4 | 「部分成功」按普通条目挂报文即可 | **必须排到第一组最前面**：那一格里同时躺着逐文件失败原因，排在后面会被「权限不足」抢走 | 工单 02 Comments |
+| 4 | 「部分成功」按普通条目挂报文即可 | **必须排到第一组最前面**：那一格里同时躺着逐文件失败原因，排在后面会被「权限不足」抢走。**后已退役**（2026-10-20，上传改失败即回滚，见第 10 条） | 工单 02 Comments |
 | 5 | 「代填用尽后超时」已改报文 | 实地发现它还挂着旧中文关键词、且排在「触发词未命中」之后，**两处都错**，已修 | 工单 02 Comments |
 | 6 | `run.rejected` 在命令通道生效 | **命令通道上走不到**：`NewSession` 先失败，已被 `session.create_failed` 接住。它实际只在代填通道的 `Start` 被拒时出现 | 工单 03 Comments |
 | 7 | 退出码 0 也照旧拼「执行失败(退出码0)」 | 报文时代这条自相矛盾（报文已经说明了失败原因），改为落第一组显示原文 | 工单 02 Comments |
 | 8 | 判据表里 `文件不可读` 那条（§七 表） | **对应的文本走 `fatal` 而不是 `Result.Error`，本就命中不了**。04 已定：**撤掉**，采信口径见 §七 表下注（开工前不归类、开工后保兜底，界线是「节点开没开工」） | §七 表下注 |
 | 9 | 语料 33 条、17 条中文输入 | 实测 17 条对得上；`建立连接失败 - …` 是 **6 条**不是 7 条。语料已从 33 条扩到 **42 条**（补结构字段与形态） | 工单 02 Comments |
+| 10 | `transfer.finished` 与「部分成功」按 02 定稿落地 | **同日退役**：上传改为「失败即回滚」（ADR-0022），传输只剩全成 / 全不成，`finished` 不再产出，接替者 `rolled_back` / `rollback_partial`；`SFTP失败` 按语义拆成六条；「执行超时」挪到两条代填分类之后（否则「触发词未命中」整类被抢走） | `docs/issues/upload-rollback/`、工单 04/06 Comments |
+
+**§十四第 10 条的补充**：ADR-0021 更新记录已点名「决定」第 1 条示例、第 8 条第 2 款、`spec.md`《预算：全部报文清单》里涉及 `transfer.finished` 的三处不再约束；本文件 §九 M29 亦有退役注记。

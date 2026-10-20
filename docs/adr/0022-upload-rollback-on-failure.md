@@ -39,8 +39,8 @@
 清理本身也可能失败（权限、连接已断、sudo 不可用）。这时：
 
 - 不隐瞒、不重试到天荒地老，失败即停；
-- 在报错原文里写一句陈述事实的报文：`sshfleet.transfer.rollback_failed: 2 of 3 written files removed, left: /data/app/x.bin`（措辞以实现为准，环节名以 `transfer.` 开头）；
-- 成功清干净时也写一句 `sshfleet.transfer.rollback: 3 of 3 written files removed`，让使用者知道目标机没留下东西。
+- 在报错原文里写一句陈述事实的报文：`sshfleet.transfer.rollback_partial: 2 of 3 written files removed, left: /data/app/x.bin`；
+- 成功清干净时也写一句 `sshfleet.transfer.rolled_back: 3 of 3 written files removed`，让使用者知道目标机没留下东西。
 
 理由：下次执行撞上「远程文件已存在」时，使用者得能回过头看出是上次没清干净。
 
@@ -50,7 +50,7 @@
 
 ### 5. 下载不做回滚
 
-下载失败时**不删**本地已下载的文件。理由与上传不同：
+下载失败时**不删**已经下载完成的文件（失败文件自己的半成品仍会删，与上传同一处理）。理由与上传不同：
 
 - **不会重名**：下载按节点 IP 建独立子目录，每个节点写自己的那份；
 - **本地满读不出有用结论**：本地磁盘写不进之后，往往跟着一串连锁失败，逐个清理不比直接删目录更省事；
@@ -66,7 +66,7 @@
 ## 影响
 
 - **执行侧**：上传失败分支增加回滚；结果里多两类事实（已清理哪些、没清掉哪些）。
-- **报文**：新增 `transfer.rollback` / `transfer.rollback_failed`；`transfer.finished` 退役。
+- **报文**：新增 `transfer.rolled_back` / `transfer.rollback_partial`；`transfer.finished` 退役。
 - **判定与配置**：「部分成功」分类从出厂配置删除；`transfer.*` 的环节名集合变动，需同步判据表与语料。
 - **呈现层**：统计块口径照旧数节点（另见报文议题 08 的讨论），但不再有「部分成功」这一档的歧义。
 - **使用手册**：上传的行为说明要写清「失败会清掉本次已传的文件」——这是使用者会直接感知到的行为变化。
@@ -82,3 +82,5 @@
 | 下载也一起回滚 | 下载动的是本机自己的产物，删目录重下即可，回滚只会增加失败路径与连锁清理 |
 
 ## 更新记录
+
+- 2026-10-20：**回滚报文的环节名落定为 `rolled_back` / `rollback_partial`**。上文「决定」第 3 条与「影响」中原写的 `transfer.rollback` / `transfer.rollback_failed` 不再约束，以实现（`internal/ssh/stages.go`）与判据文件现行配置为准——环节名只陈述现象，`rolled_back` 说清了「已回滚」这一事实。
