@@ -13,6 +13,7 @@ Status: ready-for-agent
 - [ ] `answer` 一摊：两件事改为发报文并由判据文件认领：
   - `sshfleet.answer.missed: <n> answers not delivered`
   - `sshfleet.answer.exhausted_timeout: all answers sent but no output before timeout`
+- [ ] `answer` 一摊的两条由 `interactive.go` 收尾处的导出纯函数产出（入参是未送出的条数、是否用尽、是否超时），与 02 立下的做法一致。
 - [ ] `abort` 一摊：确认 02 落下的 `sshfleet.abort.canceled` 与 `sshfleet.abort.connect_canceled` 两处在两种判定下都成立——**已连上被中断**（`abort.canceled`）与**还没连上就被中断**（`abort.connect_canceled`）分别对应今天的「任务已取消」「建连被取消」。
 - [ ] **中止词命中后不再由代码写死分类名**：删掉 `verdict.Judge` 里 `if res.AbortLine != "" { 分类 = "密码过期" }` 那条分支。`AbortLine` 仍然作为事实保留（呈现层据此说明会话为何提前结束），其原文**并入待匹配文本**，分类由第一组判据表给出。
 - [ ] 用例证明中止路径仍然给出「密码过期」：以 `AbortLine`（例如 `WARNING: Your password has expired.`）为输入，判据表第一组把它认成「密码过期」。
