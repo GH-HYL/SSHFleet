@@ -72,3 +72,22 @@ func IsMessage(text string) bool {
 	}
 	return false
 }
+
+// AppendMessage 把一句报文**追加**到已有原文后面，返回新的那一格。
+//
+// 报错原文只有一格，而结构事实的报文往往来晚一步——传输部分成功时那一格已经放着最后一条
+// 逐文件失败原因，建连被中断时那一格已经放着 `dial tcp …`。顺序固定为**原文在前、报文在后**：
+// 原文是权威原文，报文是对这次收尾的陈述。
+//
+// 谁都不覆盖谁：盖掉就是吞信息，与 ADR-0021 决定第 6 条相抵。空报文什么都不加。
+func AppendMessage(existing, msg string) string {
+	msg = strings.TrimRight(msg, "\n")
+	if msg == "" {
+		return existing
+	}
+	existing = strings.TrimRight(existing, "\n")
+	if existing == "" {
+		return msg
+	}
+	return existing + "\n" + msg
+}

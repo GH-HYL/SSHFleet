@@ -73,7 +73,7 @@ func (c *Client) Connect(ctx context.Context) error {
 	dialer := net.Dialer{Timeout: c.cfg.ConnectTimeout}
 	rawConn, err := dialer.DialContext(ctx, "tcp", addr)
 	if err != nil {
-		return fmt.Errorf("建立连接失败 - %w", err)
+		return errors.New(connectMessage(connectStageOfDialError(err), err))
 	}
 
 	// 握手阶段限时（拨号 + 宽限）；成功后清掉 deadline，避免影响后续会话
@@ -82,9 +82,10 @@ func (c *Client) Connect(ctx context.Context) error {
 	if err != nil {
 		_ = rawConn.Close()
 		if errors.Is(err, context.DeadlineExceeded) || isTimeout(err) {
-			return fmt.Errorf("建立连接失败 - 握手超时%v", c.cfg.ConnectTimeout+handshakeGrace)
+			return errors.New(Message("connect", connectHandshakeTimeout,
+				fmt.Sprintf("handshake not completed within %v", c.cfg.ConnectTimeout+handshakeGrace)))
 		}
-		return fmt.Errorf("建立连接失败 - %w", err)
+		return errors.New(connectMessage(connectStageOfHandshakeError(err), err))
 	}
 	_ = rawConn.SetDeadline(time.Time{})
 	c.conn = ssh.NewClient(sshConn, chans, reqs)
@@ -126,11 +127,11 @@ func (c *Client) buildAuthMethods() ([]ssh.AuthMethod, error) {
 		if err != nil {
 			var missing *ssh.PassphraseMissingError
 			if errors.As(err, &missing) {
-				return nil, fmt.Errorf(
-					"这把私钥有口令，没有给口令\n" +
-						"提示：在第 6 列写口令，或把默认口令配到配置文件 credential.key_password")
+				// 库已经分好类的错误：无损翻译成报文，原文照旧跟在后面。
+				return nil, errors.New(Message("connect", connectKeyNoPassphrase,
+					"the private key is encrypted but no passphrase was given"))
 			}
-			return nil, fmt.Errorf("解析密钥失败 - %w", err)
+			return nil, errors.New(connectMessage(connectKeyParseFailed, err))
 		}
 		methods = append(methods, ssh.PublicKeys(signer))
 		c.publicKeyOffered = true

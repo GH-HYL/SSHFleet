@@ -51,14 +51,15 @@ func (c *Client) connectFor(ctx context.Context, result *Result) bool {
 	result.AuthMethod = c.authMethodDesc()
 	if err != nil {
 		result.ConnectSuccess = false
-		result.Error = strPtr(err.Error())
-		// 这次建连失败是被外部中断打断的，不是目标机自己的毛病——照实记下来。
-		// 判定侧据此把"取消"与"连不上"分开报，不必再去辨认报错文案
-		//（与执行 / 代填 / 改密 / 传输四条通道同一个口径，见 runWithTimeoutAndCancel）。
+		// 这次建连失败是被外部中断打断的，不是目标机自己的毛病——照实记下来，并说成一句
+		// 「连接还没建成就被中断」的报文（与执行 / 代填 / 改密 / 传输四条通道同一个口径）。
 		// ctx 只由信号取消（main 里 signal.NotifyContext，无 deadline），故 Err() 非空
 		// 就一定是"用户按了 Ctrl+C / 收到了 TERM"。
 		if ctx.Err() != nil {
 			result.Canceled = true
+			result.Error = strPtr(AppendMessage(err.Error(), AbortMessage(true, false)))
+		} else {
+			result.Error = strPtr(err.Error())
 		}
 		return false
 	}
@@ -83,7 +84,7 @@ func (c *Client) RunCommand(ctx context.Context, command, stdin string, seq int)
 
 	session, err := c.conn.NewSession()
 	if err != nil {
-		result.Error = strPtr("创建会话失败 - " + err.Error())
+		result.Error = strPtr(Message("session", sessionCreateFailed, err.Error()))
 		return result
 	}
 	defer func() { _ = session.Close() }()
@@ -95,7 +96,7 @@ func (c *Client) RunCommand(ctx context.Context, command, stdin string, seq int)
 	if stdin != "" {
 		w, werr := session.StdinPipe()
 		if werr != nil {
-			result.Error = strPtr("创建输入通道失败 - " + werr.Error())
+			result.Error = strPtr(Message("session", sessionChannelFailed, werr.Error()))
 			return result
 		}
 		go func() {
@@ -121,6 +122,10 @@ func (c *Client) RunCommand(ctx context.Context, command, stdin string, seq int)
 	// 会话建立：拿到退出码、干净收场、或超时/中断（三者都只在命令已在跑时发生）。
 	// 都不是（如远端拒了命令本身）即未下发。
 	result.SessionBegun = f.exitCode != nil || f.timedOut || f.canceled
+	// 收尾时说清这一摊是怎么结束的：被中断。分类照旧由判据表认领。
+	if result.Canceled {
+		result.Error = appendAbort(result.Error, true)
+	}
 	return result
 }
 
@@ -179,12 +184,16 @@ func (c *Client) runWithTimeoutAndCancel(parent context.Context, session *ssh.Se
 		if parent.Err() != nil {
 			return parent.Err(), false, true // 外部取消（中断 / 上级超时）
 		}
-		return fmt.Errorf("命令执行超时(%v)", c.cfg.ExecTimeout), true, false
+		return errors.New(Message("run", runTimeout,
+			fmt.Sprintf("exceeded %v", c.cfg.ExecTimeout))), true, false
 	}
 }
 
 // extractExitCode 仅 *ssh.ExitError（命令以非 0 退出）返回真实退出码；
 // 超时 / 中断等非命令执行错误返回 nil（GLOSSARY「退出码」）。
+//
+// *ssh.ExitMissingError 不在这里返回码——它没有码可返；但它**不能像从前那样被直接丢弃**，
+// 转由 endFactsOf 翻成一句报文（ADR-0021 决定第 8 条：库已分好类的信息不许丢）。
 func extractExitCode(err error) *int {
 	var exitErr *ssh.ExitError
 	if errors.As(err, &exitErr) {
@@ -192,6 +201,12 @@ func extractExitCode(err error) *int {
 		return &code
 	}
 	return nil
+}
+
+// isExitMissing 库说「会话结束了、但没收到退出状态」。
+func isExitMissing(err error) bool {
+	var missing *ssh.ExitMissingError
+	return errors.As(err, &missing)
 }
 
 // endFacts 一次执行的结束信号 → 事实字段。三条通道（命令 / 代填 / 改密）收场时登记的
@@ -222,6 +237,10 @@ func endFactsOf(err error, timedOut, canceled bool) endFacts {
 	case !timedOut && !canceled:
 		if code := extractExitCode(err); code != nil {
 			f.exitCode = code
+		} else if isExitMissing(err) {
+			// 库已经告诉我们「会话结束了、没收到退出状态」——这本身就是分类依据，
+			// 翻成报文，不再退化成靠关键词匹配库提示原文（库改措辞就静默失效）。
+			f.errText = strPtr(Message("session", sessionExitMissing, err.Error()))
 		} else {
 			f.errText = strPtr(err.Error())
 		}
