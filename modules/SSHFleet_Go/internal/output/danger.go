@@ -32,7 +32,7 @@ func dangerBox(report *dangercheck.Report, forbidden bool) string {
 	// 框线必歪（用户 2026-09-15 反馈「两个感叹号没对齐」）。禁止级同样要宽度确定：
 	// 用 ✕（U+2715，Emoji 属性为 No、显示宽度 1），不用 🚫 那个宽度不稳的 emoji。
 	title := "⚠  发现危险命令  ⚠"
-	footer := "这条命令有风险，请确认你确实要执行它"
+	footer := "该命令命中危险规则，请确认后继续执行"
 	if forbidden {
 		title = "✕  发现禁止命令  ✕"
 		footer = "此命令被禁止执行，程序将立即退出！"
