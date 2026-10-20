@@ -28,28 +28,44 @@ const (
 )
 
 // 一级定性给出的分类名：结构事实直接成立，不经判据表。
-// 这些名字与 config/keywords_error.conf、keywords_passwd.conf 里的同名分类对应——
-// 改名会让终端统计把它们当兜底原文单排一行。
+//
+// 这些名字必须与 config/keywords_error.conf、keywords_passwd.conf 里的同名分类对得上
+// （登记处标 code_defined）。名字登记了才算已知分类，否则统计块会把它排到「未归类」去；
+// 判定包**不再另养豁免名单**——那份名单与配置是两个副本，脱节时改了配置不生效。
+//
+// 导出：它们同时是对外契约——改密那几档的名字要跨出工具日志与结果明细，
+// 名字只活在这一处。
 const (
 	// CategoryPasswordExpired 中止词命中的分类名（GLOSSARY「中止词」：归类「密码过期」是约定）。
-	// 导出：它同时是对外契约——改密的入场信号与守卫都按这个分类名取关键词
-	// （见 Keywords.PasswordExpired），名字只活在这一处。
+	// 改密的入场信号与守卫都按这个分类名取关键词（见 Keywords.PasswordExpired）。
 	CategoryPasswordExpired = "密码过期"
-	catTriggerMiss          = "触发词未命中"  // 代填还有没送出去的
-	catExhaustedTimeout     = "代填用尽后超时" // 代填全部送出后仍等到超时
-	catPartialSuccess       = "部分成功"    // 传输有成功有失败
-	catPasswdNotExpired     = "密码未过期"   // 改密整场没出现过期信号
+	// CategoryPartialSuccess 传输时有的成、有的没成。
+	CategoryPartialSuccess = "部分成功"
+	// CategoryTriggerMiss 代填还有没送出去的。
+	CategoryTriggerMiss = "触发词未命中"
+	// CategoryExhaustedTimeout 代填全部送出后仍等到超时。
+	CategoryExhaustedTimeout = "代填用尽后超时"
+	// CategoryNotExpired 改密整场没出现过期信号：这台机器本来就不用改。
+	CategoryNotExpired = "密码未过期"
 	// 改密卡住的四种形态（2026-10-14 由结构事实定性，此前是执行侧编的四句
 	//「改密没有完成：…」文案 + 判据表关键词认回来）。两个布尔量就够了：
 	// PasswdFedAny＝工具有没有认出远端在问什么并答过一句；TimedOut＝是不是等到点。
-	catPasswdNoPrompt = "提示词没认出" // 一句都没喂出去、也没等到点：远端问的话提示词表里没有
-	catPasswdNoSignal = "没等到提示"  // 一句都没喂出去、等到点了：远端没出声，或问的话没认出来
-	catPasswdNoReply  = "远端无响应"  // 喂进去了、等到点也没下文（多半卡在读写密码文件）
-	catPasswdGiveUp   = "改密未完成"  // 喂进去了、远端还在重问而已给的答案用完；也是这一族的兜底
+	//
+	// CategoryNoPrompt 一句都没喂出去、也没等到点：远端问的话提示词表里没有。
+	CategoryNoPrompt = "提示词没认出"
+	// CategoryNoSignal 一句都没喂出去、等到点了：远端没出声，或问的话没认出来。
+	CategoryNoSignal = "没等到提示"
+	// CategoryNoReply 喂进去了、等到点也没下文（多半卡在读写密码文件）。
+	CategoryNoReply = "远端无响应"
+	// CategoryGiveUp 喂进去了、远端还在重问而已给的答案用完；也是这一族的兜底。
+	CategoryGiveUp = "改密未完成"
 	// 外部中断（Ctrl+C / 上级取消）按"中断在哪一步"分两档：连接都没建成的机器
 	// 压根没被执行到，跟"跑到一半被中断"混为一谈会让人以为它跑过。
-	catCanceled        = "任务已取消" // 已连上，命令 / 传输 / 改密跑到中途被中断
-	catConnectCanceled = "建连被取消" // 还在建立连接就被中断（连接慢的机器最容易撞上）
+	//
+	// CategoryCanceled 已连上，命令 / 传输 / 改密跑到中途被中断。
+	CategoryCanceled = "任务已取消"
+	// CategoryConnectCanceled 还在建立连接就被中断（连接慢的机器最容易撞上）。
+	CategoryConnectCanceled = "建连被取消"
 )
 
 // 判据表里那条按退出码自动给的兜底分类的前缀（配置文件写不了带数字的名字）。
@@ -76,12 +92,12 @@ func Judge(res *ssh.Result, mode cli.Mode, kw *Keywords) {
 			return
 		}
 		if res.SessionBegun && !res.Canceled && len(res.AnswersMissed) > 0 {
-			res.Category = catTriggerMiss
+			res.Category = CategoryTriggerMiss
 			res.ExitCode = res.CommandExitCode // 脚本自己跑完了：定论退出码照实给（0 也是它）
 			return
 		}
 		if res.SessionBegun && res.AnswersExhausted && res.TimedOut {
-			res.Category = catExhaustedTimeout
+			res.Category = CategoryExhaustedTimeout
 			return
 		}
 		if res.SessionBegun && res.CommandExitCode != nil && *res.CommandExitCode == 0 &&
@@ -94,7 +110,7 @@ func Judge(res *ssh.Result, mode cli.Mode, kw *Keywords) {
 	case cli.ModeUpload, cli.ModeDownload:
 		// 有成功有失败是结构性状态，先于失败原因展示（与既有顺序一致）
 		if res.FailedFiles > 0 && res.SuccessFiles > 0 {
-			res.Category = catPartialSuccess
+			res.Category = CategoryPartialSuccess
 			return
 		}
 		if res.ConnectSuccess && res.FailedFiles == 0 && res.SuccessFiles > 0 &&
@@ -116,7 +132,7 @@ func Judge(res *ssh.Result, mode cli.Mode, kw *Keywords) {
 				return
 			}
 			// 整场没出现过期信号 = 这台机器不需要改密（原执行侧收尾判定搬到这里）
-			res.Category = catPasswdNotExpired
+			res.Category = CategoryNotExpired
 			return
 		}
 		// 卡住了：按结构事实定性，不看 Error 里的文案（D3）。
@@ -130,22 +146,22 @@ func Judge(res *ssh.Result, mode cli.Mode, kw *Keywords) {
 		if !res.Canceled {
 			switch {
 			case res.PasswdEarlyClose:
-				res.Category = catPasswdGiveUp
+				res.Category = CategoryGiveUp
 				return
 			case res.TimedOut:
 				if res.PasswdFedAny {
-					res.Category = catPasswdNoReply
+					res.Category = CategoryNoReply
 				} else {
-					res.Category = catPasswdNoSignal
+					res.Category = CategoryNoSignal
 				}
 				return
 			case derefString(res.Error) == "" && !res.PasswdFedAny:
 				// passwd 非 0 收场又一言不发，且工具没喂出去过：提示词表没认出远端在问什么
-				res.Category = catPasswdNoPrompt
+				res.Category = CategoryNoPrompt
 				return
 			case derefString(res.Error) == "" && passwdExitedNonzero(res):
 				// 同上但喂过了：远端收了密码却没下文
-				res.Category = catPasswdGiveUp
+				res.Category = CategoryGiveUp
 				return
 			}
 		}
@@ -158,9 +174,9 @@ func Judge(res *ssh.Result, mode cli.Mode, kw *Keywords) {
 	// 排在各模式的成功规则之后：取消本来也走不到成功。传输的「部分成功」同理更具体。
 	if res.Canceled {
 		if res.ConnectSuccess {
-			res.Category = catCanceled
+			res.Category = CategoryCanceled
 		} else {
-			res.Category = catConnectCanceled
+			res.Category = CategoryConnectCanceled
 		}
 		return
 	}
@@ -229,20 +245,19 @@ func passwdExitedNonzero(res *ssh.Result) bool {
 }
 
 // IsFallbackCategory 判断分类名是否为「关键词未命中时的兜底原文」。
-// 必须覆盖判据表两组的名字（Has 取并集），漏掉一组会把覆盖出来的分类误判成兜底原文。
 //
-// 另外要放过**由代码按结构事实定性、配置表里没有登记**的那几个名字——判据表是
-// 「文案 → 分类」的表，而这些分类压根不是查表得来的，不放过就会被上屏成「未归类」。
+// 只有一条规则：判据表里登记过这个名字，就是已知分类（Has 取两块并集，漏一组会把
+// 选组出来的分类误判成兜底原文）。由程序按结构事实定性、不查表的那些分类名，同样靠
+// 配置登记（登记处标 code_defined）；判定包不另养名单。
+//
+// 为什么名单不能留在代码里：名单与配置是同一个事实的两份副本，而配置侧还维护着 tip、
+// 改得更勤。副本一脱节，使用者照着配置改分类就"改了不生效"；漏补一个名字也不会报错，
+// 只在上屏时露出来（2026-10-18 就这么漏过一次）。现在由配置说了算。
 func IsFallbackCategory(category string, kw *Keywords) bool {
 	if category == "" || category == Unclassified {
 		return false
 	}
 	if kw.Has(category) {
-		return false
-	}
-	switch category {
-	case catPartialSuccess,
-		catPasswdNoPrompt, catPasswdNoSignal, catPasswdNoReply, catPasswdGiveUp:
 		return false
 	}
 	return !IsExitCodeCategory(category)

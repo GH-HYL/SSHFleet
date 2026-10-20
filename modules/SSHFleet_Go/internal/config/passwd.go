@@ -31,10 +31,13 @@ type PasswdStep struct {
 }
 
 // PasswdCategory 一条失败分类：按远端说的原话归类。
+//
+// CodeDefined 与通用判据表同义：分类名由程序按结构事实给出，这里只留名字与提示语。
 type PasswdCategory struct {
-	Name     string   `toml:"name"`
-	Keywords []string `toml:"keywords"`
-	Tip      string   `toml:"tip"`
+	Name        string   `toml:"name"`
+	Keywords    []string `toml:"keywords"`
+	Tip         string   `toml:"tip"`
+	CodeDefined bool     `toml:"code_defined"`
 }
 
 // PasswdConfig 改密配置的内容。
@@ -106,6 +109,8 @@ func (s PasswdStep) validate() error {
 // validate 单条 category 的校验。
 //
 // keywords 允许为空：校验只针对写出来的空串（那是写错了，不是没写）。
+// 「写了名字却匹配不上」不在这里拦——那份配置是作者随程序发布的，拦下来等于让
+// 拿着旧配置的人升级后起不来。它由 UnmatchedCategories 单独报告，调用方按警告处理。
 func (c PasswdCategory) validate() error {
 	if strings.TrimSpace(c.Name) == "" {
 		return fmt.Errorf("缺少 name（分类名）")
@@ -116,4 +121,19 @@ func (c PasswdCategory) validate() error {
 		}
 	}
 	return nil
+}
+
+// UnmatchedCategories 列出「写了名字、既没关键词、也没标明由程序定性」的分类——
+// 它们永远匹配不上，一旦出现，这个分类就会在统计块里落到「未归类」。
+//
+// 刻意不做成致命错误：本文件随程序发布，旧配置里本来就没有这些标注，拦住等于让
+// 升级后起不来（《个人开发规范》四·2「不兼容」的第一条判据）。由调用方给一句警告。
+func UnmatchedCategories(c *PasswdConfig) []string {
+	var out []string
+	for _, x := range c.Categories {
+		if len(x.Keywords) == 0 && !x.CodeDefined {
+			out = append(out, x.Name)
+		}
+	}
+	return out
 }

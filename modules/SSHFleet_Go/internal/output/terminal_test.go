@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"sshfleet/internal/cli"
+	"sshfleet/internal/config"
 	"sshfleet/internal/result"
 	"sshfleet/internal/ssh"
 	"sshfleet/internal/verdict"
@@ -332,5 +333,70 @@ func TestPrintStatisticsUnclassifiedGuide(t *testing.T) {
 	PrintStatistics(out, stats, kw, true)
 	if strings.Contains(out.String(), "未归类") {
 		t.Fatalf("没有未归类分类时不该出引导：\n%s", out.String())
+	}
+}
+
+// 由程序按结构事实定性的分类，配置里登记了名字就排在「失败分类统计」正常位置；
+// 删掉那条登记，它就与认不出来的报错原文一样落到「未归类」那几行。
+// 这条断言的是「配置说了算」——判定包里不再有替配置做主的名单（2026-10-20）。
+func TestPrintStatisticsCodeDefinedCategoryFollowsConfig(t *testing.T) {
+	// 与 main 同一条装法：通用判据表 + 改密配置里那批分类插到最前面。
+	// 「远端无响应」登记在改密配置里，只读通用表是看不到它的。
+	kw, err := verdict.LoadKeywords(filepath.Join("..", "..", "config", "keywords_error.conf"))
+	if err != nil {
+		t.Fatalf("关键词文件应可加载: %v", err)
+	}
+	pc, err := config.LoadPasswdConfig(filepath.Join("..", "..", "config", "keywords_passwd.conf"))
+	if err != nil {
+		t.Fatalf("改密配置应可加载: %v", err)
+	}
+	cats := make([]verdict.Category, 0, len(pc.Categories))
+	for _, x := range pc.Categories {
+		cats = append(cats, verdict.Category{Name: x.Name, Keywords: x.Keywords, Tip: x.Tip, CodeDefined: x.CodeDefined})
+	}
+	kw.PrependCategories(cats)
+
+	stats := &result.Stats{
+		NodesTotal: 2, ResultsTotal: 2, Verify: "通过", FailCounts: 2,
+		SortedFailCategories: []result.CategoryCount{
+			{Category: "远端无响应", Count: 1},
+		},
+	}
+
+	// 登记了（随程序发布的那份配置里就有）
+	out := &bytes.Buffer{}
+	PrintStatistics(out, stats, kw, true)
+	got := out.String()
+	// 注意：分类名与「>>>」之间夹着颜色转义，不能按整行字面比对
+	if !strings.Contains(got, "失败分类统计") || !strings.Contains(got, ">>>") ||
+		!strings.Contains(got, "远端无响应 ×") {
+		t.Fatalf("登记过的分类应排在失败分类统计里：\n%s", got)
+	}
+	if !strings.Contains(got, "远端无响应：密码送出去了却没回话") {
+		t.Fatalf("登记过的分类应带出它的提示语：\n%s", got)
+	}
+	if strings.Contains(got, "未归类") {
+		t.Fatalf("登记过的分类不该进未归类：\n%s", got)
+	}
+
+	// 同一个分类，登记删掉
+	bare := &verdict.Keywords{}
+	stats.SortedFailCategories = []result.CategoryCount{{Category: "远端无响应", Count: 1}}
+	out.Reset()
+	PrintStatistics(out, stats, bare, true)
+	got = out.String()
+	if !strings.Contains(got, "未归类 1 类") {
+		t.Fatalf("没登记的分类应进未归类：\n%s", got)
+	}
+	// 「>>>」那一行（已知分类）里不能出现它；它应当缩进落在未归类那几行
+	knownLine := ""
+	for _, line := range strings.Split(got, "\n") {
+		if strings.Contains(line, ">>>") {
+			knownLine = line
+		}
+	}
+	// 颜色转义把「×」与计数隔开，只能按片段找；缩进行不能出现在「>>>」那一行里
+	if knownLine == "" || strings.Contains(knownLine, "远端无响应") || !strings.Contains(got, "远端无响应 ×") {
+		t.Fatalf("没登记的分类应单排在未归类下：\n%s", got)
 	}
 }

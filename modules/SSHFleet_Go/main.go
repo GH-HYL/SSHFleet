@@ -36,7 +36,7 @@ import (
 // 版本号：单一出处（显示在帮助信息首行下方，经 cli.Parse 传入 Usage）。
 // 与 CHANGELOG 顶部当天段落的段头**同一个号**——开段、抬号时在同一次提交里同步改，
 // 两处不一致即为错误。同一天的改动共用一个号，不因改动多而另起号。
-const appVersion = "10.0.1"
+const appVersion = "10.1.0"
 
 // versionWithBuildID 版本号拼上**构建标识**：git 短提交号（仓库内编译时由 go build
 // 自动注入 vcs.revision；工作区有未提交改动时加 -dirty）+ HEAD 提交时间。
@@ -188,7 +188,7 @@ func passwdPromptsOf(c *config.PasswdConfig) *ssh.PasswdPrompts {
 func passwdCategoriesOf(c *config.PasswdConfig) []verdict.Category {
 	cats := make([]verdict.Category, 0, len(c.Categories))
 	for _, x := range c.Categories {
-		cats = append(cats, verdict.Category{Name: x.Name, Keywords: x.Keywords, Tip: x.Tip})
+		cats = append(cats, verdict.Category{Name: x.Name, Keywords: x.Keywords, Tip: x.Tip, CodeDefined: x.CodeDefined})
 	}
 	return cats
 }
@@ -292,6 +292,12 @@ func main() {
 	passwdCfg, err := config.LoadPasswdConfig(config.BuiltinPaths.PasswdKeywords)
 	if err != nil {
 		fatal("config", err)
+	}
+	// 写了名字、既没关键词、也没标明由程序定性的分类永远匹配不上，会在统计块里落到
+	// 「未归类」。只警告不拦：这份配置随程序发布，旧配置里本来就没有这个标注，
+	// 拦住等于让升级后起不来。
+	if names := config.UnmatchedCategories(passwdCfg); len(names) > 0 {
+		logger.Warn(fmt.Sprintf("改密配置里有 %d 个分类永远匹配不上：%s", len(names), strings.Join(names, "、")))
 	}
 	errorKeywords.PrependCategories(passwdCategoriesOf(passwdCfg))
 	prompts := passwdPromptsOf(passwdCfg)
