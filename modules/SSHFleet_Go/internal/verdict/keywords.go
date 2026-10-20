@@ -18,15 +18,13 @@ import (
 // Category 一个分类及其关键词（顺序即匹配优先级）。
 // Tip 是可选的一句话排查建议：本次出现过该分类时，在统计块里跟着分类名提示一行。
 //
-// CodeDefined 标明这个分类名由程序按结构事实给出、不查表，配置这里只留名字与提示语。
-// 它让「登记即已知」这条规矩能自洽：兜底判定只看名字有没有登记（IsFallbackCategory），
-// 所以登记处必须能表达"这个分类没有可匹配的文案，但它是真的分类"——否则要么逼着写一个
-// 永远匹配不上的关键词，要么就得在代码里另养一张名单替配置做主。
+// 关键词既可以是远端说的话，也可以是工具自己报的报文（`sshfleet.<环境>.<环节>: …`）——
+// 两者在匹配上没有区别（ADR-0021 决定第 3 条）。一条分类写不写关键词、写什么，
+// 只由匹配语义决定：没有关键词就是永远匹配不上，它的结果落到"未归类"里显示原文。
 type Category struct {
-	Name        string   `toml:"name"`
-	Keywords    []string `toml:"keywords"`
-	Tip         string   `toml:"tip"`
-	CodeDefined bool     `toml:"code_defined"`
+	Name     string   `toml:"name"`
+	Keywords []string `toml:"keywords"`
+	Tip      string   `toml:"tip"`
 }
 
 // Keywords 加载后的判据表：两块，选组依据是"目的命令有没有给出退出码"（4.3）。
@@ -73,19 +71,20 @@ func LoadKeywords(path string) (*Keywords, error) {
 	return &Keywords{items: file.Categories, exitItems: file.ExitCategories}, nil
 }
 
-// validateCategories 逐类校验：name 非空、关键词非空。label 用于标明是哪一块出的错。
+// validateCategories 逐类校验：只查 name 非空与关键词里的空项。
 //
-// 关键词可以为空的唯一情形是标明了 code_defined（名字由程序给）。匹配不上的分类
-// 在启动时就拦下：它不会报错、也不会崩，只会让使用者看到一堆本该归类的"未归类"。
+// 「写了名字却没关键词」**不再拦**：一个分类只要写了 name 就合法——没有关键词就是永远
+// 匹配不上、结果落到"未归类"，由使用者自己负责。原先为"程序定性"单开的那条通道
+// （code_defined 字段与配套校验）已随报文体系整体下线。
 func validateCategories(items []Category, label string) error {
 	for idx, c := range items {
 		if strings.TrimSpace(c.Name) == "" {
 			return fmt.Errorf("错误分类关键词%s第 %d 类缺少 name", label, idx+1)
 		}
-		if len(c.Keywords) == 0 && !c.CodeDefined {
-			return fmt.Errorf("错误分类%s既没有关键词、也没标明由程序定性，永远匹配不上\n"+
-				"改法：要么补上 keywords，要么写明 code_defined = true（适用于分类名由程序直接给出的分类）",
-				label+c.Name)
+		for _, kw := range c.Keywords {
+			if strings.TrimSpace(kw) == "" {
+				return fmt.Errorf("错误分类%s第 %d 类的 keywords 里有空项", label, idx+1)
+			}
 		}
 	}
 	return nil
@@ -136,6 +135,14 @@ func (k *Keywords) KeywordsOf(name string) []string {
 	return out
 }
 
+// passwordExpiredCategory 「密码过期」这个分类名（GLOSSARY「中止词」：归类「密码过期」是约定）。
+//
+// 为什么是这里的字面量、而不是别再设一个导出常量：改密的入场信号与代填的中止词都只从这里
+// 取关键词，它们要的是**远端那句提示的关键词**，不是"分类名由代码给出"。这个字面量是
+// 「按分类名查表」的唯一落点：改那条分类的 keywords，两个用途一起跟着变（这是想要的）；
+// 改它的 name，查表会落空、两个用途一起失效——启动期的守卫会当场报错拦下。
+const passwordExpiredCategory = "密码过期"
+
 // PasswordExpired 判据表里「密码过期」分类的关键词。改密与代填都只从这里取。
 //
 // 为什么立一个具名方法，而不是让调用方写 KeywordsOf("密码过期")：这个分类名是**跨包约定**
@@ -144,7 +151,7 @@ func (k *Keywords) KeywordsOf(name string) []string {
 // 守卫以为配置正常、执行侧拿不到入场信号，每台机器干等到超时——正是守卫要拦的那个故障，
 // 守卫却和故障一起失灵。收在这里之后，改名的落点只有一处。
 func (k *Keywords) PasswordExpired() []string {
-	return k.KeywordsOf(CategoryPasswordExpired)
+	return k.KeywordsOf(passwordExpiredCategory)
 }
 
 // TipOf 取某分类的提示语（统计块里跟着分类名显示的那句排查建议）。

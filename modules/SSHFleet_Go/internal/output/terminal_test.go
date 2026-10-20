@@ -336,10 +336,10 @@ func TestPrintStatisticsUnclassifiedGuide(t *testing.T) {
 	}
 }
 
-// 由程序按结构事实定性的分类，配置里登记了名字就排在「失败分类统计」正常位置；
+// 分类名是否「已知」只看配置里登记了没有：登记了排在「失败分类统计」正常位置；
 // 删掉那条登记，它就与认不出来的报错原文一样落到「未归类」那几行。
-// 这条断言的是「配置说了算」——判定包里不再有替配置做主的名单（2026-10-20）。
-func TestPrintStatisticsCodeDefinedCategoryFollowsConfig(t *testing.T) {
+// 这条断言的是「配置说了算」——判定包里没有替配置做主的名单（2026-10-20）。
+func TestPrintStatisticsKnownCategoryFollowsConfig(t *testing.T) {
 	// 与 main 同一条装法：通用判据表 + 改密配置里那批分类插到最前面。
 	// 「远端无响应」登记在改密配置里，只读通用表是看不到它的。
 	kw, err := verdict.LoadKeywords(filepath.Join("..", "..", "config", "keywords_error.conf"))
@@ -352,7 +352,7 @@ func TestPrintStatisticsCodeDefinedCategoryFollowsConfig(t *testing.T) {
 	}
 	cats := make([]verdict.Category, 0, len(pc.Categories))
 	for _, x := range pc.Categories {
-		cats = append(cats, verdict.Category{Name: x.Name, Keywords: x.Keywords, Tip: x.Tip, CodeDefined: x.CodeDefined})
+		cats = append(cats, verdict.Category{Name: x.Name, Keywords: x.Keywords, Tip: x.Tip})
 	}
 	kw.PrependCategories(cats)
 

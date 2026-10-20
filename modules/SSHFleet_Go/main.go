@@ -188,7 +188,7 @@ func passwdPromptsOf(c *config.PasswdConfig) *ssh.PasswdPrompts {
 func passwdCategoriesOf(c *config.PasswdConfig) []verdict.Category {
 	cats := make([]verdict.Category, 0, len(c.Categories))
 	for _, x := range c.Categories {
-		cats = append(cats, verdict.Category{Name: x.Name, Keywords: x.Keywords, Tip: x.Tip, CodeDefined: x.CodeDefined})
+		cats = append(cats, verdict.Category{Name: x.Name, Keywords: x.Keywords, Tip: x.Tip})
 	}
 	return cats
 }
@@ -292,12 +292,6 @@ func main() {
 	passwdCfg, err := config.LoadPasswdConfig(config.BuiltinPaths.PasswdKeywords)
 	if err != nil {
 		fatal("config", err)
-	}
-	// 写了名字、既没关键词、也没标明由程序定性的分类永远匹配不上，会在统计块里落到
-	// 「未归类」。只警告不拦：这份配置随程序发布，旧配置里本来就没有这个标注，
-	// 拦住等于让升级后起不来。
-	if names := config.UnmatchedCategories(passwdCfg); len(names) > 0 {
-		logger.Warn(fmt.Sprintf("改密配置里有 %d 个分类永远匹配不上：%s", len(names), strings.Join(names, "、")))
 	}
 	errorKeywords.PrependCategories(passwdCategoriesOf(passwdCfg))
 	prompts := passwdPromptsOf(passwdCfg)

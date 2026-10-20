@@ -1,10 +1,19 @@
 // Package verdict 承载结果判定：执行侧只记录事实，成败与分类只在这里产生一次。
 //
-// 术语见 GLOSSARY.md「结果判定（verdict）」；设计依据与逐条决策见
-// docs/issues/result-verdict/spec.md（两级判定 D6、选组判据 4.3、成功规则 4.5）。
+// 术语见 GLOSSARY.md「结果判定（verdict）」；报文时代的判定口径见 ADR-0021
+// 「决定」第 3 / 8 条与 docs/issues/message-based-classification/spec.md。
 //
-// 依赖边界：本包只允许引用 ssh（结果结构体）与 cli（模式枚举）——
+// 依赖边界：本包只允许引用 ssh（结果结构体、报文）与 cli（模式枚举）——
 // batch / output 反向引用本包，判定绝不回头依赖它们。
+//
+// # 判定层不做的事
+//
+// 它**不定义分类名**：一个失败归到哪一类，只由判据表说了算。结构事实（成了几个、
+// 有没有超时、代填喂进去过没有）由执行侧在收尾时说成一句报文，与远端原话走同一套查表。
+// 读结构字段只有一个用途——按各模式的成功规则判成败。
+//
+// 唯一一处例外是 `执行失败(退出码N)`：那个名字里带数字，配置的 `name` 写不了变量，
+// 做不成可匹配的关键词，所以由这里按退出码拼出。别的地方一个都不许有。
 package verdict
 
 import (
@@ -16,7 +25,6 @@ import (
 )
 
 // 成败二态（D1）：成功 / 其他（其他即失败）。
-// 「部分成功」只是 Other 里的一个分类名，不是第三态。
 //
 // 结果结构体住 ssh，而 ssh 不能反向引用本包（本包引它），所以 Verdict 字段是裸 string、
 // 这里只给常量不作类型——判定与消费方一律用这两个常量比较，不写裸字面量。
@@ -27,178 +35,96 @@ const (
 	Other = "other"
 )
 
-// 一级定性给出的分类名：结构事实直接成立，不经判据表。
-//
-// 这些名字必须与 config/keywords_error.conf、keywords_passwd.conf 里的同名分类对得上
-// （登记处标 code_defined）。名字登记了才算已知分类，否则统计块会把它排到「未归类」去；
-// 判定包**不再另养豁免名单**——那份名单与配置是两个副本，脱节时改了配置不生效。
-//
-// 导出：它们同时是对外契约——改密那几档的名字要跨出工具日志与结果明细，
-// 名字只活在这一处。
-const (
-	// CategoryPasswordExpired 中止词命中的分类名（GLOSSARY「中止词」：归类「密码过期」是约定）。
-	// 改密的入场信号与守卫都按这个分类名取关键词（见 Keywords.PasswordExpired）。
-	CategoryPasswordExpired = "密码过期"
-	// CategoryPartialSuccess 传输时有的成、有的没成。
-	CategoryPartialSuccess = "部分成功"
-	// CategoryTriggerMiss 代填还有没送出去的。
-	CategoryTriggerMiss = "触发词未命中"
-	// CategoryExhaustedTimeout 代填全部送出后仍等到超时。
-	CategoryExhaustedTimeout = "代填用尽后超时"
-	// CategoryNotExpired 改密整场没出现过期信号：这台机器本来就不用改。
-	CategoryNotExpired = "密码未过期"
-	// 改密卡住的四种形态（2026-10-14 由结构事实定性，此前是执行侧编的四句
-	//「改密没有完成：…」文案 + 判据表关键词认回来）。两个布尔量就够了：
-	// PasswdFedAny＝工具有没有认出远端在问什么并答过一句；TimedOut＝是不是等到点。
-	//
-	// CategoryNoPrompt 一句都没喂出去、也没等到点：远端问的话提示词表里没有。
-	CategoryNoPrompt = "提示词没认出"
-	// CategoryNoSignal 一句都没喂出去、等到点了：远端没出声，或问的话没认出来。
-	CategoryNoSignal = "没等到提示"
-	// CategoryNoReply 喂进去了、等到点也没下文（多半卡在读写密码文件）。
-	CategoryNoReply = "远端无响应"
-	// CategoryGiveUp 喂进去了、远端还在重问而已给的答案用完；也是这一族的兜底。
-	CategoryGiveUp = "改密未完成"
-	// 外部中断（Ctrl+C / 上级取消）按"中断在哪一步"分两档：连接都没建成的机器
-	// 压根没被执行到，跟"跑到一半被中断"混为一谈会让人以为它跑过。
-	//
-	// CategoryCanceled 已连上，命令 / 传输 / 改密跑到中途被中断。
-	CategoryCanceled = "任务已取消"
-	// CategoryConnectCanceled 还在建立连接就被中断（连接慢的机器最容易撞上）。
-	CategoryConnectCanceled = "建连被取消"
-)
-
 // 判据表里那条按退出码自动给的兜底分类的前缀（配置文件写不了带数字的名字）。
+//
+// 这是本包唯一一处「代码给分类名」：名字里带一个数字，做不成报文可匹配的关键词。
 const exitCodeFailPrefix = "执行失败(退出码"
 
-// Judge 单条结果的判定入口（单入口，内部先一级后二级，D6）：
-// 按模式选成功规则（4.5），定出成败、失败分类与定论退出码，写进结论区三格。
+// Judge 单条结果的判定入口：按模式选成功规则（定成败），失败分类一律交判据表。
 //
 // 纯函数（D8）：只看入参（结果 + 模式 + 判据表），不读全局状态。
 // 结论区只由这里写（只此一次）；事实区一个字都不碰。
+//
+// 结构字段只用来判成败，不再用来起名——那批「按结构事实直接定性的分类」随报文体系退役
+// （ADR-0021 决定第 3 条）。
 func Judge(res *ssh.Result, mode cli.Mode, kw *Keywords) {
 	res.Verdict = Other
 	res.Category = ""
 	res.ExitCode = nil
 
-	// —— 一级：结构事实直接定性（不查表，4.1）——
-	switch mode {
-	case cli.ModeCommand, cli.ModeScript:
-		// 会话里执行命令的三类（命令 / 脚本 / 代填）共用同一条成功规则（4.5）：
-		// 没配代填时 AnswersMissed / AbortLine 天然为空，条件自然退化。
-		if res.AbortLine != "" {
-			res.Category = CategoryPasswordExpired
-			res.ExitCode = res.CommandExitCode // 中止即收场，通常是 nil
-			return
-		}
-		if res.SessionBegun && !res.Canceled && len(res.AnswersMissed) > 0 {
-			res.Category = CategoryTriggerMiss
-			res.ExitCode = res.CommandExitCode // 脚本自己跑完了：定论退出码照实给（0 也是它）
-			return
-		}
-		if res.SessionBegun && res.AnswersExhausted && res.TimedOut {
-			res.Category = CategoryExhaustedTimeout
-			return
-		}
-		if res.SessionBegun && res.CommandExitCode != nil && *res.CommandExitCode == 0 &&
-			!res.TimedOut && !res.Canceled {
-			res.Verdict = Success
-			res.ExitCode = res.CommandExitCode
-			return
-		}
-
-	case cli.ModeUpload, cli.ModeDownload:
-		// 有成功有失败是结构性状态，先于失败原因展示（与既有顺序一致）
-		if res.FailedFiles > 0 && res.SuccessFiles > 0 {
-			res.Category = CategoryPartialSuccess
-			return
-		}
-		if res.ConnectSuccess && res.FailedFiles == 0 && res.SuccessFiles > 0 &&
-			!res.TimedOut && !res.Canceled {
-			res.Verdict = Success
-			return
-		}
-
-	case cli.ModePasswd:
-		// 「干净收场」＝会话正常结束、没超时没中断没早收场、没有报错，
-		// **且 passwd 自己也不是以非 0 收的场**——它非 0 就是"没改成"，退码归在 Steps 里
-		//（StepPasswd）。此前这一条藏在 Error 的兜底文案里（执行侧会为它编一句
-		//「改密没有完成」），2026-10-14 改成读结构事实，不再依赖那句话。
-		cleanStop := !res.PasswdEarlyClose && !res.TimedOut && !res.Canceled &&
-			derefString(res.Error) == "" && !passwdExitedNonzero(res)
-		if cleanStop {
-			if res.EnterSignalSeen {
-				res.Verdict = Success
-				return
-			}
-			// 整场没出现过期信号 = 这台机器不需要改密（原执行侧收尾判定搬到这里）
-			res.Category = CategoryNotExpired
-			return
-		}
-		// 卡住了：按结构事实定性，不看 Error 里的文案（D3）。
-		//
-		// 两类分开：
-		//   · 超时 / 早收场——**无条件覆盖**文案。这两种形态下 Error 里那点内容多半是
-		//     「命令执行超时(5s)」这类通用描述，照它分类只会给出「执行超时」，盖掉
-		//     "改密卡在哪一步"这个更有用的信息（原执行侧也是无条件覆盖的）。
-		//   · 其余（passwd 自己非 0 收场）——远端说了原因就让位给判据表，按它的措辞分；
-		//     没说话才用兜底的名。
-		if !res.Canceled {
-			switch {
-			case res.PasswdEarlyClose:
-				res.Category = CategoryGiveUp
-				return
-			case res.TimedOut:
-				if res.PasswdFedAny {
-					res.Category = CategoryNoReply
-				} else {
-					res.Category = CategoryNoSignal
-				}
-				return
-			case derefString(res.Error) == "" && !res.PasswdFedAny:
-				// passwd 非 0 收场又一言不发，且工具没喂出去过：提示词表没认出远端在问什么
-				res.Category = CategoryNoPrompt
-				return
-			case derefString(res.Error) == "" && passwdExitedNonzero(res):
-				// 同上但喂过了：远端收了密码却没下文
-				res.Category = CategoryGiveUp
-				return
-			}
-		}
-	}
-
-	// —— 二级之前：外部中断（Ctrl+C / 上级取消）——
-	//
-	// 这是**结构事实**，不看报错文案（与 TimedOut 同口径，见 ssh.endFacts 的说明）。
-	// 排在模式规则之后：中止词（密码过期）那类结论比"被中断"更具体，不该被盖掉；
-	// 排在各模式的成功规则之后：取消本来也走不到成功。传输的「部分成功」同理更具体。
-	if res.Canceled {
-		if res.ConnectSuccess {
-			res.Category = CategoryCanceled
-		} else {
-			res.Category = CategoryConnectCanceled
-		}
+	// —— 成功规则（读结构字段只为这一件事）——
+	if succeeded(res, mode) {
+		res.Verdict = Success
+		res.ExitCode = res.CommandExitCode
 		return
 	}
 
-	// —— 二级：文案查判据表（4.3 选组）——
-	// 选组是纯字段判定：目的那条命令真的给了退出码 → 第二组；否则第一组。
-	// 改密已见过期信号的会话不带服务端提示参与匹配——那句提示是改密的前提，不是失败原因
-	//（原执行侧"改密对话走起来之后不并 banner"的口径，随字段独立移到消费侧）。
+	// —— 失败分类：一律查表（选组规则不变，4.3）——
+	res.Category = classify(res, mode, kw)
+}
+
+// succeeded 各模式的成功规则。
+//
+// 三条口径：
+//   - 会话里跑命令（命令 / 脚本 / 代填共用一条）：退出码为 0、没超时没中断，
+//     **且报错原文里没有报文**。最后这一条是报文体系新增的：一级定性删掉之后，
+//     「代填没送完但命令退出 0」不再有分支抢在成功规则前面，没有它就判成成功了。
+//   - 上传 / 下载：连接成功、一个文件都没失败、至少成一个、没超时没中断。
+//     （部分成功时 FailedFiles > 0，自然不成立，不必另判。）
+//   - 改密：干净收场且整场出现过入场信号。干净收场里那句「报错原文为空」保留——
+//     报文只在非成功形态下写，它读作「没有事实要陈述」，不是第二条给分类名的路径。
+func succeeded(res *ssh.Result, mode cli.Mode) bool {
+	switch mode {
+	case cli.ModeCommand, cli.ModeScript:
+		return res.SessionBegun && res.CommandExitCode != nil && *res.CommandExitCode == 0 &&
+			!res.TimedOut && !res.Canceled && !ssh.IsMessage(derefString(res.Error))
+
+	case cli.ModeUpload, cli.ModeDownload:
+		return res.ConnectSuccess && res.FailedFiles == 0 && res.SuccessFiles > 0 &&
+			!res.TimedOut && !res.Canceled
+
+	case cli.ModePasswd:
+		// 干净收场：会话正常结束、没超时没中断没早收场、没有报错，
+		// 且 passwd 自己也不是以非 0 收的场——它非 0 就是"没改成"，退码归在 Steps 里。
+		if res.PasswdEarlyClose || res.TimedOut || res.Canceled {
+			return false
+		}
+		if derefString(res.Error) != "" || passwdExitedNonzero(res) {
+			return false
+		}
+		return res.EnterSignalSeen
+	}
+	return false
+}
+
+// classify 选组 + 查表。失败时一定给出一个分类名：命中即分类名，没命中即原文本身
+// （与今天「未归类」的口径一致），两段都空才兜底「原因未知」。
+//
+// 选组是纯字段判定（4.3）：目的那条命令真的给了退出码 → 第二组；否则第一组。
+// 改密已见过期信号的会话不带服务端提示参与匹配——那句提示是改密的前提，不是失败原因。
+func classify(res *ssh.Result, mode cli.Mode, kw *Keywords) string {
 	src := joinText(res.ServerBanner, derefString(res.Error))
+	// 代填的中止词命中原文并入待匹配文本：中止确实意味着密码过期，但分类名不该由代码给，
+	// 让它跟其他原文一样去查表（ADR-0021 决定第 9 条）。
+	src = joinText(src, res.AbortLine)
 	if mode == cli.ModePasswd && res.EnterSignalSeen {
 		src = derefString(res.Error)
 	}
 	if res.CommandExitCode != nil {
-		if hit := kw.matchText(true, joinText(src, res.Output)); hit != "" {
-			res.Category = hit
-		} else {
-			res.Category = exitCodeFailPrefix + strconv.Itoa(*res.CommandExitCode) + ")"
-		}
+		// 定论退出码照实给：命令真跑过，它自己的退出码就是结论的一部分（0 也是它）。
+		// 这一步原先散在「代填未命中」那条一级分支里，一级分支删掉后收拢到这里。
 		res.ExitCode = res.CommandExitCode
-		return
+		if hit := kw.matchText(true, joinText(src, res.Output)); hit != "" {
+			return hit
+		}
+		// 退出码 0 却判失败（例如代填没送完）：失败原因不在退出码里，
+		// 拼一个「执行失败(退出码0)」既自相矛盾、也会把真正的报文原文盖掉。
+		// 让它照第一组的规矩走——原文在前、再查表、认不出就显示原文。
+		if *res.CommandExitCode != 0 {
+			return exitCodeFailPrefix + strconv.Itoa(*res.CommandExitCode) + ")"
+		}
 	}
-	res.Category = classifyByKeywords(kw, src, res.Output)
+	return classifyByKeywords(kw, src, res.Output)
 }
 
 // classifyByKeywords 第一组匹配：先报错原文（含服务端提示）、后输出，都未命中时
@@ -225,7 +151,7 @@ func classifyByKeywords(kw *Keywords, src, output string) string {
 
 // IsExitCodeCategory 分类名是不是「按退出码自动给的兜底分类」（执行失败(退出码N)）。
 //
-// 这个分类名由 Judge 产出（见上面那个分支），产出时退出码同时也写进了 Result.ExitCode——
+// 这个分类名由 Judge 产出，产出时退出码同时也写进了 Result.ExitCode——
 // 所以消费方要那个数字，读字段即可，不必再拿正则从名字里解回来（2026-10-09）。
 func IsExitCodeCategory(category string) bool {
 	return strings.HasPrefix(category, exitCodeFailPrefix)
@@ -234,7 +160,6 @@ func IsExitCodeCategory(category string) bool {
 // passwdExitedNonzero 改密下发的 `:` 是不是以非 0 收的场（那个码记在 Steps 的 StepPasswd 上）。
 //
 // 它是「这次改密到底成没成」的关键事实之一：passwd 非 0 就是没改成，哪怕它一个字都没说。
-// 执行侧不再为这种情况编一句「改密没有完成」（D3），改由这里读结构字段判断。
 func passwdExitedNonzero(res *ssh.Result) bool {
 	for _, s := range res.Steps {
 		if s.Name == ssh.StepPasswd && s.ExitCode != nil && *s.ExitCode != 0 {
@@ -246,13 +171,9 @@ func passwdExitedNonzero(res *ssh.Result) bool {
 
 // IsFallbackCategory 判断分类名是否为「关键词未命中时的兜底原文」。
 //
-// 只有一条规则：判据表里登记过这个名字，就是已知分类（Has 取两块并集，漏一组会把
-// 选组出来的分类误判成兜底原文）。由程序按结构事实定性、不查表的那些分类名，同样靠
-// 配置登记（登记处标 code_defined）；判定包不另养名单。
-//
-// 为什么名单不能留在代码里：名单与配置是同一个事实的两份副本，而配置侧还维护着 tip、
-// 改得更勤。副本一脱节，使用者照着配置改分类就"改了不生效"；漏补一个名字也不会报错，
-// 只在上屏时露出来（2026-10-18 就这么漏过一次）。现在由配置说了算。
+// 只有一条规则：判据表里登记过这个名字，就是已知分类。判定包不另养名单——
+// 名单与配置是同一个事实的两份副本，而配置侧还维护着 tip、改得更勤；副本一脱节，
+// 使用者照着配置改分类就"改了不生效"（2026-10-18 就这么漏过一次）。
 func IsFallbackCategory(category string, kw *Keywords) bool {
 	if category == "" || category == Unclassified {
 		return false
