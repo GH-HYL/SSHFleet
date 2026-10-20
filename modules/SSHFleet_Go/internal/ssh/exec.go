@@ -134,7 +134,19 @@ func (c *Client) RunCommand(ctx context.Context, command, stdin string, seq int)
 //
 // 为什么不能逐行丢弃空白行：空行同样可能是输出的组成部分（`ls -l` 分组、`df -h`、
 // 日志分段都靠空行分隔），按行清理会改掉原输出的结构。
+//
+// 为什么第一步要归一回车（2026-10-20 真机取证补上的一步）：远端回 CRLF 或孤立 CR 是常态
+// ——`--no-shell` 原样下发、远端不经 tty 时，程序回什么字节就原样到达。CR 一旦留到终端，
+// 就被当成「回到行首」的控制指令：行中间的那一个会把行首覆盖成空白，孤立的那些会把整行
+// 吃掉——屏幕上只剩分隔线、看起来是空行，而归档文件里字字都在（同一次运行、两个去向对同一
+// 段字节解释不同）。在这之前 xlsx 侧自己做了这层替换（cleanForExcel），终端与 txt 没有。
+//
+// 归一放在采集侧的这里，只管「行怎么断」，不动任何可见字符：CRLF 与孤立 CR 都换成 LF，
+// 每行行首缩进与中间空行照旧原样保留。这样归档、xlsx、终端三处拿到的是同一份已经断好行的
+// 文本，呈现层不必再各清各的。
 func trimOuterBlankLines(s string) string {
+	s = strings.ReplaceAll(s, "\r\n", "\n")
+	s = strings.ReplaceAll(s, "\r", "\n")
 	lines := strings.Split(s, "\n")
 	start, end := 0, len(lines)
 	for start < end && strings.TrimSpace(lines[start]) == "" {

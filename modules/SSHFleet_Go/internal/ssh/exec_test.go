@@ -18,6 +18,14 @@ func TestTrimOuterBlankLines(t *testing.T) {
 		{"保留中间空行", "a\n\nb", "a\n\nb"},
 		{"整块都是空白", "\n\n   \n", ""},
 		{"无输出", "", ""},
+		// 回车（CR）必须先归一，否则会原样流到终端。终端把 CR 解释成「回到行首」：
+		// 行中间的那一个会把行首写成空白覆盖掉前面的内容，孤立的那些会把整行吃掉——
+		// 屏幕上只剩分隔线，看起来是空行，而归档文件里字字都在（2026-10-20 真机取证）。
+		{"CRLF 归一为 LF", "System in health state.\r\n", "System in health state."},
+		{"多行各自 CRLF", "System Events:\r\n16 major events.\r\n", "System Events:\n16 major events."},
+		{"行中孤立 CR 归一", "第一行\r第二行\r", "第一行\n第二行"},
+		{"CR 与 LF 混用", "a\r\nb\rc\nd", "a\nb\nc\nd"},
+		{"行首 CR", "\rSystem in health state.", "System in health state."},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

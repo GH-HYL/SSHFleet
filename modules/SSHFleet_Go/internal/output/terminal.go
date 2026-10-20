@@ -113,12 +113,54 @@ func ResultLine(r ssh.Result, mode cli.Mode, answers []ssh.Answer, category stri
 
 	if r.ConnectSuccess {
 		if r.Output != "" {
-			lines = append(lines, r.Output)
+			lines = append(lines, showControlChars(r.Output))
 		}
 	}
 
 	lines = append(lines, strings.Repeat("=", 50))
 	return strings.Join(lines, "\n")
+}
+
+// controlCharPictures 把会改写终端屏幕的控制字符换成看得见的写法（Unicode 控制图示）。
+//
+// 为什么呈现层要做这一层：远端输出是任意字节流，回车、退格、NUL 交给终端就被当成控制指令
+// ——行中间的回车把行首覆盖成空白、孤立的那些把整行吃掉，屏幕上只剩一条分隔线、看起来是
+// 「没有输出」，而归档文件里字字都在（2026-10-20 真机取证：Windows 连 iBMC 跑
+// `ipmcget -d health`，终端上每个节点都是空白，terminal-output.txt 里却有输出）。
+//
+// 换成图示而不是删掉：删了就看不出「输出里原本有什么」，以后同样的问题又只能靠猜。
+// 制表符不在表里——终端按列宽展开正是想要的排版。换行也不在：采集侧已把 CR 归一成 LF。
+var controlCharPictures = map[rune]string{
+	'\r': "␍",
+	'\b': "␈",
+	0x00: "␀",
+	'\v': "␋",
+	'\f': "␌",
+	0x7f: "␡",
+}
+
+// showControlChars 逐字符替换上表里的控制字符；其余字符（含制表符、换行）原样保留。
+func showControlChars(s string) string {
+	needsWork := false
+	for _, r := range s {
+		if _, ok := controlCharPictures[r]; ok {
+			needsWork = true
+			break
+		}
+	}
+	if !needsWork {
+		return s // 常见路径：绝大多数输出里一个控制字符都没有
+	}
+	var b strings.Builder
+	b.Grow(len(s) + 8)
+	for _, r := range s {
+		if pic, ok := controlCharPictures[r]; ok {
+			b.WriteString(pic)
+			continue
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
 }
 
 // PrintStatistics 打印统计块（对位旧 format_statistic_results_to_terminal）。
