@@ -99,6 +99,40 @@ func TestResultLinePassesOutputThrough(t *testing.T) {
 	}
 }
 
+// 终端明细不吃原始控制字符（2026-10-20 真机取证）：回车、退格、NUL 交给终端会被当成
+// 控制指令——行中间的回车把行首覆盖成空白、孤立回车吃掉整行，屏幕上只剩分隔线，
+// 看起来是空行，而归档里字字都在。所以这些控制字符在呈现层一律换成看得见的写法，
+// 不删掉，使用者仍能看出「输出里带了什么」。制表符不动：终端按宽度展开正是想要的。
+func TestResultLineShowsControlCharsInsteadOfLettingTerminalEatThem(t *testing.T) {
+	cases := []struct{ name, output, want string }{
+		{"孤立回车分隔的两段", "第一行\r第二行", "第一行␍第二行"},
+		{"行中回车", "System in health state.\r不健康", "System in health state.␍不健康"},
+		{"退格", "abc\b\b", "abc␈␈"},
+		{"NUL", "a\x00b", "a␀b"},
+		{"纵向制表", "a\vb\x0cc", "a␋b␌c"},
+		{"制表符保留", "a\tb", "a\tb"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := ResultLine(ssh.Result{
+				IP: "[10.0.0.1]", ConnectSuccess: true, Verdict: verdict.Success,
+				ConnectCostTime: 0.01, ExecCostTime: 0.02,
+				Output: c.output,
+			}, cli.ModeCommand, nil, "执行成功")
+
+			if !strings.Contains(got, c.want) {
+				t.Fatalf("输出 %q 应显示为 %q，实际：\n%s", c.output, c.want, got)
+			}
+			// 明细里绝不能残留会让终端改写屏幕的控制字符（制表符与换行除外）。
+			for _, r := range strings.NewReplacer("\t", "", "\n", "").Replace(got) {
+				if r < 0x20 || r == 0x7f {
+					t.Fatalf("明细里残留了控制字符 %q：\n%q", r, got)
+				}
+			}
+		})
+	}
+}
+
 // 「未送出的代填」这一行事实的细节（D35，作者 2026-10-03 裁定）：失败行要把序号与
 // 触发词原文渲染回来——只陈述事实，不写结论词（「触发词未命中」四个字仍只由分类列表达）。
 // GLOSSARY「触发词未命中」词条里那句"序号里最小的那个就是第一个出错点"，指的就是这里的序号。
