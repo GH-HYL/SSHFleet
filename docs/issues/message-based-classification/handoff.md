@@ -12,11 +12,11 @@
 
 | 工单 | 提交 | 做了什么 |
 | --- | --- | --- |
-| 01 摸底 | `ec4969a` | 产出 `audit.md`：33 处自编中文、11 个分类常量逐个拆解、23 条关键词逐条对应、出厂报文核准到 36 条 |
+| 01 摸底 | `ec4969a` | 产出 `audit.md`：33 处自编中文、11 个分类常量逐个拆解、23 条关键词逐条对应、出厂报文核准到 **38 条** |
 | 02 框架 | `45ecaf1` `d54a43d` `1dbe403` | 报文格式与四个导出纯函数；判定层删常量、只留成功规则；`code_defined` 全线下线；判据表改挂报文；执行侧七摊改报文 |
 | 03 会话/执行 | `496878c` | 新增 `run.rejected`；两处超时收成同一个环节名 |
 
-**当前测试与构建**：`go build ./...`、`go vet ./...`、`go test ./...` 全绿（13 个包）。分类语料 **42 条全过**。
+**当前测试与构建**：`go build ./...`、`go vet ./...`、`go test ./...` 全绿（12 个有测试的包；`batch`、`log`、`main` 三个包没有测试文件）。分类语料 **47 条全过**。
 
 ## 三、下一步：04 传输
 
@@ -54,12 +54,49 @@ MSYS_NO_PATHCONV=1 ./sshfleet.exe -f "172.28.118.49,22,sshfleet_ok,Probe#2026ok"
 2. **连 WSL 用 IP（`172.28.118.49`），不要用 localhost**。localhost 转发时通时断。IP 变了用 `wsl -d Ubuntu-26.04 -u root -- ip -4 addr show eth0` 查。
 3. **Git Bash 会改写 `/tmp/xxx` 参数**，跑下载模式必须加 `MSYS_NO_PATHCONV=1`。
 
-## 六、环境
+## 六、测试环境（WSL2）· 现状实录
 
-- **WSL Ubuntu-26.04 长期在后台运行，不要 `wsl --shutdown`。** 重启会换 NAT 地址、打断你手上的东西。
-- 账号：`sshfleet_ok` / `Probe#2026ok`（普通）、`sshfleet_expired` / `Probe#2026exp`（密码已过期）、`sshfleet_nologin` / `Probe#2026no`（nologin）。
-- 配置里 `sudo = true` 是默认值，但测试账号没有 sudo 权限，**跑任何模式都要加 `--no-sudo`**，否则会得到「执行失败(退出码1)」+ `sudo: I'm sorry`。要给 sudo 场景做验收，得先给 `sshfleet_ok` 配 `NOPASSWD`。
-- 你原有的 `repro` 账号与 `/etc/ssh/sshd_config.d/99-probe.conf` **没动过**，用不上就别碰。
+**这套环境是开发者亲手搭的，长期在后台常驻，直接用就行，不需要重建。** 以下是 2026-10-20 实测的事实；**不要 `wsl --shutdown`**（会换 IP、打断他手上的东西）。
+
+### 基础
+
+| 项 | 值 |
+| --- | --- |
+| 发行版 | `Ubuntu 26.04 LTS`（WSL2），systemd 状态 `running` |
+| 进入方式 | `wsl -d Ubuntu-26.04 -u root -- bash -c '...'`（默认用户是 root） |
+| 地址 | **`172.28.118.49:22`**（从 Windows 侧直连已验证 True） |
+| sshd | `active`，监听 `0.0.0.0:22` |
+| 端口 2222 | **未监听**，正好拿来造「连接被拒」 |
+| `sudo` 组 | 为空 —— 三个测试账号都**没有 sudo 权限** |
+
+### 账号（都是为本议题建的临时账号）
+
+| 账号 | 密码 | shell | 用途 |
+| --- | --- | --- | --- |
+| `sshfleet_ok` | `Probe#2026ok` | `/bin/bash` | 普通账号：命令 / 传输 / 改密的正常路径 |
+| `sshfleet_expired` | `Probe#2026exp` | `/bin/bash` | **密码已过期**（`chage -d 0`，shadow 第 3 列为 `0`） |
+| `sshfleet_nologin` | `Probe#2026no` | `/usr/sbin/nologin` | 登录被禁止：第二组判据按远端原话命中 |
+
+> 这些是**临时测试凭据**，本机用即可，别写进任何要提交的文件。
+
+### 已造好的测试数据
+
+- `/tmp/dl/` —— 3 个文件，其中 `b.txt` 是 `chmod 000`（属主 `sshfleet_ok`），用来造**部分成功**。
+- `/tmp/emptydir/` —— 空目录，用来造**远端没有文件**。
+- `/tmp/findtest/` —— 验证 `find`/权限行为用，可删。
+
+### 不要碰的东西
+
+- `repro` 账号与 `/etc/ssh/sshd_config.d/99-probe.conf` 是**开发者自己**配的 prober（`ForceCommand` 接管 `repro` 的会话），与本议题无关，**不要改动**。它的密码不知道，也不要猜。
+- 我曾为验证 `run.rejected` 临时建过 `sshfleet_forced` 账号与 `98-sshfleet-forced.conf`，**已删除并 reload 验证过**；现在 `sshd_config.d/` 下只剩 `99-probe.conf`。
+
+### 还没配、需要时才补
+
+- **`sshfleet_ok` 的 `NOPASSWD` sudo**。现在三个账号都不在 `sudo` 组，所以**跑任何模式都要加 `--no-sudo`**；不加会得到「执行失败(退出码1)」+ `sudo: I'm sorry sshfleet_ok. I'm afraid I can't do that`。04 要验收 sudo 上传路径时先配上：
+  ```bash
+  wsl -d Ubuntu-26.04 -u root -- bash -c 'echo "sshfleet_ok ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/sshfleet-ok && chmod 440 /etc/sudoers.d/sshfleet-ok'
+  ```
+- **「远端不吭声」的畸形账号**（改密 `no_prompt` 档）。现在没有，要用时另造（`stty` 不可用或 PAM 异常的场景）。
 
 ## 七、实施中踩过的坑（省得再踩一遍）
 

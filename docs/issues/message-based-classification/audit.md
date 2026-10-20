@@ -22,7 +22,7 @@ Status: done
 | 读「密码过期」这个分类名的地方 | **2 处** | 入场信号、代填中止词，见 §五 |
 | SSH 库已分类却未用上的错误类型 | **3 类** | `ExitMissingError` / `PassphraseMissingError` / `OpenChannelError`，见 §六 |
 | 写报错原文的语句 | **29 处赋值** | 其中 26 处直接 `strPtr(...)`、3 处经 `endFactsOf` 的 `f.errText`，见 §八 |
-| 出厂报文 | **36 条** | 全部报文清单见 §九（M1–M36） |
+| 出厂报文 | **38 条** | 全部报文清单见 §九（M1–M38） |
 | 测试文件涉及分类名 | **7 个** | 语义 6 个、措辞 2 个（有重叠），见 §十一 |
 
 ## 二、工具自编中文：逐处清单
@@ -253,21 +253,23 @@ spec《预算：全部报文清单》的核准与补全版。**本表是「出�
 | M23 | `sshfleet.transfer.local_dir_failed` | `transfer` | `sftp.go:292`（建本地 IP 目录） | **spec 未列，本表补上** | 整句 |
 | M24 | `sshfleet.transfer.remote_file_failed` | `transfer` | `sftp.go:380/392/406/420`（上传路径） | 建目录 / 建文件 / 写文件失败 | 整句 |
 | M25 | `sshfleet.transfer.local_file_failed` | `transfer` | `sftp.go:484/490/504`（下载路径） | 开远程 / 建本地 / 写本地失败 | 整句 |
-| M26 | `sshfleet.transfer.tmp_failed` | `transfer` | `sftp.go:426/442/456/466`（sudo 路径） | 临时目录 / 文件 / `sudo mv` 失败 | 整句 |
-| M27 | `sshfleet.transfer.finished` | `transfer` | 上传 / 下载 / 取消早退共用的收尾（见 §十） | 有成功也有失败 | **追加** |
-| M28 | `sshfleet.passwd.not_expired` | `passwd` | `RunPasswdChange` 收尾（`passwdsession.go:124` 之前） | 干净收场但无入场信号 | **追加** |
-| M29 | `sshfleet.passwd.no_signal` | `passwd` | 同上 | 超时且没喂过 | **追加** |
-| M30 | `sshfleet.passwd.no_reply` | `passwd` | 同上 | 超时且喂过 | **追加** |
-| M31 | `sshfleet.passwd.no_prompt` | `passwd` | 同上 | 非 0 收场、未喂过、远端没说话 | **追加** |
-| M32 | `sshfleet.passwd.give_up` | `passwd` | 同上 | 早收场，或非 0 收场且喂过但无原话 | **追加** |
-| M33 | `sshfleet.answer.missed` | `answer` | `RunInteractive` 收尾（`interactive.go:210-221`） | 有未送出的代填 | **追加** |
-| M34 | `sshfleet.answer.exhausted_timeout` | `answer` | 同上 | 表已空仍超时 | **追加** |
-| M35 | `sshfleet.abort.canceled` | `abort` | 建连收尾（`connectFor`）与三条通道收尾 | 已连上被中断 | **追加** |
-| M36 | `sshfleet.abort.connect_canceled` | `abort` | `connectFor`（`exec.go:60-62`） | 未连上被中断 | 整句 |
+| M26 | `sshfleet.transfer.tmp_failed` | `transfer` | `sftp.go` sudo 路径 | 临时目录 / 文件 / 写临时文件失败 | 整句 |
+| M27 | `sshfleet.transfer.sudo_failed` | `transfer` | 同上 | `sudo mv` 到最终位置失败 | 整句 |
+| M28 | `sshfleet.transfer.remote_exists` | `transfer` | 上传逐文件检查 | 目标机已有同名文件（不覆盖） | 逐文件行 |
+| M29 | `sshfleet.transfer.finished` | `transfer` | 上传 / 下载 / 取消早退共用的收尾（见 §十） | 有成功也有失败 | **追加** |
+| M30 | `sshfleet.passwd.not_expired` | `passwd` | `RunPasswdChange` 收尾 | 干净收场但无入场信号 | **追加** |
+| M31 | `sshfleet.passwd.no_signal` | `passwd` | 同上 | 超时且没喂过 | **追加** |
+| M32 | `sshfleet.passwd.no_reply` | `passwd` | 同上 | 超时且喂过 | **追加** |
+| M33 | `sshfleet.passwd.no_prompt` | `passwd` | 同上 | 非 0 收场、未喂过、远端没说话 | **追加** |
+| M34 | `sshfleet.passwd.give_up` | `passwd` | 同上 | 早收场，或非 0 收场且喂过但无原话 | **追加** |
+| M35 | `sshfleet.answer.missed` | `answer` | `RunInteractive` 收尾（`interactive.go:210-221`） | 有未送出的代填 | **追加** |
+| M36 | `sshfleet.answer.exhausted_timeout` | `answer` | 同上 | 表已空仍超时 | **追加** |
+| M37 | `sshfleet.abort.canceled` | `abort` | 建连收尾（`connectFor`）与三条通道收尾 | 已连上被中断 | **追加** |
+| M38 | `sshfleet.abort.connect_canceled` | `abort` | `connectFor` | 未连上被中断 | 整句 |
 
-> **合计 36 条**（M1–M36）。与 spec《预算：全部报文清单》的框架表相比，**本表补上了 11 条**，都是摸底层代码实际找到的失败形态：`connect.handshake_failed`、`connect.key_passphrase_missing`、`session.exit_missing`、`run.rejected`、`transfer.remote_file_failed`、`transfer.local_file_failed`、`transfer.tmp_failed`、`transfer.local_dir_failed`、`transfer.remote_not_dir`、`transfer.remote_unreachable`、`transfer.list_failed`。spec 说「01 逐条核实并补全，本表给的是框架」，指的就是这里。
+> **合计 38 条**（M1–M38）。与 spec《预算：全部报文清单》的框架表相比，**本表补上了 13 条**，都是摸代码与实施时实际找到的失败形态：`connect.handshake_failed`、`connect.key_passphrase_missing`、`session.exit_missing`、`run.rejected`、`transfer.remote_file_failed`、`transfer.local_file_failed`、`transfer.tmp_failed`、`transfer.sudo_failed`、`transfer.remote_exists`、`transfer.local_dir_failed`、`transfer.remote_not_dir`、`transfer.remote_unreachable`、`transfer.list_failed`。spec 说「01 逐条核实并补全，本表给的是框架」，指的就是这里。
 >
-> **M24–M26 的粒度待 04 定**：代码里 13 处 `fmt.Errorf` 若逐条给环节名，报文会膨胀到 13 条；本表按「上传路径 / 下载路径 / sudo 路径」归成 3 条，原始错误跟在冒号后面保留区分度。**这个归并是建议，04 开工前由你确认**。
+> **`transfer` 那 13 处 `fmt.Errorf` 的归并已于 02 定案**：按「上传路径 / 下载路径 / sudo 路径」归成 3 条（`remote_file_failed` / `local_file_failed` / `tmp_failed`），原始错误跟在冒号后保留区分度。`sudo mv 失败` 另立 `sudo_failed`（判据表「sudo失败」就认它）。这个决定 04 不需要再定，核实即可。
 
 ## 十、结构形态 → 纯函数（导出的测试接缝）
 
@@ -329,7 +331,7 @@ spec《预算：全部报文清单》的核准与补全版。**本表是「出�
 
 | # | 初始清单怎么写 | 实际怎么了 | 在哪 |
 | --- | --- | --- | --- |
-| 1 | 出厂报文 25 条（§九 框架表） | 核准并补全到 **36 条**，新增的全是摸代码找到的传输/认证形态 | §九 表下注 |
+| 1 | 出厂报文 25 条（§九 框架表） | 核准并补全到 **38 条**（01 核准 36 条，02 实施时又补 `transfer.sudo_failed` 与 `transfer.remote_exists`） | §九 表下注 |
 | 2 | `transfer.*` 逐条给环节名（13 处 `fmt.Errorf`） | 归成 3 条：`remote_file_failed` / `local_file_failed` / `tmp_failed`，原始错误跟在冒号后保留区分度 | 工单 02 Comments |
 | 3 | 报文格式放「最底层的公共包」 | 实际放在 `internal/ssh`。放 `common` 会让 `ssh` 经 `common` 间接依赖 `log`；`ssh` 已被 `verdict`/`batch`/`output` 依赖，放这里环最浅 | 工单 02 Comments |
 | 4 | 「部分成功」按普通条目挂报文即可 | **必须排到第一组最前面**：那一格里同时躺着逐文件失败原因，排在后面会被「权限不足」抢走 | 工单 02 Comments |
