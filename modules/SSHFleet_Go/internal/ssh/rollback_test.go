@@ -73,3 +73,24 @@ func TestRollbackWithAllFailuresStillSpeaks(t *testing.T) {
 		t.Fatalf("全删不掉也要说清，实际 %q", msg)
 	}
 }
+
+// 半成品没删掉时的那句话：空清单不产出，有路径就列出来（工单 09）。
+func TestPartialLeftMessage(t *testing.T) {
+	if got := PartialLeftMessage(nil); got != "" {
+		t.Fatalf("没有半成品时不该产出报文，得到 %q", got)
+	}
+	got := PartialLeftMessage([]string{"/data/app/x.bin"})
+	want := "sshfleet.transfer.partial_left: half-written file left: /data/app/x.bin"
+	if got != want {
+		t.Fatalf("报文 = %q，期望 %q", got, want)
+	}
+
+	if got := LocalPartialLeftMessage(nil); got != "" {
+		t.Fatalf("没有半成品时不该产出报文，得到 %q", got)
+	}
+	gotLocal := LocalPartialLeftMessage([]string{"D:/logs/x.bin"})
+	wantLocal := "sshfleet.transfer.local_partial_left: half-written file left: D:/logs/x.bin"
+	if gotLocal != wantLocal {
+		t.Fatalf("报文 = %q，期望 %q", gotLocal, wantLocal)
+	}
+}

@@ -475,3 +475,47 @@ success_files = 0
 failed_files = 0
 timed_out = true
 expected = "执行超时"
+
+[[cases]]
+name = "上传失败已回滚"
+# ADR-0022：失败即回滚，回滚成功由报文陈述；分类名来自判据表。
+error = "sshfleet.transfer.rolled_back: 1 of 1 written files removed"
+output = ""
+mode = "upload"
+success_files = 0
+failed_files = 1
+expected = "上传失败已回滚"
+
+[[cases]]
+name = "回滚没清干净：状态排在失败原因之前"
+# 同一格里既有失败原因（permission denied）也有回滚状态；回滚两条排在判据表最前，
+# 所以分类是状态而不是「权限不足」。这条锁住的是次序，不是措辞。
+error = '''sshfleet.transfer.rollback_partial: 1 of 2 written files removed, left: /data/app/x.bin
+permission denied'''
+output = ""
+mode = "upload"
+success_files = 0
+failed_files = 1
+expected = "上传回滚未清干净"
+
+[[cases]]
+name = "密码过期：代填中止词并入匹配文本"
+# 中止只终止会话，分类仍由远端原话查表给出（ADR-0021 决定第 9 条）。
+error = ""
+output = ""
+mode = "execute"
+success_files = 0
+failed_files = 0
+abort_line = "WARNING: Your password has expired."
+expected = "密码过期"
+
+[[cases]]
+name = "半成品没删掉：与回滚残留同档"
+# 写到一半的文件删不掉，它不在回滚计数里，但同样是目标机上的残留（工单 09）。
+error = '''sshfleet.transfer.remote_file_failed: write failed: broken pipe
+sshfleet.transfer.partial_left: half-written file left: /data/app/x.bin'''
+output = ""
+mode = "upload"
+success_files = 0
+failed_files = 1
+expected = "上传回滚未清干净"
