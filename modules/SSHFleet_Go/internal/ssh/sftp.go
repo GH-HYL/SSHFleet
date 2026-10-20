@@ -83,6 +83,9 @@ func (c *Client) UploadFiles(ctx context.Context, files []LocalFile, skipped []s
 
 	success, failed := 0, 0
 	var uploadedBytes int64
+	// writtenPaths 本次已写成功的远端完整路径。失败回滚只删这些——不扫目录、不用通配符
+	// （ADR-0022 决定第 2 条）：写入前必查重名，所以这里的每一条都是本次自己建的。
+	writtenPaths := make([]string, 0, len(files))
 	// 采集阶段被过滤的软链接先写进明细（随 output 字段落盘/进归档；上传侧不在终端打结果明细），
 	// 不计成功也不计失败（spec D51）
 	lines := make([]string, 0, len(skipped)+len(files))
@@ -95,13 +98,13 @@ func (c *Client) UploadFiles(ctx context.Context, files []LocalFile, skipped []s
 	for _, f := range files {
 		select {
 		case <-ctx.Done():
-			// 只记结构事实（Canceled）并陈述一句「在哪一步被中断」：分类照旧由判据表认领，
-			// 执行侧不下结论。部分传完的也照实说一句 finished，两条都追加、谁都不盖谁。
+			// 被中断同样算「这次没传完」（ADR-0022 第 1 条：要么全传上去、要么一个都不留）：
+			// 已经写成功的那些照样回滚，不能因为「是用户按的中断」就把残留留在目标机上。
 			result.Canceled = true
 			result.SuccessFiles, result.FailedFiles = success, failed
 			result.TotalBytes, result.ExecCostTime = uploadedBytes, costTotal
 			result.Output = buildTransferOutput(len(files), success, failed, lines)
-			result.Error = appendFinished(result.Error, success, failed, len(files))
+			result.Error = appendMessage(result.Error, c.rollbackUpload(sftpClient, writtenPaths, useSudo))
 			result.Error = appendAbort(result.Error, true)
 			return result
 		default:
@@ -111,7 +114,9 @@ func (c *Client) UploadFiles(ctx context.Context, files []LocalFile, skipped []s
 		// 远端路径 = 目标目录 + 相对上传根的路径（上传目录保留层级，spec D49）
 		remoteFilePath := path.Join(remotePath, f.Rel)
 
-		// 远程文件已存在：该文件失败并终止本节点传输（不覆盖，旧行为）
+		// 远程文件已存在：该文件失败并终止本节点传输（不覆盖，旧行为）。
+		// 注意：这个文件**没有**被写、也不进 writtenPaths——目标机上那个同名文件是别人先放的，
+		// 回滚一定不能碰它。
 		if _, err := sftpClient.Stat(remoteFilePath); err == nil {
 			failed++
 			msg := fmt.Sprintf("%s: 上传失败 - %s", f.Rel, Message(EnvTransfer, transferRemoteExists, "file already exists on the remote host"))
@@ -120,6 +125,7 @@ func (c *Client) UploadFiles(ctx context.Context, files []LocalFile, skipped []s
 			if onProgress != nil {
 				onProgress(Progress{Seq: seq, IP: c.cfg.IP, SuccessFiles: success, FailedFiles: failed})
 			}
+			result.Error = appendMessage(result.Error, c.rollbackUpload(sftpClient, writtenPaths, useSudo))
 			break
 		}
 
@@ -132,6 +138,7 @@ func (c *Client) UploadFiles(ctx context.Context, files []LocalFile, skipped []s
 			if onProgress != nil {
 				onProgress(Progress{Seq: seq, IP: c.cfg.IP, SuccessFiles: success, FailedFiles: failed})
 			}
+			result.Error = appendMessage(result.Error, c.rollbackUpload(sftpClient, writtenPaths, useSudo))
 			break
 		}
 		localMode := localInfo.Mode().Perm()
@@ -157,9 +164,14 @@ func (c *Client) UploadFiles(ctx context.Context, files []LocalFile, skipped []s
 			if onProgress != nil {
 				onProgress(Progress{Seq: seq, IP: c.cfg.IP, SuccessFiles: success, FailedFiles: failed})
 			}
+			// 失败即回滚（ADR-0022）：目标机恢复成本次执行前的样子。
+			// 失败文件自己的半成品由上传函数删掉，这里只清前面写成功的那些。
+			result.Error = appendMessage(result.Error, c.rollbackUpload(sftpClient, writtenPaths, useSudo))
 			break
 		}
 		success++
+		// 只有**写成功**的才进清单——回滚删的就是这份清单，多记一条就多一分误删风险。
+		writtenPaths = append(writtenPaths, remoteFilePath)
 		uploadedBytes += written
 		// 逐个文件的「成功」行不写：明细首行的文件总数 / 成功 / 失败已说全，每行再带一次
 		// 耗时是重复输出（2026-10-07 作者定）。失败行与跳过行照旧——它们各自带独立信息。
@@ -170,7 +182,6 @@ func (c *Client) UploadFiles(ctx context.Context, files []LocalFile, skipped []s
 	}
 
 	result.Output = buildTransferOutput(len(files), success, failed, lines)
-	result.Error = appendFinished(result.Error, success, failed, len(files))
 	// 传输不是命令执行：不写任何退出码，成败由结果判定按 FailedFiles 等事实给
 	result.ExecCostTime = costTotal
 	result.TotalBytes = uploadedBytes
@@ -291,6 +302,9 @@ func (c *Client) DownloadFiles(ctx context.Context, remotePath, localPath string
 		return result
 	}
 
+	// 本地落地目录：开工后才建，失败照样发报文。参数阶段只确认过 -p 存在，
+	// 从确认屏到真正开传之间它可能已被删、被改权限——这类失败必须落到「本地文件错误」，
+	// 不能因为「前面查过了」就不报。
 	ipDir := filepath.Join(localPath, c.cfg.IP)
 	if err := os.MkdirAll(ipDir, 0o755); err != nil {
 		result.Error = strPtr(Message(EnvTransfer, transferLocalDirFailed, err.Error()))
@@ -315,7 +329,6 @@ func (c *Client) DownloadFiles(ctx context.Context, remotePath, localPath string
 			result.SuccessFiles, result.FailedFiles = success, failed
 			result.TotalBytes, result.TotalFiles, result.ExecCostTime = downloadedBytes, totalFiles, costTotal
 			result.Output = buildTransferOutput(totalFiles, success, failed, lines)
-			result.Error = appendFinished(result.Error, success, failed, totalFiles)
 			result.Error = appendAbort(result.Error, true)
 			return result
 		default:
@@ -367,7 +380,6 @@ func (c *Client) DownloadFiles(ctx context.Context, remotePath, localPath string
 	}
 
 	result.Output = buildTransferOutput(totalFiles, success, failed, lines)
-	result.Error = appendFinished(result.Error, success, failed, totalFiles)
 	// 传输不是命令执行：不写任何退出码；「至少成功 1 个且 0 失败才算成功」由结果判定按
 	// SuccessFiles / FailedFiles 给（「一个都没传」的情况已在枚举阶段拦下）
 	result.ExecCostTime = costTotal
@@ -476,8 +488,45 @@ func (c *Client) sftpUploadWithSudo(sftpClient *sftp.Client, localPath, rel, rem
 	return written, nil
 }
 
-// escapeShellArg 把路径嵌进远端命令的单引号里之前的转义。
+// rollbackUpload 上传失败后删掉本次已写成功的文件（ADR-0022）。
 //
+// 只删 writtenPaths 里列的那些完整路径，不扫目录、不用通配符、不删中间目录：
+// 上传流程在写每个文件之前都查过重名，所以这些路径必然都是本次自己建的。
+// 删不掉的路径照实带进报文，不静默——下次撞上「远程文件已存在」时，使用者要能
+// 回头看出上次没清干净。
+//
+// sudo 路径用 sudo rm（写进去的文件可能属主是 root）；非 sudo 用 SFTP Remove。
+func (c *Client) rollbackUpload(sftpClient *sftp.Client, writtenPaths []string, useSudo bool) string {
+	remove := func(p string) error {
+		if useSudo {
+			return c.runCommand(fmt.Sprintf("sudo rm -f '%s'", escapeShellArg(p)))
+		}
+		return sftpClient.Remove(p)
+	}
+	return rollbackWith(writtenPaths, remove)
+}
+
+// rollbackWith 逐条点名删除，把结果说成一句话（与「怎么删」解耦，便于单测删不掉的情形）。
+//
+// 删除的动作由调用方给：非 sudo 是 SFTP Remove、sudo 是 `sudo rm -f`。这里只负责
+// 「一条一条删、成功的计数、失败的留路径」，**绝不扩大删除范围**。
+func rollbackWith(writtenPaths []string, remove func(p string) error) string {
+	if len(writtenPaths) == 0 {
+		return ""
+	}
+	left := make([]string, 0)
+	removed := 0
+	for _, p := range writtenPaths {
+		if err := remove(p); err != nil {
+			left = append(left, p)
+			continue
+		}
+		removed++
+	}
+	return RollbackMessage(len(writtenPaths), removed, left)
+}
+
+// escapeShellArg 把路径嵌进远端命令的单引号里之前的转义。
 // 转义规则与 shellQuote 同源（escapeSingleQuotes）——不再各写一遍，与 find/mv 的
 // 口径由结构保证，不靠注释提醒人。
 func escapeShellArg(s string) string {
@@ -486,9 +535,12 @@ func escapeShellArg(s string) string {
 
 // sftpDownloadFile 通过 SFTP 下载单个文件，返回实际下载字节数；失败删除本地半成品。
 func (c *Client) sftpDownloadFile(sftpClient *sftp.Client, remoteFilePath, localFilePath string, seq int, totalBytes int64, totalFiles int, onProgress func(Progress)) (int64, error) {
+	// 打开的是**远端**文件：这一步失败是目标机那边的事（文件刚被删、权限不够），
+	// 挂 remote_file_failed。挂 local_file_failed 会让「本机写不进去」与「远端读不出来」
+	// 共用同一个环节名，使用者按分类排查时会找错方向。
 	src, err := sftpClient.Open(remoteFilePath)
 	if err != nil {
-		return 0, errors.New(Message(EnvTransfer, transferLocalFileFailed, err.Error()))
+		return 0, errors.New(Message(EnvTransfer, transferRemoteFileFailed, err.Error()))
 	}
 	defer func() { _ = src.Close() }()
 

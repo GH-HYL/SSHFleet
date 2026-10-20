@@ -73,9 +73,8 @@ func LoadKeywords(path string) (*Keywords, error) {
 
 // validateCategories 逐类校验：只查 name 非空与关键词里的空项。
 //
-// 「写了名字却没关键词」**不再拦**：一个分类只要写了 name 就合法——没有关键词就是永远
-// 匹配不上、结果落到"未归类"，由使用者自己负责。原先为"程序定性"单开的那条通道
-// （code_defined 字段与配套校验）已随报文体系整体下线。
+// 「写了名字却没关键词」不拦：一个分类只要写了 name 就合法——没有关键词就是永远
+// 匹配不上、结果落到"未归类"，由使用者自己负责。
 func validateCategories(items []Category, label string) error {
 	for idx, c := range items {
 		if strings.TrimSpace(c.Name) == "" {

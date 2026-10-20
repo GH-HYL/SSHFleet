@@ -55,7 +55,7 @@ func TestIsMessage(t *testing.T) {
 		want bool
 	}{
 		{"报文", "sshfleet.connect.refused: connection refused", true},
-		{"原文在前报文在后的一格", "a.txt: 下载失败 - permission denied\nsshfleet.transfer.finished: 1 of 3 files transferred", true},
+		{"原文在前报文在后的一格", "a.txt: 下载失败 - permission denied\nsshfleet.transfer.rolled_back: 1 of 1 written files removed", true},
 		{"远端原话不是报文", "Permission denied (publickey)", false},
 		{"工具自编中文也不是报文", "建立连接失败 - dial tcp: connection refused", false},
 		{"空串", "", false},

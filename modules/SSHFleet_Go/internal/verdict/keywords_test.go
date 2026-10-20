@@ -20,8 +20,7 @@ func writeKeywordsConf(t *testing.T, body string) string {
 }
 
 // 一条分类只要写了 name 就合法：没有关键词就是永远匹配不上、结果落到「未归类」，
-// 由使用者自己负责。这条规矩是报文体系定下的——原先为"程序定性"单开的 code_defined
-// 通道已整体下线。
+// 由使用者自己负责。
 func TestLoadKeywordsAcceptsCategoryWithoutKeywords(t *testing.T) {
 	body := "[[categories]]\nname = '远端无响应'\ntip = '多半卡在读写密码文件'\n"
 	if _, err := LoadKeywords(writeKeywordsConf(t, body)); err != nil {
@@ -50,29 +49,29 @@ func TestLoadKeywordsRejectsCategoryWithoutName(t *testing.T) {
 	}
 }
 
-// code_defined 这个字段不再存在：配置里还写着它，按"未识别字段"报错——
-// 旧配置不能装作没事继续跑，否则使用者会以为那个字段还有用。
-func TestLoadKeywordsRejectsRetiredCodeDefinedField(t *testing.T) {
-	body := "[[categories]]\nname = '远端无响应'\ncode_defined = true\n"
+// 配置里写了不认识的字段就报错，不许装作没事继续跑——否则使用者会以为那个字段还有用。
+func TestLoadKeywordsRejectsUnknownField(t *testing.T) {
+	body := "[[categories]]\nname = '远端无响应'\nunknown_field = true\n"
 	_, err := LoadKeywords(writeKeywordsConf(t, body))
 	if err == nil {
-		t.Fatal("code_defined 已不存在，应当按未识别字段报错")
+		t.Fatal("不认识的字段应当按未识别字段报错")
 	}
-	if !strings.Contains(err.Error(), "code_defined") {
-		t.Fatalf("报错应当指出是 code_defined，实际：%v", err)
+	if !strings.Contains(err.Error(), "未识别字段") {
+		t.Fatalf("报错应当指出是未识别字段，实际：%v", err)
 	}
 }
 
-// 报文可以当关键词用：一条分类挂上 `sshfleet.transfer.finished`，含这句话的文本就归它。
+// 报文可以当关键词用：一条分类挂上 `sshfleet.transfer.rolled_back`，含这句话的文本就归它。
 func TestMessageCanBeAKeyword(t *testing.T) {
-	body := "[[categories]]\nname = '部分成功'\nkeywords = ['sshfleet.transfer.finished']\n"
+	body := "[[categories]]\nname = '上传回滚失败'\nkeywords = ['sshfleet.transfer.rollback_partial']\n"
 	kw, err := LoadKeywords(writeKeywordsConf(t, body))
 	if err != nil {
 		t.Fatal(err)
 	}
-	text := "c.log: 下载失败 - permission denied\nsshfleet.transfer.finished: 3 of 5 files transferred"
-	if hit := kw.matchText(false, text); hit != "部分成功" {
-		t.Fatalf("报文当关键词应命中「部分成功」，实为 %q", hit)
+	text := "a.log: 上传失败 - sshfleet.transfer.remote_file_failed: disk quota exceeded\n" +
+		"sshfleet.transfer.rollback_partial: 1 of 2 written files removed, left: /data/b.bin"
+	if hit := kw.matchText(false, text); hit != "上传回滚失败" {
+		t.Fatalf("报文当关键词应命中「上传回滚失败」，实为 %q", hit)
 	}
 }
 
@@ -86,7 +85,7 @@ func TestMessagePrefixClaimsWholeEnvironment(t *testing.T) {
 	for _, text := range []string{
 		"sshfleet.transfer.client_failed: ssh: subsystem request failed",
 		"sshfleet.transfer.remote_missing: remote path not found: /data",
-		"sshfleet.transfer.finished: 6 of 10 files transferred",
+		"sshfleet.transfer.rolled_back: 6 of 6 written files removed",
 	} {
 		if hit := kw.matchText(false, text); hit != "传输没成" {
 			t.Fatalf("%q 应被前缀认领，实为 %q", text, hit)
@@ -130,8 +129,13 @@ func TestShippedConfigsClaimEveryMessageFamily(t *testing.T) {
 		{"sshfleet.run.timeout", "执行超时"},
 		{"sshfleet.run.rejected", "命令被拒绝"},
 		{"sshfleet.session.channel_failed", "无法建立会话"},
-		{"sshfleet.transfer.client_failed", "SFTP失败"},
-		{"sshfleet.transfer.finished", "部分成功"},
+		{"sshfleet.transfer.client_failed", "目标机不支持 SFTP"},
+		{"sshfleet.transfer.remote_file_failed", "目标机写入失败"},
+		{"sshfleet.transfer.tmp_failed", "目标机写入失败"},
+		{"sshfleet.transfer.local_file_failed", "本机写入失败"},
+		{"sshfleet.transfer.remote_not_dir", "上传目标不是目录"},
+		{"sshfleet.transfer.rolled_back", "上传失败已回滚"},
+		{"sshfleet.transfer.rollback_partial", "上传回滚未清干净"},
 		{"sshfleet.transfer.local_unreadable", "本地文件错误"},
 		{"sshfleet.transfer.remote_missing", "远程路径不存在"},
 		{"sshfleet.transfer.no_files", "远端没有文件"},
@@ -197,4 +201,29 @@ func TestMessageKeywordBelongsToOneCategory(t *testing.T) {
 	if len(owner) == 0 {
 		t.Fatal("没扫到任何报文关键词，断言失效")
 	}
+}
+
+// 「密码过期」这个分类名是**跨包约定**：批量改密的入场信号与代填的中止词都按名查表
+// （`Keywords.PasswordExpired()`）。改它的 name 会让查表落空——启动期的守卫据此报错
+// 退出，而不是每台机器静默干等到超时。这条用例锁定「改 name → 取到空表」这个事实。
+func TestPasswordExpiredEmptyAfterRename(t *testing.T) {
+	if got := LoadKeywordsForTest(t, "[[categories]]\nname = '密码过期'\nkeywords = ['WARNING: Your password has expired.']\n").PasswordExpired(); len(got) != 1 {
+		t.Fatalf("原名下应取到 1 条入场信号关键词，实际 %v", got)
+	}
+
+	renamed := LoadKeywordsForTest(t,
+		"[[categories]]\nname = '密码已到期'\nkeywords = ['WARNING: Your password has expired.']\n")
+	if got := renamed.PasswordExpired(); len(got) != 0 {
+		t.Fatalf("改掉 name 后入场信号应取空（守卫据此报错退出），实际 %v", got)
+	}
+}
+
+// LoadKeywordsForTest 读临时判据表，出错即 Fatal。
+func LoadKeywordsForTest(t *testing.T, body string) *Keywords {
+	t.Helper()
+	kw, err := LoadKeywords(writeKeywordsConf(t, body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return kw
 }

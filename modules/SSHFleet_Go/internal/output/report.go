@@ -71,9 +71,8 @@ func WriteReport(archiveDir string, stats *result.Stats, a *cli.Args, cfg *confi
 	for i, entry := range a.Answers {
 		fmt.Fprintf(&b, "  代填 %d： %s\n", i+1, entry.Describe())
 	}
-	if a.Command != "" || a.Script != "" {
-		fmt.Fprintf(&b, "  并发数： %d\n", a.Number)
-	}
+	// 并发数是这次执行的属性，与模式无关：命令、脚本、上传、下载、改密都显示。
+	fmt.Fprintf(&b, "  并发数： %d\n", a.Number)
 	if a.ConnectTimeout != 0 {
 		fmt.Fprintf(&b, "  连接超时： %ds\n", a.ConnectTimeout)
 	}

@@ -32,14 +32,16 @@ failed_files = 0
 expected = "传输成功"
 
 [[cases]]
-name = "部分成功 3/5"
-error = '''c.log: 下载失败 - sshfleet.transfer.local_file_failed: permission denied
-sshfleet.transfer.finished: 3 of 5 files transferred'''
+name = "下载中途失败：由逐文件那一行认领"
+# 上传改成失败即回滚后不再有「部分成功」；下载仍可能中途失败，失败原因由逐文件行的
+# 报文自己说（ADR-0022 决定第 5 条：下载不回滚）。
+# 注意措辞里别带 permission 之类的词——那会被「权限不足」先认走，测的就不是本行了。
+error = '''c.log: 下载失败 - sshfleet.transfer.remote_file_failed: remote open failed'''
 output = ""
 mode = "download"
 success_files = 3
-failed_files = 2
-expected = "部分成功"
+failed_files = 1
+expected = "目标机写入失败"
 
 [[cases]]
 name = "仅密码被拒 → 身份验证失败"
@@ -80,13 +82,13 @@ failed_files = 0
 expected = "执行成功"
 
 [[cases]]
-name = "下载打开远程文件失败 → SFTP失败"
+name = "本机写入失败 → 本机写入失败"
 error = "sshfleet.transfer.local_file_failed: disk quota exceeded on /var/log"
 output = ""
 mode = "download"
 success_files = 0
 failed_files = 1
-expected = "SFTP失败"
+expected = "本机写入失败"
 
 [[cases]]
 name = "未知错误 → error 原文"
@@ -172,13 +174,13 @@ failed_files = 0
 expected = "本地文件错误"
 
 [[cases]]
-name = "创建临时文件失败"
+name = "创建临时文件失败 → 目标机写入失败"
 error = "sshfleet.transfer.tmp_failed: open /tmp/x: is a directory"
 output = ""
 mode = "upload"
 success_files = 0
 failed_files = 0
-expected = "SFTP失败"
+expected = "目标机写入失败"
 
 [[cases]]
 name = "没有可下载的文件 → 远端没有文件"

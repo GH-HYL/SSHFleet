@@ -14,26 +14,35 @@ import (
 
 // —— transfer ——
 
-func TestFinishedMessageCountsSuccessOfEnumerated(t *testing.T) {
-	// 总数取**枚举后要传的文件数**，不是"成功数 + 失败数"：逐文件失败会中断该节点
-	// 剩余的传输（失败数最多 1，后面的是"没轮到"），它们仍应算在这批总数里。
-	const want = "sshfleet.transfer.finished: 6 of 10 files transferred"
-	if got := ssh.FinishedMessage(6, 1, 10); got != want {
-		t.Fatalf("FinishedMessage = %q，期望 %q", got, want)
+// 回滚报文（ADR-0022）：上传失败后清掉本次写进去的文件，说清删了几个、还剩哪些。
+func TestRollbackMessage(t *testing.T) {
+	cases := []struct {
+		name    string
+		written int
+		removed int
+		left    []string
+		want    string
+	}{
+		{
+			name: "全清干净", written: 3, removed: 3, left: nil,
+			want: "sshfleet.transfer.rolled_back: 3 of 3 written files removed",
+		},
+		{
+			name: "只清掉一部分", written: 3, removed: 1, left: []string{"/data/a.bin", "/data/b.bin"},
+			want: "sshfleet.transfer.rollback_partial: 1 of 3 written files removed, left: /data/a.bin, /data/b.bin",
+		},
+		{
+			// 一个都没写成功时目标机本来就没留下东西，不必声明。
+			name: "一个都没写进去", written: 0, removed: 0, left: nil,
+			want: "",
+		},
 	}
-}
-
-func TestFinishedMessageSilentWhenNothingFailed(t *testing.T) {
-	// 干净收场一个字都不写：这条不变量是「报文只在非成功形态下写」的依据。
-	if got := ssh.FinishedMessage(10, 0, 10); got != "" {
-		t.Fatalf("全传成了不该发报文，实际 %q", got)
-	}
-}
-
-func TestFinishedMessageSilentWhenNothingSucceeded(t *testing.T) {
-	// 一个都没成不是「部分成功」：失败原因由报错原文自己说。
-	if got := ssh.FinishedMessage(0, 1, 10); got != "" {
-		t.Fatalf("一个都没成不该发 finished 报文，实际 %q", got)
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := ssh.RollbackMessage(c.written, c.removed, c.left); got != c.want {
+				t.Fatalf("RollbackMessage = %q，期望 %q", got, c.want)
+			}
+		})
 	}
 }
 
