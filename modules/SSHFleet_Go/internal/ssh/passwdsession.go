@@ -54,7 +54,7 @@ func (c *Client) RunPasswdChange(ctx context.Context, in PasswdInput, seq int) *
 
 	session, err := c.conn.NewSession()
 	if err != nil {
-		result.Error = strPtr("创建会话失败 - " + err.Error())
+		result.Error = strPtr(Message("session", sessionCreateFailed, err.Error()))
 		return result
 	}
 	defer func() { _ = session.Close() }()
@@ -62,12 +62,12 @@ func (c *Client) RunPasswdChange(ctx context.Context, in PasswdInput, seq int) *
 	// tty 模式传 nil：用远端默认（onlcr、echo 都照开）。密码本身不回显（实测 M6），
 	// 警告行与提示行照旧进采集范围。
 	if err := session.RequestPty(ptyTerm, ptyRows, ptyCols, nil); err != nil {
-		result.Error = strPtr("申请终端失败 - " + err.Error())
+		result.Error = strPtr(Message("session", sessionPtyFailed, err.Error()))
 		return result
 	}
 	stdin, err := session.StdinPipe()
 	if err != nil {
-		result.Error = strPtr("创建输入通道失败 - " + err.Error())
+		result.Error = strPtr(Message("session", sessionChannelFailed, err.Error()))
 		return result
 	}
 
@@ -123,7 +123,7 @@ func (c *Client) RunPasswdChange(ctx context.Context, in PasswdInput, seq int) *
 	//（2026-10-14 实测踩过）。
 	if outcome.err != nil {
 		if f.exitCode != nil {
-			// passwd 自己以非 0 收场：有原话就照实写，没有就留空由判定层按结构事实定性。
+			// passwd 自己以非 0 收场：有原话就照实写，没有就留给下面的报文。
 			if reason := passwdReason(note); reason != "" {
 				result.Error = strPtr(reason)
 			}
@@ -133,7 +133,40 @@ func (c *Client) RunPasswdChange(ctx context.Context, in PasswdInput, seq int) *
 			result.Error = f.errText
 		}
 	}
+
+	// 收尾时说清这一摊是怎么结束的（干净收场一个字都不写）：
+	// 被中断 / 卡在哪一步 / 这台机器本来就不用改。一律**追加**，不盖远端原话。
+	switch {
+	case result.Canceled:
+		result.Error = appendAbort(result.Error, true)
+	case outcome.err == nil && f.exitCode == nil:
+		// 连接层就失败了：connect.* 报文已在 connectFor 里写好，这里没有可补充的事实。
+	case isCleanStop(result):
+		result.Error = appendMessage(result.Error, PasswdNotExpiredMessage(result.EnterSignalSeen))
+	default:
+		result.Error = appendMessage(result.Error, PasswdStuckMessage(PasswdShape{
+			FedAny:          result.PasswdFedAny,
+			EarlyClose:      result.PasswdEarlyClose,
+			TimedOut:        result.TimedOut,
+			EnterSignalSeen: result.EnterSignalSeen,
+			RemoteSaid:      deref(result.Error) != "",
+		}))
+	}
 	return result
+}
+
+// isCleanStop 这次改密是不是「干净收场」：没超时、没中断、没早收场、passwd 自己也是 0 收场。
+// 与判定层 succeeded() 里那条同口径；执行侧用它决定要不要发「密码未过期」那句。
+func isCleanStop(res *Result) bool {
+	if res.TimedOut || res.Canceled || res.PasswdEarlyClose {
+		return false
+	}
+	for _, s := range res.Steps {
+		if s.Name == StepPasswd && s.ExitCode != nil && *s.ExitCode != 0 {
+			return false
+		}
+	}
+	return true
 }
 
 // passwdReasonLines error 里最多带几行远端原话。

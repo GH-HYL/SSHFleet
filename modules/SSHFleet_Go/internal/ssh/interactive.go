@@ -3,6 +3,7 @@ package ssh
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 	"strconv"
@@ -160,7 +161,7 @@ func (c *Client) RunInteractive(ctx context.Context, in InteractiveInput, downli
 
 	session, err := c.conn.NewSession()
 	if err != nil {
-		result.Error = strPtr("创建会话失败 - " + err.Error())
+		result.Error = strPtr(Message("session", sessionCreateFailed, err.Error()))
 		return result
 	}
 	defer func() { _ = session.Close() }()
@@ -168,13 +169,13 @@ func (c *Client) RunInteractive(ctx context.Context, in InteractiveInput, downli
 	// tty 模式传 nil：用远端默认（onlcr、echo 都照开）。回显也在采集范围内，
 	// 故触发词要有区分度（配置纪律，不是代码能兜住的）。
 	if err := session.RequestPty(ptyTerm, ptyRows, ptyCols, nil); err != nil {
-		result.Error = strPtr("申请终端失败 - " + err.Error())
+		result.Error = strPtr(Message("session", sessionPtyFailed, err.Error()))
 		return result
 	}
 
 	stdin, err := session.StdinPipe()
 	if err != nil {
-		result.Error = strPtr("创建输入通道失败 - " + err.Error())
+		result.Error = strPtr(Message("session", sessionChannelFailed, err.Error()))
 		return result
 	}
 
@@ -216,10 +217,27 @@ func (c *Client) RunInteractive(ctx context.Context, in InteractiveInput, downli
 	} else if outcome.begun && !outcome.canceled && len(missed) == 0 &&
 		outcome.timedOut && len(in.Answers) > 0 {
 		// 表已送空仍超时：工具分不出「脚本卡在没配触发词的提示上」与「任务本身耗时长」，
-		// 但「表已空」是确定的事实——判定按它给「代填用尽后超时」。
+		// 但「表已空」是确定的事实——陈述成一句报文，分类由判据表认领。
 		result.AnswersExhausted = true
 	}
+
+	// 收尾时说清这一摊是怎么结束的：代填没送完 / 表空了还在等 / 被中断。
+	// 一律**追加**在已有原文后面，谁都不覆盖谁。
+	if outcome.canceled {
+		result.Error = appendAbort(result.Error, true)
+	} else {
+		result.Error = appendMessage(result.Error, AnswerMessage(len(missed), result.AnswersExhausted, result.TimedOut))
+	}
 	return result
+}
+
+// appendMessage 把一句报文追加进报错原文那一格（空报文不加）。
+func appendMessage(existing *string, msg string) *string {
+	if msg == "" {
+		return existing
+	}
+	out := AppendMessage(deref(existing), msg)
+	return &out
 }
 
 // interactiveOutcome 会话结束的样子：错误值 + 收尾判定要用的事实。
@@ -289,7 +307,7 @@ func (c *Client) driveSession(parent context.Context, d sessionDriver, command s
 				out.canceled = true
 				return out
 			}
-			out.err = fmt.Errorf("命令执行超时(%v)", c.cfg.ExecTimeout)
+			out.err = errors.New(Message("run", runTimeout, fmt.Sprintf("exceeded %v", c.cfg.ExecTimeout)))
 			out.timedOut = true
 			return out
 		}
