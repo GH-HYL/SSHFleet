@@ -424,3 +424,52 @@ mode = "execute"
 success_files = 0
 failed_files = 0
 expected = "触发词未命中"
+
+# ---- 2026-10-20 新增：会话与执行两摊（工单 03）----
+# 三处会话建不起来、命令被拒、会话没给退出状态——改造后都靠报文认，不再靠库的提示措辞。
+
+[[cases]]
+name = "创建输入通道失败 → 无法建立会话"
+error = "sshfleet.session.channel_failed: ssh: failed to open stdin pipe"
+output = ""
+mode = "execute"
+success_files = 0
+failed_files = 0
+expected = "无法建立会话"
+
+[[cases]]
+name = "申请终端失败 → 无法建立会话"
+error = "sshfleet.session.pty_failed: ssh: pty request failed"
+output = ""
+mode = "execute"
+success_files = 0
+failed_files = 0
+expected = "无法建立会话"
+
+[[cases]]
+name = "命令被目标机拒绝 → 命令被拒绝"
+error = "sshfleet.run.rejected: ssh: rejected: administratively prohibited"
+output = ""
+mode = "execute"
+success_files = 0
+failed_files = 0
+expected = "命令被拒绝"
+
+[[cases]]
+name = "会话结束没收到退出状态 → 会话被中断"
+error = "sshfleet.session.exit_missing: remote command exited without exit status"
+output = ""
+mode = "execute"
+success_files = 0
+failed_files = 0
+expected = "会话被中断"
+
+[[cases]]
+name = "执行超时 → 执行超时"
+error = "sshfleet.run.timeout: exceeded 30s"
+output = ""
+mode = "execute"
+success_files = 0
+failed_files = 0
+timed_out = true
+expected = "执行超时"
