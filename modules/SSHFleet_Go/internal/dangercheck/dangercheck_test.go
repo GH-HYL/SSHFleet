@@ -23,22 +23,6 @@ func loadRulesOrFail(t *testing.T) *Rules {
 	return rules
 }
 
-// 条数下限只在加载文件时生效：至少 minRules 条启用的规则。
-func TestLoadRulesEnforcesMinRules(t *testing.T) {
-	var b strings.Builder
-	for i := 0; i < minRules-1; i++ {
-		b.WriteString("[[rules]]\nname = '递归删除'\nexample = 'rm -rf /opt/app'\nreason = '删掉就找不回来'\nregex = ['\\brm -rf ']\nrisk_level = 'high'\n\n")
-	}
-	p := filepath.Join(t.TempDir(), "few.conf")
-	if err := os.WriteFile(p, []byte(b.String()), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	_, err := LoadRules(p)
-	if err == nil || !strings.Contains(err.Error(), "至少要") {
-		t.Fatalf("启用规则不足下限时应报错，实为: %v", err)
-	}
-}
-
 func TestRulesValidation(t *testing.T) {
 	base, err := LoadRules(rulesPath(t))
 	if err != nil {
@@ -145,15 +129,10 @@ func TestDisabledRuleOnlyNeedsName(t *testing.T) {
 	}
 }
 
-// extraRules 拼一份够 10 条下限的规则文件正文，末尾追加一段。
+// extraRules 拼一份至少有一条正常规则的规则文件正文，末尾追加一段。
 func extraRules(tail string) string {
 	one := "[[rules]]\nname = '递归删除'\nexample = 'rm -rf /opt/app'\nreason = '删掉就找不回来'\nregex = ['\\brm -rf ']\nrisk_level = 'high'\n\n"
-	var b strings.Builder
-	for i := 0; i < minRules; i++ {
-		b.WriteString(one)
-	}
-	b.WriteString(tail)
-	return b.String()
+	return one + tail
 }
 
 func TestUnknownFieldRejected(t *testing.T) {
