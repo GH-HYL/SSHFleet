@@ -1,8 +1,8 @@
 # 失败原因统一为报文，分类名一律由配置匹配决定 · 规格
 
-Status: ready-for-agent
+Status: done（2026-10-20，工单 01–07 全部完成）
 
-> 实施入口见同目录 `README.md`（从哪开始、什么顺序、坑在哪）。
+> 实施入口：~~同目录 `README.md`~~ 已按收工约定删除，议题现状见 `audit.md` §十四 与各工单 Comments。
 > 决策依据：`docs/adr/0021-message-based-classification.md`（报文格式、中文只留配置一处、不考虑兼容、执行侧与判定层的界）。本文只写「做成什么样」，不重复 ADR 的取舍理由。
 
 ## Problem Statement

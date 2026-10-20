@@ -160,7 +160,7 @@ sshfleet.abort.canceled: canceled after the session was established
 - 2026-10-20：**新增「决定」第 9 条**——密码过期不套用报文。上文初版「影响」中「两份配置里那 11 条分类改为挂报文」不再约束（应为 10 条），替代见「决定」第 9 条与「影响」现行文。
 - 2026-10-20：**`code_defined` 视同从未存在**（2026-10-20 当天引入、未封包）。上文初版「决定」第 4 条中「删掉 `code_defined`」的表述不再约束，替代见该条现行文；`docs/issues/result-verdict/spec.md` 的 D6「一级 = 结构事实直接定性」不再约束，替代见本篇「决定」第 3 条与第 8 条。
 - 2026-10-20：**不做译文层，报文原文即使用者可见文本**。上文「决定」第 5 条中「呈现层的中文译文：报文在终端、`output.txt`、`report.txt` 里翻译成中文给用户看」不再约束，中文只留在配置文件里的 `name` 与 `tip`；「理由」中「中文留在配置与译文两处」同句、「影响」中「`internal/output`：新增报文 → 中文的译文层」与「使用者可见面」中「中间的报文前缀要翻译成中文」同段，均不再约束。替代见 `docs/issues/message-based-classification/spec.md` 的《呈现》一节与《Further Notes》最后一条理由。
-- 2026-10-20：**`transfer.finished` 与「部分成功」退役**。上传改为「失败即回滚」（ADR-0022），失败时不留任何本次写入的文件，传输只剩全成 / 全不成两种形态。上文「决定」第 3 条中 `sshfleet.transfer.finished: 6 of 10 files transferred` 这个例子、「影响」中关于传输部分成功的那部分陈述，以及 `spec.md`《预算：全部报文清单》里 `transfer` 一栏的 `finished`，均不再约束，替代见 `docs/adr/0022-upload-rollback-on-failure.md` 与 `docs/issues/upload-rollback/`。
+- 2026-10-20：**`transfer.finished` 与「部分成功」退役**。上传改为「失败即回滚」（ADR-0022），失败时不留任何本次写入的文件，传输只剩全成 / 全不成两种形态。上文「决定」第 1 条示例块中的 `sshfleet.transfer.finished` 行、「决定」第 2 条第 2 款中以「传输收尾的报文是 `finished` 而非 `partial`」为现行陈述的那一句、「决定」第 3 条中同名例子、「影响」中关于传输部分成功的那部分陈述，以及 `spec.md`《预算：全部报文清单》里 `transfer` 一栏的 `finished`，均不再约束，替代见 `docs/adr/0022-upload-rollback-on-failure.md` 与 `docs/issues/upload-rollback/`。
 
 ## 实施进度
 
