@@ -44,11 +44,11 @@ kill -9 -1	forbidden	杀死所有进程	杀掉本机全部进程，系统和业�
 kill -KILL -1	forbidden	杀死所有进程	用信号名写法的杀全部进程，效果与数字写法相同		
 kill -1 -1	forbidden	杀死所有进程	负一作为进程号就是本机全部进程，等于把机器打死		
 sudo kill -9 -1	forbidden	杀死所有进程	提权后杀光全部进程，连系统守护进程都消失		
-reboot	forbidden	系统重启	整批重启会同时打断全部正在跑的任务，直接拒绝		
-sudo reboot	forbidden	系统重启	提权重启同样让整批同时重启，直接拒绝		
-shutdown -r now	forbidden	系统重启	立即重启打断整批在跑的任务，直接拒绝		
-shutdown -r +10	forbidden	系统重启	定时重启照样让整批同时重启，直接拒绝		
-init 6	forbidden	系统重启	切到重启运行级别，与整批重启后果相同，直接拒绝		
+reboot	forbidden	系统重启	整批重启会同时打断全部正在跑的任务		
+sudo reboot	forbidden	系统重启	提权重启让整批机器同时重来		
+shutdown -r now	forbidden	系统重启	立即重启打断整批正在跑的业务		
+shutdown -r +10	forbidden	系统重启	定时重启照样让整批同时重来		
+init 6	forbidden	系统重启	切到重启运行级别，效果等同整批重启		
 rm -r -f /opt/app/data	high	递归删除	递归强制删除，删掉就找不回来		
 rm -rf /opt/app/data	high	递归删除	递归强制删除应用数据，删掉无法恢复		
 rm -fr /opt/x	high	递归删除	旗标换序不改变递归强删的本质		
@@ -100,7 +100,7 @@ truncate -s 0 /var/log/messages	medium	清空系统日志	系统日志被清空�
 "python3 -c 'import os; os.system(""rm -rf /etc"")'"	forbidden	递归删除系统目录	原引擎对非 shell 语言漏报，这是本议题的起因；删配置目录的后果不变	python	
 "python3 -c 'import subprocess; subprocess.run([""rm"",""-rf"",""/etc""])'"	none		参数拆成列表的写法不普遍，接受漏报	python	
 "python3 -c 'print(""rm -rf /etc"")'"	forbidden	递归删除系统目录	纯打印不执行删除；按纯文本口径命中，属于接受的代价	python	字符串里出现危险词会命中
-"python3 -c ""import os; os.system('reboot')"""	forbidden	系统重启	用 python 调重启，后果与直接敲 reboot 相同，直接拒绝	python	
+"python3 -c ""import os; os.system('reboot')"""	forbidden	系统重启	用 python 调重启，后果与直接敲一样	python	
 "perl -e 'system(""rm -rf /etc"")'"	forbidden	递归删除系统目录	用 perl 调删除，删的仍是配置目录	perl	
 require('child_process').execSync('rm -rf /etc')	forbidden	递归删除系统目录	用 node 调删除，删的仍是配置目录	node	
 require('child_process').execSync('mkfs.ext4 /dev/sda1')	forbidden	格式化主盘	用 node 做格式化，后果与命令行里敲一样	node	
@@ -113,7 +113,7 @@ ruby -e '`rm -rf /etc`'	forbidden	递归删除系统目录	反引号里就是 rm
 "eval ""rm -rf /etc"""	forbidden	递归删除系统目录	拼接后执行的仍是删配置目录	eval	
 echo /etc | xargs rm -rf	none		目标路径写在 rm 前面，纯文本只认 rm 后面跟的路径，这条不拦	xargs	原期望 forbidden；纯文本正则抓不到这种参数在前面的写法
 "ssh host ""rm -rf /etc"""	forbidden	递归删除系统目录	远端机器同样会被删配置目录	ssh	
-"sudo sh -c ""reboot"""	forbidden	系统重启	层层包装后执行的仍是整批重启，直接拒绝	sudo	
+"sudo sh -c ""reboot"""	forbidden	系统重启	层层包装后执行的仍是整批重启	sudo	
 "bash -c ""systemctl stop sshd"""	medium	停止·禁用服务	借 shell 停掉登录服务，之后连不上	shell	
 "set -e
 rm -rf /opt/app/cache
