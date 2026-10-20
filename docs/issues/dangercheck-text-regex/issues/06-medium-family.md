@@ -61,17 +61,18 @@ medium 与 high 的处置**完全一样**（打印警告 → 问一次 → `--ye
 
 ## 验收
 
-- [ ] 第 1 条：4 种关键路径写法命中；`/tmp` 下三种**不命中**
-- [ ] 第 2 条：5 种写法命中（**含 `systemctl mask firewalld`**）；**`systemctl stop nginx` 不命中**（这是原规则误伤、新规则必须放掉的）
-- [ ] 第 3 条：3 种写法命中
-- [ ] 第 4 条：`chmod 777`、**`chmod -R 777`**、`chmod o+w` 命中；**`chmod 755`、`chmod 775` 不命中**
-- [ ] 第 5 条：4 种写法命中（含数字形式）
-- [ ] 第 6 条：2 种写法命中
-- [ ] `medium` 档总共**恰好 6 条**
-- [ ] **`firewalld` 的 `mask` 与 `disable` 落在同一档**（都是 medium），不会一个 forbidden 一个 medium
-- [ ] 语料测试通过；**不通过的用例先分辨是规则错还是期望错**，拿不准的交开发者定，不许改期望凑绿
+- [x] 第 1 条：4 种关键路径写法命中；`/tmp` 下三种**不命中**
+- [x] 第 2 条：5 种写法命中（**含 `systemctl mask firewalld`**）；**`systemctl stop nginx` 不命中**（这是原规则误伤、新规则必须放掉的）
+- [x] 第 3 条：3 种写法命中
+- [x] 第 4 条：`chmod 777`、**`chmod -R 777`**、`chmod o+w` 命中；**`chmod 755`、`chmod 775` 不命中**
+- [x] 第 5 条：4 种写法命中（含数字形式）
+- [x] 第 6 条：2 种写法命中
+- [x] `medium` 档共 **7 条**（2026-10-20 按开发者三点五调整：原判 6 条，`强制删包` 由 high 降入）
+- [x] **`firewalld` 的 `mask` 与 `disable` 落在同一档**（都是 medium），不会一个 forbidden 一个 medium
+- [x] 语料测试通过；**不通过的用例先分辨是规则错还是期望错**，拿不准的交开发者定，不许改期望凑绿
 
 ## Comments
 
 - 2026-10-19：建立。第 2 条的名单反转是实测发现的真缺陷（`audit.md` 8.2），重写时必须顺手修正。
 - 2026-10-19：**已落地**。关键路径文件只认 `/etc/`、`/var/log/`、`/boot/` 之下的删除；`/etc/nginx`、`/var/log/app.log` 归本条，`/tmp` 下不认。`firewalld` 的 `mask` 与 `disable` 同在本条，`sshd`/`network` 的 `mask` 在 05。`chmod -R 777`、`o+w`、`a+rwx` 与数字形式都覆盖，755/775 不认。
+- 2026-10-20：**验收逐条复核通过**。关键路径 4 种命中、`/tmp` 三种不命中；`systemctl mask firewalld` 与 `disable firewalld` 同落 medium，`stop nginx` 不命中；`chmod 777`/`-R 777`/`o+w` 命中而 `755`/`775` 不命中；账户删除 3 种、SUID 4 种、日志 2 种均命中。条数按三点五调整为 7 条。
