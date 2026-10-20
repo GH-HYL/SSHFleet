@@ -16,6 +16,7 @@ Status: ready-for-agent
   - `sshfleet.passwd.no_prompt: passwd exited without asking for input`
   - `sshfleet.passwd.give_up: no further prompts after answers used up`
   - `sshfleet.passwd.not_expired: no password-expiry prompt seen`
+- [ ] 这五条由 `passwdsession.go` 收尾处的**导出纯函数**产出，入参是 `TimedOut` / `PasswdFedAny` / `PasswdEarlyClose` / `EnterSignalSeen` 与「远端有没有说过话」（今天那两条分支靠 `Error == ""` 判断的就是这件事）。**远端说了话就别再补报文**——那种形态让判据表按远端原话认，与今天的让位口径一致。
 - [ ] **「密码过期」不发报文**：它是远端说的话（改密向导那几行），工具只是把输出读了回来。分类常量删除后，它的分类在命令 / 脚本模式下由第二组判据表按输出原文给出。
 - [ ] 改密的**入场信号**与 `main.go` 里的守卫：仍取 `Keywords.PasswordExpired()`（按分类名「密码过期」去判据表取关键词）。用例证明：
   - 把那条分类的 `keywords` 换成别的远端提示 → 改密照着新关键词认（这是要保留的能力）；

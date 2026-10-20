@@ -43,7 +43,7 @@ sshfleet.connect.handshake_timeout: handshake not completed within 5s
 sshfleet.session.create_failed: ssh: session rejected
 sshfleet.session.pty_failed: ssh: pty request failed
 sshfleet.run.timeout: exceeded 30s
-sshfleet.transfer.finished: 6 of 10 files sent
+sshfleet.transfer.finished: 6 of 10 files transferred
 sshfleet.transfer.remote_missing: remote path not found: /data/app
 sshfleet.passwd.no_signal: no password prompt seen before timeout
 sshfleet.abort.canceled: canceled after the session was established
@@ -57,7 +57,7 @@ sshfleet.abort.canceled: canceled after the session was established
 
 - **所有失败原因都以报文形式进入「报错原文」这一格**，包括两类：
   1. **工具自编的错误文本**（建连失败、申请终端失败、文件不可读……）——直接换成报文；
-  2. **结构性结论**（传输有的成有的没成、改密卡在哪一步、被中断、代填补送不完……）——由**看见该事实的那一处**在收尾时生成一条报文陈述事实（`sshfleet.transfer.finished: 6 of 10 files sent`），而**不是**由判定层编造；
+  2. **结构性结论**（传输有的成有的没成、改密卡在哪一步、被中断、代填补送不完……）——由**看见该事实的那一处**在收尾时生成一条报文陈述事实（`sshfleet.transfer.finished: 6 of 10 files transferred`），而**不是**由判定层编造；
 - 判据文件里一个分类可以挂两类关键词：远端与系统的话、工具自己的报文，**同一套匹配、同一套优先级**；
 - 匹配不到任何分类时，分类就是报错原文本身（与今天「未归类」的口径一致）。
 
@@ -95,7 +95,7 @@ sshfleet.abort.canceled: canceled after the session was established
 三条硬规矩：
 
 1. **每一层只许做无损翻译。** 库已有的分类信息**不许丢**。当前 `extractExitCode` 只认 `*ssh.ExitError`，`*ssh.ExitMissingError` 被直接丢弃、退化为靠关键词 `remote command exited without exit status` 匹配库的提示原文——库升级改了措辞就会静默失效，与「工具自编中文」属同一隐患，按本决策改为由 ② 翻译成报文（`sshfleet.session.exit_missing`）。
-2. **报文只陈述位置与事实，不陈述结论。** 环节名说清「哪一步、什么现象」（`session.create_failed`、`transfer.finished`、`abort.canceled`），**不写 `partial` / `failed` 这类替使用者下结论的词**。叫不叫「部分成功」，是配置里的 `name` 说了算。因此传输收尾的报文是 `sshfleet.transfer.finished: 6 of 10 files sent`（传完了 10 个、成了 6 个），不是 `partial`。
+2. **报文只陈述位置与事实，不陈述结论。** 环节名说清「哪一步、什么现象」（`session.create_failed`、`transfer.finished`、`abort.canceled`），**不写 `partial` / `failed` 这类替使用者下结论的词**。叫不叫「部分成功」，是配置里的 `name` 说了算。因此传输收尾的报文是 `sshfleet.transfer.finished: 6 of 10 files transferred`（传完了 10 个、成了 6 个），不是 `partial`。
 3. **判定层读结构字段只为成功规则。** 成功与否仍按各模式的成功规则从结构字段判定（退出码为 0 且未超时未中断等）；**失败分类则一律从报文查表**。判定层不存在「如果失败文件数 > 0 就给某个名字」这样的分支。
 
 ### 9. 密码过期不套用上面的分类：它是远端说的话，不是工具说的话
@@ -157,3 +157,4 @@ sshfleet.abort.canceled: canceled after the session was established
 - 2026-10-20：**新增「决定」第 8 条**——执行侧与判定层的界：每层只许无损翻译，报文不写 `partial` / `failed` 这类结论词，判定层读结构字段只为成功规则。传输收尾的报文因此定为 `finished` 而非 `partial`。
 - 2026-10-20：**新增「决定」第 9 条**——密码过期不套用报文。上文初版「影响」中「两份配置里那 11 条分类改为挂报文」不再约束（应为 10 条），替代见「决定」第 9 条与「影响」现行文。
 - 2026-10-20：**`code_defined` 视同从未存在**（2026-10-20 当天引入、未封包）。上文初版「决定」第 4 条中「删掉 `code_defined`」的表述不再约束，替代见该条现行文；`docs/issues/result-verdict/spec.md` 的 D6「一级 = 结构事实直接定性」不再约束，替代见本篇「决定」第 3 条与第 8 条。
+- 2026-10-20：**不做译文层，报文原文即使用者可见文本**。上文「决定」第 5 条中「呈现层的中文译文：报文在终端、`output.txt`、`report.txt` 里翻译成中文给用户看」不再约束，中文只留在配置文件里的 `name` 与 `tip`；「影响」中「`internal/output`：新增报文 → 中文的译文层」同条不再约束。替代见 `docs/issues/message-based-classification/spec.md` 的《呈现》一节。理由：使用者要的是分类名，失败原因那一行不是结论；多一层译文等于给同一件事养两份说法，改一处就得同步另一处。
