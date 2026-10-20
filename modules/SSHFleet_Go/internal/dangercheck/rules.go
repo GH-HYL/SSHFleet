@@ -13,9 +13,6 @@ import (
 	"sshfleet/internal/common"
 )
 
-// minRules 规则数量下限（防整份文件被误删/清空）。
-const minRules = 10
-
 // 规则说明类字段（example / reason）的显示列数上限：一个汉字算两列。
 // 超了就加载失败并指名是哪条——截断是不声不响的，使用者看到半句话会以为是程序算错了。
 const ruleTextLimit = 30
@@ -50,11 +47,6 @@ func LoadRules(path string) (*Rules, error) {
 	file, raw, err := readRulesFile(path)
 	if err != nil {
 		return nil, err
-	}
-	if n := len(enabledRules(file.Rules)); n < minRules {
-		return nil, fmt.Errorf(
-			"危险命令检测规则只启用了 %d 条，至少要 %d 条\n出处：规则文件里 enabled 不是 false 的 [[rules]] 段数\n出路：补回被删掉的规则，或把停用的规则改回启用",
-			n, minRules)
 	}
 	return compileRulesWithRaw(file.Rules, raw)
 }
@@ -188,18 +180,6 @@ func decodeHint(err error) string {
 		return "出处：报错行里的那个字段\n出路：按规则文件的六项字段核对写法（regex 必须是数组）"
 	}
 	return "出处：检查文件里有没有漏写的引号、写错的方括号"
-}
-
-// enabledRules 启用的规则条数。条数下限只管启用的那些——停用的规则不参与判定，
-// 把它们算进来，就等于「停用越多越安全」这个假象还能满足下限。
-func enabledRules(rules []Rule) []Rule {
-	out := make([]Rule, 0, len(rules))
-	for _, r := range rules {
-		if r.enabled() {
-			out = append(out, r)
-		}
-	}
-	return out
 }
 
 // ruleLabel 报错里怎么称呼这条规则：有 name 用 name，没有就说第几条。
