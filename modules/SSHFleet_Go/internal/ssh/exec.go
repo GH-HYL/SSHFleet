@@ -107,6 +107,9 @@ func (c *Client) RunCommand(ctx context.Context, command, stdin string, seq int)
 	execStart := time.Now()
 	err, timedOut, canceled := c.runWithTimeoutAndCancel(ctx, session, command)
 	result.ExecCostTime = time.Since(execStart).Seconds()
+	// 诊断：先把原始字节交出去，再做整备。整备会归一 CR，之后还原不回来——
+	// 「远端到底回了什么」只能在这一刻留痕（见 internal/diagnose）。
+	c.reportRaw(result.Seq, out.String())
 	result.Output = trimOuterBlankLines(out.String())
 
 	// 结束信号 → 事实字段（单点在 endFactsOf，与代填 / 改密通道共用）。

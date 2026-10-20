@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"runtime/debug"
 	"strings"
 	"syscall"
@@ -23,6 +24,7 @@ import (
 	"sshfleet/internal/confirm"
 	"sshfleet/internal/credential"
 	"sshfleet/internal/dangercheck"
+	"sshfleet/internal/diagnose"
 	"sshfleet/internal/log"
 	"sshfleet/internal/nodelist"
 	"sshfleet/internal/output"
@@ -405,7 +407,12 @@ func main() {
 	// 单节点结果的三个去向（终端明细 / output.txt / 执行期日志）与进度界面的
 	// 懒创建、上打提示都收在 output 的呈现器里；main 只构造并接上 batch 的三个事件。
 	// （呈现器只做呈现，不控制生命周期——主干与退出权仍在本函数手里。）
-	reporter := output.NewReporter(execLog, outputFile, mode, args.Answers, nodes.Len(), execStart, in.Disinteractive)
+	// 诊断记录（见 internal/diagnose）：目标环境这边碰不到，测试机会只有一次，
+	// 所以把「远端回了什么字节、最终交给终端的是什么」逐节点记进工具日志——
+	// 对方只需换掉可执行文件跑一次，再把 history/SSHFleetTools.log 发回来。
+	diag := diagnose.New(logger)
+	diag.Environment(versionWithBuildID(), runtime.GOOS, runtime.GOARCH, common.ColorEnabled, os.Getenv("TERM"), toolLogPath())
+	reporter := output.NewReporter(execLog, outputFile, mode, args.Answers, nodes.Len(), execStart, in.Disinteractive, diag)
 	// 改密的入场信号为空 = 整场不喂、每台机器都干等到超时：这种配置要在开工前拦住。
 	// 取的判据与执行侧同一处（Keywords.PasswordExpired），守卫与被守的东西不会各说各话。
 	if args.ChangePassword != "" && len(errorKeywords.PasswordExpired()) == 0 {
@@ -414,11 +421,15 @@ func main() {
 			"提示：该分类在 config/keywords_error.conf，别删它"))
 	}
 	execResults, err := batch.Run(execCtx, args, cfg, nodes, execLog, prompts, errorKeywords, upload, batch.Hooks{
-		OnNotice:   reporter.Notice,
-		OnProgress: reporter.Progress,
-		OnResult:   reporter.Result,
+		OnNotice:    reporter.Notice,
+		OnProgress:  reporter.Progress,
+		OnResult:    reporter.Result,
+		OnRawOutput: diag.RemoteRaw,
 	})
 	reporter.Stop()
+	// 诊断汇总：一次运行里「远端带 CR 的节点数 / 最终文本仍带控制字符的节点数」，
+	// 是读日志时最先看的一行（全文见上面的逐节点记录）。
+	diag.Summary()
 	// 先认错，再拿结果：Run 在开工前失败（如上传源含 FIFO/设备/socket、文件不可读、脚本读不到）
 	// 时返回的是 (*Results)(nil)，下面任何一次取字段都会 panic，那条本该给用户看的错反而
 	// 永远打不出来。此路径上进度界面尚未创建，Stop 是空操作，提前 fatal 不影响收尾。
