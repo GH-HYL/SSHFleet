@@ -82,7 +82,7 @@ func (c *Client) Connect(ctx context.Context) error {
 	if err != nil {
 		_ = rawConn.Close()
 		if errors.Is(err, context.DeadlineExceeded) || isTimeout(err) {
-			return errors.New(Message("connect", connectHandshakeTimeout,
+			return errors.New(Message(EnvConnect, connectHandshakeTimeout,
 				fmt.Sprintf("handshake not completed within %v", c.cfg.ConnectTimeout+handshakeGrace)))
 		}
 		return errors.New(connectMessage(connectStageOfHandshakeError(err), err))
@@ -128,7 +128,7 @@ func (c *Client) buildAuthMethods() ([]ssh.AuthMethod, error) {
 			var missing *ssh.PassphraseMissingError
 			if errors.As(err, &missing) {
 				// 库已经分好类的错误：无损翻译成报文，原文照旧跟在后面。
-				return nil, errors.New(Message("connect", connectKeyNoPassphrase,
+				return nil, errors.New(Message(EnvConnect, connectKeyNoPassphrase,
 					"the private key is encrypted but no passphrase was given"))
 			}
 			return nil, errors.New(connectMessage(connectKeyParseFailed, err))

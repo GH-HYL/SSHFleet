@@ -34,16 +34,28 @@ import "strings"
 // （spec《Further Notes》最后一条理由）。
 const messagePrefix = "sshfleet."
 
-// messageEnvs 环境取值（七种，ADR-0021「决定」第 1 条）。写错的环境名不产出合法报文，
+// 环境取值（七种，ADR-0021「决定」第 1 条）。**生成方一律引用这些常量，不要手打字符串**
+// ——手打的 `"transf"` 编译得过、只有运行时才看得出坏了。
+const (
+	EnvConnect  = "connect"  // 建连与认证
+	EnvSession  = "session"  // 会话与终端
+	EnvRun      = "run"      // 命令执行
+	EnvTransfer = "transfer" // 传输
+	EnvPasswd   = "passwd"   // 批量改密
+	EnvAnswer   = "answer"   // 代填
+	EnvAbort    = "abort"    // 中断与取消
+)
+
+// messageEnvs 环境取值白名单。写错的环境名不产出合法报文，
 // 好让它在产出的那一刻就露出坏形状，而不是静默混进匹配文本。
 var messageEnvs = map[string]bool{
-	"connect":  true, // 建连与认证
-	"session":  true, // 会话与终端
-	"run":      true, // 命令执行
-	"transfer": true, // 传输
-	"passwd":   true, // 批量改密
-	"answer":   true, // 代填
-	"abort":    true, // 中断与取消
+	EnvConnect:  true,
+	EnvSession:  true,
+	EnvRun:      true,
+	EnvTransfer: true,
+	EnvPasswd:   true,
+	EnvAnswer:   true,
+	EnvAbort:    true,
 }
 
 // Message 拼一行报文：`sshfleet.<env>.<stage>: <detail>`。

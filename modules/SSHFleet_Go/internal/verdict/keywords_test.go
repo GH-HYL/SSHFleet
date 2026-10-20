@@ -163,3 +163,38 @@ func hasKeyword(kw *Keywords, category, keyword string) bool {
 	}
 	return false
 }
+
+// 一条报文只该归一个分类：`answer.exhausted_timeout` 同时挂在两处时，
+// 谁排在前面就永远赢——后面那条等于死条目。这里守住"每个报文关键词只出现一次"。
+func TestMessageKeywordBelongsToOneCategory(t *testing.T) {
+	errKw, err := LoadKeywords(filepath.Join("..", "..", "config", "keywords_error.conf"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pc, err := config.LoadPasswdConfig(filepath.Join("..", "..", "config", "keywords_passwd.conf"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cats []Category
+	cats = append(cats, errKw.items...)
+	cats = append(cats, errKw.exitItems...)
+	for _, x := range pc.Categories {
+		cats = append(cats, Category{Name: x.Name, Keywords: x.Keywords})
+	}
+
+	owner := map[string]string{}
+	for _, c := range cats {
+		for _, kw := range c.Keywords {
+			if !strings.HasPrefix(kw, "sshfleet.") {
+				continue
+			}
+			if prev, ok := owner[kw]; ok && prev != c.Name {
+				t.Errorf("报文关键词 %q 同时挂在 %q 与 %q：排在后面的那条永远认不到", kw, prev, c.Name)
+			}
+			owner[kw] = c.Name
+		}
+	}
+	if len(owner) == 0 {
+		t.Fatal("没扫到任何报文关键词，断言失效")
+	}
+}

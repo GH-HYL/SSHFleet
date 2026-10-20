@@ -84,7 +84,7 @@ func (c *Client) RunCommand(ctx context.Context, command, stdin string, seq int)
 
 	session, err := c.conn.NewSession()
 	if err != nil {
-		result.Error = strPtr(Message("session", sessionCreateFailed, err.Error()))
+		result.Error = strPtr(Message(EnvSession, sessionCreateFailed, err.Error()))
 		return result
 	}
 	defer func() { _ = session.Close() }()
@@ -96,7 +96,7 @@ func (c *Client) RunCommand(ctx context.Context, command, stdin string, seq int)
 	if stdin != "" {
 		w, werr := session.StdinPipe()
 		if werr != nil {
-			result.Error = strPtr(Message("session", sessionChannelFailed, werr.Error()))
+			result.Error = strPtr(Message(EnvSession, sessionChannelFailed, werr.Error()))
 			return result
 		}
 		go func() {
@@ -184,7 +184,7 @@ func (c *Client) runWithTimeoutAndCancel(parent context.Context, session *ssh.Se
 		if parent.Err() != nil {
 			return parent.Err(), false, true // 外部取消（中断 / 上级超时）
 		}
-		return errors.New(Message("run", runTimeout,
+		return errors.New(Message(EnvRun, runTimeout,
 			fmt.Sprintf("exceeded %v", c.cfg.ExecTimeout))), true, false
 	}
 }
@@ -249,10 +249,10 @@ func endFactsOf(err error, timedOut, canceled bool) endFacts {
 		} else if isExitMissing(err) {
 			// 库已经告诉我们「会话结束了、没收到退出状态」——这本身就是分类依据，
 			// 翻成报文，不再退化成靠关键词匹配库提示原文（库改措辞就静默失效）。
-			f.errText = strPtr(Message("session", sessionExitMissing, err.Error()))
+			f.errText = strPtr(Message(EnvSession, sessionExitMissing, err.Error()))
 		} else if isCommandRejected(err) {
 			// 库已经告诉我们「目标机拒了这次请求」：命令没跑，没有退出码可给。
-			f.errText = strPtr(Message("run", runRejected, err.Error()))
+			f.errText = strPtr(Message(EnvRun, runRejected, err.Error()))
 		} else {
 			f.errText = strPtr(err.Error())
 		}
