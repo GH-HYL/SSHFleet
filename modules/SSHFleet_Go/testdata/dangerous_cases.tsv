@@ -25,7 +25,7 @@ rm -rf /var/log	forbidden	递归删除系统目录	删掉系统日志目录本�
 rm -rf /etc/nginx	medium	删除关键路径文件	删掉配置目录里的子目录，服务配置一起消失		
 mkfs /dev/sda	forbidden	格式化主盘	格式化整块盘，盘上数据和分区表一起消失，不可能恢复		
 mkfs.ext4 /dev/sda1	forbidden	格式化主盘	格式化分区表里的分区，该分区上的数据全部丢失		
-mkfs.ext4 /dev/sdb1	forbidden	格式化主盘	批量工具里写盘的格式化，误伤代价是整批拒绝一次，漏掉代价是数据不可恢复		
+mkfs.ext4 /dev/sdb1	forbidden	格式化主盘	批量工具里写盘的格式化，误判的代价是这一批跑不成，漏判的代价是数据没了		
 mkfs.xfs /dev/nvme0n1	forbidden	格式化主盘	云主机常见盘符一样被格式化，效果与格式化系统盘相同		
 mkfs.xfs /dev/vdb1	forbidden	格式化主盘	虚拟盘分区被格式化，数据同样无从恢复		
 mkfs -t xfs /dev/sda	forbidden	格式化主盘	换成参数写法的格式化，仍会把整块盘格掉		
