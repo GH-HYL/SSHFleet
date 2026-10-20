@@ -4,9 +4,11 @@
 
 结构性分类的报文已在 02 落定（`sshfleet.abort.canceled`、`sshfleet.session.exit_missing` 等），本工单只补 `session` 与 `run` 两摊的**错误文本**。
 
+**实施入口**：`docs/issues/message-based-classification/README.md`。
+
 **被谁阻塞**：02（报文格式、译文层、校验规则终态均已就位，照抄即可）。
 
-**状态**：ready-for-agent
+Status: ready-for-agent
 
 - [ ] `session` 一摊：创建会话失败、申请终端失败、创建输入通道失败三处中文前缀改为报文，同一情形只用一个环节名（`create_failed` / `pty_failed` / `channel_failed`），三条通道（命令 / 代填 / 改密）共用。
 - [ ] `run` 一摊：`命令执行超时(5s)` 改为报文。**两处各编一次的那句必须收成一条**（`exec.go` 与 `interactive.go`），同一情形只允许一个环节名。
@@ -16,4 +18,4 @@
 
 ## Comments
 
-- 2026-10-20 「命令超时两处各编一次」的收口方式：两条路径最终都经过 `endFactsOf`（命令 / 代填 / 改密三条通道的唯一收尾映射点），报文前缀在那里统一加，两个调用点不再各自拼。
+- 2026-10-20：「命令超时两处各编一次」的收口方式：两条路径最终都经过 `endFactsOf`（命令 / 代填 / 改密三条通道的唯一收尾映射点），报文前缀在那里统一加，两个调用点不再各自拼。
