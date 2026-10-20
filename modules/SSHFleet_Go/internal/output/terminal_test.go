@@ -207,8 +207,8 @@ func TestResultLineRendersMissedAnswers(t *testing.T) {
 		t.Fatalf("成功行不该出错误详情行：\n%s", okLine)
 	}
 	noAnswer := ResultLine(ssh.Result{
-		IP: "[10.0.0.5]", ConnectSuccess: true, Category: "部分成功", FailedFiles: 1, SuccessFiles: 2,
-	}, cli.ModeUpload, answers, "部分成功")
+		IP: "[10.0.0.5]", ConnectSuccess: true, Category: "目标机写入失败", FailedFiles: 1, SuccessFiles: 0,
+	}, cli.ModeUpload, answers, "目标机写入失败")
 	if strings.Contains(noAnswer, "错误详情") {
 		t.Fatalf("没有失败详情可说的行不该出错误详情行：\n%s", noAnswer)
 	}

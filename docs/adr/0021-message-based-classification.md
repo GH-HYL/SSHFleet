@@ -1,6 +1,6 @@
 # ADR-0021: 失败原因统一为「报文」，分类名一律由配置匹配决定
 
-- **状态**：已接受（accepted）—— **实施中**，进度见文末「实施进度」；代码按 `docs/issues/message-based-classification/issues/` 下 `01`–`07` 落地
+- **状态**：已接受（accepted）—— **已实施**（2026-10-20，工单 01–07 全部完成；实施过程中与初始框架的偏差见文末「实施进度」与各工单 Comments；`transfer.finished` 及「部分成功」由 ADR-0022 接替退役）
 - **日期**：2026-10-20
 - **决策人**：作者（2026-10-20 本轮对话；同日多次修订，见文末「更新记录」）
 - **实施载体**：`docs/issues/message-based-classification/spec.md`
@@ -160,6 +160,7 @@ sshfleet.abort.canceled: canceled after the session was established
 - 2026-10-20：**新增「决定」第 9 条**——密码过期不套用报文。上文初版「影响」中「两份配置里那 11 条分类改为挂报文」不再约束（应为 10 条），替代见「决定」第 9 条与「影响」现行文。
 - 2026-10-20：**`code_defined` 视同从未存在**（2026-10-20 当天引入、未封包）。上文初版「决定」第 4 条中「删掉 `code_defined`」的表述不再约束，替代见该条现行文；`docs/issues/result-verdict/spec.md` 的 D6「一级 = 结构事实直接定性」不再约束，替代见本篇「决定」第 3 条与第 8 条。
 - 2026-10-20：**不做译文层，报文原文即使用者可见文本**。上文「决定」第 5 条中「呈现层的中文译文：报文在终端、`output.txt`、`report.txt` 里翻译成中文给用户看」不再约束，中文只留在配置文件里的 `name` 与 `tip`；「理由」中「中文留在配置与译文两处」同句、「影响」中「`internal/output`：新增报文 → 中文的译文层」与「使用者可见面」中「中间的报文前缀要翻译成中文」同段，均不再约束。替代见 `docs/issues/message-based-classification/spec.md` 的《呈现》一节与《Further Notes》最后一条理由。
+- 2026-10-20：**`transfer.finished` 与「部分成功」退役**。上传改为「失败即回滚」（ADR-0022），失败时不留任何本次写入的文件，传输只剩全成 / 全不成两种形态。上文「决定」第 3 条中 `sshfleet.transfer.finished: 6 of 10 files transferred` 这个例子、「影响」中关于传输部分成功的那部分陈述，以及 `spec.md`《预算：全部报文清单》里 `transfer` 一栏的 `finished`，均不再约束，替代见 `docs/adr/0022-upload-rollback-on-failure.md` 与 `docs/issues/upload-rollback/`。
 
 ## 实施进度
 
@@ -170,4 +171,5 @@ sshfleet.abort.canceled: canceled after the session was established
   - 报文格式的声明落在 `internal/ssh` 而非 `common`——放 `common` 会让 `ssh` 经 `common` 间接依赖 `log`，环更深；
   - 「部分成功」必须排到第一组最前面，否则同一格里的逐文件失败原因会把它抢走（以前靠一级定性先判，报文时代只能靠次序）；
   - `run.rejected` 在命令通道上走不到（`NewSession` 先失败已被 `session.create_failed` 接住），只在代填通道的 `Start` 被拒时出现。
+  - **「部分成功」与 `transfer.finished` 于同日退役**（不在本 ADR 的框架里）：ADR-0022 把上传改成失败即回滚，中间态不再存在。04 的实施记录与三条验收演示因此只作为过程留档，最终形态以 `docs/issues/upload-rollback/` 为准。
 - **尚未做的**：`internal/output` 与判定包的呈现断言未逐一核对（07 收尾时做）；CHANGELOG 与使用手册未更新（07）；端到端只跑了报文相关的形态，五种模式的完整验收在 07。

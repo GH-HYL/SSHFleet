@@ -12,28 +12,17 @@ import "fmt"
 // 三条共同纪律：
 //   - 入参只是该形态要用的几个布尔与计数，不是整个 Result；
 //   - 干净收场返回空串：报文只在「不该算干净成功」的形态下写；
-//   - 环节名只陈述现象（finished / canceled / give_up），不写 partial / failed。
+//   - 环节名只陈述现象（rolled_back / canceled / give_up），不写 partial / failed。
+//
+// 传输这一摊原来还有一条 `finished`（「6 of 10 files transferred」）。上传改成失败即回滚后
+// （ADR-0022），工具不再产生「部分成功」，它随之退役；下载仍可能中途失败，但下载的语义
+// 不掺回滚，失败原因由逐文件那一行自己说，不再另发汇总报文。
 const (
 	envTransfer = EnvTransfer
 	envPasswd   = EnvPasswd
 	envAnswer   = EnvAnswer
 	envAbort    = EnvAbort
 )
-
-// FinishedMessage 传输收尾那句：这批里成了几个、一共几个。
-//
-// 只有「有成功也有失败」才说：全成了说它没意义（干净收场一个字都不写），一个都没成
-// 也不是这句——那时失败原因本身就是全部事实。
-//
-// total 传**枚举后要传的文件数**（结果里的 TotalFiles），不是「成功数 + 失败数」：
-// 逐文件失败会中断该节点剩余的传输，失败数最多 1，后面那些是「没轮到」，仍算在这批总数里。
-func FinishedMessage(success, failed, total int) string {
-	if failed <= 0 || success <= 0 {
-		return ""
-	}
-	return Message(envTransfer, "finished",
-		fmt.Sprintf("%d of %d files transferred", success, total))
-}
 
 // PasswdShape 改密收尾要问纯函数的那几个事实（与 Result 的字段一一对应）。
 type PasswdShape struct {

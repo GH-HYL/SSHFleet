@@ -161,9 +161,9 @@ func TestFallbackCategory(t *testing.T) {
 		category string
 		want     bool
 	}{
-		{"SFTP失败", false},
+		{"目标机写入失败", false},
 		{"执行失败(退出码2)", false},
-		{"部分成功", false},
+		{"本地文件错误", false},
 		{"原因未知", false},
 		{"触发词未命中", false},
 		{unknownErr, true},
@@ -188,7 +188,7 @@ func TestFallbackCategoryFollowsConfig(t *testing.T) {
 		{"远端无响应", []string{"密码过期", "远端无响应"}, false},
 		{"远端无响应", []string{"密码过期"}, true},
 		{"提示词没认出", []string{"提示词没认出"}, false},
-		{"部分成功", []string{"部分成功"}, false},
+		{"本地文件错误", []string{"本地文件错误"}, false},
 	}
 	for _, c := range cases {
 		kw := &Keywords{}
@@ -249,15 +249,16 @@ func TestJudgeStructuralFacts(t *testing.T) {
 		t.Fatalf("中止词应密码过期/退出码空，实为 %+v", res)
 	}
 
-	// 传输部分成功：报文由执行侧追加在逐文件失败原因之后；定论退出码空
+	// 上传失败后回滚：报文追加在逐文件失败原因之后，回滚那句说明目标机已清干净；
+	// 分类由逐文件那行的报文给（不再是「部分成功」，ADR-0022 让它退役了）；定论退出码空
 	res = ssh.Result{
 		ConnectSuccess: true, SuccessFiles: 2, FailedFiles: 1,
 		Error: strPtrOf("a.log: 上传失败 - sshfleet.transfer.remote_file_failed: disk quota exceeded\n" +
-			"sshfleet.transfer.finished: 2 of 3 files transferred"),
+			"sshfleet.transfer.rolled_back: 2 of 2 written files removed"),
 	}
 	Judge(&res, cli.ModeUpload, kw)
-	if res.Category != "部分成功" || res.ExitCode != nil || res.Verdict != Other {
-		t.Fatalf("部分成功判定不对，实为 %+v", res)
+	if res.Category != "上传失败已回滚" || res.ExitCode != nil || res.Verdict != Other {
+		t.Fatalf("回滚后的上传失败判定不对，实为 %+v", res)
 	}
 
 	// 改密未见过期信号 → 「密码未过期」；`:` 在 Steps、CommandExitCode 恒空

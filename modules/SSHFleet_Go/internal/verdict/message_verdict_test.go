@@ -44,10 +44,24 @@ func TestJudgeTakesCategoryFromMessage(t *testing.T) {
 			expect: "拒绝网络连接",
 		},
 		{
-			name:   "传输部分成功：由配置认领那句 finished",
-			text:   "c.log: 下载失败 - permission denied\nsshfleet.transfer.finished: 3 of 5 files transferred",
-			mode:   cli.ModeDownload,
-			expect: "部分成功",
+			name:   "上传失败回滚：清干净那句由配置认领",
+			text:   "a.log: 上传失败 - sshfleet.transfer.remote_file_failed: disk quota exceeded\nsshfleet.transfer.rolled_back: 2 of 2 written files removed",
+			mode:   cli.ModeUpload,
+			expect: "上传失败已回滚",
+		},
+		{
+			name:   "回滚没清干净：优先报「未清干净」，盖过逐文件那条",
+			text:   "a.log: 上传失败 - sshfleet.transfer.remote_file_failed: disk quota exceeded\nsshfleet.transfer.rollback_partial: 1 of 2 written files removed, left: /data/b.bin",
+			mode:   cli.ModeUpload,
+			expect: "上传回滚未清干净",
+		},
+		{
+			// 撞名导致的失败同样会回滚。统计块要回答的是「目标机现在怎么样、能不能重传」，
+			// 所以回滚状态排在「远程文件已存在」之前——两者在这一格里是并存的。
+			name:   "撞名触发回滚：统计块优先显示回滚状态",
+			text:   "c.bin: 上传失败 - sshfleet.transfer.remote_exists: file already exists on the remote host\nsshfleet.transfer.rolled_back: 2 of 2 written files removed",
+			mode:   cli.ModeUpload,
+			expect: "上传失败已回滚",
 		},
 	}
 	for _, c := range cases {
@@ -63,7 +77,6 @@ func TestJudgeTakesCategoryFromMessage(t *testing.T) {
 // 不吞、不猜（与今天「认不出来就显示报错原文」同一个位置）。
 func TestJudgeUnclaimedMessageFallsBackToText(t *testing.T) {
 	kw := loadKeywords(t)
-	const text = "sshfleet.transfer.finished: 3 of 5 files transferred"
 	// 传一条配置里没有的分类都不含的报文，专看好落点。
 	const stray = "sshfleet.run.not_in_config: something happened"
 
@@ -71,7 +84,6 @@ func TestJudgeUnclaimedMessageFallsBackToText(t *testing.T) {
 	if got != stray {
 		t.Fatalf("未认领的报文应回落成原文，实为 %q", got)
 	}
-	_ = text
 }
 
 // TestJudgeSuccessRuleRejectsMessage 成功规则多一条：报错原文里出现报文即不算成功。
@@ -141,7 +153,7 @@ func TestJudgePasswordExpiredWithPasswdGuide(t *testing.T) {
 func TestJudgeNoCategoryConstants(t *testing.T) {
 	// 空判据表：任何形态都不可能命中分类。
 	kw := &Keywords{}
-	const msg = "sshfleet.transfer.finished: 3 of 5 files transferred"
+	const msg = "sshfleet.transfer.rolled_back: 2 of 2 written files removed"
 
 	res := ssh.Result{ConnectSuccess: true, SuccessFiles: 3, FailedFiles: 2, Error: strPtrOf(msg)}
 	Judge(&res, cli.ModeUpload, kw)
