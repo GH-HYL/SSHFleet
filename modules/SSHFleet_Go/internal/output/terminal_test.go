@@ -133,6 +133,28 @@ func TestResultLineShowsControlCharsInsteadOfLettingTerminalEatThem(t *testing.T
 	}
 }
 
+// 失败行的错误详情 / 错误原文同样不能透传控制字符：它们来自远端（报错原文、服务端
+// banner），和 Output 一样可能是任意字节。只护住 Output 会留一个同样的洞。
+func TestResultLineShowsControlCharsInErrorText(t *testing.T) {
+	// 连上了但没跑成：错误详情这一路。
+	got := ResultLine(ssh.Result{
+		IP: "[10.0.0.1]", ConnectSuccess: true, Verdict: "other", Category: "执行失败",
+		Error: strPtr("命令被拒\r远端仍在处理"),
+	}, cli.ModeCommand, nil, "执行失败")
+	if !strings.Contains(got, "错误详情: 命令被拒␍远端仍在处理") {
+		t.Fatalf("错误详情里的回车应显示为 ␍，实际：%q", got)
+	}
+
+	// 连接失败：错误这一路。
+	got = ResultLine(ssh.Result{
+		IP: "[10.0.0.1]", ConnectSuccess: false, Verdict: "other", Category: "连接失败",
+		Error: strPtr("dial tcp\r拒绝"),
+	}, cli.ModeCommand, nil, "连接失败")
+	if !strings.Contains(got, "错误: dial tcp␍拒绝") {
+		t.Fatalf("错误行里的回车应显示为 ␍，实际：%q", got)
+	}
+}
+
 // 「未送出的代填」这一行事实的细节（D35，作者 2026-10-03 裁定）：失败行要把序号与
 // 触发词原文渲染回来——只陈述事实，不写结论词（「触发词未命中」四个字仍只由分类列表达）。
 // GLOSSARY「触发词未命中」词条里那句"序号里最小的那个就是第一个出错点"，指的就是这里的序号。

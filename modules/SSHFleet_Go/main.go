@@ -373,7 +373,7 @@ func main() {
 
 	execStart := time.Now()
 
-	// 归档目录：本次执行的全部产物（执行日志 / 终端输出 / 报告 / xlsx / 资源备份）
+	// 归档目录：本次执行的全部产物（执行日志 / 终端输出 / 报告 / xlsx / 取证日志 / 资源备份）
 	archive, err := output.CreateArchive(args)
 	if err != nil {
 		fatal("output", err)
@@ -391,6 +391,18 @@ func main() {
 	execLogPath := filepath.Join(archive.Dir, config.BuiltinPaths.Exec)
 	logger.Info(fmt.Sprintf("执行期日志已轮转至：%s（执行结束自动切回）", execLogPath))
 
+	// 取证日志（见 internal/diagnose）：与 report.txt 同放归档目录，一次执行一个文件。
+	// 记录器在这里一次建成、落点此后再不变——它只写这一个文件，不参与执行流程。
+	// 建不出来时只告警、不中断：取证是附加物，不能因为它拖垮这次执行。
+	diag := diagnose.New(nil)
+	if diagLog, derr := log.InitExec(archive.Dir, config.BuiltinPaths.Diagnose); derr != nil {
+		logger.Warn(fmt.Sprintf("无法创建 %s 文件: %v", config.BuiltinPaths.Diagnose, derr))
+	} else {
+		defer func() { _ = diagLog.Close() }()
+		diag = diagnose.New(diagLog)
+	}
+	diag.Environment(versionWithBuildID(), runtime.GOOS, runtime.GOARCH, common.ColorEnabled, os.Getenv("TERM"))
+
 	mode := args.ModeName()
 	if dangerNote != "" {
 		execLog.Warn(dangerNote)
@@ -407,11 +419,6 @@ func main() {
 	// 单节点结果的三个去向（终端明细 / output.txt / 执行期日志）与进度界面的
 	// 懒创建、上打提示都收在 output 的呈现器里；main 只构造并接上 batch 的三个事件。
 	// （呈现器只做呈现，不控制生命周期——主干与退出权仍在本函数手里。）
-	// 诊断记录（见 internal/diagnose）：目标环境这边碰不到，测试机会只有一次，
-	// 所以把「远端回了什么字节、最终交给终端的是什么」逐节点记进工具日志——
-	// 对方只需换掉可执行文件跑一次，再把 history/SSHFleetTools.log 发回来。
-	diag := diagnose.New(logger)
-	diag.Environment(versionWithBuildID(), runtime.GOOS, runtime.GOARCH, common.ColorEnabled, os.Getenv("TERM"), toolLogPath())
 	reporter := output.NewReporter(execLog, outputFile, mode, args.Answers, nodes.Len(), execStart, in.Disinteractive, diag)
 	// 改密的入场信号为空 = 整场不喂、每台机器都干等到超时：这种配置要在开工前拦住。
 	// 取的判据与执行侧同一处（Keywords.PasswordExpired），守卫与被守的东西不会各说各话。
