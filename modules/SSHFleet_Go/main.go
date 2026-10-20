@@ -34,7 +34,7 @@ import (
 // 版本号：单一出处（显示在帮助信息首行下方，经 cli.Parse 传入 Usage）。
 // 与 CHANGELOG 顶部当天段落的段头**同一个号**——开段、抬号时在同一次提交里同步改，
 // 两处不一致即为错误。同一天的改动共用一个号，不因改动多而另起号。
-const appVersion = "10.0.0"
+const appVersion = "10.0.1"
 
 // versionWithBuildID 版本号拼上**构建标识**：git 短提交号（仓库内编译时由 go build
 // 自动注入 vcs.revision；工作区有未提交改动时加 -dirty）+ HEAD 提交时间。
@@ -307,7 +307,7 @@ func main() {
 		os.Exit(1)
 	case len(dangerReport.Matches) > 0:
 		// 非 forbidden：不管交互与否都先把警告框打出来。--yes 只是替人回答了「y」，
-		// 不该连带把「这条命令有风险」这件事也从屏幕上抹掉；跳过确认时的留痕仍由 Confirm 写。
+		// 不该连带把「命中了危险规则」这件事也从屏幕上抹掉；跳过确认时的留痕仍由 Confirm 写。
 		output.PrintDangerWarning(dangerReport, false)
 		autoNote := "非交互模式放行危险命令：" + dangerReport.Matches[0].Note()
 		confirmed, cerr := in.Confirm(common.ConfirmReq{
