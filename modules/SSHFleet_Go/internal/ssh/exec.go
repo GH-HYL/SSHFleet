@@ -209,6 +209,15 @@ func isExitMissing(err error) bool {
 	return errors.As(err, &missing)
 }
 
+// isCommandRejected 库说「目标机不接受这次会话 / 命令请求」。
+//
+// 这是"连上了、会话也开了，但对方拒绝执行"那一类：命令根本没跑，因此没有退出码，
+// 也不能靠库的提示原文去认（措辞一变就静默失效）。
+func isCommandRejected(err error) bool {
+	var openErr *ssh.OpenChannelError
+	return errors.As(err, &openErr)
+}
+
 // endFacts 一次执行的结束信号 → 事实字段。三条通道（命令 / 代填 / 改密）收场时登记的
 // 是同一件事，这里做单点映射：
 //
@@ -241,6 +250,9 @@ func endFactsOf(err error, timedOut, canceled bool) endFacts {
 			// 库已经告诉我们「会话结束了、没收到退出状态」——这本身就是分类依据，
 			// 翻成报文，不再退化成靠关键词匹配库提示原文（库改措辞就静默失效）。
 			f.errText = strPtr(Message("session", sessionExitMissing, err.Error()))
+		} else if isCommandRejected(err) {
+			// 库已经告诉我们「目标机拒了这次请求」：命令没跑，没有退出码可给。
+			f.errText = strPtr(Message("run", runRejected, err.Error()))
 		} else {
 			f.errText = strPtr(err.Error())
 		}

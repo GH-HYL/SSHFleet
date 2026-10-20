@@ -128,6 +128,8 @@ func TestShippedConfigsClaimEveryMessageFamily(t *testing.T) {
 		{"sshfleet.session.pty_failed", "无法建立会话"},
 		{"sshfleet.session.exit_missing", "会话被中断"},
 		{"sshfleet.run.timeout", "执行超时"},
+		{"sshfleet.run.rejected", "命令被拒绝"},
+		{"sshfleet.session.channel_failed", "无法建立会话"},
 		{"sshfleet.transfer.client_failed", "SFTP失败"},
 		{"sshfleet.transfer.finished", "部分成功"},
 		{"sshfleet.transfer.local_unreadable", "本地文件错误"},

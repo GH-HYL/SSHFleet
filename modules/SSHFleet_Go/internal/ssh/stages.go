@@ -63,3 +63,6 @@ func deref(p *string) string {
 	}
 	return *p
 }
+
+// runRejected 目标机接受了连接，但拒绝执行这条命令（命令没跑起来，没有退出码）。
+const runRejected = "rejected"
