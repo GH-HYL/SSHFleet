@@ -19,10 +19,12 @@ import (
 	"os"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/mattn/go-isatty"
 )
 
-// byteStats 一段远端输出里各类字节的计数与「行尾形态」分布。
-type byteStats struct {
+// ByteStats 一段远端输出里各类字节的计数。导出：它是本包的对外判据，测试与调用方据此读事实。
+type ByteStats struct {
 	Total     int
 	CR        int
 	LF        int
@@ -32,26 +34,26 @@ type byteStats struct {
 	ValidUTF8 bool
 }
 
-// lineEndings 每行行尾的形态：crlf / lf / cr / none（无换行）。按出现顺序统计个数。
-type lineEndings struct {
+// LineEndings 每行行尾的形态统计。导出理由同 ByteStats。
+type LineEndings struct {
 	CRLF int
 	LF   int
 	CR   int
 	None int
 }
 
-func (s byteStats) String() string {
+func (s ByteStats) String() string {
 	return fmt.Sprintf("共 %d 字节：CR=%d LF=%d ESC=%d NUL=%d 其它控制字符=%d 合法UTF-8=%v",
 		s.Total, s.CR, s.LF, s.ESC, s.NUL, s.OtherCtrl, s.ValidUTF8)
 }
 
-func (e lineEndings) String() string {
+func (e LineEndings) String() string {
 	return fmt.Sprintf("CRLF=%d 只LF=%d 只CR=%d 无换行=%d", e.CRLF, e.LF, e.CR, e.None)
 }
 
 // Stats 统计一段文本的字节构成。
-func Stats(s string) byteStats {
-	st := byteStats{Total: len(s), ValidUTF8: utf8.ValidString(s)}
+func Stats(s string) ByteStats {
+	st := ByteStats{Total: len(s), ValidUTF8: utf8.ValidString(s)}
 	for i := 0; i < len(s); i++ {
 		switch b := s[i]; {
 		case b == '\r':
@@ -71,8 +73,8 @@ func Stats(s string) byteStats {
 
 // Endings 统计行尾形态。判定规则：`\r\n` 算一个 CRLF；孤立的 `\r` 算只 CR；
 // 其余 `\n` 算只 LF；末段不为空则记一次「无换行」。
-func Endings(s string) lineEndings {
-	var e lineEndings
+func Endings(s string) LineEndings {
+	var e LineEndings
 	for i := 0; i < len(s); i++ {
 		switch s[i] {
 		case '\r':
@@ -175,14 +177,14 @@ func LocalEnv(colorEnabled bool, consoleVT bool, termName string) string {
 		isTerminal(), termName, colorEnabled, consoleVT)
 }
 
-// isTerminal 本进程 stdout 是否连在终端上（会被重定向到文件时判为否）。
-// 实现与呈现层同一口径，所以放在这里单独一份、不去跨包引它。
+// isTerminal 本进程 stdout 是否连在终端上（重定向到文件时为否）。
+//
+// 用 isatty 而不是 Stat 的字符设备位：Windows 上 cygwin/mintty 的管道也算终端，
+// 与呈现层（internal/output）判断「要不要启动进度界面」用的是同一个库、同一口径——
+// 两处口径一旦分叉，「日志说 stdout 是终端，可进度界面没起来」这种矛盾就会出现在取证记录里。
 func isTerminal() bool {
-	fi, err := os.Stdout.Stat()
-	if err != nil {
-		return false
-	}
-	return fi.Mode()&os.ModeCharDevice != 0
+	fd := os.Stdout.Fd()
+	return isatty.IsTerminal(fd) || isatty.IsCygwinTerminal(fd)
 }
 
 // quote 给一段可能含空格的文本加上直引号：日志里空值要看得见（"" 与「什么都没有」不同）。

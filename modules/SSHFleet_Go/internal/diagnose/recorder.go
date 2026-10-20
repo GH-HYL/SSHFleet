@@ -2,10 +2,10 @@
 //
 // 设计约束（这一轮的前提：测试机会只有一次、由别人替我们跑）：
 //   - 不依赖任何开关：编译进去就生效，他换 exe 跑一次就有；
-//   - 信息进**同一个日志文件**（工具日志 history/SSHFleetTools.log），
-//     不必让他去归档目录里翻多个文件；
-//   - 每个节点写一段自洽的记录：远端原始字节 → 整备后字节 → 最终交给终端的字节，
-//     三段并排，读的人一眼能看出「是采集丢了、还是终端吃了」；
+//   - 信息进**归档目录里单独一个文件**（SSHFleetDiagnose.log，与 report.txt 同目录），
+//     他跑完直接拿那一个文件，不必去别的目录里翻；
+//   - 每个节点写两段自洽的记录：**整备之前**的远端原始字节、与**最终交给终端**的那段
+//     文本，两段并排，读的人一眼能看出「是采集丢了、还是终端吃了」；
 //   - 结尾写一份汇总，只汇总计数与形态，不重复正文。
 package diagnose
 
@@ -26,7 +26,7 @@ const (
 // Recorder 诊断记录器。并发安全：结果由 worker 协程产出、呈现层单线程回放，
 // 但原始输出是在采集侧（worker 协程）登记的，必须加锁。
 type Recorder struct {
-	lg Logger
+	lg InfoLogger
 
 	mu sync.Mutex
 	// 每个节点只写一次的原始输出记录（键 = 序号）。
@@ -39,31 +39,37 @@ type Recorder struct {
 	samplesWithCR []string
 }
 
-// Logger 诊断器需要的最小日志能力（工具日志已满足；nil 安全）。
-type Logger interface {
+// InfoLogger 诊断器需要的最小日志能力（一条 Info 就够，级别与时间戳由日志自己管）。
+type InfoLogger interface {
 	Info(args ...any)
 }
 
-// New 建一个记录器；lg 为 nil 时所有方法都是空操作（测试与不诊断时不必判空）。
-func New(lg Logger) *Recorder {
+// New 建一个记录器，落点一次给定、此后不变；lg 为 nil 时所有方法都是空操作。
+//
+// 为什么不做「先写一个地方、再改成写另一个地方」：那会让日志出口变成跨模块流转的可变
+// 状态，切换时序也得由主干操心（规范「结构·2」）。归档目录一建好就建记录器，在此之前
+// 发生的事由主干自己写进工具日志，两件事各归各的。
+func New(lg InfoLogger) *Recorder {
 	return &Recorder{lg: lg, rawWritten: map[int]bool{}}
 }
 
 // Enabled 是否真的会记（没给日志时全空操作）。
 func (r *Recorder) Enabled() bool { return r != nil && r.lg != nil }
 
-// Environment 记一次运行的环境事实：版本、系统、终端、颜色能力、会话 tee 设定。
-// 在开工之前调用一次即可——它是「终端会怎么解释这段字节」的前提条件。
-func (r *Recorder) Environment(version, goos, goarch string, colorEnabled bool, termName, logPath string) {
+// Environment 记一次运行的环境事实：版本、系统、终端、颜色能力、控制台 VT。
+// 开工之前调用一次即可——它是「终端会怎么解释这段字节」的前提条件。
+func (r *Recorder) Environment(version, goos, goarch string, colorEnabled bool, termName string) {
 	if !r.Enabled() {
 		return
 	}
 	vt, vtNote := ConsoleVT()
 	r.lg.Info("DIAG> ── 环境 ──────────────────────────────────────────")
-	r.lg.Info("DIAG> 本文件就是取证日志，发回时请整个复制：" + logPath)
 	r.lg.Info(fmt.Sprintf("DIAG> 版本：%s；平台：%s/%s；%s", version, goos, goarch, LocalEnv(colorEnabled, vt, termName)))
 	r.lg.Info(fmt.Sprintf("DIAG> Windows控制台VT：%s", vtNote))
-	r.lg.Info("DIAG> 会话不申请 tty（工具从不调用 RequestPty），远端按自身逻辑断行")
+	// tty 事实必须照实记：命令 / 脚本模式不申请 pty（远端按自身逻辑断行），
+	// 而代填（-a）与改密模式会申请（interactive.go / passwdsession.go 各一处）。
+	// 两者对「远端回什么字节」影响直接相关，写死成一句断言会把读日志的人带偏。
+	r.lg.Info("DIAG> 会话 tty：命令 / 脚本模式不申请 pty，远端按自身逻辑断行；代填（-a）与改密模式会申请")
 }
 
 // RemoteRaw 记录某节点**整备之前**的远端原始输出。采集侧在归一前调用。
@@ -109,7 +115,9 @@ func (r *Recorder) ResultDetail(seq int, ip, line string) {
 	st := Stats(line)
 	r.mu.Lock()
 	r.nodesTotal++
-	if st.CR > 0 || st.ESC > 0 || st.NUL > 0 || st.OtherCtrl > 0 {
+	// ESC 不计：颜色序列在终端上是正当用途，计进来会让「仍带控制字符的节点数」
+	// 在有颜色的环境里恒为非零，把这张判据表读反。
+	if st.CR > 0 || st.NUL > 0 || st.OtherCtrl > 0 {
 		r.nodesWithCtrl++
 	}
 	r.mu.Unlock()
@@ -118,6 +126,10 @@ func (r *Recorder) ResultDetail(seq int, ip, line string) {
 	r.lg.Info(fmt.Sprintf("DIAG>   字节构成：%s", st))
 	r.lg.Info(fmt.Sprintf("DIAG>   行尾形态：%s", Endings(line)))
 	r.lg.Info(fmt.Sprintf("DIAG>   转义形式：%s", quote(Escaped(line, rawEscapeLimit))))
+	r.lg.Info("DIAG>   十六进制：")
+	for _, ln := range splitLines(HexDump(line, rawDumpLimit)) {
+		r.lg.Info("DIAG>   " + ln)
+	}
 }
 
 // Summary 收尾汇总：一次运行的判据性计数。主干在结果处理完之后调用一次。

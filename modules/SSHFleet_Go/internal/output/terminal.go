@@ -102,11 +102,11 @@ func ResultLine(r ssh.Result, mode cli.Mode, answers []ssh.Answer, category stri
 		// 这行原先只在连接失败时才有，这类结果的细节只能事后翻 results.xlsx（D35）。
 		if r.Verdict != verdict.Success {
 			if text := errText(r, answers, ""); text != "" {
-				lines = append(lines, fmt.Sprintf("【%s】 错误详情: %s", r.IP, text))
+				lines = append(lines, fmt.Sprintf("【%s】 错误详情: %s", r.IP, showControlChars(text)))
 			}
 		}
 	} else {
-		lines = append(lines, fmt.Sprintf("【%s】 错误: %s", r.IP, errText(r, answers, "未知错误")))
+		lines = append(lines, fmt.Sprintf("【%s】 错误: %s", r.IP, showControlChars(errText(r, answers, "未知错误"))))
 	}
 
 	lines = append(lines, fmt.Sprintf("【%s】 分类: %s", r.IP, category))

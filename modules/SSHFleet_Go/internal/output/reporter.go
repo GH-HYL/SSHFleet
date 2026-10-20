@@ -134,10 +134,12 @@ func (r *Reporter) Result(res ssh.Result) {
 
 	// 终端明细：非传输类（命令 / 脚本 / 改密）上屏；传输类（上传 / 下载）不上屏——
 	// 那两条路有进度界面负责呈现明细。
+	// 诊断：每条结果都记（含传输类——它们不上屏，但汇总里的节点数要算全，
+	// 否则「收到结果 N 条」与「最终文本 N 个」两对数会对不上）。
+	if r.diag != nil {
+		r.diag.ResultDetail(res.Seq, res.IP, line)
+	}
 	if !r.mode.Info().Transfer {
-		if r.diag != nil {
-			r.diag.ResultDetail(res.Seq, res.IP, line)
-		}
 		r.printAbove(line)
 	}
 	r.logNode(res, category)
