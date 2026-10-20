@@ -495,7 +495,7 @@ func pathWithoutSpace(flag, p string) error {
 		return nil
 	}
 	what := pathFlagWhat[flag]
-	return fmt.Errorf("%s 的取值中间不能有空格：%s\n提示：%s 收的是%s，确认一下是不是漏了引号、或者参数写错了",
+	return fmt.Errorf("%s 的取值中间不能有空格：%s\n提示：%s 收的是%s，请检查是否漏写引号或参数拼写有误",
 		flag, p, flag, what)
 }
 
