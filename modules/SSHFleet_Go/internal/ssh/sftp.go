@@ -119,9 +119,11 @@ func (c *Client) UploadFiles(ctx context.Context, files []LocalFile, skipped []s
 		// 回滚一定不能碰它。
 		if _, err := sftpClient.Stat(remoteFilePath); err == nil {
 			failed++
+			// 报错原文格只放报文（ADR-0021 第 8 条：执行侧只陈述事实，不下结论）。
+			// 「上传失败」这类中文结论只留在输出明细行（lines），不参与判据匹配。
 			msg := fmt.Sprintf("%s: 上传失败 - %s", f.Rel, Message(EnvTransfer, transferRemoteExists, "file already exists on the remote host"))
 			lines = append(lines, msg)
-			result.Error = strPtr(msg)
+			result.Error = strPtr(fmt.Sprintf("%s: %s", f.Rel, Message(EnvTransfer, transferRemoteExists, "file already exists on the remote host")))
 			if onProgress != nil {
 				onProgress(Progress{Seq: seq, IP: c.cfg.IP, SuccessFiles: success, FailedFiles: failed})
 			}
@@ -134,7 +136,7 @@ func (c *Client) UploadFiles(ctx context.Context, files []LocalFile, skipped []s
 			failed++
 			msg := fmt.Sprintf("%s: 上传失败 - %v", f.Rel, err)
 			lines = append(lines, msg)
-			result.Error = strPtr(msg)
+			result.Error = strPtr(Message(EnvTransfer, transferLocalUnreadable, fmt.Sprintf("%s: %v", f.Rel, err)))
 			if onProgress != nil {
 				onProgress(Progress{Seq: seq, IP: c.cfg.IP, SuccessFiles: success, FailedFiles: failed})
 			}
@@ -144,13 +146,14 @@ func (c *Client) UploadFiles(ctx context.Context, files []LocalFile, skipped []s
 		localMode := localInfo.Mode().Perm()
 
 		var (
-			written   int64
-			uploadErr error
+			written    int64
+			uploadErr  error
+			halfWrites []string
 		)
 		if !effectiveSudo {
-			written, uploadErr = c.sftpUploadFile(sftpClient, f.Path, remoteFilePath, localMode, seq, totalBytes, len(files), onProgress)
+			written, uploadErr, halfWrites = c.sftpUploadFile(sftpClient, f.Path, remoteFilePath, localMode, seq, totalBytes, len(files), onProgress)
 		} else {
-			written, uploadErr = c.sftpUploadWithSudo(sftpClient, f.Path, f.Rel, remotePath, localMode, seq, totalBytes, len(files), onProgress)
+			written, uploadErr, halfWrites = c.sftpUploadWithSudo(sftpClient, f.Path, f.Rel, remotePath, localMode, seq, totalBytes, len(files), onProgress)
 		}
 
 		cost := time.Since(fileStart).Seconds()
@@ -160,13 +163,21 @@ func (c *Client) UploadFiles(ctx context.Context, files []LocalFile, skipped []s
 			failed++
 			msg := fmt.Sprintf("%s: 上传失败 - %v", f.Rel, uploadErr)
 			lines = append(lines, msg)
-			result.Error = strPtr(msg)
+			// uploadErr 由上传函数产出，已经是报文；万一不是（将来新增的路径漏了包），
+			// 在这里兜一层，别让中文结论或者裸原文进报错原文格。
+			reason := uploadErr.Error()
+			if !IsMessage(reason) {
+				reason = Message(EnvTransfer, transferRemoteFileFailed, reason)
+			}
+			result.Error = strPtr(fmt.Sprintf("%s: %s", f.Rel, reason))
 			if onProgress != nil {
 				onProgress(Progress{Seq: seq, IP: c.cfg.IP, SuccessFiles: success, FailedFiles: failed})
 			}
 			// 失败即回滚（ADR-0022）：目标机恢复成本次执行前的样子。
 			// 失败文件自己的半成品由上传函数删掉，这里只清前面写成功的那些。
 			result.Error = appendMessage(result.Error, c.rollbackUpload(sftpClient, writtenPaths, useSudo))
+			// 半成品没删掉时照实说（工单 09）：它们不在回滚清单里，混进回滚计数会失真。
+			result.Error = appendMessage(result.Error, PartialLeftMessage(halfWrites))
 			break
 		}
 		success++
@@ -356,18 +367,24 @@ func (c *Client) DownloadFiles(ctx context.Context, remotePath, localPath string
 			break
 		}
 
-		written, downloadErr := c.sftpDownloadFile(sftpClient, remoteFilePath, localFilePath, seq, totalBytes, totalFiles, onProgress)
+		written, downloadErr, halfWrites := c.sftpDownloadFile(sftpClient, remoteFilePath, localFilePath, seq, totalBytes, totalFiles, onProgress)
 		cost := time.Since(fileStart).Seconds()
 		costTotal += cost
 
 		if downloadErr != nil {
 			failed++
+			// 「下载失败」只留在输出明细行；报错原文格放报文（ADR-0021 第 8 条）。
 			msg := fmt.Sprintf("%s: 下载失败 - %v", file.relativePath, downloadErr)
 			lines = append(lines, msg)
-			result.Error = strPtr(msg)
+			reason := downloadErr.Error()
+			if !IsMessage(reason) {
+				reason = Message(EnvTransfer, transferLocalFileFailed, reason)
+			}
+			result.Error = strPtr(fmt.Sprintf("%s: %s", file.relativePath, reason))
 			if onProgress != nil {
 				onProgress(Progress{Seq: seq, IP: c.cfg.IP, DownloadedBytes: downloadedBytes, TotalBytes: totalBytes, TotalFiles: totalFiles, SuccessFiles: success, FailedFiles: failed})
 			}
+			result.Error = appendMessage(result.Error, LocalPartialLeftMessage(halfWrites))
 			break
 		}
 		success++
@@ -391,24 +408,24 @@ func (c *Client) DownloadFiles(ctx context.Context, remotePath, localPath string
 }
 
 // sftpUploadFile 直接通过 SFTP 写入文件（非 sudo 路径），返回实际写入字节数。
-func (c *Client) sftpUploadFile(sftpClient *sftp.Client, localPath, remoteFilePath string, perm os.FileMode, seq int, totalBytes int64, totalFiles int, onProgress func(Progress)) (int64, error) {
+func (c *Client) sftpUploadFile(sftpClient *sftp.Client, localPath, remoteFilePath string, perm os.FileMode, seq int, totalBytes int64, totalFiles int, onProgress func(Progress)) (int64, error, []string) {
 	// 中间目录按需创建：上传目录的相对层级要保留（spec D49）。
 	// 目标目录（-p）本身仍必须已存在——这里只建它下面的层级，不建它在远端的位置。
 	if dir := path.Dir(remoteFilePath); dir != "." {
 		if err := sftpClient.MkdirAll(dir); err != nil {
-			return 0, errors.New(Message(EnvTransfer, transferRemoteFileFailed, fmt.Sprintf("create remote dir %s: %v", dir, err)))
+			return 0, errors.New(Message(EnvTransfer, transferRemoteFileFailed, fmt.Sprintf("create remote dir %s: %v", dir, err))), nil
 		}
 	}
 
 	src, err := os.Open(localPath)
 	if err != nil {
-		return 0, errors.New(Message(EnvTransfer, transferLocalUnreadable, err.Error()))
+		return 0, errors.New(Message(EnvTransfer, transferLocalUnreadable, err.Error())), nil
 	}
 	defer func() { _ = src.Close() }()
 
 	dst, err := sftpClient.Create(remoteFilePath)
 	if err != nil {
-		return 0, errors.New(Message(EnvTransfer, transferRemoteFileFailed, err.Error()))
+		return 0, errors.New(Message(EnvTransfer, transferRemoteFileFailed, err.Error())), nil
 	}
 	defer func() { _ = dst.Close() }()
 
@@ -421,35 +438,47 @@ func (c *Client) sftpUploadFile(sftpClient *sftp.Client, localPath, remoteFilePa
 		callback:   onProgress,
 	}, onProgress == nil)
 	if err != nil {
-		_ = sftpClient.Remove(remoteFilePath) // 删除远程半成品
-		return 0, errors.New(Message(EnvTransfer, transferRemoteFileFailed, err.Error()))
+		var leftovers []string
+		if rmErr := sftpClient.Remove(remoteFilePath); rmErr != nil { // 删除远程半成品
+			// 删不掉就照实说：它在目标机上占着路径，下次重传会撞「远程文件已存在」。
+			leftovers = append(leftovers, remoteFilePath)
+		}
+		return 0, errors.New(Message(EnvTransfer, transferRemoteFileFailed, err.Error())), leftovers
 	}
 	if err := sftpClient.Chmod(remoteFilePath, perm); err != nil {
 		// 权限设置失败不阻断（旧行为）
 	}
-	return written, nil
+	return written, nil, nil
 }
 
 // sftpUploadWithSudo 经临时目录 + sudo mv 上传（sudo 路径），返回实际写入字节数。
-func (c *Client) sftpUploadWithSudo(sftpClient *sftp.Client, localPath, rel, remotePath string, perm os.FileMode, seq int, totalBytes int64, totalFiles int, onProgress func(Progress)) (int64, error) {
+func (c *Client) sftpUploadWithSudo(sftpClient *sftp.Client, localPath, rel, remotePath string, perm os.FileMode, seq int, totalBytes int64, totalFiles int, onProgress func(Progress)) (int64, error, []string) {
 	// 最终落点 = 目标目录 + 相对路径；中间的层级用 sudo 建（目标目录本身必须已存在）
 	remoteFilePath := path.Join(remotePath, rel)
 	if dir := path.Dir(remoteFilePath); dir != remotePath {
 		if err := c.runCommand(fmt.Sprintf("sudo mkdir -p '%s'", escapeShellArg(dir))); err != nil {
-			return 0, errors.New(Message(EnvTransfer, transferRemoteFileFailed, fmt.Sprintf("create remote dir %s: %v", dir, err)))
+			return 0, errors.New(Message(EnvTransfer, transferRemoteFileFailed, fmt.Sprintf("create remote dir %s: %v", dir, err))), nil
 		}
 	}
 
 	tmpDir := tmpRoot + randomHex()
 	if err := c.runCommand(fmt.Sprintf("sudo mkdir -p '%s' && sudo chmod 777 '%s'", tmpDir, tmpDir)); err != nil {
-		return 0, errors.New(Message(EnvTransfer, transferTmpFailed, err.Error()))
+		return 0, errors.New(Message(EnvTransfer, transferTmpFailed, err.Error())), nil
 	}
-	cleanup := func() { _ = c.runCommand(fmt.Sprintf("sudo rm -rf '%s'", tmpDir)) }
+	// cleanup 的失败不再静默：临时目录清不掉时，目标机上会留着本次的半成品。
+	var leftovers []string
+	cleanup := func() {
+		if err := c.runCommand(fmt.Sprintf("sudo rm -rf '%s'", tmpDir)); err != nil {
+			if len(leftovers) == 0 || leftovers[len(leftovers)-1] != tmpDir {
+				leftovers = append(leftovers, tmpDir)
+			}
+		}
+	}
 
 	src, err := os.Open(localPath)
 	if err != nil {
 		cleanup()
-		return 0, errors.New(Message(EnvTransfer, transferLocalUnreadable, err.Error()))
+		return 0, errors.New(Message(EnvTransfer, transferLocalUnreadable, err.Error())), leftovers
 	}
 	defer func() { _ = src.Close() }()
 
@@ -458,7 +487,7 @@ func (c *Client) sftpUploadWithSudo(sftpClient *sftp.Client, localPath, rel, rem
 	dst, err := sftpClient.Create(tmpFilePath)
 	if err != nil {
 		cleanup()
-		return 0, errors.New(Message(EnvTransfer, transferTmpFailed, err.Error()))
+		return 0, errors.New(Message(EnvTransfer, transferTmpFailed, err.Error())), leftovers
 	}
 	defer func() { _ = dst.Close() }()
 
@@ -472,7 +501,7 @@ func (c *Client) sftpUploadWithSudo(sftpClient *sftp.Client, localPath, rel, rem
 	}, onProgress == nil)
 	if err != nil {
 		cleanup()
-		return 0, errors.New(Message(EnvTransfer, transferTmpFailed, err.Error()))
+		return 0, errors.New(Message(EnvTransfer, transferTmpFailed, err.Error())), leftovers
 	}
 	if err := sftpClient.Chmod(tmpFilePath, perm); err != nil {
 		// 权限设置失败不阻断（旧行为）
@@ -481,11 +510,16 @@ func (c *Client) sftpUploadWithSudo(sftpClient *sftp.Client, localPath, rel, rem
 	// sudo mv 到最终路径：两个参数都转义——两边都含用户可控字符（临时名里带着本地文件名的
 	// 基名，最终名是原路径 + 原文件名），任一边漏转义都会把远端命令拼坏。
 	if err := c.runCommand(fmt.Sprintf("sudo mv '%s' '%s'", escapeShellArg(tmpFilePath), escapeShellArg(remoteFilePath))); err != nil {
+		// 跨文件系统时 mv 退化为 copy+unlink，中途失败可能在最终位置留下半成品。
+		// 不猜：先 Stat，确认存在才报，别把「根本没写出去」误报成残留。
+		if _, statErr := sftpClient.Stat(remoteFilePath); statErr == nil {
+			leftovers = append(leftovers, remoteFilePath)
+		}
 		cleanup()
-		return 0, errors.New(Message(EnvTransfer, transferSudoFailed, err.Error()))
+		return 0, errors.New(Message(EnvTransfer, transferSudoFailed, err.Error())), leftovers
 	}
 	cleanup()
-	return written, nil
+	return written, nil, leftovers
 }
 
 // rollbackUpload 上传失败后删掉本次已写成功的文件（ADR-0022）。
@@ -534,19 +568,19 @@ func escapeShellArg(s string) string {
 }
 
 // sftpDownloadFile 通过 SFTP 下载单个文件，返回实际下载字节数；失败删除本地半成品。
-func (c *Client) sftpDownloadFile(sftpClient *sftp.Client, remoteFilePath, localFilePath string, seq int, totalBytes int64, totalFiles int, onProgress func(Progress)) (int64, error) {
+func (c *Client) sftpDownloadFile(sftpClient *sftp.Client, remoteFilePath, localFilePath string, seq int, totalBytes int64, totalFiles int, onProgress func(Progress)) (int64, error, []string) {
 	// 打开的是**远端**文件：这一步失败是目标机那边的事（文件刚被删、权限不够），
 	// 挂 remote_file_failed。挂 local_file_failed 会让「本机写不进去」与「远端读不出来」
 	// 共用同一个环节名，使用者按分类排查时会找错方向。
 	src, err := sftpClient.Open(remoteFilePath)
 	if err != nil {
-		return 0, errors.New(Message(EnvTransfer, transferRemoteFileFailed, err.Error()))
+		return 0, errors.New(Message(EnvTransfer, transferRemoteFileFailed, err.Error())), nil
 	}
 	defer func() { _ = src.Close() }()
 
 	dst, err := os.Create(localFilePath)
 	if err != nil {
-		return 0, errors.New(Message(EnvTransfer, transferLocalFileFailed, err.Error()))
+		return 0, errors.New(Message(EnvTransfer, transferLocalFileFailed, err.Error())), nil
 	}
 	defer func() { _ = dst.Close() }()
 
@@ -559,10 +593,14 @@ func (c *Client) sftpDownloadFile(sftpClient *sftp.Client, remoteFilePath, local
 		callback:   onProgress,
 	}, onProgress == nil)
 	if err != nil {
-		_ = os.Remove(localFilePath)
-		return 0, errors.New(Message(EnvTransfer, transferLocalFileFailed, err.Error()))
+		var leftovers []string
+		if rmErr := os.Remove(localFilePath); rmErr != nil {
+			// 本机半成品没删掉：下次重试会撞上这个残缺文件（工单 09）。
+			leftovers = append(leftovers, localFilePath)
+		}
+		return 0, errors.New(Message(EnvTransfer, transferLocalFileFailed, err.Error())), leftovers
 	}
-	return written, nil
+	return written, nil, nil
 }
 
 // copyUpload 1MB 缓冲流式上传；plain 为真时不走进度包裹（无回调场景）。

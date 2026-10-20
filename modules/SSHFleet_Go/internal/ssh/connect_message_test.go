@@ -35,9 +35,9 @@ func TestConnectStageOfDialError(t *testing.T) {
 			want: "no_route",
 		},
 		{
-			name: "域名解析不出来",
+			name: "清单只收 IP：no such host 也按通用拨号失败",
 			err:  errors.New("dial tcp: lookup nope.example: no such host"),
-			want: "dns_failed",
+			want: "dial_failed",
 		},
 		{
 			name: "认不出的拨号错误：退化为通用环节名",

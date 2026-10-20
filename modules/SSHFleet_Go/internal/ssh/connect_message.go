@@ -17,7 +17,6 @@ const (
 	connectRefused          = "refused"
 	connectTimeout          = "timeout"
 	connectNoRoute          = "no_route"
-	connectDNSFailed        = "dns_failed"
 	connectDialFailed       = "dial_failed"
 	connectHandshakeTimeout = "handshake_timeout"
 	connectAuthFailed       = "auth_failed"
@@ -44,8 +43,8 @@ func connectStageOfDialError(err error) string {
 		strings.Contains(msg, "network is unreachable"),
 		strings.Contains(msg, "host is unreachable"):
 		return connectNoRoute
-	case strings.Contains(msg, "no such host"):
-		return connectDNSFailed
+	// 没有 dns_failed：清单只收 IP，不发域名解析请求（2026-10-20 作者定）。
+	// 真出现 "no such host" 也只可能是别处转来的文本，按通用拨号失败报。
 	case strings.Contains(msg, "i/o timeout"), strings.Contains(msg, "timeout"):
 		return connectTimeout
 	default:

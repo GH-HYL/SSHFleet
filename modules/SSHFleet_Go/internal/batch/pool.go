@@ -8,7 +8,8 @@ import (
 )
 
 // runPool worker pool：并发执行任务，结果收集后返回（按完成顺序，调用方自行保序）。
-// ctx 取消时不再启动新任务、结果静默丢弃（对位旧 runPool 语义）。
+// ctx 取消时不再启动新任务；已经开工的任务跑完照常上报结果——取消不等于没执行，
+// 目标机可能已经被改过，结果里带着它自己的分类与报文。
 func runPool(ctx context.Context, concurrency int, tasks []*task, work func(context.Context, *task) ssh.Result, onResult func(ssh.Result)) []ssh.Result {
 	taskCh := make(chan *task, len(tasks))
 	resCh := make(chan ssh.Result, len(tasks))
@@ -27,11 +28,10 @@ func runPool(ctx context.Context, concurrency int, tasks []*task, work func(cont
 						return
 					}
 					res := work(ctx, t)
-					// 对位旧 runPool：取消后完成的结果不再上报（已完成的节点结果此前已入库）
-					select {
-					case resCh <- res:
-					case <-ctx.Done():
-					}
+					// 结果一律上报：通道容量等于任务数，发送不会阻塞。
+					// 取消后也不能丢——这一节点可能已经改过目标机（上传失败还回滚过），
+					// 丢了就会在统计里变成「未执行」，把「回滚做没做」这件事一起吞掉。
+					resCh <- res
 				}
 			}
 		}()

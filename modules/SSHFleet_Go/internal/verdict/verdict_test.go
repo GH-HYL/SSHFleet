@@ -22,6 +22,7 @@ type corpusCase struct {
 	ExitCode     *int   `toml:"exit_code"`
 	Error        string `toml:"error"`
 	Banner       string `toml:"banner"`
+	AbortLine    string `toml:"abort_line"`
 	Output       string `toml:"output"`
 	Mode         string `toml:"mode"`
 	SuccessFiles int    `toml:"success_files"`
@@ -70,6 +71,7 @@ func judgeCorpus(c corpusCase, kw *Keywords) string {
 		ConnectSuccess:   true,
 		Error:            strPtrOf(c.Error),
 		ServerBanner:     c.Banner,
+		AbortLine:        c.AbortLine,
 		Output:           c.Output,
 		SuccessFiles:     c.SuccessFiles,
 		FailedFiles:      c.FailedFiles,

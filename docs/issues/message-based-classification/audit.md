@@ -35,7 +35,7 @@ Status: done
 
 | # | 位置 | 现行文本 | 判定性质 | 报文 |
 | --- | --- | --- | --- | --- |
-| A1 | `client.go:76` | `建立连接失败 - %w`（拨号失败） | 文本判定 | `connect.refused` / `connect.timeout` / `connect.no_route` / `connect.dns_failed`，按 `err` 分支 |
+| A1 | `client.go:76` | `建立连接失败 - %w`（拨号失败） | 文本判定 | `connect.refused` / `connect.timeout` / `connect.no_route`，按 `err` 分支（`dns_failed` 已于审计后删除：清单只收 IP） |
 | A2 | `client.go:85` | `建立连接失败 - 握手超时%v` | 文本判定 | `connect.handshake_timeout` |
 | A3 | `client.go:87` | `建立连接失败 - %w`（握手失败） | 文本判定 | `connect.auth_failed`（`unable to authenticate` 等）或 `connect.handshake_failed` |
 | A4 | `client.go:133` | `解析密钥失败 - %w` | 文本判定 | `connect.key_parse_failed` |
@@ -238,7 +238,7 @@ spec《预算：全部报文清单》的核准与补全版。**本表是「出�
 | M1 | `sshfleet.connect.refused` | `connect` | `ssh.Client.Connect`（`client.go:76`） | `err` 含 `connection refused/reset` | 整句 |
 | M2 | `sshfleet.connect.timeout` | `connect` | 同上 | `net.Error.Timeout()` 且非握手阶段 | 整句 |
 | M3 | `sshfleet.connect.no_route` | `connect` | 同上 | `no route to host` 族 | 整句 |
-| M4 | `sshfleet.connect.dns_failed` | `connect` | 同上 | `no such host` | 整句 |
+| M4 | ~~`sshfleet.connect.dns_failed`~~ | — | — | **已删除**（清单只收 IP，2026-10-20 审计后） | — |
 | M5 | `sshfleet.connect.handshake_timeout` | `connect` | `Connect`（`client.go:84-86`） | 握手超时 | 整句 |
 | M6 | `sshfleet.connect.auth_failed` | `connect` | `Connect`（`client.go:87`） | `unable to authenticate` 族 | 整句 |
 | M7 | `sshfleet.connect.handshake_failed` | `connect` | `Connect`（`client.go:87` 兜底） | 其余握手失败（含 EOF） | 整句 |
@@ -276,7 +276,7 @@ spec《预算：全部报文清单》的核准与补全版。**本表是「出�
 | M37 | `sshfleet.abort.canceled` | `abort` | 建连收尾（`connectFor`）与三条通道收尾 | 已连上被中断 | **追加** |
 | M38 | `sshfleet.abort.connect_canceled` | `abort` | `connectFor` | 未连上被中断 | 整句 |
 
-> **合计 38 条**（M1–M38）。与 spec《预算：全部报文清单》的框架表相比，**本表补上了 13 条**，都是摸代码与实施时实际找到的失败形态：`connect.handshake_failed`、`connect.key_passphrase_missing`、`session.exit_missing`、`run.rejected`、`transfer.remote_file_failed`、`transfer.local_file_failed`、`transfer.tmp_failed`、`transfer.sudo_failed`、`transfer.remote_exists`、`transfer.local_dir_failed`、`transfer.remote_not_dir`、`transfer.remote_unreachable`、`transfer.list_failed`。spec 说「01 逐条核实并补全，本表给的是框架」，指的就是这里。
+> **合计 38 条（过程留档；终值 41 条）**：M1–M38 之外还漏了 `connect.dial_failed`（拨号失败兜底，见 `connect_message.go`），加上 M28 之后的 `rolled_back` / `rollback_partial`，代码现行环节常量为 **41 条**（connect 9 / session 4 / run 2 / transfer 17 / passwd 5 / answer 2 / abort 2；09 工单新增 `partial_left` / `local_partial_left`，`dns_failed` 已删）。**终值以代码常量与判据表为准**，本表只记下当时摸底的事实。与 spec《预算：全部报文清单》的框架表相比，**本表补上了 13 条**，都是摸代码与实施时实际找到的失败形态：`connect.handshake_failed`、`connect.key_passphrase_missing`、`session.exit_missing`、`run.rejected`、`transfer.remote_file_failed`、`transfer.local_file_failed`、`transfer.tmp_failed`、`transfer.sudo_failed`、`transfer.remote_exists`、`transfer.local_dir_failed`、`transfer.remote_not_dir`、`transfer.remote_unreachable`、`transfer.list_failed`。spec 说「01 逐条核实并补全，本表给的是框架」，指的就是这里。
 >
 > **`transfer` 那 13 处 `fmt.Errorf` 的归并已于 02 定案**：按「上传路径 / 下载路径 / sudo 路径」归成 3 条（`remote_file_failed` / `local_file_failed` / `tmp_failed`），原始错误跟在冒号后保留区分度。`sudo mv 失败` 另立 `sudo_failed`（判据表「sudo失败」就认它）。这个决定 04 不需要再定，核实即可。
 
@@ -348,7 +348,7 @@ spec《预算：全部报文清单》的核准与补全版。**本表是「出�
 | 6 | `run.rejected` 在命令通道生效 | **命令通道上走不到**：`NewSession` 先失败，已被 `session.create_failed` 接住。它实际只在代填通道的 `Start` 被拒时出现 | 工单 03 Comments |
 | 7 | 退出码 0 也照旧拼「执行失败(退出码0)」 | 报文时代这条自相矛盾（报文已经说明了失败原因），改为落第一组显示原文 | 工单 02 Comments |
 | 8 | 判据表里 `文件不可读` 那条（§七 表） | **对应的文本走 `fatal` 而不是 `Result.Error`，本就命中不了**。04 已定：**撤掉**，采信口径见 §七 表下注（开工前不归类、开工后保兜底，界线是「节点开没开工」） | §七 表下注 |
-| 9 | 语料 33 条、17 条中文输入 | 实测 17 条对得上；`建立连接失败 - …` 是 **6 条**不是 7 条。语料已从 33 条扩到 **42 条**（补结构字段与形态） | 工单 02 Comments |
+| 9 | 语料 33 条、17 条中文输入 | 实测 17 条对得上；`建立连接失败 - …` 是 **6 条**不是 7 条。语料经 02/03 扩到 47 条，审计后又补回滚与代填中止 **3 条**，终值 **50 条** | 工单 02/03 Comments、`fix-list.md` |
 | 10 | `transfer.finished` 与「部分成功」按 02 定稿落地 | **同日退役**：上传改为「失败即回滚」（ADR-0022），传输只剩全成 / 全不成，`finished` 不再产出，接替者 `rolled_back` / `rollback_partial`；`SFTP失败` 按语义拆成六条；「执行超时」挪到两条代填分类之后（否则「触发词未命中」整类被抢走） | `docs/issues/upload-rollback/`、工单 04/06 Comments |
 
 **§十四第 10 条的补充**：ADR-0021 更新记录已点名「决定」第 1 条示例、第 8 条第 2 款、`spec.md`《预算：全部报文清单》里涉及 `transfer.finished` 的三处不再约束；本文件 §九 M29 亦有退役注记。

@@ -38,7 +38,33 @@ const (
 	transferRemoteExists      = "remote_exists"      // 目标机上已有同名文件
 	transferRolledBack        = "rolled_back"        // 上传失败后，本次写进去的文件已清干净
 	transferRollbackPartial   = "rollback_partial"   // 回滚没清干净：还剩哪些路径
+	transferPartialLeft       = "partial_left"       // 写到一半的文件没删掉（上传，远端）
+	transferLocalPartialLeft  = "local_partial_left" // 写到一半的文件没删掉（下载，本机）
 )
+
+// PartialLeftMessage 半成品没删掉时那句陈述（ADR-0022 决定第 3 条「回滚失败要照实说」）。
+//
+// 半成品**不在** writtenPaths 里——它没写成功，回滚清单不认它。所以它删不掉时
+// 必须自己说一句，否则使用者看到的分类是失败原因，却不知道目标机上还留着半个文件。
+func PartialLeftMessage(paths []string) string {
+	if len(paths) == 0 {
+		return ""
+	}
+	return Message(EnvTransfer, transferPartialLeft,
+		"half-written file left: "+strings.Join(paths, ", "))
+}
+
+// LocalPartialLeftMessage 下载侧的同一条陈述：本机的半成品没删掉。
+//
+// 下载不做回滚（ADR-0022 决定第 5 条），但「失败文件自己的半成品仍会删」——
+// 删不掉时同样要说，否则下次重试会撞上一个残缺文件。
+func LocalPartialLeftMessage(paths []string) string {
+	if len(paths) == 0 {
+		return ""
+	}
+	return Message(EnvTransfer, transferLocalPartialLeft,
+		"half-written file left: "+strings.Join(paths, ", "))
+}
 
 // RollbackMessage 上传失败回滚后那句陈述（ADR-0022 决定第 3 条）。
 //
