@@ -96,55 +96,77 @@ func TestAnswerRowErrorsSayWhatIsMissing(t *testing.T) {
 	}
 }
 
-// 内联值：`;;` 分行、一行一条；注释行与空行跳过；一条可挂多个触发词。
-func TestCheckAnswerInlineMultiline(t *testing.T) {
-	a := &Args{Command: "sh x.sh", Answer: `1,请选择架构;;#注释;;;;2,deb/rpm,包格式`}
+// 内联值只写一条：`;;` 是普通字符，不会被切成多条（ADR-0023）。
+func TestCheckAnswerInlineIsOneRecord(t *testing.T) {
+	a := &Args{Command: "sh x.sh", Answer: `1,请选择架构;;deb`}
 	if err := checkAnswer(a, nil); err != nil {
-		t.Fatalf("多行内联值应解析通过：%v", err)
+		t.Fatalf("内联一条代填应解析通过：%v", err)
 	}
-	if len(a.Answers) != 2 {
-		t.Fatalf("应解析出 2 条代填，实际 %d 条：%+v", len(a.Answers), a.Answers)
+	if len(a.Answers) != 1 {
+		t.Fatalf("应解析出 1 条代填，实际 %d 条：%+v", len(a.Answers), a.Answers)
 	}
-	if a.Answers[0].Value != "1" || len(a.Answers[0].Triggers) != 1 || a.Answers[0].Triggers[0] != "请选择架构" {
-		t.Fatalf("第 1 条解析不对：%+v", a.Answers[0])
-	}
-	if a.Answers[1].Value != "2" || len(a.Answers[1].Triggers) != 2 || a.Answers[1].Triggers[0] != "deb/rpm" {
-		t.Fatalf("一条挂多个触发词应全收：%+v", a.Answers[1])
+	if a.Answers[0].Value != "1" || len(a.Answers[0].Triggers) != 1 || a.Answers[0].Triggers[0] != "请选择架构;;deb" {
+		t.Fatalf("`;;` 应留在触发词里、只有一条：%+v", a.Answers[0])
 	}
 	if a.AnswerFile != "" {
 		t.Fatalf("内联值不该记成文件来源：%s", a.AnswerFile)
 	}
 }
 
-// 真实换行与 `;;` 等价（有些 shell 会把真实换行放进引号里传进来）。
-func TestCheckAnswerInlineRealNewline(t *testing.T) {
-	a := &Args{Command: "sh x.sh", Answer: "1,请选择架构\n2,请选择包格式"}
-	if err := checkAnswer(a, nil); err != nil {
-		t.Fatalf("真实换行应与 ;; 等价：%v", err)
+// 内联值里出现换行：直接拒绝，并指向写文件（ADR-0023）。
+func TestCheckAnswerInlineRejectsRealNewline(t *testing.T) {
+	cases := map[string]string{
+		"两条":   "1,请选择架构\n2,请选择包格式",
+		"CRLF": "1,请选择架构\r\n2,请选择包格式",
 	}
-	if len(a.Answers) != 2 {
-		t.Fatalf("应解析出 2 条代填，实际 %d 条", len(a.Answers))
+	for name, raw := range cases {
+		t.Run(name, func(t *testing.T) {
+			a := &Args{Command: "sh x.sh", Answer: raw}
+			err := checkAnswer(a, nil)
+			if err == nil {
+				t.Fatal("内联值含换行应被拒绝")
+			}
+			if !strings.Contains(err.Error(), "不能有换行") || !strings.Contains(err.Error(), "CSV 文件") {
+				t.Fatalf("报错应说清不能有换行、并指向文件，实际：%v", err)
+			}
+		})
 	}
 }
 
-// 分行只认 `;;`，字面 `\n` 在同一行里原样保留：两者同时出现时各管各的。
-func TestCheckAnswerInlineSeparatorAndLiteralBackslashN(t *testing.T) {
-	a := &Args{Command: "sh x.sh", Answer: `D:\new\tool.exe,请输入路径;;1,请选择架构`}
+// 字面 `\n` 与 `;;` 都只是普通字符：整条记录原样进字段，不切、不转义。
+func TestCheckAnswerKeepsSemicolonPairAndLiteralBackslashN(t *testing.T) {
+	a := &Args{Command: "sh x.sh", Answer: `D:\new\tool.exe;;1,请输入路径`}
 	if err := checkAnswer(a, nil); err != nil {
 		t.Fatalf("应解析通过：%v", err)
 	}
-	if len(a.Answers) != 2 {
-		t.Fatalf("`;;` 应分出 2 条，实际 %d 条：%+v", len(a.Answers), a.Answers)
+	if len(a.Answers) != 1 {
+		t.Fatalf("应只有 1 条代填，实际 %d 条：%+v", len(a.Answers), a.Answers)
 	}
-	if got := a.Answers[0].Value; got != `D:\new\tool.exe` {
-		t.Fatalf("第 1 条的 \\n 应原样保留，实际 %q", got)
+	if got := a.Answers[0].Value; got != `D:\new\tool.exe;;1` {
+		t.Fatalf("值应原样保留（含反斜杠与 `;;`），实际 %q", got)
 	}
-	if got := a.Answers[1].Triggers[0]; got != "请选择架构" {
-		t.Fatalf("第 2 条的触发词不对：%q", got)
+	if got := a.Answers[0].Triggers[0]; got != "请输入路径" {
+		t.Fatalf("触发词不对：%q", got)
 	}
 }
 
-// 代填内容里的反斜杠是普通字符：Windows 路径常含 `\n`，不能当分行（ADR-0020）。
+// 内联值只解析出一列（引号里才有逗号）：仍按「第 1 行不合规」报缺触发词，
+// 不落到「文件不存在」（ADR-0023）。
+func TestCheckAnswerInlineOneColumn(t *testing.T) {
+	a := &Args{Command: "sh x.sh", Answer: `"a,b"`}
+	err := checkAnswer(a, nil)
+	if err == nil {
+		t.Fatal("缺触发词应报错")
+	}
+	if !strings.Contains(err.Error(), "第 1 行不合规") {
+		t.Fatalf("应按行报列数问题，实际：%v", err)
+	}
+	if strings.Contains(err.Error(), "文件不存在") {
+		t.Fatalf("不该落到「文件不存在」：%v", err)
+	}
+}
+
+// 代填内容里的反斜杠是普通字符：Windows 路径常含 `\n`，不会被当成换行（ADR-0023）。
 func TestCheckAnswerInlineKeepsBackslashN(t *testing.T) {
 	a := &Args{Command: "sh x.sh", Answer: `D:\new\tool.exe,请输入安装路径`}
 	if err := checkAnswer(a, nil); err != nil {
@@ -240,7 +262,7 @@ func TestCheckAnswerCSVFile(t *testing.T) {
 }
 
 // 代填文件里的换行是内容的一部分：一条代填要打两行再回车，只能写成文件
-// （内联用 `;;` 分行，不另设转义）。这里钉住文件这条路没被内联侧改动波及。
+// （内联值不许有换行，见 ADR-0023）。这里钉住文件这条路没被内联侧改动波及。
 func TestCheckAnswerCSVFileKeepsRealNewline(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "answer.csv")

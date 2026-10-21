@@ -48,7 +48,7 @@ type Args struct {
 	GenKey         bool   // --gen-key
 	KeyStatus      bool   // --key-status
 	ConvertSecret  string // --convert-secret
-	FIsInline      bool   // -f 为内联清单文本（不是文件路径）；由 Parse 判定
+	FIsInline      bool   // -f 为内联的一条记录（不是文件路径）：来源由 Parse 定，格式在合规检查里校验
 
 	// -a 与 [interactive]：原始值在 Parse 里装好，解析结果由 CheckArguments 填——
 	// 来源判定与门控只做一次，执行侧直接用。
@@ -426,14 +426,10 @@ func Parse(cfg *config.Config, version string, raw []string) (*Args, error) {
 	// 凭据加密开关：--change-password 的取值按它解释（明文 / 密文文件路径）
 	a.credentialEncrypted = cfg.Credential.Encrypt
 
-	// -f 的值也可以是内联清单文本（不是路径）：先定来源。是文本就原样留着——
-	// 路径规范化只管路径，而 `\`→`/` 会把文本里 Windows 路径的反斜杠改掉。
+	// -f 的值也可以是内联的一条记录（不是路径）：在这里定来源（装载阶段要 FIsInline）。
+	// 值一律原样留着——命令行给的路径交给系统解析，不换分隔符、不去空白（ADR-0023）。
 	if a.CsvFile != "" {
-		src := resolveSource(a.CsvFile)
-		a.FIsInline = !src.IsFile
-		if src.IsFile {
-			a.CsvFile = normalizePath(src.Path)
-		}
+		a.FIsInline = !resolveSource(a.CsvFile).IsFile
 	}
 
 	// 本地路径参数：只做字符串层规范化（顺序与旧版一致）。
@@ -629,7 +625,7 @@ func helpEntries(cfg *config.Config) []helpEntry {
 		opt("", "--sudo", sudoTag, "这次以 root 身份执行（需目标节点已配免密 sudo）"),
 		opt("", "--no-sudo", "", noSudoDesc),
 		opt("", "--yes", "", "跳过所有确认直接执行（自动化用，用它之前先手动跑通一次）"),
-		opt("-a", "--answer", "", "代填：看到触发词就自动填内容（值形如「代填内容,触发词,触发词」，多条用 ;; 分行），也可给 CSV 文件的路径（每行一条）"),
+		opt("-a", "--answer", "", "代填：看到触发词就自动填内容（一条写成「代填内容,触发词,触发词」），多条写进 CSV 文件再指向它"),
 		opt("", "--no-shell", "", "不套工具的外壳、不设环境：命令原样下发；脚本直接交给解释器跑"),
 		opt("-t", "--timeout", fmt.Sprintf("[默认: %d/%d]", cfg.Execution.TimeoutExecute, cfg.Execution.TimeoutTransfer), "命令跑完、文件传完的最长等待（秒）"),
 		opt("-T", "--connect-timeout", fmt.Sprintf("[默认: %d]", cfg.Execution.TimeoutConnect), "连上服务器的最长等待（秒）"),
@@ -719,10 +715,10 @@ func usageText(cfg *config.Config, version string, width int) string {
 	examples := [][2]string{
 		{"执行命令:", fmt.Sprintf("%s -f nodes.csv -c \"ls -l\"", name)},
 		{"执行脚本:", fmt.Sprintf("%s -f nodes.csv -s deploy.sh", name)},
-		// 代填的值照原样给两个"值,触发词"对：示例只摆内容，不解释——所以值与触发词
-		// 都取一看就懂的写法（y / rpm 各自对应它那句问话），不用 1 / 2 这种靠题面才懂的填法
-		// （2026-10-07 作者定）。
-		{"代填执行:", fmt.Sprintf("%s -f nodes.csv -s deploy.sh -a \"y,是否继续;;rpm,请选择包格式\"", name)},
+		// 代填的值照原样给一个"值,触发词"对：示例只摆内容，不解释——所以值与触发词
+		// 都取一看就懂的写法（y 对应它那句问话），不用 1 / 2 这种靠题面才懂的填法
+		// （2026-10-07 作者定）。多条写在文件里，示例不摆多行（ADR-0023）。
+		{"代填执行:", fmt.Sprintf("%s -f nodes.csv -s deploy.sh -a \"y,是否继续\"", name)},
 		{"批量改密:", fmt.Sprintf("%s -f nodes.csv --change-password \"新密码\"", name)},
 		{"上传文件:", fmt.Sprintf("%s -f nodes.csv -u ./dist/app -p /opt/app/", name)},
 		{"下载文件:", fmt.Sprintf("%s -f nodes.csv -d /var/log/app -p ./logs/", name)},
