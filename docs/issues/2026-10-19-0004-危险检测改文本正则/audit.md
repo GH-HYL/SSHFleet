@@ -2,7 +2,7 @@
 
 Status: done（2026-10-19 实测完成；结论已并入 `spec.md` 的定案 F/G/H，并由 `issues/04`–`issues/07` 执行。本文件是该批工单的事实底本）
 
-> **这是什么**：`dangercheck-text-regex` 重构的**实测报告**，是后续若干条工单的事实底本（载体约定见 `docs/agents/issue-tracker.md` 的 `audit.md`）。
+> **这是什么**：`2026-10-19-0004-危险检测改文本正则` 重构的**实测报告**，是后续若干条工单的事实底本（载体约定见 `docs/agents/issue-tracker.md` 的 `audit.md`）。
 >
 > **为什么单独成文件**：本文的结论（哪条规则该删、该并、该改档）全部由实测数据支撑，合并进工单的 `## Comments` 会丢掉「这些结论是怎么来的」。
 >
@@ -20,7 +20,7 @@ Status: done（2026-10-19 实测完成；结论已并入 `spec.md` 的定案 F/G
 2. 在副本里以**包内身份**加探针测试，直调 `dangercheck.Analyze`，跑现引擎；
 3. 另构建二进制 `build/atest-2/bin/SSHFleet.exe`，实测**端到端**行为（警告框、退出码）。
 
-**仓库内代码全程未被触碰**（`git status` 仅显示 `docs/issues/dangercheck-text-regex/spec.md` 为本轮文档改动）。
+**仓库内代码全程未被触碰**（`git status` 仅显示 `docs/issues/2026-10-19-0004-危险检测改文本正则/spec.md` 为本轮文档改动）。
 
 `Analyze` 签名与语义见 `modules/SSHFleet_Go/internal/dangercheck/judge.go:44`；档位处置见 `modules/SSHFleet_Go/main.go:301-337`。
 
@@ -122,7 +122,7 @@ $ ./bin/SSHFleet.exe -c "systemctl restart nginx" --yes
 
 ## 六、顺手发现：两处手册表述已过时（本轮范围外，只报告）
 
-`--yes` 下「看得出刚放行了什么」是 2026-10-18 的修复（CHANGELOG 9.1.7：「`--yes` 下同样显示危险命令的风险提示」；工单 `docs/issues/defect-scan-2026-10-17/issues/02-yes-shows-danger-warning.md`，状态 done）。但两处手册没跟着改，现在**说的是反的**：
+`--yes` 下「看得出刚放行了什么」是 2026-10-18 的修复（CHANGELOG 9.1.7：「`--yes` 下同样显示危险命令的风险提示」；工单 `docs/issues/2026-10-18-2214-代码缺陷清点/issues/02-yes-shows-danger-warning.md`，状态 done）。但两处手册没跟着改，现在**说的是反的**：
 
 | 位置 | 现文 | 实际行为 |
 | --- | --- | --- |

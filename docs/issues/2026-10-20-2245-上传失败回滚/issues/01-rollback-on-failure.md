@@ -6,7 +6,7 @@
 
 **状态**：done（2026-10-20）
 
-**依据**：`docs/adr/0022-upload-rollback-on-failure.md`
+**依据**：`docs/adr/0022-上传失败即回滚.md`
 
 ## 验收
 

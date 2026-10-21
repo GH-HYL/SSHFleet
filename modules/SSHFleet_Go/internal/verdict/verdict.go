@@ -1,7 +1,7 @@
 // Package verdict 承载结果判定：执行侧只记录事实，成败与分类只在这里产生一次。
 //
 // 术语见 GLOSSARY.md「结果判定（verdict）」；报文时代的判定口径见 ADR-0021
-// 「决定」第 3 / 8 条与 docs/issues/message-based-classification/spec.md。
+// 「决定」第 3 / 8 条与 docs/issues/2026-10-20-1604-报文式失败分类/spec.md。
 //
 // 依赖边界：本包只允许引用 ssh（结果结构体、报文）与 cli（模式枚举）——
 // batch / output 反向引用本包，判定绝不回头依赖它们。

@@ -36,11 +36,11 @@ Blocked by: None
 **实施前**：把本票拆成实现工单。按作者口径，`Mode` 类型一动算**大改动**，需先**纸面走查五个模式**、再**上真机跑一遍**。
 
 - [x] 三件待定项各有结论（见上）
-- [x] 新 ADR 立好：`docs/adr/0013-centralize-execution-mode-naming.md`
-- [x] 拆成实现工单：`docs/issues/mode-centralization/`（`spec.md` + `issues/01`–`04`）
+- [x] 新 ADR 立好：`docs/adr/0013-执行模式名字集中化.md`
+- [x] 拆成实现工单：`docs/issues/2026-10-12-1150-执行模式命名集中化/`（`spec.md` + `issues/01`–`04`）
 - [x] 实施后回填本票与 ADR-0013 的状态
 
 ## Comments
-- 2026-10-07 形状定答，落地为 `docs/adr/0013-centralize-execution-mode-naming.md`（作者当日拍板：集中化做；只集中名字；漏改用启动期自检兜底）。本票转 `ready-for-human`。
-- 2026-10-07 实现工单已拆出：`docs/issues/mode-centralization/`（`spec.md` + `issues/01`–`04`）。本票自此只作来源记录。
+- 2026-10-07 形状定答，落地为 `docs/adr/0013-执行模式名字集中化.md`（作者当日拍板：集中化做；只集中名字；漏改用启动期自检兜底）。本票转 `ready-for-human`。
+- 2026-10-07 实现工单已拆出：`docs/issues/2026-10-12-1150-执行模式命名集中化/`（`spec.md` + `issues/01`–`04`）。本票自此只作来源记录。
 - 2026-10-07 实施完成，提交 `b2956d5`（01–03 已 resolved，04 待作者真机复验）。本票结。

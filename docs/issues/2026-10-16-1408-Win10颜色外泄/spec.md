@@ -3,7 +3,7 @@
 Status: done（2026-10-16，提交 `ea5cec1`）
 
 > **事实依据**：同目录 `findings-2026-10-16.md`（2026-10-16 实测，全部输出为实机抓取，非代码推断）。
-> **决策依据**：`docs/adr/0017-program-adapts-console-not-user.md`。
+> **决策依据**：`docs/adr/0017-控制台适配由程序自己做.md`。
 > **实施工单**：`issues/01-adapt-console-color-capability.md`。
 
 ---

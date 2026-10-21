@@ -4,7 +4,7 @@
 
 结构性分类的报文已在 02 落定（`sshfleet.abort.canceled`、`sshfleet.session.exit_missing` 等），本工单只补 `session` 与 `run` 两摊的**错误文本**。
 
-**实施入口**：`docs/issues/message-based-classification/README.md`。
+**实施入口**：`docs/issues/2026-10-20-1604-报文式失败分类/README.md`。
 
 **被谁阻塞**：02（报文格式、校验规则终态、结构事实的发报点均已就位，照抄即可）。
 

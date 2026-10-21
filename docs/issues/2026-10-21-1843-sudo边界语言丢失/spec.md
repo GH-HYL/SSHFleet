@@ -45,6 +45,6 @@ Status: needs-triage
 
 - 2026-10-21：建立。来历：`-a` 代填输出中英混排、中文触发词失配 → 核对拼装链路（确认 `-a` 带 env）→ 沙盒实跑取到下发原文 → 本机复现「缺 locale 导致混排」→ 文档与二进制取证定位到 sudo 的 `env_keep` 差异 → 实测翻译包缺失导致同 locale 混排。全部证据与已证否方向见 `findings-2026-10-21.md`。
 - 2026-10-21：复审，两轴。
-  - **规范轴**：小节沿用 `cli-path-normalization` 的「只登记」形态，**未套** spec 模板的 Solution / User Stories / 测试决策——因为方案未定，按《个人开发规范》二·1 该先定方案再补；证据载体用 `findings-<日期>.md`，符合 `issue-tracker.md` 的底本白名单。
+  - **规范轴**：小节沿用 `2026-10-21-1413-命令行路径规范化` 的「只登记」形态，**未套** spec 模板的 Solution / User Stories / 测试决策——因为方案未定，按《个人开发规范》二·1 该先定方案再补；证据载体用 `findings-<日期>.md`，符合 `issue-tracker.md` 的底本白名单。
   - **事实轴**，改了三处：① findings 里 `sudoers.dist` 的引文按实际输出重抄（原先写成 `sed -n '55,58p'` 且多引了一行 `HOME`，与文件不符；实际是 56–58 行、只有 locale 那一行）；② RHEL / CentOS 的 `env_keep` 从「事实」降为「未验证的假设」，spec 与 findings 两处同步改口；③ `PATH` 那条补上「默认配置下、sudoers 设了 `secure_path`」的前提，并在 findings 补第 51 行作为依据。
   - 仍存的空白：sudo 的行为没有实测（本会话起不来），CentOS 侧全未验证——两条都已写进 findings 第八节，不在此处掩盖。

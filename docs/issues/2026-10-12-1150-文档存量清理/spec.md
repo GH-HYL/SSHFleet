@@ -67,7 +67,7 @@ Status: done（2026-10-17 本轮完成）
 
 - 修改任何代码。本议题只做文档层面的核实与归位。
 - 议题内容的实质改写（除状态、文件名、附加文档归位外，正文不动）。
-- 新发现代码缺陷的修复——那登记在 `docs/issues/defect-scan-2026-10-17/`。
+- 新发现代码缺陷的修复——那登记在 `docs/issues/2026-10-18-2214-代码缺陷清点/`。
 
 ---
 
@@ -83,7 +83,7 @@ Status: done（2026-10-17 本轮完成）
 | 议题目录 | 12 个 | 清理高峰期 19 个；交付时 17 个 |
 | 文档 | 78 份 | 清理前 89 份；清理后 81 份 |
 
-**旧任务书里的「起点线索」也已被推翻**：它说 `mode-centralization` 与 `rewrite-to-go` 的 `Status` 疑似没回填——核实后这两处早该标 done，属状态值写法问题而非「没回填」。
+**旧任务书里的「起点线索」也已被推翻**：它说 `2026-10-12-1150-执行模式命名集中化` 与 `2026-09-11-1336-Go重写` 的 `Status` 疑似没回填——核实后这两处早该标 done，属状态值写法问题而非「没回填」。
 
 ### 旧任务书的两处说法已失实
 
@@ -130,7 +130,7 @@ git config --global --add safe.directory D:/Desktop/Code/SSHFleet
 - 2026-10-17：原 `handoff-2026-10-08.md` 的任务书内容要点已摘要进本 spec 的「补充说明」，原文件删除。
 - 2026-10-17（同日，开发者指示）：审计类文档删除。**准确范围**（经改动审计更正）：
   - 删除 `docs/issues/security-audit/` 原有 4 份文件（`HANDOFF.md`、`final-report.md`、`live-report.md`、`static-report.md`）。该目录**原本就没有 `spec.md`、也没有 `issues/`**——那些是本次整改中途新建、随后又依开发者指示删除的，不是原有内容。
-  - 删除 `docs/issues/configurable-interpreters/issues/01-audit-interpreter-batch.md`。该目录同样是本次新建、随后删除，HEAD 里原本没有。
+  - 删除 `docs/issues/2026-10-12-1150-解释器可配置/issues/01-audit-interpreter-batch.md`。该目录同样是本次新建、随后删除，HEAD 里原本没有。
   - **代价（据实记录）**：删 `security-audit` 时只把 S1/S2/S3 摘要进 `defect-scan-2026-10-17/`，S4–S7 四条设计边界与实测原文未随之保留。**后经审计指出，S4–S7 已从 `ce618f1` 取回并单列**（见 `defect-scan-2026-10-17/spec.md` 的「设计边界」一节）；实测环境搭建过程与终端实测原文仍未取回，需要时按同一提交取。
   - `defect-scan-2026-10-17/` 保留，其中的危险命令检测两条由**该议题**承载证据与复现方式。
 
@@ -141,20 +141,20 @@ git config --global --add safe.directory D:/Desktop/Code/SSHFleet
    98 files changed, 285 insertions(+), 4883 deletions(-)
 
   $ git status --short   # 未跟踪的新文件
-   ?? docs/adr/0018-accept-earlier-stats-sampling-point.md
-   ?? docs/issues/answer-mismatch-fill/spec.md
-   ?? docs/issues/backlog-cleanup/spec.md
-   ?? docs/issues/category-stats-layout/spec.md
-   ?? docs/issues/configurable-interpreters/{spec.md, findings-2026-10-07.md}
-   ?? docs/issues/defect-scan-2026-10-17/
-   ?? docs/issues/error-classification/spec.md
-   ?? docs/issues/lower-onboarding-cost/spec.md
-   ?? docs/issues/mode-centralization/{spec.md, issues/04-closeout-and-verify.md}
-   ?? docs/issues/progress-update-lag/spec.md
-   ?? docs/issues/remote-interaction/spec.md
-   ?? docs/issues/remote-password-change/spec.md
-   ?? docs/issues/result-verdict/spec.md
-   ?? docs/issues/rewrite-to-go/{spec.md, issues/29-upload-structure.md}
+   ?? docs/adr/0018-接受统计取样点提前.md
+   ?? docs/issues/2026-10-12-1150-代填未命中/spec.md
+   ?? docs/issues/2026-10-12-1150-文档存量清理/spec.md
+   ?? docs/issues/2026-10-12-1150-分类统计布局/spec.md
+   ?? docs/issues/2026-10-12-1150-解释器可配置/{spec.md, findings-2026-10-07.md}
+   ?? docs/issues/2026-10-18-2214-代码缺陷清点/
+   ?? docs/issues/2026-10-12-1150-错误分类判据/spec.md
+   ?? docs/issues/2026-10-12-1150-学习成本改造/spec.md
+   ?? docs/issues/2026-10-12-1150-执行模式命名集中化/{spec.md, issues/04-closeout-and-verify.md}
+   ?? docs/issues/2026-10-12-1150-进度条滞后/spec.md
+   ?? docs/issues/2026-10-12-1150-远端交互代填/spec.md
+   ?? docs/issues/2026-10-12-1150-批量改密/spec.md
+   ?? docs/issues/2026-10-12-1150-结果统一判定/spec.md
+   ?? docs/issues/2026-09-11-1336-Go重写/{spec.md, issues/29-upload-structure.md}
   ```
 
   **收口核对**（逐项跑过）：

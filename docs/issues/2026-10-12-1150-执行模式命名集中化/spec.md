@@ -4,8 +4,8 @@ Status: done
 
 **闭环说明（2026-10-08 复核）**：已实施。落地提交 `b2956d5`（工单 01–03 `resolved`、04 已闭环），ADR-0013 状态已置「已实施」；作者用非 root 账号真机 A/B 复跑五条执行模式路径，归一化后逐字一致。
 
-> **决策依据**：`docs/adr/0013-centralize-execution-mode-naming.md`。本文件只放**实施细节**，不重复决策。
-> **来源工单**：`docs/issues/architecture-review-2026-10-06/issues/05-mode-centralization.md`。
+> **决策依据**：`docs/adr/0013-执行模式名字集中化.md`。本文件只放**实施细节**，不重复决策。
+> **来源工单**：`docs/issues/2026-10-12-1150-架构审查/issues/05-mode-centralization.md`。
 > **收益口径**：业务正确性 · 改动面 · 维护成本（ADR-0012），不含可测性。
 
 ---

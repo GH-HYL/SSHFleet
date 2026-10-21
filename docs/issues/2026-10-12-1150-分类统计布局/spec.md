@@ -6,7 +6,7 @@ Status: done
 
 > 起点：开发者 2026-09-28 指出统计块里**三种数字容易混淆**——① 分类名内嵌的数字（退出码，将来还会有触发词序号），② 计数（`：5`），③ 行内其它数字；并要求重新设计统计块的显示。
 > **实施需用户明确授权**（个人开发规范 一、约束·1 红线 1）；本文档只落方向与取舍，不改代码。
-> 本稿由「远端交互应答」引出（`docs/issues/remote-interaction/spec.md` 的「触发词未命中」分类会进这个统计块），但**是一件独立的事**，不夹在那个功能里做。
+> 本稿由「远端交互应答」引出（`docs/issues/2026-10-12-1150-远端交互代填/spec.md` 的「触发词未命中」分类会进这个统计块），但**是一件独立的事**，不夹在那个功能里做。
 
 ---
 
@@ -100,8 +100,8 @@ Status: done
 
 ## 六、关联
 
-- `docs/issues/remote-interaction/spec.md` —— 本稿的引出者（「触发词未命中」分类会进这个统计块）
-- `docs/issues/error-classification/spec.md` §4.9 —— 「提示：」块的形态与 `tip` 字段的既有裁定
+- `docs/issues/2026-10-12-1150-远端交互代填/spec.md` —— 本稿的引出者（「触发词未命中」分类会进这个统计块）
+- `docs/issues/2026-10-12-1150-错误分类判据/spec.md` §4.9 —— 「提示：」块的形态与 `tip` 字段的既有裁定
 - `docs/adr/0004` —— 退出码与分类的关系（本稿不改这条，只改显示）
 - `internal/output/terminal.go` —— `PrintStatistics` / `exitCodeHintLine` / `categoryTipLines` / `exitCodeFailTip`
 - `internal/output/report.go` —— `WriteReport` 的【结果统计】段
