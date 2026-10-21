@@ -1,6 +1,6 @@
 ---
-name: pick-and-explain
-description: 把决策摆成几条路并标出推荐：每条给出原因与代价，附服务于它的代码。
+name: explain-pick
+description: 【选择并说明】把一次决策摆成几条路，标出推荐哪条。每条都给出原因与代价，代价一栏不许空——说不出代价说明这条路还没想透。需要时附上服务于那条路的代码。最后列出「还没说定的」影响这次选择的事。用户问「选哪个好」「给我几个方案」时用。
 disable-model-invocation: true
 ---
 
