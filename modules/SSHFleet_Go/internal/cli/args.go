@@ -426,11 +426,9 @@ func Parse(cfg *config.Config, version string, raw []string) (*Args, error) {
 	// 凭据加密开关：--change-password 的取值按它解释（明文 / 密文文件路径）
 	a.credentialEncrypted = cfg.Credential.Encrypt
 
-	// -f 的值也可以是内联的一条记录（不是路径）：在这里定来源（装载阶段要 FIsInline）。
-	// 值一律原样留着——命令行给的路径交给系统解析，不换分隔符、不去空白（ADR-0023）。
-	if a.CsvFile != "" {
-		a.FIsInline = !resolveSource(a.CsvFile).IsFile
-	}
+	// -f 的取值（路径还是内联的一条记录）不在这里判：它与 -a 共用同一处判定，
+	// 统一在合规检查阶段做（见 check.go 的 -f 段）。值一律原样留着——命令行给的路径
+	// 交给系统解析，不换分隔符、不去空白（ADR-0023）。
 
 	// 本地路径参数：只做字符串层规范化（顺序与旧版一致）。
 	//

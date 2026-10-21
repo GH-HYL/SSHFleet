@@ -80,11 +80,11 @@ func resolveValue(raw string, form valueForm) (source, error) {
 //
 // 内联值里出现换行直接拒绝，不静默当记录分隔、也不丢后半截——内联只写一条，
 // 多台 / 多条、内容里要回车的，都写成文件（ADR-0023 决定 2）。
-// 报错与提示两侧同形，只差参数名与去路。
+// 报错与提示两侧同形，只差参数名与去路：原因只说一句「不能有换行」，
+// 去路留给下一行，两处不重复同一件事。
 func checkInlineValue(raw string, form valueForm) error {
 	if strings.ContainsAny(raw, "\r\n") {
-		return fmt.Errorf("%s 的内联值里不能有换行：内联只写一条，多台 / 多条请写成 CSV 文件\n提示：%s",
-			form.flag, form.newlineHint)
+		return fmt.Errorf("%s 的内联值里不能有换行：内联只写一条\n提示：%s", form.flag, form.newlineHint)
 	}
 	if !form.isRecord(raw) {
 		return fmt.Errorf("%s 参数指定的文件不存在：%s\n提示：%s", form.flag, raw, form.goneHint)
@@ -92,17 +92,12 @@ func checkInlineValue(raw string, form valueForm) error {
 	return nil
 }
 
-// looksLikeNodeRecord 一行节点信息的判据：首字段是 IPv4。
+// looksLikeNodeRecord 一行节点信息的判据：CSV 读出的首字段是 IPv4。
 //
-// CSV 允许给字段加引号（Excel 导出的单行就长成 `"10.0.0.1","22",…`），所以先剥掉
-// 一对外层双引号再判。只剥引号、不预解析整行：预解析会把「引号不配对」这类真语法
-// 错误吞成「文件不存在」，比现在更难查。
+// 判据只在 common.LooksLikeInlineNodeRecord 一处——放行与显示时的脱敏共用同一把尺子，
+// 不会出现「放行认得出、脱敏认不出」（ADR-0023 决定 5）。
 func looksLikeNodeRecord(raw string) bool {
-	first := strings.TrimSpace(strings.SplitN(raw, ",", 2)[0])
-	if len(first) >= 2 && first[0] == '"' && first[len(first)-1] == '"' {
-		first = strings.TrimSpace(first[1 : len(first)-1])
-	}
-	return common.IsIPv4Literal(first)
+	return common.LooksLikeInlineNodeRecord(raw)
 }
 
 // looksLikeAnswerRecord 一条代填的判据：值里得有列分隔符，才可能同时给出

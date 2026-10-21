@@ -10,26 +10,42 @@ import (
 
 // 取值来源判定（-f 与 -a 共用）：路径存在即文件，否则当一条内联记录。
 // 判定不看后缀名——`nodes` 也叫文件；也不加工路径——`\` 不换成 `/`、
-// 不去空白、不拼前缀（ADR-0023）。
+// 不去空白、不拼前缀（ADR-0023）。从命令行入口看 FIsInline 这个结果。
 
-func TestResolveSourceFile(t *testing.T) {
+func TestSourceFileWithoutCsvSuffix(t *testing.T) {
 	file := filepath.Join(t.TempDir(), "nodes") // 故意不带 .csv 后缀
 	if err := os.WriteFile(file, []byte("127.0.0.1\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if src := resolveSource(file); !src.IsFile || src.Path != file {
-		t.Fatalf("已存在的路径应判成文件来源，实际：%+v", src)
+	a, err := Parse(helpTestCfg(), "9.9.9", []string{"-f", file, "-c", "uptime"})
+	if err != nil {
+		t.Fatalf("Parse 不该报错：%v", err)
+	}
+	if err := CheckArguments(a); err != nil {
+		t.Fatalf("已存在的文件应通过合规检查：%v", err)
+	}
+	if a.FIsInline {
+		t.Fatal("已存在的路径应判成文件来源，不看后缀名")
+	}
+	if a.CsvFile != file {
+		t.Fatalf("路径应原样留着，实际：%q", a.CsvFile)
 	}
 }
 
-func TestResolveSourceInline(t *testing.T) {
+func TestSourceInlineKeepsRawValue(t *testing.T) {
 	raw := `127.0.0.1,22,root,D:\new\pw.bin`
-	src := resolveSource(raw)
-	if src.IsFile {
-		t.Fatalf("路径不存在时应判成内联文本，实际：%+v", src)
+	a, err := Parse(helpTestCfg(), "9.9.9", []string{"-f", raw, "-c", "uptime"})
+	if err != nil {
+		t.Fatalf("Parse 不该报错：%v", err)
 	}
-	if src.Raw != raw {
-		t.Fatalf("内联文本要原样留着，实际：%q", src.Raw)
+	if err := CheckArguments(a); err != nil {
+		t.Fatalf("一条内联记录应通过合规检查：%v", err)
+	}
+	if !a.FIsInline {
+		t.Fatal("路径不存在时应判成内联记录")
+	}
+	if a.CsvFile != raw {
+		t.Fatalf("内联值要原样留着，实际：%q", a.CsvFile)
 	}
 }
 
@@ -39,6 +55,9 @@ func TestParseKeepsInlineListRaw(t *testing.T) {
 	a, err := Parse(helpTestCfg(), "9.9.9", []string{"-f", raw, "-c", "uptime"})
 	if err != nil {
 		t.Fatalf("内联清单应解析通过：%v", err)
+	}
+	if err := CheckArguments(a); err != nil {
+		t.Fatalf("合规检查应通过：%v", err)
 	}
 	if !a.FIsInline {
 		t.Fatal("路径不存在时应标成内联清单")
@@ -54,6 +73,9 @@ func TestParseAllowsInlineListWithSpace(t *testing.T) {
 	if err != nil {
 		t.Fatalf("内联清单里的空格不该报错：%v", err)
 	}
+	if err := CheckArguments(a); err != nil {
+		t.Fatalf("合规检查应通过：%v", err)
+	}
 	if !a.FIsInline {
 		t.Fatal("应标成内联清单")
 	}
@@ -68,6 +90,9 @@ func TestParseListFileIsNotInline(t *testing.T) {
 	a, err := Parse(helpTestCfg(), "9.9.9", []string{"-f", file, "-c", "uptime"})
 	if err != nil {
 		t.Fatalf("正常路径应解析通过：%v", err)
+	}
+	if err := CheckArguments(a); err != nil {
+		t.Fatalf("合规检查应通过：%v", err)
 	}
 	if a.FIsInline {
 		t.Fatal("已存在的文件不该标成内联清单")
@@ -92,6 +117,9 @@ func TestParseAcceptsListPathWithSpace(t *testing.T) {
 	if err != nil {
 		t.Fatalf("路径含空格的已存在文件应正常接受：%v", err)
 	}
+	if err := CheckArguments(a); err != nil {
+		t.Fatalf("合规检查应通过：%v", err)
+	}
 	if a.FIsInline {
 		t.Fatal("已存在的文件（哪怕路径含空格）不该标成内联清单")
 	}
@@ -109,11 +137,11 @@ func TestCheckFInlineRecordsPass(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Parse 不该报错：%v", err)
 			}
-			if !a.FIsInline {
-				t.Fatal("不是文件，应标成内联")
-			}
 			if err := CheckArguments(a); err != nil {
 				t.Fatalf("-f %q 应通过：%v", val, err)
+			}
+			if !a.FIsInline {
+				t.Fatal("不是文件，应标成内联")
 			}
 		})
 	}
@@ -138,7 +166,7 @@ func TestCheckFSemicolonPairIsOneRecord(t *testing.T) {
 	}
 }
 
-// 内联值里出现换行：直接拒绝，并指向写文件。
+// 内联值里出现换行：直接拒绝，原因只说一件（不能有换行），去路放在提示行。
 func TestCheckFRejectsNewline(t *testing.T) {
 	cases := map[string]string{
 		"裸 IP 两条": "10.0.0.1\n10.0.0.2",
@@ -156,8 +184,9 @@ func TestCheckFRejectsNewline(t *testing.T) {
 			if err == nil {
 				t.Fatal("含换行的内联值应被拒绝")
 			}
-			if !strings.Contains(err.Error(), "不能有换行") || !strings.Contains(err.Error(), "CSV 文件") {
-				t.Fatalf("报错应说清不能有换行、并指向文件，实际：%v", err)
+			want := "-f 的内联值里不能有换行：内联只写一条\n提示：把节点写进 CSV 文件，再用 -f 指向它"
+			if err.Error() != want {
+				t.Fatalf("文案应为 %q，实际：%q", want, err.Error())
 			}
 		})
 	}
@@ -181,29 +210,55 @@ func TestParseDoesNotRewriteWindowsStylePath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Parse 不该报错：%v", err)
 	}
-	if !a.FIsInline {
-		t.Fatal("原值找不到就按内联处理，不该被改写成 / 之后认成文件")
-	}
 	if err := CheckArguments(a); err == nil || !strings.Contains(err.Error(), "文件不存在") {
 		t.Fatalf("应报文件不存在，实际：%v", err)
 	}
+	if a.FIsInline != true {
+		t.Fatal("原值找不到就按内联处理，不该被改写成 / 之后认成文件")
+	}
 }
 
-// 路径也不去首尾空白：带尾随空格的值不会被整理成前面那个文件。
+// 路径不去空白：带首尾空白的值原样交给系统，不会被整理成前面那个文件。
+//
+// 用**前导**空格钉：Windows 的 os.Stat 会把尾随空格裁掉再找，尾随空格那条在这里
+// 验不出「程序有没有加工原值」（实测会命中 nodes.csv）。前导空格两边系统都不裁剪。
 func TestParseDoesNotTrimPath(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "nodes.csv")
 	if err := os.WriteFile(file, []byte("127.0.0.1\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	a, err := Parse(helpTestCfg(), "9.9.9", []string{"-f", file + " ", "-c", "uptime"})
+	a, err := Parse(helpTestCfg(), "9.9.9", []string{"-f", " " + file, "-c", "uptime"})
 	if err != nil {
 		t.Fatalf("Parse 不该报错：%v", err)
 	}
-	if !a.FIsInline {
-		t.Fatal("带尾随空格的原值找不到就按内联处理，不该被去掉空白后认成文件")
-	}
+	// 判定在合规检查阶段做：它报「文件不存在」就说明原值没被去空白后认成文件。
 	if err := CheckArguments(a); err == nil || !strings.Contains(err.Error(), "文件不存在") {
 		t.Fatalf("应报文件不存在，实际：%v", err)
+	}
+}
+
+// `-f` 与 `-a` 是同一套判定：同一个不存在的路径，两边报同一句话（只说参数名不同）。
+// 从命令行入口看：两边都走一处判定，报错才会同形。
+func TestSameGateForFAndA(t *testing.T) {
+	const gone = "nosuch-file.csv"
+	for _, tc := range []struct{ flag, raw string }{
+		{"-f", gone},
+		{"-a", gone},
+	} {
+		t.Run(tc.flag, func(t *testing.T) {
+			a, err := Parse(helpTestCfg(), "9.9.9", []string{"-c", "uptime", tc.flag, tc.raw})
+			if err != nil {
+				t.Fatalf("Parse 不该报错：%v", err)
+			}
+			err = CheckArguments(a)
+			if err == nil {
+				t.Fatalf("%s %s 应报错", tc.flag, tc.raw)
+			}
+			want := tc.flag + " 参数指定的文件不存在：" + tc.raw
+			if !strings.Contains(err.Error(), want) {
+				t.Fatalf("应与另一侧同形（含 %q），实际：%v", want, err)
+			}
+		})
 	}
 }
