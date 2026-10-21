@@ -3,6 +3,7 @@ package credential
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -89,6 +90,7 @@ func TestConvertSecretTakesDotDotPathAndLeavesNeighbourAlone(t *testing.T) {
 }
 
 // 文件不存在时，报错要带出使用者输入的那个路径，否则他不知道是哪次输入打错了。
+// 断言落在信封开头：系统原文本身也带路径，只断言「含路径」抓不到「信封没写路径」的回归。
 func TestConvertSecretMissingFileQuotesInput(t *testing.T) {
 	t.Chdir(t.TempDir())
 
@@ -96,8 +98,8 @@ func TestConvertSecretMissingFileQuotesInput(t *testing.T) {
 	if err == nil {
 		t.Fatal("文件不存在时应报错")
 	}
-	if !strings.Contains(err.Error(), "nope.txt") {
-		t.Fatalf("报错应含使用者输入的路径，实际：%s", err)
+	if !strings.HasPrefix(err.Error(), "读取凭据文件失败：nope.txt") {
+		t.Fatalf("报错应以「读取凭据文件失败：<原样路径>」开头，实际：%s", err)
 	}
 }
 
@@ -116,5 +118,55 @@ func TestConvertSecretHandsInputToOSUnchanged(t *testing.T) {
 		if err := ConvertSecret(in, false); err == nil {
 			t.Fatalf("%q 应原样交给系统并失败：本程序不展开 ~、不去空白", in)
 		}
+	}
+}
+
+// 已经是对应格式时不重复干活：明文配「不加密」、密文配「加密」，都该原地跳过、内容不动。
+func TestConvertSecretSkipsFileAlreadyInTargetForm(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	writeCred(t, filepath.Join(dir, "plain.txt"), testPlain)
+	writeCred(t, filepath.Join(dir, "cipher.txt"), testCipher)
+
+	if err := ConvertSecret("plain.txt", false); err != nil {
+		t.Fatalf("明文配不加密应跳过并成功，实际报错：%v", err)
+	}
+	if got := readCred(t, filepath.Join(dir, "plain.txt")); got != testPlain {
+		t.Fatalf("跳过的文件不该被动，实际内容：%q", got)
+	}
+
+	if err := ConvertSecret("cipher.txt", true); err != nil {
+		t.Fatalf("密文配加密应跳过并成功，实际报错：%v", err)
+	}
+	if got := readCred(t, filepath.Join(dir, "cipher.txt")); got != testCipher {
+		t.Fatalf("跳过的文件不该被动，实际内容：%q", got)
+	}
+}
+
+// 加密方向：明文 → 密文，写进盘的内容必须能用同一把密钥解回原文。
+func TestConvertSecretEncryptsPlainFile(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows 的本机持久密钥在注册表里，测试隔离不掉，GuardEncrypt 会拦下与本夹具不一致的那把")
+	}
+	home := t.TempDir() // 空的 HOME：读不到本机已保存的密钥，才不会与夹具这把冲突
+	t.Setenv("HOME", home)
+	t.Setenv("SSHFLEET_KEY", testMasterKey)
+	dir := t.TempDir()
+	t.Chdir(dir)
+	writeCred(t, filepath.Join(dir, "pass.txt"), testPlain)
+
+	if err := ConvertSecret("pass.txt", true); err != nil {
+		t.Fatalf("明文应被加密，实际报错：%v", err)
+	}
+	got := readCred(t, filepath.Join(dir, "pass.txt"))
+	if got == testPlain {
+		t.Fatal("文件内容应已变成密文，实际仍是明文")
+	}
+	back, err := DecryptV2(got, testMasterKey)
+	if err != nil {
+		t.Fatalf("写进去的密文应能用同一把密钥解开，实际报错：%v", err)
+	}
+	if back != testPlain {
+		t.Fatalf("解回来应是 %q，实际：%q", testPlain, back)
 	}
 }
