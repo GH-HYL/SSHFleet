@@ -268,9 +268,10 @@ func (a *Args) Summary() string {
 	case a.NewPassword != "":
 		changePassword = "'" + common.MaskSecret(a.NewPassword) + "'"
 	case a.ChangePassword != "":
-		// 给了 --change-password 却没解析结果：只有 Summary 早于合规检查被调用才会走到
-		// （新密码在 checkPasswdChange 里解）。明写「未解析」而不是 ****——那个形态与
-		// 4 位以内的密码一模一样，看日志的人分不出「密码短」还是「根本没解」。
+		// 防御性分支，生产路径上走不到：Summary 的唯一调用点在合规检查之后，那时
+		// NewPassword 一定已经解出来了。留着是防将来有人在合规检查之前加一行日志——
+		// 那会让这一格静默变成 ****，而 **** 与 4 位以内的密码同形，看日志的人
+		// 分不出「这次的密码很短」还是「根本没解出来」。明写「未解析」就不含糊。
 		changePassword = "'（未解析）'"
 	}
 	fields = append(fields, "change_password="+changePassword)

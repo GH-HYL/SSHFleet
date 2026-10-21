@@ -327,6 +327,11 @@ func TestWriteReportPasswdRowShowsRealNewPassword(t *testing.T) {
 			if !strings.Contains(report, want) {
 				t.Fatalf("报告应含 %q\n报告全文：\n%s", want, report)
 			}
+			// 只验「有脱敏形态」是半个断言：还得验明文没跟着落盘。报告是归档产物，
+			// 一旦明文漏进去就跟着打包传走。
+			if strings.Contains(report, "NewPass#2026") {
+				t.Fatalf("报告里不该出现新密码明文\n报告全文：\n%s", report)
+			}
 		})
 	}
 }

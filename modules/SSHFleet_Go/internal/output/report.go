@@ -41,6 +41,9 @@ func WriteReport(archiveDir string, stats *result.Stats, a *cli.Args, cfg *confi
 	fmt.Fprintf(&b, "执行结束时间： %s\n", stats.GlobalStopTime.Format("2006-01-02 15:04:05.000000"))
 	// 命令行先脱敏再落盘：这条是整条 argv，内联清单（-f 1.2.3.4,22,root,密码）会整段带进来。
 	// 报告属归档产物，按 L13 不得留下明文凭据——宁可放弃"照抄重跑"，也不能把密码写进文件。
+	// 改密模式下这里会出现 --change-password 的取值：加密时那是**密文文件路径**的脱敏形态
+	// （如 /h****xt），不是新密码——它不是「显示新密码」的地方，新密码见下面「执行参数」里
+	// 那一行。别把这两行当同一个毛病改掉。
 	fmt.Fprintf(&b, "\n【执行命令】 \n  %s\n", DisplayCommand(common.MaskCommandLine(argv)))
 
 	b.WriteString("\n【执行参数】\n")

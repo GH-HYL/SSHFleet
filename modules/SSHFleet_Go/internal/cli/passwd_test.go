@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"sshfleet/internal/credential"
 )
 
 // --change-password 的取值与互斥。取值形态由 credential.encrypt 开关唯一决定，
@@ -115,5 +117,32 @@ func TestCheckPasswdChangeTrimsOuterSpace(t *testing.T) {
 	}
 	if a.NewPassword != "NewPass123" {
 		t.Fatalf("首尾空白应去掉，实际：%q", a.NewPassword)
+	}
+}
+
+// 加密链路：旗标值是密文文件路径，解出来的才是新密码。
+//
+// 这是「三处显示点取 NewPassword」这件事的**前提**。显示那几条测试都手塞 NewPassword，
+// 所以这条链一断（不再解密、或解成空），它们照样全绿，而线上三处会显示 ****。
+// 造密文走真实加密，主密钥经环境变量注入（GetMasterKey 只认 SSHFLEET_KEY）。
+func TestCheckPasswdChangeDecryptsCipherFile(t *testing.T) {
+	const key = "test-master-key-2026"
+	path := filepath.Join(t.TempDir(), "new_pw.cred")
+
+	token, err := credential.EncryptV2("NewPass#2026", key)
+	if err != nil {
+		t.Fatalf("造密文失败：%v", err)
+	}
+	if err := os.WriteFile(path, []byte(token), 0o600); err != nil {
+		t.Fatalf("写凭据文件失败：%v", err)
+	}
+	t.Setenv("SSHFLEET_KEY", key)
+
+	a := &Args{ChangePassword: path, credentialEncrypted: true}
+	if err := checkPasswdChange(a); err != nil {
+		t.Fatalf("加密模式下应解出新密码：%v", err)
+	}
+	if a.NewPassword != "NewPass#2026" {
+		t.Fatalf("应解出明文，实际：%q", a.NewPassword)
 	}
 }
