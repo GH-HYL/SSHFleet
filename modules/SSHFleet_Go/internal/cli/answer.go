@@ -14,8 +14,9 @@ import (
 
 // -a（代填）的取值处理：来源判定、解析、门控、互斥与长度检查，都在选项/参数合规检查阶段一次做完。
 //
-// 取值形态与 -f 完全同构：给一个 CSV 文件路径，或直接写同样格式的内联文本
-// （命令行里用 `;;` 分行）。解析走 common.ReadCSVRows——与清单同一份实现，
+// 取值形态与 -f 完全同构：给一个 CSV 文件路径，或直接写一条内联代填；两者
+// 走同一处判定（resolveValue），`;;` 与字面 `\n` 都只是普通字符（ADR-0023）。
+// 解析走 common.ReadCSVRows——与清单同一份实现，
 // `#` 注释行、空行、BOM、双引号、变长列的口径全部一致，没有第二套规则。
 //
 // 列语义是代填自己的：第 1 列是代填内容，第 2 列起是触发词，列数自适应。
@@ -36,12 +37,11 @@ func checkAnswer(a *Args, scriptText []byte) error {
 		return err
 	}
 
-	src := resolveSource(a.Answer)
-	// 门控：一条代填至少要有两列（内容 + 触发词），所以内联值一定含逗号。
-	// 不含逗号又不是已有文件，多半是路径打错了——照 -f 的同一形状报「文件不存在」。
-	if !src.IsFile && !strings.Contains(src.Raw, ",") {
-		return fmt.Errorf("-a 参数指定的文件不存在：%s\n"+
-			"提示：直接写代填内容就用逗号分隔：代填内容,触发词,触发词", src.Raw)
+	// 来源判定与「像不像一条代填」的门控与 -f 共用一处（resolveValue）：
+	// 先当路径交给系统，不是文件再看值里有没有列分隔符。
+	src, err := resolveValue(a.Answer, answerForm)
+	if err != nil {
+		return err
 	}
 
 	text, err := answerText(src)
@@ -77,11 +77,11 @@ func checkAnswer(a *Args, scriptText []byte) error {
 
 // answerText 按来源取到要解析的文本。
 //
-// 内联值先把 `;;` 换成分行符——命令行里传不进换行，这是唯一的整备动作；
-// 整备之后与文件内容走完全同一条解析路径。
+// 内联值原样交给解析器：装载期不做任何整备，`;;` 与字面 `\n` 都是普通字符，
+// 真要多条就写成文件（ADR-0023）。文件侧同样原样读。
 func answerText(src source) (string, error) {
 	if !src.IsFile {
-		return common.InlineText(src.Raw), nil
+		return src.Raw, nil
 	}
 	data, err := os.ReadFile(src.Path)
 	if err != nil {

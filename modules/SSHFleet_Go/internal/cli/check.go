@@ -151,14 +151,12 @@ func CheckArguments(a *Args) error {
 		return err
 	}
 
-	// -f：来源（文件 / 内联文本）已由 Parse 判定，这里按来源分流——
-	// 内联文本要看首字段像不像节点，文件要能读、且不是二进制。
+	// -f：来源（文件 / 内联的一条记录）已由 Parse 定（装载阶段也要它），这里只校验——
+	// 内联那条走与 -a 共用的 checkInlineValue，文件要能读、且不是二进制。
 	if a.CsvFile != "" {
 		if a.FIsInline {
-			// 首字段是 IPv4 才算内联清单文本，否则多半是把路径打错了
-			firstField := strings.TrimSpace(strings.Split(a.CsvFile, ",")[0])
-			if !common.IsIPv4Literal(firstField) {
-				return fmt.Errorf("-f 参数指定的文件不存在：%s\n提示：要临时传几台机器，可以直接写一行以 IP 开头的节点信息，例如 192.168.1.1,22,root,密码", a.CsvFile)
+			if err := checkInlineValue(a.CsvFile, nodeListForm); err != nil {
+				return err
 			}
 		} else {
 			data, err := os.ReadFile(a.CsvFile)

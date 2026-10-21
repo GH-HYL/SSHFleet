@@ -400,8 +400,8 @@ func mustIn() *common.Interactor {
 	return &common.Interactor{In: strings.NewReader(""), Out: &strings.Builder{}, Disinteractive: true}
 }
 
-// readCSVRows 的两条来源：文件按原样读，内联先把 `;;` 换成分行符。
-// 这条分叉只在本函数里，补完之后两者走同一条解析路径（common.ReadCSVRows）。
+// readCSVRows 的两条来源：文件按原样读，内联值也原样交给解析器——`;;` 与字面
+// `\n` 都是普通字符，内联只写一条（ADR-0023）。
 func TestReadCSVRowsSources(t *testing.T) {
 	// 文件：内容原样进来，`\n` 是两个普通字符（不做转义展开）
 	dir := t.TempDir()
@@ -417,31 +417,31 @@ func TestReadCSVRowsSources(t *testing.T) {
 		t.Fatalf("文件清单应读出 2 行，实际 %v", rows)
 	}
 
-	// 内联：命令行传不进换行，只能写 `;;`，由装载阶段换成分行符
+	// 内联单条：最常见的写法
+	rows, err = readCSVRows("10.0.0.1,22,root,pw", true, mustIn())
+	if err != nil || len(rows) != 1 || rows[0][3] != "pw" {
+		t.Fatalf("内联单条应读出 1 行，实际 %v（%v）", rows, err)
+	}
+
+	// 内联里写 `;;` 也不会分行：它是普通字符，整串按一条解析
 	rows, err = readCSVRows(`10.0.0.1,22,root,pw;;10.0.0.2,22,root,pw`, true, mustIn())
 	if err != nil {
 		t.Fatalf("读内联清单失败：%v", err)
 	}
-	if len(rows) != 2 || rows[0][0] != "10.0.0.1" || rows[1][0] != "10.0.0.2" {
-		t.Fatalf("内联的 ;; 应分成两行、读出 2 行，实际 %v", rows)
-	}
-
-	// 内联单行：最常见的写法，不带任何 `;;`
-	rows, err = readCSVRows("10.0.0.1,22,root,pw", true, mustIn())
-	if err != nil || len(rows) != 1 || rows[0][3] != "pw" {
-		t.Fatalf("内联单行应读出 1 行，实际 %v（%v）", rows, err)
+	if len(rows) != 1 || rows[0][3] != "pw;;10.0.0.2" {
+		t.Fatalf("`;;` 应留在字段里、只有一条，实际 %v", rows)
 	}
 }
 
-// 内联清单里的反斜杠是普通字符：Windows 路径常含 `\n`，切开就会变成两个节点
-// （ADR-0020）。这里用 `;;` 把两台机器连起来，顺带钉住「路径不被当分行」。
+// 内联清单里的反斜杠是普通字符：Windows 路径常含 `\n`，展开就会把路径切断
+// （ADR-0023）。整条记录照原样进字段。
 func TestReadCSVRowsInlineKeepsBackslashPath(t *testing.T) {
-	rows, err := readCSVRows(`10.0.0.1,22,root,D:\new\pw.bin,D:\new\id.pem,D:\nodes\kp.bin;;10.0.0.2,22,root,pw`, true, mustIn())
+	rows, err := readCSVRows(`10.0.0.1,22,root,D:\new\pw.bin,D:\new\id.pem,D:\nodes\kp.bin`, true, mustIn())
 	if err != nil {
 		t.Fatalf("读内联清单失败：%v", err)
 	}
-	if len(rows) != 2 {
-		t.Fatalf("应是 2 台机器，实际 %d 行：%v", len(rows), rows)
+	if len(rows) != 1 {
+		t.Fatalf("应是 1 台机器，实际 %d 行：%v", len(rows), rows)
 	}
 	if got := rows[0][3]; got != `D:\new\pw.bin` {
 		t.Fatalf("第 4 列的路径应原样保留，实际 %q", got)
@@ -1062,7 +1062,12 @@ func TestReadPlaintextModeNeedsNoMasterKey(t *testing.T) {
 // 读取失败时不得返回半个清单：调用方（main）按「拿到非 nil 才继续」处理，
 // 返回部分结果会让报错之后的流程多跑一段。
 func TestReadReturnsNoNodesOnError(t *testing.T) {
-	args, cfg, in, _ := testRead(t, true, "-f", "10.0.0.1,22,root,pw\n这不是IP,22,root,pw", "-c", "echo hi")
+	dir := t.TempDir()
+	file := filepath.Join(dir, "nodes.csv")
+	if err := os.WriteFile(file, []byte("10.0.0.1,22,root,pw\n这不是IP,22,root,pw\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	args, cfg, in, _ := testRead(t, true, "-f", file, "-c", "echo hi")
 	cfg.Credential.Encrypt = false
 
 	nodes, err := Read(args, cfg, in)
