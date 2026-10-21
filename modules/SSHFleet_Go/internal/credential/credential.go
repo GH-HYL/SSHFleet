@@ -196,12 +196,12 @@ func CredErrorLabel(code CredCode, path string, detail string) string {
 // ErrRelativeNoSecretDir 相对路径但 secret_dir 未配置（调用方按各自场景组织文案）。
 var ErrRelativeNoSecretDir = errors.New("相对路径但 secret_dir 未配置")
 
-// ResolveSecretPath 凭据路径梯子（全工具单一事实来源，spec D31 统一解析顺序）：
-// 去首尾空白 → ~ 展开 → 绝对则原样 → 相对则拼 secret_dir。
-// 存在性校验由调用方负责（CSV 场景经 ReadCredential 的 missing，转换场景显式 Stat）。
+// ResolveSecretPath 写在**文件里**的凭据路径解析（清单列与配置字段的单一事实来源，
+// spec D31）：去首尾空白 → ~ 展开 → 绝对则原样 → 相对则拼 secret_dir。
+// 命令行给的路径不走这里——它按当前工作目录解析，见 convert.go 的 resolveCredPath。
+// 存在性校验由调用方负责（清单场景经 ReadCredential 的 missing 分流）。
 func ResolveSecretPath(raw, secretDir string) (string, error) {
-	p := strings.TrimSpace(raw)
-	p = expandHomeTilde(p)
+	p := normalizeCredPath(raw)
 	if filepath.IsAbs(p) {
 		return p, nil
 	}
@@ -209,6 +209,13 @@ func ResolveSecretPath(raw, secretDir string) (string, error) {
 		return "", ErrRelativeNoSecretDir
 	}
 	return filepath.Join(secretDir, p), nil
+}
+
+// normalizeCredPath 两类凭据路径共用的前两步：去首尾空白 → ~ 展开。
+// 之后基准不同：写在文件里的拼 secret_dir（ResolveSecretPath），命令行给的按
+// 当前工作目录（convert.go 的 resolveConvertPath）。
+func normalizeCredPath(raw string) string {
+	return expandHomeTilde(strings.TrimSpace(raw))
 }
 
 // expandHomeTilde 把前导 ~ 展开为用户主目录。
