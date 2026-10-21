@@ -1,6 +1,6 @@
 # 内联清单里的反斜杠路径被误当换行 · 规格
 
-Status: done（2026-10-19 实施并提交 4bc04fe）
+Status: done（2026-10-19 实施并提交 4bc04fe；记号结论已被 ADR-0023 取代，见文末「更新记录」）
 
 > **来历**：2026-10-19 核对 `internal/nodelist` 两个一直红的测试时查出，不在当轮的缺陷清点范围内，单独立项。
 
@@ -110,3 +110,7 @@ $ SSHFleet -f nodes.csv -s install.sh -a 'a\nb,请选择架构'
 - 归档 `report.txt` 的代填记录在加密模式（`encrypt = true`）下的形态，本轮只在明文模式实跑。
 
 **事实核对通过的主要项**（均有实跑或 grep 证据）：`ExpandEscapedNewlines` 在 Go 代码零命中；`InlineText` 仅 `nodelist/csvread.go:64` 与 `cli/answer.go:84` 两个调用点；版本号 `9.2.0` 在 CHANGELOG 段头与 `main.go:37` 一致；spec 测试决策列的 5 条回归各有对应测试函数；README/手册/常见问题/示例无 `\n` 分隔残留；`4bc04fe` 提交存在且含所述 18 个文件；复现命令改前红改后绿可复现。
+
+## 更新记录
+
+- 2026-10-21：内联值改为只写一条，`;;` 作行分隔作废（字面 `\n` 同样只是普通字符，真换行被拒绝）；上文「问题陈述」「方案」与「实现决策」里关于 `;;` 作行分隔的取舍不再约束，替代见 `docs/adr/0023-inline-value-is-a-single-record.md`。
