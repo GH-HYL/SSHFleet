@@ -5,26 +5,22 @@ package credential
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 )
 
 // ConvertSecret 处理 --convert-secret。
 //
-// 路径解析：去空白 → ~ 展开 → 相对路径按当前工作目录（不拼 secret_dir，见 resolveConvertPath）。
+// 目标路径原样交给系统：相对、绝对、../ 都由 os 按当前工作目录解析，本程序不判断
+// 形态、不展开 ~、不去空白。secret_dir 只服务写在文件里的凭据（见 ResolveSecretPath）。
 func ConvertSecret(rawPath string, encrypted bool) error {
-	path, err := resolveConvertPath(rawPath)
-	if err != nil {
-		return err
-	}
-	content, err := ReadCredFileContent(path)
+	content, err := ReadCredFileContent(rawPath)
 	if err != nil {
 		return err
 	}
 	if encrypted {
-		return convertToCipher(path, content)
+		return convertToCipher(rawPath, content)
 	}
-	return convertToPlain(path, content)
+	return convertToPlain(rawPath, content)
 }
 
 // convertToCipher 明文 → 密文。
@@ -66,23 +62,6 @@ func convertToPlain(path, content string) error {
 		return fmt.Errorf("解密结果是空的，拒绝写回：%s", path)
 	}
 	return writeAndEcho(path, plaintext, "密文", "明文")
-}
-
-// resolveConvertPath 解析 --convert-secret 的目标文件：命令行给的路径按当前工作目录
-// 解析，不拼 secret_dir——secret_dir 只服务写在文件里的凭据（见 ResolveSecretPath）。
-// 否则同名文件会撞车：转了 secret_dir 里那个，使用者指的那个纹丝不动。
-func resolveConvertPath(raw string) (string, error) {
-	p := normalizeCredPath(raw)
-	if _, err := os.Stat(p); err != nil {
-		where := ""
-		if !filepath.IsAbs(p) {
-			if wd, wdErr := os.Getwd(); wdErr == nil {
-				where = fmt.Sprintf("（相对路径按当前工作目录 %s 解析）", wd)
-			}
-		}
-		return "", fmt.Errorf("找不到凭据文件：%s%s，请检查路径是否正确", p, where)
-	}
-	return p, nil
 }
 
 // writeAndEcho 就地覆盖写入，再从磁盘回读校验；为避免凭据明文泄露到终端，

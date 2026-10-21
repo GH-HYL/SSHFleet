@@ -26,4 +26,4 @@ Blocked by: 08
 
 ## 更新记录
 
-- 2026-10-21：`--convert-secret` 的目标路径改按当前工作目录解析（`~` 照常展开），不再拼 `secret_dir`；上文「范围」第 1、2 条与本文件首条 Comments 中涉及「相对拼 secret_dir」的部分不再约束，替代实现见 `modules/SSHFleet_Go/internal/credential/convert.go` 的 `resolveConvertPath`
+- 2026-10-21：`--convert-secret` 的目标路径改为**原样交给系统**（相对、绝对、`../` 由 `os` 按 cwd 解析，`~` 与空格都不代为处理），不再拼 `secret_dir`；上文「范围」第 1、2 条与本文件首条 Comments 中涉及「相对拼 secret_dir」的部分不再约束，替代实现见 `modules/SSHFleet_Go/internal/credential/convert.go` 的 `ConvertSecret`
