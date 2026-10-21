@@ -2,7 +2,7 @@
 
 Status: done
 
-> **本文件是本议题唯一承载 `file:line` 的地方。** spec 与工单按 `docs/agents/doc-formats.md` 不写路径与片段，要定位到具体函数时看这里。
+> **本文件是本议题唯一承载 `file:line` 的地方。** spec 与工单按 `docs/agents/doc-guide.md` 不写路径与片段，要定位到具体函数时看这里。
 >
 > 摸底基准：`cfb7ecc`（2026-10-20）工作区，`go build` / `go vet` 退出码 0，`go test ./...` 13 个包全 ok。
 > 计数口径：**只数非测试代码**（`_test.go` 一律不计）；中文注释不计入「产出给使用者的文本」。
