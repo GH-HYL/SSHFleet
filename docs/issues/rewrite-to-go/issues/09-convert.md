@@ -22,3 +22,8 @@ Blocked by: 08
 ## Comments
 
 - 2026-09-11 完成。二进制端到端冒烟通过：明文 →（等级3）0x02 加密 → 重复执行判「已是加密格式」→（等级1）还原为明文，密码 `<真实口令已移除>` 逐字还原；D31 路径规则（相对拼 secret_dir / 绝对直用 / secret_dir 未配置报两条出路 / 找不到文件）、缺主密钥提示均验证。
+- 2026-10-21 本工单对 D31 的解读有误（把命令行路径也拼 `secret_dir`），已按 spec 原文改回「按当前工作目录解析」，见文末「更新记录」。
+
+## 更新记录
+
+- 2026-10-21：`--convert-secret` 的目标路径改按当前工作目录解析（`~` 照常展开），不再拼 `secret_dir`；上文「范围」第 1、2 条与本文件首条 Comments 中涉及「相对拼 secret_dir」的部分不再约束，替代实现见 `modules/SSHFleet_Go/internal/credential/convert.go` 的 `resolveConvertPath`

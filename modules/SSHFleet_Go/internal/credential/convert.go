@@ -3,17 +3,17 @@
 package credential
 
 import (
-	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
 // ConvertSecret 处理 --convert-secret。
 //
-// 路径解析：去空白 → ~ 展开 → 绝对原样 → 相对拼 secret_dir；secret_dir 未配置 → 明确报错。
-func ConvertSecret(rawPath, secretDir string, encrypted bool) error {
-	path, err := resolveCredPath(rawPath, secretDir)
+// 路径解析：去空白 → ~ 展开 → 相对路径按当前工作目录（不拼 secret_dir，见 resolveConvertPath）。
+func ConvertSecret(rawPath string, encrypted bool) error {
+	path, err := resolveConvertPath(rawPath)
 	if err != nil {
 		return err
 	}
@@ -68,19 +68,19 @@ func convertToPlain(path, content string) error {
 	return writeAndEcho(path, plaintext, "密文", "明文")
 }
 
-// resolveCredPath 解析 --convert-secret 传入的路径（走 ResolveSecretPath 单点）；
-// 拼出的文件须存在。
-func resolveCredPath(raw, secretDir string) (string, error) {
-	p, err := ResolveSecretPath(raw, secretDir)
-	if err != nil {
-		if errors.Is(err, ErrRelativeNoSecretDir) {
-			return "", fmt.Errorf(
-				"凭据路径 '%s' 为相对路径，但 credential.secret_dir 未配置，无法拼接\n出路：① 改写绝对路径 ② 在配置中设置 credential.secret_dir", strings.TrimSpace(raw))
-		}
-		return "", err
-	}
+// resolveConvertPath 解析 --convert-secret 的目标文件：命令行给的路径按当前工作目录
+// 解析，不拼 secret_dir——secret_dir 只服务写在文件里的凭据（见 ResolveSecretPath）。
+// 否则同名文件会撞车：转了 secret_dir 里那个，使用者指的那个纹丝不动。
+func resolveConvertPath(raw string) (string, error) {
+	p := normalizeCredPath(raw)
 	if _, err := os.Stat(p); err != nil {
-		return "", fmt.Errorf("找不到凭据文件：%s（已按 secret_dir 拼接为 %s），请检查路径是否正确", raw, p)
+		where := ""
+		if !filepath.IsAbs(p) {
+			if wd, wdErr := os.Getwd(); wdErr == nil {
+				where = fmt.Sprintf("（相对路径按当前工作目录 %s 解析）", wd)
+			}
+		}
+		return "", fmt.Errorf("找不到凭据文件：%s%s，请检查路径是否正确", p, where)
 	}
 	return p, nil
 }
