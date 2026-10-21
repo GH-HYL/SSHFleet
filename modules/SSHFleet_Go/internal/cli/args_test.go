@@ -788,9 +788,10 @@ func TestSummaryPasswdFieldShowsRealNewPassword(t *testing.T) {
 	}
 }
 
-// 给了 --change-password 却还没解析新密码时，日志那格写「未解析」，不拿 **** 顶替。
+// 防御性分支：给了 --change-password 却还没解析新密码时，日志那格写「未解析」。
 //
-// **** 与「4 位以内的密码」同形：看日志的人分不出「这次的密码很短」还是「根本没解出来」。
+// 生产路径走不到（Summary 的唯一调用点在合规检查之后）。这条测试只钉住「万一走到时
+// 不拿 **** 顶替」——**** 与「4 位以内的密码」同形，看日志的人分不出来。
 func TestSummaryPasswdFieldBeforeDecode(t *testing.T) {
 	a := &Args{ChangePassword: "/home/hyl/secret/new_pw.txt"} // 未经 CheckArguments
 	if got := a.Summary(); !strings.Contains(got, "change_password='（未解析）'") {

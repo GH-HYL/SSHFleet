@@ -278,6 +278,12 @@ func main() {
 	// 脚本后缀没配解释器：在确认屏之前当场问一句是否用回退解释器继续（默认 no，
 	// 回车即退出）。放这里与选项/参数合规检查同处"启动检查"阶段，符合既有的确认时机。
 	if err := cli.ConfirmInterpreterFallback(args, cfg, in); err != nil {
+		if errors.Is(err, common.ErrCancelled) {
+			// 屏幕已由交互器打出「已取消：…」，日志里也要留一句：否则日志末尾停在
+			// 「解析结果」，事后分不清是使用者自己取消、还是程序半路出了事。
+			// 口径对齐危险命令确认答「否」那条取消（那里也是 logger.Warn 一句再 fatal）。
+			logger.Warn("执行已取消（脚本后缀没有配置解释器）")
+		}
 		fatal("cli", err)
 	}
 	logger.Success("输入的选项/参数合规性检查通过")
