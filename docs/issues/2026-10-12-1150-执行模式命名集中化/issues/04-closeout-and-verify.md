@@ -29,7 +29,7 @@ Blocked by: 02, 03
 
 - `go vet ./...` 干净、`go test ./...` 全绿。
 - **CHANGELOG 不记**：这是纯重构，用户可见输出一字不变，按《个人开发规范》四不记。若走查发现显示有变，那一处按 bug 修，不是要记的优化项。
-- 回填状态：`docs/adr/0013` 的《状态》改「已实施」；`docs/issues/architecture-review-2026-10-06/issues/05-mode-centralization.md` 与本目录各票标 `done` 并记提交号。
+- 回填状态：`docs/adr/0013` 的《状态》改「已实施」；`docs/issues/2026-10-12-1150-架构审查/issues/05-mode-centralization.md` 与本目录各票标 `done` 并记提交号。
 
 - [x] 纸面走查表 5×9 格填满，无一格与改动前不同
 - [x] 真机五条路径跑过，显示与归档目录名不变

@@ -2,7 +2,7 @@
 
 Status: done
 
-**闭环说明（2026-10-08 复核）**：已解决。两块判据表已落地——`config/keywords_error.conf` 的 `[[categories]]`（第 46 行起）与 `[[exit_code_categories]]`（第 325 / 334 / 344 行）。**后续演进一步**：第二组的**选组依据**已由 `result-verdict` 重构（2026-09-29，见 `docs/adr/0004` 的《2026-09-29 取代》节）从「结果退出码非 0」改为「目的命令是否给出退出码（`CommandExitCode != nil`）」；分类名与关键词表不变。真机实测（2026-10-08，非 root 账号）：`拒绝网络连接` 等分类按预期命中。
+**闭环说明（2026-10-08 复核）**：已解决。两块判据表已落地——`config/keywords_error.conf` 的 `[[categories]]`（第 46 行起）与 `[[exit_code_categories]]`（第 325 / 334 / 344 行）。**后续演进一步**：第二组的**选组依据**已由 `2026-10-12-1150-结果统一判定` 重构（2026-09-29，见 `docs/adr/0004` 的《2026-09-29 取代》节）从「结果退出码非 0」改为「目的命令是否给出退出码（`CommandExitCode != nil`）」；分类名与关键词表不变。真机实测（2026-10-08，非 root 账号）：`拒绝网络连接` 等分类按预期命中。
 
 > 记录「连接与认证都成功、命令却被拒绝执行」这一族报文的分类决定。
 > 全部结论来自 2026-09-16 的真机复现，原文与字段见第五节。
@@ -285,7 +285,7 @@ printf 'Match User sftest2\n    ForceCommand internal-sftp\n' > /etc/ssh/sshd_co
 
 ## 十、关联
 
-- `docs/adr/0004-keyword-override-under-nonzero-exit-code.md` —— 机制 B 的 ADR（含备选方案与拒绝理由）
-- `docs/adr/0005-capture-server-banner-for-failure-reason.md` —— 机制 A 的 ADR
+- `docs/adr/0004-非零退出码下的判据覆盖.md` —— 机制 B 的 ADR（含备选方案与拒绝理由）
+- `docs/adr/0005-用banner作认证故障原因.md` —— 机制 A 的 ADR
 - `GLOSSARY.md` —— 词条「会话被拒」「退出码」「服务端提示」
-- `docs/issues/rewrite-to-go/spec.md` D11 / D44 —— 关键词表迁移约束与认证失败分类的既有决策
+- `docs/issues/2026-09-11-1336-Go重写/spec.md` D11 / D44 —— 关键词表迁移约束与认证失败分类的既有决策

@@ -107,7 +107,7 @@ Status: done（4 处缺陷已修；6 处观察项已逐条裁定，其中 O2 作
 | `modules/SSHFleet_Go/testdata/error_classification_cases.toml` | 「预处理失败 exit_code=1」的期望随 O1 更新（原期望钉的是旧缺陷行为） |
 | `docs/1-使用手册.md` | 危险屏样张与页脚按实测修正；上传小节补同名文件行为 |
 | `docs/6-示例.md` | 示例六补同名文件行为一句 |
-| `docs/issues/lower-onboarding-cost/copy.md` | 回写：帮助末尾 `docs/manual/` → `docs/`（目录扁平化的连带）；`远程路径不存在` 的 tip；九.1 补"取最高"实测与页脚定稿；二.4 补输出审计新增的三条文案 |
+| `docs/issues/2026-10-12-1150-学习成本改造/copy.md` | 回写：帮助末尾 `docs/manual/` → `docs/`（目录扁平化的连带）；`远程路径不存在` 的 tip；九.1 补"取最高"实测与页脚定稿；二.4 补输出审计新增的三条文案 |
 | `CHANGELOG.md` | 6.0.0 段 `### Fixed` 补 9 条 |
 
 **另**：`build/SSHFleet.exe` / `build/SSHFleet` 是含修复的重建产物；`release/` 下的发布包仍是 13:42 那版（**不含修复**），要带上得重跑 `build-windows.bat`。

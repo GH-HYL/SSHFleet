@@ -25,7 +25,7 @@
 
 | 文件 | 作用 |
 | --- | --- |
-| `docs/adr/0022-upload-rollback-on-failure.md` | 为什么这么定，含下载为什么不做、删除范围为什么可以证明 |
+| `docs/adr/0022-上传失败即回滚.md` | 为什么这么定，含下载为什么不做、删除范围为什么可以证明 |
 | `issues/01-rollback-on-failure.md` | 具体做什么 |
 
 ## 已知的坑

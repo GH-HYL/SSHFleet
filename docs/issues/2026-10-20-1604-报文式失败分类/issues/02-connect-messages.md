@@ -8,7 +8,7 @@
 
 `connect` 一摊是这次端到端演示的样本：连一台**端口没开**的机器，屏幕上那行错误从 `建立连接失败 - dial tcp …: connect: connection refused` 变成 `sshfleet.connect.refused: dial tcp …: connect: connection refused`（原样，不翻译），统计块里那一类的名字仍是「拒绝网络连接」——名字来自配置。
 
-**实施入口**：`docs/issues/message-based-classification/README.md`。
+**实施入口**：`docs/issues/2026-10-20-1604-报文式失败分类/README.md`。
 
 **被谁阻塞**：01（摸底清单）。
 

@@ -421,7 +421,7 @@ README 既有用法写的是 `~/.MyPW/pw.txt`（受 `~` 展开，两版一致）
 
 **Go 的编译缓存与临时目录改为「不指定、走默认位置」。**
 
-- 旧做法（M6 / 早期构建脚本）：把 `GOCACHE` / `GOTMPDIR` 显式指向工作区 `build/` 下（`build/gocache`、`build/gotmp`）。旧记录见 `docs/issues/remote-interaction/issues/08-release-closeout.md`。
+- 旧做法（M6 / 早期构建脚本）：把 `GOCACHE` / `GOTMPDIR` 显式指向工作区 `build/` 下（`build/gocache`、`build/gotmp`）。旧记录见 `docs/issues/2026-10-12-1150-远端交互代填/issues/08-release-closeout.md`。
 - 现行决策：**不再指定**——编译缓存是 Go 编译过程的缓存、不是产物，指定它只增加维护面。`build-windows.bat` 已同步（第 26 行注明「不在此指定，走系统默认路径」）。
 - 规则级依据：`docs/个人开发规范.md` §一「工具链自身的编译缓存与临时目录走默认位置，不必指定」。
 - 「产物不出工作区」这条**不变**：编译产物仍落 `build/`、最终产物落 `release/`，只是编译器的缓存与临时目录不再由人指定。
