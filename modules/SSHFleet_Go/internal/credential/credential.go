@@ -196,10 +196,11 @@ func CredErrorLabel(code CredCode, path string, detail string) string {
 // ErrRelativeNoSecretDir 相对路径但 secret_dir 未配置（调用方按各自场景组织文案）。
 var ErrRelativeNoSecretDir = errors.New("相对路径但 secret_dir 未配置")
 
-// ResolveSecretPath 写在**文件里**的凭据路径解析（清单列与配置字段的单一事实来源，
-// spec D31）：去首尾空白 → ~ 展开 → 绝对则原样 → 相对则拼 secret_dir。
-// 命令行给的路径不经过这里——那里原样交给系统，本程序不碰（见 convert.go 的 ConvertSecret）。
+// ResolveSecretPath **写在文件里**的凭据路径解析（spec D31）：去首尾空白 → ~ 展开 →
+// 绝对则原样 → 相对则拼 secret_dir。服务对象是清单列与配置里的凭据字段；
+// 命令行给的路径**不经过这里**——那里原样交给系统，本程序不碰（见 convert.go 的 ConvertSecret）。
 // 存在性校验由调用方负责（清单场景经 ReadCredential 的 missing 分流）。
+// 注：配置侧目前还没接上（config 层先拒掉了相对路径与 ~，见 issues/cli-path-normalization/）。
 func ResolveSecretPath(raw, secretDir string) (string, error) {
 	p := expandHomeTilde(strings.TrimSpace(raw))
 	if filepath.IsAbs(p) {
