@@ -19,16 +19,22 @@ func MaskSecret(s string) string {
 }
 
 // LooksLikeInlineList 判断一个 -f 取值是不是带凭据段的内联清单：
-// 一条内联节点记录，且写了换行以外的凭据段（第 4 段密码、第 6 段口令）。
+// 恰好一条内联节点记录，且写了第 4 段或第 6 段（密码 / 口令）。
 //
 // 记录像不像由 LooksLikeInlineNodeRecord 一处判——取值判定与这里共用同一把尺子，
-// 不会出现「放行认得出、脱敏认不出」（ADR-0023 决定 5）。裸 IP 没有凭据可脱，
-// 文件路径也读不出节点，两者都返回 false。
+// 不会出现「放行认得出、脱敏认不出」（ADR-0023 决定 5）。这里只补两件脱敏自己的事：
+// 裸 IP 没有凭据可脱、读不成一条记录的读不出段号，两种都不遮。
 func LooksLikeInlineList(s string) bool {
-	if !LooksLikeInlineNodeRecord(s) {
+	record, ok := csvRecord(s)
+	if !ok || !LooksLikeInlineNodeRecord(s) {
 		return false
 	}
-	return strings.Contains(s, ",")
+	for _, idx := range []int{3, 5} {
+		if idx < len(record.Fields) && strings.TrimSpace(record.Fields[idx]) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 // MaskInlineList 内联清单（IP,端口,用户名,密码,私钥路径,口令）的脱敏：

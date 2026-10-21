@@ -95,13 +95,16 @@ func recordStartLine(chunk string, line int) int {
 // 用 CSV 读法取首字段而不是自己按逗号切：手切看不出引号里包着的逗号，也认不出引号
 // 没闭合这种「读不成一条」的值。
 //
+// 必须**恰好一条**：多行正文读得出好几条记录，那就不是「一条内联记录」（ADR-0023 决定 1）。
+// 命令行那条路上出现真换行的值在 cli 侧就先被拒了，但本函数也要自持——脱敏一侧同样调它。
+//
 // 放在这里是因为它和 ReadCSVRows 是同一条口径：`-f` 的取值判定与显示时的脱敏
 // （MaskInlineListIf）都调它，两处不会各认一边（ADR-0023 决定 5）。
 // 内联值里出现真换行时的拒绝不在这里判——那是取值判定的次序问题，见 cli/source.go。
 func LooksLikeInlineNodeRecord(s string) bool {
-	rows, err := ReadCSVRows(s)
-	if err != nil || len(rows) == 0 {
+	record, ok := csvRecord(s)
+	if !ok {
 		return false
 	}
-	return IsIPv4Literal(rows[0].Fields[0])
+	return IsIPv4Literal(record.Fields[0])
 }

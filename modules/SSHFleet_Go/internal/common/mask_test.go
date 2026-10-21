@@ -1,7 +1,6 @@
 package common
 
 import (
-	"encoding/csv"
 	"strings"
 	"testing"
 )
@@ -47,18 +46,16 @@ func TestMaskCommandLineKeepsInlineListBehaviour(t *testing.T) {
 
 // Excel 导出的单行写法：整段带引号。取值判定认它是一条节点，
 // 脱敏也得认——否则这行密码会明文进日志、确认屏和报告。
+//
+// 期望值按 CSV 写法的字面形态手写：只有真含逗号或引号的字段才带引号，所以
+// 整段带引号的输入会被规范化成 `10.0.0.1,22,root,****`。
 func TestMaskCommandLineMasksQuotedInlineList(t *testing.T) {
 	got := MaskCommandLine([]string{"SSHFleet.exe", "-f", `"10.0.0.1",22,root,s3cret`, "-c", "uptime"})
 	if strings.Contains(got[2], "s3cret") {
 		t.Fatalf("带引号的内联清单也要脱敏，实际：%q", got[2])
 	}
-	// 期望值从 CSV 口径写出来：IP、端口、用户名原样，第 4 段遮住。
-	var want strings.Builder
-	w := csv.NewWriter(&want)
-	_ = w.Write([]string{"10.0.0.1", "22", "root", "****"})
-	w.Flush()
-	if got[2] != strings.TrimSuffix(want.String(), "\n") {
-		t.Fatalf("IP、端口、用户名应原样保留，实际：%q", got[2])
+	if want := "10.0.0.1,22,root,****"; got[2] != want {
+		t.Fatalf("IP、端口、用户名应原样保留，实际：%q（想要 %q）", got[2], want)
 	}
 }
 
@@ -68,12 +65,8 @@ func TestMaskCommandLineMasksQuotedInlineListSixColumns(t *testing.T) {
 	if strings.Contains(got[2], "pw1") || strings.Contains(got[2], "keypw1") {
 		t.Fatalf("密码与私钥口令都不该留下明文，实际：%q", got[2])
 	}
-	var want strings.Builder
-	w := csv.NewWriter(&want)
-	_ = w.Write([]string{"10.0.0.1", "22", "root", "****", "key.bin", "****"})
-	w.Flush()
-	if got[2] != strings.TrimSuffix(want.String(), "\n") {
-		t.Fatalf("第 4、6 段应遮住、其余保留，实际：%q", got[2])
+	if want := "10.0.0.1,22,root,****,key.bin,****"; got[2] != want {
+		t.Fatalf("第 4、6 段应遮住、其余保留，实际：%q（想要 %q）", got[2], want)
 	}
 }
 
@@ -83,12 +76,20 @@ func TestMaskCommandLineMasksQuotedComma(t *testing.T) {
 	if strings.Contains(got[2], "s3cret") {
 		t.Fatalf("引号前有逗号时密码仍要遮住，实际：%q", got[2])
 	}
-	var want strings.Builder
-	w := csv.NewWriter(&want)
-	_ = w.Write([]string{"10.0.0.1", "22", "ro,ot", "****"})
-	w.Flush()
-	if got[2] != strings.TrimSuffix(want.String(), "\n") {
-		t.Fatalf("引号里的逗号不该把段号切错，实际：%q", got[2])
+	if want := `10.0.0.1,22,"ro,ot",****`; got[2] != want {
+		t.Fatalf("引号里的逗号不该把段号切错，实际：%q（想要 %q）", got[2], want)
+	}
+}
+
+// 多行正文不是「一条内联记录」：判据必须说不是，脱敏也就原样不动
+// （那是取值判定那头该拒的东西，不该被当成内联清单去遮成半截）。
+func TestInlineListRejectsMultiRecord(t *testing.T) {
+	two := "10.0.0.1,22,root,pw\n10.0.0.2,22,root,pw"
+	if LooksLikeInlineNodeRecord(two) {
+		t.Fatal("两行正文不是一条内联记录")
+	}
+	if LooksLikeInlineList(two) {
+		t.Fatal("两行正文不该被当成内联清单")
 	}
 }
 
