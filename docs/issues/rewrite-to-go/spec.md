@@ -427,8 +427,9 @@ README 既有用法写的是 `~/.MyPW/pw.txt`（受 `~` 展开，两版一致）
 ---
 ## 补充新决策（--convert-secret 的路径基准）
 
-**`--convert-secret` 的目标路径按当前工作目录解析，不拼 `secret_dir`**（2026-10-21）。
+**`--convert-secret` 的目标路径原样交给系统，本程序不做任何加工**（2026-10-21）。
 
 - 依据：本文「D31 展开」表里「`--convert-secret` 目标」本就在**命令行来源**那一行，基准写的是当前工作目录。工单 `issues/09-convert.md` 当年把它读成「相对拼 secret_dir」，实现照工单走，于是同名文件撞车时改写的是 `secret_dir` 里那个，使用者指的那个纹丝不动。
-- 不再约束的两处：D31 小节「统一解析顺序（两类共用一个函数，只差基准）」——现为共用「去空白 + `~` 展开」两步、基准各自决定；「行为变化（两处）」第 2 条（同名文件「新版一律去 `secret_dir` 找」）——现行行为与它描述的第 1 条旧版一致。
-- 替代实现：`modules/SSHFleet_Go/internal/credential/convert.go` 的 `resolveConvertPath`。
+- 现行做法：命令行路径直接交给 `os`——相对、绝对、`../` 由系统按 cwd 解析，`~` 与空格都不代为展开或去掉（`~` 由 shell 展开）。拼接 `secret_dir` 只服务清单列与配置字段。
+- 不再约束的两处：D31 小节「统一解析顺序（两类共用一个函数，只差基准）」——两类路径现已各走一边，不再共用一个函数；「行为变化（两处）」第 2 条（同名文件「新版一律去 `secret_dir` 找」）——现行行为与它描述的第 1 条旧版一致。
+- 替代实现：`modules/SSHFleet_Go/internal/credential/convert.go` 的 `ConvertSecret`（不做路径处理），配置与清单侧仍走 `ResolveSecretPath`。
