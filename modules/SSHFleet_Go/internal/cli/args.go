@@ -48,7 +48,7 @@ type Args struct {
 	GenKey         bool   // --gen-key
 	KeyStatus      bool   // --key-status
 	ConvertSecret  string // --convert-secret
-	FIsInline      bool   // -f 为内联的一条记录（不是文件路径）：来源由 Parse 定，格式在合规检查里校验
+	FIsInline      bool   // -f 为内联的一条记录（不是文件路径）：由合规检查判定后回填，装载与归档读它
 
 	// -a 与 [interactive]：原始值在 Parse 里装好，解析结果由 CheckArguments 填——
 	// 来源判定与门控只做一次，执行侧直接用。

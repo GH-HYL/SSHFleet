@@ -46,10 +46,11 @@ type valueForm struct {
 
 // 两侧的取值口径。这两份是约定不改的查找表，不是可变状态。
 var (
-	// 节点清单：首字段是 IPv4 就算一行节点信息。
+	// 节点清单：CSV 读出的首字段是 IPv4 就算一行节点信息。判据本身在 common 一处，
+	// 显示时的脱敏也调它——这里只是把它接进本侧的取值口径。
 	nodeListForm = valueForm{
 		flag:        "-f",
-		isRecord:    looksLikeNodeRecord,
+		isRecord:    common.LooksLikeInlineNodeRecord,
 		goneHint:    "要临时传一台机器，可以直接写一行节点信息，第一个字段是 IP，例如 192.168.1.1,22,root,密码",
 		newlineHint: "把节点写进 CSV 文件，再用 -f 指向它",
 	}
@@ -63,8 +64,8 @@ var (
 )
 
 // resolveValue 判定一处取值：先当路径交给系统，不是文件时再按本侧判据认领。
-// 代填侧用它一次做完；节点清单侧的来源在 Parse 就定了（装载要 FIsInline），
-// 合规检查只调 checkInlineValue 校验同一个值——规则仍只有下面那一处。
+// `-f` 与 `-a` 都走这一处（各自只提供一条判据）：合规检查是唯一的调用点，
+// `-f` 的来源也在那里落回 FIsInline（装载与归档要用）。
 func resolveValue(raw string, form valueForm) (source, error) {
 	src := resolveSource(raw)
 	if src.IsFile {
@@ -90,14 +91,6 @@ func checkInlineValue(raw string, form valueForm) error {
 		return fmt.Errorf("%s 参数指定的文件不存在：%s\n提示：%s", form.flag, raw, form.goneHint)
 	}
 	return nil
-}
-
-// looksLikeNodeRecord 一行节点信息的判据：CSV 读出的首字段是 IPv4。
-//
-// 判据只在 common.LooksLikeInlineNodeRecord 一处——放行与显示时的脱敏共用同一把尺子，
-// 不会出现「放行认得出、脱敏认不出」（ADR-0023 决定 5）。
-func looksLikeNodeRecord(raw string) bool {
-	return common.LooksLikeInlineNodeRecord(raw)
 }
 
 // looksLikeAnswerRecord 一条代填的判据：值里得有列分隔符，才可能同时给出
