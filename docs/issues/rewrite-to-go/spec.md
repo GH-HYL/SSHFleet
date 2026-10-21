@@ -120,7 +120,7 @@ Status: done
 | 路径 | 来源 | 相对路径的基准 | 校验 |
 | --- | --- | --- | --- |
 | 清单第 4/5/6 列（密码 / 私钥 / 私钥口令） | 清单内 | `secret_dir` | 拼后须存在 |
-| 配置 `account.password` / `key` / `key_passphrase` | 配置内 | `secret_dir` | 拼后须存在 |
+| 配置 `account.password` / `credential.key` / `credential.key_password` | 配置内 | `secret_dir` | 拼后须存在（**未实现**：`config.go` 目前拒绝相对路径，见文末更新记录） |
 | `-f` 清单 · `-s` 脚本 · `-u` 上传源 · `-k` 私钥 · `--convert-password` 目标 · `-p`（下载模式的本地目录） | 命令行 | 当前工作目录 | 按各自规则 |
 | `-p`（上传模式的远端目录）· `-d`（远端路径） | 命令行 | —（不参与本地解析） | 仍要校验：必须是绝对路径；上传的 `-p` 还要以 `/` 结尾（ADR-0002） |
 
@@ -137,7 +137,7 @@ Status: done
 
 README 既有用法写的是 `~/.MyPW/pw.txt`（受 `~` 展开，两版一致），实际影响面小。
 
-> **2026-10-21 更新**：上文「统一解析顺序（两类共用一个函数，只差基准）」与「行为变化」第 2 条已被取代——命令行来源的路径（含 `--convert-secret` 目标）现原样交给系统：不拼 `secret_dir`、不展开 `~`、不去空白。见文末「更新记录」。
+> **2026-10-21 更新**：「行为变化」**两条都已不成立**——第 1 条（未配 `secret_dir` 且文件在当前目录时报错）现在会照常命中，第 2 条（同名文件一律去 `secret_dir` 找）现在改为命中当前目录；「统一解析顺序（两类共用一个函数，只差基准）」同样被取代。命令行来源的路径（含 `--convert-secret` 目标）现原样交给系统：不拼 `secret_dir`、不展开 `~`、不去空白。见文末「更新记录」。
 
 ---
 
@@ -430,3 +430,4 @@ README 既有用法写的是 `~/.MyPW/pw.txt`（受 `~` 展开，两版一致）
 ## 更新记录
 
 - 2026-10-21：`--convert-secret` 的目标路径改为原样交给系统（相对、绝对、`../` 由 `os` 按 cwd 解析，`~` 与空格都不代为处理），不再拼 `secret_dir`；上文「D31 展开」小节里「统一解析顺序（两类共用一个函数，只差基准）」与「行为变化（两处）」第 2 条不再约束，替代实现见 `modules/SSHFleet_Go/internal/credential/convert.go` 的 `ConvertSecret`（清单列与配置字段仍走 `ResolveSecretPath`）
+- 2026-10-21：上条末句的「配置字段仍走 `ResolveSecretPath`」与现状不符——`config.go` 的 `normalizeConfigPath` 拒绝相对路径与 `~`，配置里三个凭据字段实际到不了拼接；清单侧只有第 5 列（私钥）真的经过它，第 4/6 列走 `credentialValueSpec` 且拼不上时报「文件不存在」。本表「配置」行的字段名也已改对（原写 `key` / `key_passphrase`，实为 `credential.key` / `credential.key_password`）。这些留给 `issues/cli-path-normalization/` 统一收口
