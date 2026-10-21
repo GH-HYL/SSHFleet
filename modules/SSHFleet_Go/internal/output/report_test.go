@@ -279,3 +279,54 @@ func TestWriteReportMultilineCategoryName(t *testing.T) {
 		t.Errorf("解析出的分类 = %q，期望 %q", got, []string{cat})
 	}
 }
+
+// 报告的「新密码」行写的是这次要设的新密码的脱敏形态，与加密开关无关。
+//
+// 加密模式下 --change-password 收的是密文文件路径，真正的密码经 credential 解出来
+// 落在 cli.Args.NewPassword。报告属归档产物，只留脱敏形态（spec 留痕条款、手册
+// 「日志、报告、参数屏里一律只留前后各 2 位」）；取旗标原值的话，加密时落盘的是
+// 一串路径的脱敏，事后翻归档对不上这次到底改成了什么（2026-10-21 实测）。
+//
+// 期望值按 MaskSecret 的公开规则手算：前 2 位 + **** + 后 2 位。
+func TestWriteReportPasswdRowShowsRealNewPassword(t *testing.T) {
+	cases := []struct {
+		name string
+		args *cli.Args
+	}{
+		{
+			name: "加密模式：旗标值是密文文件路径",
+			args: &cli.Args{
+				ChangePassword: "/home/hyl/secret/new_pw.txt",
+				NewPassword:    "NewPass#2026",
+			},
+		},
+		{
+			name: "明文模式：旗标值就是新密码",
+			args: &cli.Args{
+				ChangePassword: "NewPass#2026",
+				NewPassword:    "NewPass#2026",
+			},
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			dir := t.TempDir()
+			stats := &result.Stats{NodesTotal: 1, ResultsTotal: 1, Verify: "通过", FailCounts: 1}
+			if err := WriteReport(dir, stats, c.args, &config.Config{},
+				[]string{"sshfleet", "-f", "nodes.csv", "--change-password", c.args.ChangePassword},
+				loadReportKeywords(t)); err != nil {
+				t.Fatalf("写报告失败：%v", err)
+			}
+			data, err := os.ReadFile(filepath.Join(dir, config.BuiltinPaths.Report))
+			if err != nil {
+				t.Fatalf("读报告失败：%v", err)
+			}
+			report := string(data)
+
+			want := "  新密码： Ne****26"
+			if !strings.Contains(report, want) {
+				t.Fatalf("报告应含 %q\n报告全文：\n%s", want, report)
+			}
+		})
+	}
+}

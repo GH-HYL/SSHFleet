@@ -84,8 +84,14 @@ func TestCheckArgumentsModeIsFiveWay(t *testing.T) {
 }
 
 // 模式名进 ModeName，日志形态里的新密码必须是脱敏形态。
+//
+// 日志报的是**解析后**的新密码（加密模式下旗标原值是一份文件路径，报它等于什么都没报），
+// 所以夹具走一遍真实的解析，而不是只塞一个旗标值。
 func TestPasswdModeNameAndMaskedSummary(t *testing.T) {
 	a := &Args{ChangePassword: "NewPass123"}
+	if err := checkPasswdChange(a); err != nil {
+		t.Fatalf("明文新密码应通过：%v", err)
+	}
 	if got := a.ModeName(); got != "passwd" {
 		t.Fatalf("模式名应为 passwd，实际：%q", got)
 	}
@@ -95,5 +101,19 @@ func TestPasswdModeNameAndMaskedSummary(t *testing.T) {
 	}
 	if !strings.Contains(summary, "change_password='Ne****23'") {
 		t.Fatalf("应报脱敏形态，实际：%s", summary)
+	}
+}
+
+// 首尾空白在解析阶段就被去掉：喂给远端的是去掉之后的值。
+//
+// 确认屏与报告显示的是 NewPassword 的形态（见 confirm / output 的测试），所以「屏上看到的
+// 就是实际设进去的那个值」这件事，前提正是这里——不在这里钉住，那个断言只是拿夹具自证。
+func TestCheckPasswdChangeTrimsOuterSpace(t *testing.T) {
+	a := &Args{ChangePassword: " NewPass123 "}
+	if err := checkPasswdChange(a); err != nil {
+		t.Fatalf("明文新密码应通过：%v", err)
+	}
+	if a.NewPassword != "NewPass123" {
+		t.Fatalf("首尾空白应去掉，实际：%q", a.NewPassword)
 	}
 }

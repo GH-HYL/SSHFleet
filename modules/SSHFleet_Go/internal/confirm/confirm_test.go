@@ -89,3 +89,55 @@ func TestUploadTreeTitleUsesOption(t *testing.T) {
 		t.Fatalf("清单里应列出文件名，实际渲染：\n%s", text)
 	}
 }
+
+// 改密模式的「新密码」那行显示的是**这次要设的新密码**的脱敏形态，与加密开关无关。
+//
+// 加密模式下 --change-password 收的是密文文件路径，真正的密码要经 credential 解出来
+// 才作数（cli.Args.NewPassword）。屏上若取旗标原值，加密时显示的就是一串路径的脱敏——
+// 既不是密码、也对不上任何东西，确认屏上根本无从核对（2026-10-21 实测）。
+//
+// 期望值按 MaskSecret 的公开规则手算：前 2 位 + **** + 后 2 位。
+func TestParamScreenPasswdRowShowsRealNewPassword(t *testing.T) {
+	cases := []struct {
+		name string
+		args *cli.Args
+		want string // 屏上「新密码」那一格的值
+	}{
+		{
+			name: "加密模式：旗标值是密文文件路径，屏上显示解出来的新密码",
+			args: &cli.Args{
+				ChangePassword: "/home/hyl/secret/new_pw.txt",
+				NewPassword:    "NewPass#2026",
+			},
+			want: "Ne****26",
+		},
+		{
+			name: "明文模式：旗标值就是新密码",
+			args: &cli.Args{
+				ChangePassword: "NewPass#2026",
+				NewPassword:    "NewPass#2026",
+			},
+			want: "Ne****26",
+		},
+		{
+			name: "新密码带首尾空白：屏上形态与实际喂进去的那个值一致",
+			args: &cli.Args{
+				ChangePassword: " NewPass#2026 ",
+				NewPassword:    "NewPass#2026", // 解析侧已去掉首尾空白
+			},
+			want: "Ne****26",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			text := paramScreenText(c.args, testNodes(), "", "")
+			if !strings.Contains(text, c.want) {
+				t.Fatalf("「新密码」应显示 %s，实际渲染：\n%s", c.want, text)
+			}
+			// 路径的脱敏形态（/h****xt）不该出现在屏上：屏上那格是密码，不是文件
+			if strings.Contains(text, "/h****xt") {
+				t.Fatalf("屏上不该出现密文文件路径的脱敏形态，实际渲染：\n%s", text)
+			}
+		})
+	}
+}

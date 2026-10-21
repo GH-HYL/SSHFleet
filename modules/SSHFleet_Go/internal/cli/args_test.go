@@ -759,3 +759,41 @@ func TestPathSpaceCheckKeepsRemotePaths(t *testing.T) {
 		})
 	}
 }
+
+// 解析结果里那一格写的是**这次要设的新密码**的脱敏形态，与加密开关无关。
+//
+// 加密模式下 --change-password 收的是密文文件路径，真正的密码解出来落在 NewPassword。
+// 日志这行是事后排查「这次到底按什么参数跑的」唯一的凭据，写一串路径的脱敏等于什么都没写。
+func TestSummaryPasswdFieldShowsRealNewPassword(t *testing.T) {
+	cases := []struct {
+		name string
+		a    *Args
+	}{
+		{
+			name: "加密模式：旗标值是密文文件路径",
+			a:    &Args{ChangePassword: "/home/hyl/secret/new_pw.txt", NewPassword: "NewPass#2026"},
+		},
+		{
+			name: "明文模式：旗标值就是新密码",
+			a:    &Args{ChangePassword: "NewPass#2026", NewPassword: "NewPass#2026"},
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := c.a.Summary()
+			if !strings.Contains(got, "change_password='Ne****26'") {
+				t.Fatalf("change_password 应为新密码的脱敏形态 Ne****26，实际：%s", got)
+			}
+		})
+	}
+}
+
+// 给了 --change-password 却还没解析新密码时，日志那格写「未解析」，不拿 **** 顶替。
+//
+// **** 与「4 位以内的密码」同形：看日志的人分不出「这次的密码很短」还是「根本没解出来」。
+func TestSummaryPasswdFieldBeforeDecode(t *testing.T) {
+	a := &Args{ChangePassword: "/home/hyl/secret/new_pw.txt"} // 未经 CheckArguments
+	if got := a.Summary(); !strings.Contains(got, "change_password='（未解析）'") {
+		t.Fatalf("未解析时应写明，实际：%s", got)
+	}
+}

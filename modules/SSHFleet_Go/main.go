@@ -224,7 +224,6 @@ func main() {
 		}
 		fatal("cli", fmt.Errorf("选项/参数解析失败\n原因：%v", err))
 	}
-	logger.Success("选项/参数解析成功，解析结果：" + args.Summary())
 
 	// 交互器：全工具唯一的用户交互入口（In/Out 注入 + 非交互标志）
 	in := common.NewInteractor(args.Disinteractive, logger)
@@ -272,6 +271,10 @@ func main() {
 	if err := cli.CheckArguments(args); err != nil {
 		fatal("cli", fmt.Errorf("选项/参数合规性检查未通过\n原因：%v", err))
 	}
+	// 解析结果落到日志：放在合规检查之后，因为 --change-password 的**新密码**要到这一步
+	// 才解出来（checkPasswdChange 读密文文件、解密、去首尾空白，填进 NewPassword）。
+	// 日志里那一格记的是解密后的新密码的脱敏形态；早于这一步打出来，它只能是「未解析」。
+	logger.Success("选项/参数解析成功，解析结果：" + args.Summary())
 	// 脚本后缀没配解释器：在确认屏之前当场问一句是否用回退解释器继续（默认 no，
 	// 回车即退出）。放这里与选项/参数合规检查同处"启动检查"阶段，符合既有的确认时机。
 	if err := cli.ConfirmInterpreterFallback(args, cfg, in); err != nil {
