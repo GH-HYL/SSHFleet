@@ -15,7 +15,7 @@
 - [x] 命中文件后，后续读的就是判定时那个路径字符串，不再过一遍规范化
 - [x] `-f` 的报错提示里不再出现「几台」，与「只写一条」一致
 - [x] 多行清单文件照旧解析（回归：文件里的多台、注释行、空行、BOM、引号都不受影响）
-- [x] `go test ./internal/cli/ ./internal/nodelist/` 全绿
+- [x] `go test ./internal/cli/ ./internal/nodelist/ ./internal/common/` 全绿（`25aa85e` 也改了 `internal/common/csvtext.go` 与 `mask.go`）
 
 ## Comments
 
@@ -28,7 +28,7 @@
     提示：要临时传一台机器，可以直接写一行节点信息，第一个字段是 IP，例如 192.168.1.1,22,root,密码
 
     $ ./SSHFleet -f $'10.0.0.1\n10.0.0.2' -c uptime
-    原因：-f 的内联值里不能有换行：内联只写一条，多台 / 多条请写成 CSV 文件
+    原因：-f 的内联值里不能有换行：内联只写一条
     提示：把节点写进 CSV 文件，再用 -f 指向它
 
     $ ./SSHFleet -f '127.0.0.1,1,root,pw;;127.0.0.2,1,root,pw2' -c uptime
@@ -38,3 +38,4 @@
     最后一条证明带完整列的 `;;` 不再切成两台：只按第一条连，后半截进了字段。
   - `-f '"10.0.0.1",22,root,pw'` 过闸后进入凭据预检（不再是「文件不存在」）。
   - `go test ./...` 全绿。
+- 2026-10-21（审计后修正）：原文「`go test ./...` 全绿」在 Windows 上不成立——`TestParseDoesNotTrimPath` 用尾随空格钉「不去空白」，而 Windows 的 `os.Stat` 会裁掉尾随空格命中文件，该用例必红。现已改用**前导**空格，并把断言挪到合规检查之后（判定搬到那一阶段了）。另更正本文第 18 行的测试包范围：漏了 `./internal/common/`，本提交同时改过它的 `csvtext.go`/`mask.go`。

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"sshfleet/internal/ssh"
+	"sshfleet/internal/config"
 )
 
 // -a 的取值处理：来源判定（文件 / 内联文本）、解析、门控、互斥与长度检查。
@@ -14,6 +14,41 @@ import (
 //
 // CSV 解析口径与 -f 同构（两处都走 common.ReadCSVRows），这里测的是代填自己的
 // 列语义与门控；解析口径本身由 common 侧的单测覆盖。
+
+// answerTestCfg 带 -a 的用例要用的配置：-a 要求解释器会读程序文本，
+// 空串会被 checkAnswerInterpreter 拦下——那是另一件事，不该混进取值判定里。
+func answerTestCfg() *config.Config {
+	cfg := helpTestCfg()
+	cfg.Interpreter.Command = "bash"
+	return cfg
+}
+
+// answerArgs 用命令行入口造 -a 的入参：与 main 一样，Parse 之后紧跟合规检查。
+func answerArgs(t *testing.T, args ...string) (*Args, error) {
+	t.Helper()
+	a, err := Parse(answerTestCfg(), "test", args)
+	if err != nil {
+		t.Fatalf("Parse 不该在这里报错：%v", err)
+	}
+	return a, CheckArguments(a)
+}
+
+// answerErr 一条内联代填从命令行入口走一遍，只返回合规检查的报错。
+func answerErr(t *testing.T, value string) error {
+	t.Helper()
+	_, err := answerArgs(t, "-f", "172.28.118.49,22,root,pw", "-c", "sh x.sh", "-a", value)
+	return err
+}
+
+// answerOK 一条内联代填从命令行入口走一遍，要求通过并把解析结果交回来。
+func answerOK(t *testing.T, value string) *Args {
+	t.Helper()
+	a, err := answerArgs(t, "-f", "172.28.118.49,22,root,pw", "-c", "sh x.sh", "-a", value)
+	if err != nil {
+		t.Fatalf("-a %q 应通过合规检查：%v", value, err)
+	}
+	return a
+}
 
 // 代填报错必须点名 -a / 代填，并说清是文件还是内联值。
 // 此前几条只甩一个文件名（如「X 是二进制文件」），使用者不知道是哪个参数带进来的
@@ -85,7 +120,7 @@ func TestAnswerRowErrorsSayWhatIsMissing(t *testing.T) {
 			if err := os.WriteFile(file, []byte(c.body), 0o644); err != nil {
 				t.Fatal(err)
 			}
-			err := checkAnswer(&Args{Command: "sh x.sh", Answer: file}, nil)
+			err := answerErr(t, file)
 			if err == nil {
 				t.Fatal("应报错")
 			}
@@ -98,8 +133,13 @@ func TestAnswerRowErrorsSayWhatIsMissing(t *testing.T) {
 
 // 内联值只写一条：`;;` 是普通字符，不会被切成多条（ADR-0023）。
 func TestCheckAnswerInlineIsOneRecord(t *testing.T) {
-	a := &Args{Command: "sh x.sh", Answer: `1,请选择架构;;deb`}
-	if err := checkAnswer(a, nil); err != nil {
+	a, err := Parse(answerTestCfg(), "test", []string{
+		"-f", "172.28.118.49,22,root,pw", "-c", "sh x.sh", "-a", `1,请选择架构;;deb`,
+	})
+	if err != nil {
+		t.Fatalf("Parse 不该在这里报错：%v", err)
+	}
+	if err := CheckArguments(a); err != nil {
 		t.Fatalf("内联一条代填应解析通过：%v", err)
 	}
 	if len(a.Answers) != 1 {
@@ -113,7 +153,7 @@ func TestCheckAnswerInlineIsOneRecord(t *testing.T) {
 	}
 }
 
-// 内联值里出现换行：直接拒绝，并指向写文件（ADR-0023）。
+// 内联值里出现换行：直接拒绝，原因只说一件，去路放在提示行（ADR-0023）。
 func TestCheckAnswerInlineRejectsRealNewline(t *testing.T) {
 	cases := map[string]string{
 		"两条":   "1,请选择架构\n2,请选择包格式",
@@ -121,13 +161,20 @@ func TestCheckAnswerInlineRejectsRealNewline(t *testing.T) {
 	}
 	for name, raw := range cases {
 		t.Run(name, func(t *testing.T) {
-			a := &Args{Command: "sh x.sh", Answer: raw}
-			err := checkAnswer(a, nil)
+			a, err := Parse(answerTestCfg(), "test", []string{
+				"-f", "172.28.118.49,22,root,pw", "-c", "sh x.sh", "-a", raw,
+			})
+			if err != nil {
+				t.Fatalf("Parse 不该在这里报错：%v", err)
+			}
+			err = CheckArguments(a)
 			if err == nil {
 				t.Fatal("内联值含换行应被拒绝")
 			}
-			if !strings.Contains(err.Error(), "不能有换行") || !strings.Contains(err.Error(), "CSV 文件") {
-				t.Fatalf("报错应说清不能有换行、并指向文件，实际：%v", err)
+			want := "-a 的内联值里不能有换行：内联只写一条\n" +
+				"提示：把代填写进 CSV 文件，再用 -a 指向它；内容里要回车也只能写文件"
+			if err.Error() != want {
+				t.Fatalf("文案应为 %q，实际：%q", want, err.Error())
 			}
 		})
 	}
@@ -135,8 +182,13 @@ func TestCheckAnswerInlineRejectsRealNewline(t *testing.T) {
 
 // 字面 `\n` 与 `;;` 都只是普通字符：整条记录原样进字段，不切、不转义。
 func TestCheckAnswerKeepsSemicolonPairAndLiteralBackslashN(t *testing.T) {
-	a := &Args{Command: "sh x.sh", Answer: `D:\new\tool.exe;;1,请输入路径`}
-	if err := checkAnswer(a, nil); err != nil {
+	a, err := Parse(answerTestCfg(), "test", []string{
+		"-f", "172.28.118.49,22,root,pw", "-c", "sh x.sh", "-a", `D:\new\tool.exe;;1,请输入路径`,
+	})
+	if err != nil {
+		t.Fatalf("Parse 不该在这里报错：%v", err)
+	}
+	if err := CheckArguments(a); err != nil {
 		t.Fatalf("应解析通过：%v", err)
 	}
 	if len(a.Answers) != 1 {
@@ -153,8 +205,7 @@ func TestCheckAnswerKeepsSemicolonPairAndLiteralBackslashN(t *testing.T) {
 // 内联值只解析出一列（引号里才有逗号）：仍按「第 1 行不合规」报缺触发词，
 // 不落到「文件不存在」（ADR-0023）。
 func TestCheckAnswerInlineOneColumn(t *testing.T) {
-	a := &Args{Command: "sh x.sh", Answer: `"a,b"`}
-	err := checkAnswer(a, nil)
+	err := answerErr(t, `"a,b"`)
 	if err == nil {
 		t.Fatal("缺触发词应报错")
 	}
@@ -168,21 +219,18 @@ func TestCheckAnswerInlineOneColumn(t *testing.T) {
 
 // 代填内容里的反斜杠是普通字符：Windows 路径常含 `\n`，不会被当成换行（ADR-0023）。
 func TestCheckAnswerInlineKeepsBackslashN(t *testing.T) {
-	a := &Args{Command: "sh x.sh", Answer: `D:\new\tool.exe,请输入安装路径`}
-	if err := checkAnswer(a, nil); err != nil {
-		t.Fatalf("含 \\n 的代填内容应合法：%v", err)
+	a := answerOK(t, `D:\new\tool.exe,请输入安装路径`)
+	if len(a.Answers) != 1 {
+		t.Fatalf("应只有 1 条代填，实际 %d 条：%+v", len(a.Answers), a.Answers)
 	}
-	if len(a.Answers) != 1 || a.Answers[0].Value != `D:\new\tool.exe` {
+	if a.Answers[0].Value != `D:\new\tool.exe` {
 		t.Fatalf("代填内容应原样保留，实际：%+v", a.Answers)
 	}
 }
 
 // 引号是 CSV 的语法：引号里的逗号归同一列，不当分隔符——内联与文件同一口径。
 func TestCheckAnswerQuotedComma(t *testing.T) {
-	a := &Args{Command: "sh x.sh", Answer: `"a,b",请选择架构`}
-	if err := checkAnswer(a, nil); err != nil {
-		t.Fatalf("引号包住的逗号应合法：%v", err)
-	}
+	a := answerOK(t, `"a,b",请选择架构`)
 	if a.Answers[0].Value != "a,b" || a.Answers[0].Triggers[0] != "请选择架构" {
 		t.Fatalf("引号里的逗号应归同一列：%+v", a.Answers[0])
 	}
@@ -199,8 +247,7 @@ func TestCheckAnswerNoEntries(t *testing.T) {
 		"内联": `#只有注释,也在注释里;;;;`,
 		"文件": file,
 	} {
-		a := &Args{Command: "sh x.sh", Answer: raw}
-		err := checkAnswer(a, nil)
+		err := answerErr(t, raw)
 		if err == nil || !strings.Contains(err.Error(), "没有一条代填") {
 			t.Fatalf("%s：应报没有一条代填，实际：%v", name, err)
 		}
@@ -209,10 +256,7 @@ func TestCheckAnswerNoEntries(t *testing.T) {
 
 // 第一段留空是合法写法：代表只发一个回车。
 func TestCheckAnswerEmptyValueMeansEmptyLine(t *testing.T) {
-	a := &Args{Command: "sh x.sh", Answer: ",继续"}
-	if err := checkAnswer(a, nil); err != nil {
-		t.Fatalf("留空的第一段应合法：%v", err)
-	}
+	a := answerOK(t, ",继续")
 	if a.Answers[0].Value != "" || a.Answers[0].Triggers[0] != "继续" {
 		t.Fatalf("留空应解析成空内容 + 触发词：%+v", a.Answers[0])
 	}
@@ -220,8 +264,7 @@ func TestCheckAnswerEmptyValueMeansEmptyLine(t *testing.T) {
 
 func TestCheckAnswerRejectsMissingTrigger(t *testing.T) {
 	for _, raw := range []string{"1", "1,", "1,,x"} {
-		a := &Args{Command: "sh x.sh", Answer: raw}
-		err := checkAnswer(a, nil)
+		err := answerErr(t, raw)
 		if err == nil {
 			t.Fatalf("%q 应被拒绝（触发词是唯一的门控）", raw)
 		}
@@ -230,8 +273,7 @@ func TestCheckAnswerRejectsMissingTrigger(t *testing.T) {
 
 // 不含逗号又不指向已有文件：照 -f 的同一形状判定，报「文件不存在」。
 func TestCheckAnswerValueWithoutCommaIsFile(t *testing.T) {
-	a := &Args{Command: "sh x.sh", Answer: "不存在的文件"}
-	err := checkAnswer(a, nil)
+	err := answerErr(t, "不存在的文件")
 	if err == nil || !strings.Contains(err.Error(), "文件不存在") {
 		t.Fatalf("应报文件不存在，实际：%v", err)
 	}
@@ -246,10 +288,7 @@ func TestCheckAnswerCSVFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	a := &Args{Command: "sh x.sh", Answer: file}
-	if err := checkAnswer(a, nil); err != nil {
-		t.Fatalf("代填文件应解析通过：%v", err)
-	}
+	a := answerOK(t, file)
 	if len(a.Answers) != 2 {
 		t.Fatalf("应解析出 2 条代填，实际 %d 条", len(a.Answers))
 	}
@@ -270,10 +309,7 @@ func TestCheckAnswerCSVFileKeepsRealNewline(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	a := &Args{Command: "sh x.sh", Answer: file}
-	if err := checkAnswer(a, nil); err != nil {
-		t.Fatalf("带真换行的代填文件应解析通过：%v", err)
-	}
+	a := answerOK(t, file)
 	if len(a.Answers) != 1 {
 		t.Fatalf("引号里的换行不另算一条，实际 %d 条", len(a.Answers))
 	}
@@ -289,10 +325,7 @@ func TestCheckAnswerCSVWithBOM(t *testing.T) {
 	if err := os.WriteFile(file, []byte("\ufeff# 注释\n1,请选择架构\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	a := &Args{Command: "sh x.sh", Answer: file}
-	if err := checkAnswer(a, nil); err != nil {
-		t.Fatalf("带 BOM 的代填文件应正常解析：%v", err)
-	}
+	a := answerOK(t, file)
 	if len(a.Answers) != 1 || a.Answers[0].Value != "1" {
 		t.Fatalf("应解析出 1 条代填：%+v", a.Answers)
 	}
@@ -305,8 +338,7 @@ func TestCheckAnswerCSVReportsLine(t *testing.T) {
 	if err := os.WriteFile(file, []byte("1,架构\n3\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	a := &Args{Command: "sh x.sh", Answer: file}
-	err := checkAnswer(a, nil)
+	err := answerErr(t, file)
 	if err == nil || !strings.Contains(err.Error(), "第 2 行") {
 		t.Fatalf("应报出出错行号，实际：%v", err)
 	}
@@ -319,8 +351,7 @@ func TestCheckAnswerCSVBadQuotes(t *testing.T) {
 	if err := os.WriteFile(file, []byte("1,架构\n2,\"包格式\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	a := &Args{Command: "sh x.sh", Answer: file}
-	err := checkAnswer(a, nil)
+	err := answerErr(t, file)
 	if err == nil || !strings.Contains(err.Error(), "第 2 行") {
 		t.Fatalf("引号不配对应报第 2 行，实际：%v", err)
 	}
@@ -333,8 +364,7 @@ func TestCheckAnswerCSVBinary(t *testing.T) {
 	if err := os.WriteFile(file, []byte("1,架构\x00\x01\x02"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	a := &Args{Command: "sh x.sh", Answer: file}
-	err := checkAnswer(a, nil)
+	err := answerErr(t, file)
 	if err == nil || !strings.Contains(err.Error(), "二进制") {
 		t.Fatalf("二进制文件应被拦下，实际：%v", err)
 	}
@@ -346,35 +376,41 @@ func TestCheckAnswerCSVEmpty(t *testing.T) {
 	if err := os.WriteFile(file, []byte("# 只有注释\n\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	a := &Args{Command: "sh x.sh", Answer: file}
-	if err := checkAnswer(a, nil); err == nil {
+	if err := answerErr(t, file); err == nil {
 		t.Fatal("一条代填都没有的文件应报错")
 	}
 }
 
 // 互斥：三种组合都明确报错，不静默忽略。
+//
+// -u / -d 走命令行时，前置校验（上传文件得存在、下载目录得是已有目录）会先拦住——
+// 它们与 -a 的互斥因此改由配置层直接调这一条专用校验来钉，不靠制造一个真目录。
 func TestCheckAnswerExclusive(t *testing.T) {
-	cases := map[string]*Args{
-		"--no-shell": {Command: "sh x.sh", NoShell: true, Answer: "1,架构"},
-		"-u":         {Upload: "/x", Path: "/y/", Answer: "1,架构"},
-		"-d":         {Download: "/x", Path: "/y", Answer: "1,架构"},
+	_, err := answerArgs(t, "-c", "sh x.sh", "--no-shell", "-a", "1,架构")
+	if err == nil || !strings.Contains(err.Error(), "-a 不能和 --no-shell") {
+		t.Fatalf("--no-shell 时应明确报错，实际：%v", err)
 	}
-	for name, a := range cases {
-		if err := checkAnswer(a, nil); err == nil || !strings.Contains(err.Error(), "-a 不能和") {
+
+	for name, a := range map[string]*Args{
+		"-u": {Upload: "/x", Path: "/y/", Answer: "1,架构"},
+		"-d": {Download: "/x", Path: "/y", Answer: "1,架构"},
+	} {
+		if err := checkAnswerExclusive(a); err == nil || !strings.Contains(err.Error(), "-a 不能和") {
 			t.Fatalf("%s 时应明确报错，实际：%v", name, err)
 		}
 	}
 }
 
 // 长度检查：量的是最终下发行，仅 -a 运行执行；超限在本地拦下。
+//
+// 下发行里编进去的是命令 / 脚本正文（代填内容与触发词不进这一行），所以撑爆它的
+// 得是正文。期望值取自字面量：正文 130000 字节 > 上限 122880 字节。
 func TestCheckAnswerLength(t *testing.T) {
-	ok := &Args{Command: strings.Repeat("a", 1000), Answer: "1,架构"}
-	if err := checkAnswer(ok, nil); err != nil {
+	if err := answerErr(t, "1,架构"); err != nil {
 		t.Fatalf("短命令不该触发长度检查：%v", err)
 	}
 
-	long := &Args{Command: strings.Repeat("a", 100000), Answer: "1,架构"}
-	err := checkAnswer(long, nil)
+	_, err := answerArgs(t, "-f", "172.28.118.49,22,root,pw", "-c", strings.Repeat("a", 130000), "-a", "1,架构")
 	if err == nil || !strings.Contains(err.Error(), "太长") {
 		t.Fatalf("超限应报错，实际：%v", err)
 	}
@@ -382,8 +418,12 @@ func TestCheckAnswerLength(t *testing.T) {
 
 // 脚本模式下长度按脚本正文算（命令模式算的是 a.Command）。
 func TestCheckAnswerLengthUsesScriptBody(t *testing.T) {
-	a := &Args{Script: "D:/x/big.sh", Answer: "1,架构"}
-	err := checkAnswer(a, []byte(strings.Repeat("a", 100000)))
+	dir := t.TempDir()
+	script := filepath.Join(dir, "big.sh")
+	if err := os.WriteFile(script, []byte(strings.Repeat("a", 100000)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := answerArgs(t, "-f", "172.28.118.49,22,root,pw", "-s", script, "-a", "1,架构")
 	if err == nil || !strings.Contains(err.Error(), "太长") {
 		t.Fatalf("脚本正文超限应报错，实际：%v", err)
 	}
@@ -391,12 +431,15 @@ func TestCheckAnswerLengthUsesScriptBody(t *testing.T) {
 
 // 正则模式下触发词要能编译：语法错在本地报错，不留到运行期静默不匹配。
 func TestCheckAnswerRejectsBadRegex(t *testing.T) {
-	a := &Args{
-		Command: "sh x.sh",
-		Answer:  `1,arch[`,
-		Match:   ssh.MatchOptions{Regex: true},
+	cfg := answerTestCfg()
+	cfg.Interactive.Regex = true
+	a, err := Parse(cfg, "test", []string{
+		"-f", "172.28.118.49,22,root,pw", "-c", "sh x.sh", "-a", `1,arch[`,
+	})
+	if err != nil {
+		t.Fatalf("Parse 不该在这里报错：%v", err)
 	}
-	err := checkAnswer(a, nil)
+	err = CheckArguments(a)
 	if err == nil || !strings.Contains(err.Error(), "arch[") {
 		t.Fatalf("非法正则应报错且带上原文，实际：%v", err)
 	}

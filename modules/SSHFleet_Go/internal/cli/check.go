@@ -151,23 +151,25 @@ func CheckArguments(a *Args) error {
 		return err
 	}
 
-	// -f：来源（文件 / 内联的一条记录）已由 Parse 定（装载阶段也要它），这里只校验——
-	// 内联那条走与 -a 共用的 checkInlineValue，文件要能读、且不是二进制。
+	// -f：取值判定与 -a 共用 resolveValue（先原样按路径找、不是文件再看能不能当一条
+	// 记录读、都不是报同形的一句话），来源在这里落回 FIsInline——装载与归档要用它。
+	// 命中文件之后才查这个文件读不读得了、空不空、是不是二进制。
 	if a.CsvFile != "" {
-		if a.FIsInline {
-			if err := checkInlineValue(a.CsvFile, nodeListForm); err != nil {
-				return err
-			}
-		} else {
-			data, err := os.ReadFile(a.CsvFile)
+		src, err := resolveValue(a.CsvFile, nodeListForm)
+		if err != nil {
+			return err
+		}
+		a.FIsInline = !src.IsFile
+		if src.IsFile {
+			data, err := os.ReadFile(src.Path)
 			if err != nil {
-				return fmt.Errorf("-f 参数指定的 CSV 文件不可读：%s\n提示：请检查文件是否存在、当前用户有没有读权限", a.CsvFile)
+				return fmt.Errorf("-f 参数指定的 CSV 文件不可读：%s\n提示：请检查文件是否存在、当前用户有没有读权限", src.Path)
 			}
 			if len(data) == 0 {
-				return fmt.Errorf("-f 参数指定的 CSV 文件为空：%s\n提示：一行写一台机器，只写 IP 就能跑（端口、用户名、密码走配置）", a.CsvFile)
+				return fmt.Errorf("-f 参数指定的 CSV 文件为空：%s\n提示：一行写一台机器，只写 IP 就能跑（端口、用户名、密码走配置）", src.Path)
 			}
 			if common.IsBinaryContent(data) {
-				return fmt.Errorf("-f 参数指定的清单是二进制文件：%s\n提示：清单要是文本文件（CSV）", a.CsvFile)
+				return fmt.Errorf("-f 参数指定的清单是二进制文件：%s\n提示：清单要是文本文件（CSV）", src.Path)
 			}
 		}
 	}

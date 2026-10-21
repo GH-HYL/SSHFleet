@@ -1,7 +1,10 @@
 // 凭据脱敏：明文密码 / 口令不得原样落进任何日志、报告或归档。
 package common
 
-import "strings"
+import (
+	"encoding/csv"
+	"strings"
+)
 
 // MaskSecret 显示一个凭据值：长度 > 4 位时显示「前 2 位 + **** + 后 2 位」，
 // ≤ 4 位时整个显示为 ****。
@@ -15,48 +18,57 @@ func MaskSecret(s string) string {
 	return string(r[:2]) + "****" + string(r[len(r)-2:])
 }
 
-// LooksLikeInlineList 判断一个 -f 取值是不是内联清单（首段是 IPv4 且含逗号）。
-// 文件路径形式的清单不含逗号，不会被误判。
+// LooksLikeInlineList 判断一个 -f 取值是不是带凭据段的内联清单：
+// 一条内联节点记录，且写了换行以外的凭据段（第 4 段密码、第 6 段口令）。
+//
+// 记录像不像由 LooksLikeInlineNodeRecord 一处判——取值判定与这里共用同一把尺子，
+// 不会出现「放行认得出、脱敏认不出」（ADR-0023 决定 5）。裸 IP 没有凭据可脱，
+// 文件路径也读不出节点，两者都返回 false。
 func LooksLikeInlineList(s string) bool {
-	if !strings.Contains(s, ",") {
+	if !LooksLikeInlineNodeRecord(s) {
 		return false
 	}
-	return looksLikeIPv4(strings.TrimSpace(strings.SplitN(s, ",", 2)[0]))
-}
-
-// looksLikeIPv4 只做形状判断（四段点分十进制），不校验取值范围——
-// 这里只用来决定"要不要脱敏"，不是节点校验。
-func looksLikeIPv4(s string) bool {
-	parts := strings.Split(s, ".")
-	if len(parts) != 4 {
-		return false
-	}
-	for _, p := range parts {
-		if p == "" || len(p) > 3 {
-			return false
-		}
-		for _, c := range p {
-			if c < '0' || c > '9' {
-				return false
-			}
-		}
-	}
-	return true
+	return strings.Contains(s, ",")
 }
 
 // MaskInlineList 内联清单（IP,端口,用户名,密码,私钥路径,口令）的脱敏：
 // **只把凭据那几段整个换成 ******（第 4 段密码、第 6 段口令），
 // IP / 端口 / 用户名 / 私钥路径原样保留——用户要靠这几段认出是哪台机器。
 //
+// 按 CSV 字段读、按 CSV 写回：值可以像 Excel 导出那样整段带引号（`"10.0.0.1","22",…`），
+// 引号里也可能包着逗号，按裸逗号切会把段号切错、把密码漏在外面。
+// 读不成一条记录时原样返回——那是取值判定那头该拒绝的东西，不在这里猜。
+//
 // 这里不比照 MaskSecret 的"前 2 后 2"：那条规格是给"显示某个凭据值、让人对上号"用的。
 func MaskInlineList(s string) string {
-	parts := strings.Split(s, ",")
+	record, ok := csvRecord(s)
+	if !ok {
+		return s
+	}
 	for _, idx := range []int{3, 5} {
-		if idx < len(parts) && strings.TrimSpace(parts[idx]) != "" {
-			parts[idx] = "****"
+		if idx < len(record.Fields) && strings.TrimSpace(record.Fields[idx]) != "" {
+			record.Fields[idx] = "****"
 		}
 	}
-	return strings.Join(parts, ",")
+	var b strings.Builder
+	w := csv.NewWriter(&b)
+	if err := w.Write(record.Fields); err != nil {
+		return s
+	}
+	w.Flush()
+	if err := w.Error(); err != nil {
+		return s
+	}
+	return strings.TrimSuffix(b.String(), "\n")
+}
+
+// csvRecord 把文本读成唯一的一条记录；读不出、或不止一条时返回 false。
+func csvRecord(text string) (*CSVRow, bool) {
+	rows, err := ReadCSVRows(text)
+	if err != nil || len(rows) != 1 {
+		return nil, false
+	}
+	return &rows[0], true
 }
 
 // MaskInlineListIf 是内联清单就脱敏，否则原样返回（调用方不必自己判形状）。

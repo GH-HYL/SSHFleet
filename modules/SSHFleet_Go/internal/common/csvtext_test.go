@@ -45,6 +45,34 @@ func TestReadCSVRowsLineNumbers(t *testing.T) {
 	}
 }
 
+// 一个值是不是「一条内联节点记录」：CSV 口径下首字段是 IPv4 就算。
+// 引号是 CSV 的语法，`"10.0.0.1",22,…`（Excel 导出的单行）也是一条。
+func TestLooksLikeInlineNodeRecord(t *testing.T) {
+	ok := []string{
+		"10.0.0.1",
+		"10.0.0.1,22,root,pw",
+		`"10.0.0.1",22,root,pw`,
+		`"10.0.0.1","22","root","pw"`,
+	}
+	for _, s := range ok {
+		if !LooksLikeInlineNodeRecord(s) {
+			t.Errorf("LooksLikeInlineNodeRecord(%q) 应为 true", s)
+		}
+	}
+	bad := []string{
+		"10.0.0.1;;10.0.0.2", // `;;` 只是普通字符，整串首段不是 IP
+		"nodes.csv",
+		"",
+		`"10.0.0.1,22`,  // 引号没闭合：不是一条能读的记录
+		`"a,b",22,root`, // 首字段是 a,b，不是 IP
+	}
+	for _, s := range bad {
+		if LooksLikeInlineNodeRecord(s) {
+			t.Errorf("LooksLikeInlineNodeRecord(%q) 应为 false", s)
+		}
+	}
+}
+
 // `;;` 是普通字符：内联只写一条，它不会再被当成行分隔（ADR-0023）。
 func TestReadCSVRowsKeepsSemicolonPair(t *testing.T) {
 	rows, err := ReadCSVRows(`1,请选择架构;;deb`)

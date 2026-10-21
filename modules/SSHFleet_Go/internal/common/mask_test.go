@@ -1,6 +1,7 @@
 package common
 
 import (
+	"encoding/csv"
 	"strings"
 	"testing"
 )
@@ -41,6 +42,61 @@ func TestMaskCommandLineKeepsInlineListBehaviour(t *testing.T) {
 	got := MaskCommandLine([]string{"SSHFleet.exe", "-f", "1.1.1.1,22,root,secret"})
 	if got[2] != "1.1.1.1,22,root,****" {
 		t.Fatalf("内联清单的密码列应整段脱敏，实际：%q", got[2])
+	}
+}
+
+// Excel 导出的单行写法：整段带引号。取值判定认它是一条节点，
+// 脱敏也得认——否则这行密码会明文进日志、确认屏和报告。
+func TestMaskCommandLineMasksQuotedInlineList(t *testing.T) {
+	got := MaskCommandLine([]string{"SSHFleet.exe", "-f", `"10.0.0.1",22,root,s3cret`, "-c", "uptime"})
+	if strings.Contains(got[2], "s3cret") {
+		t.Fatalf("带引号的内联清单也要脱敏，实际：%q", got[2])
+	}
+	// 期望值从 CSV 口径写出来：IP、端口、用户名原样，第 4 段遮住。
+	var want strings.Builder
+	w := csv.NewWriter(&want)
+	_ = w.Write([]string{"10.0.0.1", "22", "root", "****"})
+	w.Flush()
+	if got[2] != strings.TrimSuffix(want.String(), "\n") {
+		t.Fatalf("IP、端口、用户名应原样保留，实际：%q", got[2])
+	}
+}
+
+// 六列都带引号：第 4 段密码、第 6 段口令都整段遮住，其余保留。
+func TestMaskCommandLineMasksQuotedInlineListSixColumns(t *testing.T) {
+	got := MaskCommandLine([]string{"SSHFleet.exe", "-f", `"10.0.0.1","22","root","pw1","key.bin","keypw1"`})
+	if strings.Contains(got[2], "pw1") || strings.Contains(got[2], "keypw1") {
+		t.Fatalf("密码与私钥口令都不该留下明文，实际：%q", got[2])
+	}
+	var want strings.Builder
+	w := csv.NewWriter(&want)
+	_ = w.Write([]string{"10.0.0.1", "22", "root", "****", "key.bin", "****"})
+	w.Flush()
+	if got[2] != strings.TrimSuffix(want.String(), "\n") {
+		t.Fatalf("第 4、6 段应遮住、其余保留，实际：%q", got[2])
+	}
+}
+
+// 引号里包着逗号：按字段切才不会把段号切错，密码照样遮住。
+func TestMaskCommandLineMasksQuotedComma(t *testing.T) {
+	got := MaskCommandLine([]string{"SSHFleet.exe", "-f", `10.0.0.1,22,"ro,ot",s3cret`})
+	if strings.Contains(got[2], "s3cret") {
+		t.Fatalf("引号前有逗号时密码仍要遮住，实际：%q", got[2])
+	}
+	var want strings.Builder
+	w := csv.NewWriter(&want)
+	_ = w.Write([]string{"10.0.0.1", "22", "ro,ot", "****"})
+	w.Flush()
+	if got[2] != strings.TrimSuffix(want.String(), "\n") {
+		t.Fatalf("引号里的逗号不该把段号切错，实际：%q", got[2])
+	}
+}
+
+// 裸 IP 没有凭据段，不是什么「特殊写法」，就是没有可脱的东西。
+func TestMaskCommandLineBareIPUntouched(t *testing.T) {
+	got := MaskCommandLine([]string{"SSHFleet.exe", "-f", "10.0.0.1"})
+	if got[2] != "10.0.0.1" {
+		t.Fatalf("裸 IP 应原样保留，实际：%q", got[2])
 	}
 }
 
