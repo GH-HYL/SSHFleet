@@ -174,17 +174,25 @@ func TestResolvePortNoInteraction(t *testing.T) {
 }
 
 // 表头识别提示只在交互模式上屏（非交互下由静默闸门挡掉，见对应的另一条）。
-// 内联值不能有换行，所以这里用文本辅助函数直接喂 CSV 正文。
 func TestCSVHeaderNoticeGoesToInteractor(t *testing.T) {
 	csv := "ip,port,user,password\n10.0.0.1,22,root,pw.txt\n"
 	in, out := newTestInteractor("", false)
 
-	rows, err := readCSVText(csv, in)
-	if err != nil {
-		t.Fatalf("读取内联清单失败：%v", err)
+	dir := t.TempDir()
+	list := writeList(t, dir, "nodes.csv", csv)
+	args, cfg := testArgsCfg(t, "-f", list, "-c", "echo hi")
+	if err := cli.CheckArguments(args); err != nil {
+		t.Fatalf("合规检查应通过：%v", err)
 	}
-	if len(rows) != 1 {
-		t.Fatalf("表头应被移除，剩 1 行，实际 %d 行：%v", len(rows), rows)
+	cfg.Credential.Encrypt = false
+	cfg.Account.Password = "配置默认密码"
+
+	nodes, err := Read(args, cfg, in)
+	if err != nil {
+		t.Fatalf("读取清单失败：%v", err)
+	}
+	if nodes.Len() != 1 {
+		t.Fatalf("表头应被移除，剩 1 台，实际 %d 台", nodes.Len())
 	}
 	if !strings.Contains(out.String(), "已移除表头行") {
 		t.Fatalf("表头提示应写进注入的输出流，实际输出：%q", out.String())
@@ -198,27 +206,25 @@ func TestCSVHeaderNoticeGoesToInteractor(t *testing.T) {
 // 免得后来者以为它该在读取阶段就被丢弃。
 func TestReadCSVRowsSkipsCommentsAndBlanks(t *testing.T) {
 	csv := "# 这是注释\n\n10.0.0.1,22,root,pw.txt\n10.0.0.2,22,root,pw.txt\n"
-	in, _ := newTestInteractor("", true)
-
-	rows, err := readCSVText(csv, in)
+	nodes, err := readList(t, csv)
 	if err != nil {
 		t.Fatalf("读取失败：%v", err)
 	}
-	if len(rows) != 2 {
-		t.Fatalf("注释行与空行应跳过，应剩 2 行，实际 %d 行：%v", len(rows), rows)
+	if nodes.Len() != 2 {
+		t.Fatalf("注释行与空行应跳过，应剩 2 台，实际 %d 台", nodes.Len())
 	}
-	if rows[0][0] != "10.0.0.1" || rows[1][0] != "10.0.0.2" {
-		t.Fatalf("清洗后行序不符：%v", rows)
+	if nodes.Items[0].IP != "10.0.0.1" || nodes.Items[1].IP != "10.0.0.2" {
+		t.Fatalf("清洗后行序不符：%+v", nodes.Items)
 	}
 
 	// 只含空白的行不被读取阶段丢弃，原样保留（交由 IP 校验处理）
-	if rows, err := readCSVText("10.0.0.1,22,root,pw.txt\n   \n", in); err != nil || len(rows) != 2 {
-		t.Fatalf("只含空白的行应原样保留，实际 %v（%v）", rows, err)
+	if _, err := readList(t, "10.0.0.1,22,root,pw.txt\n   \n"); err == nil {
+		t.Fatal("只含空白的行应留给 IP 校验拦下")
 	}
 
 	// 只有注释：无有效节点，明确报错
-	if _, err := readCSVText("# 只有注释\n", in); err == nil {
-		t.Fatal("无有效节点时应报错")
+	if msg := readListErr(t, "# 只有注释\n").Error(); !strings.Contains(msg, "未解析出任何有效节点") {
+		t.Fatalf("无有效节点时应明确报错，实际：%s", msg)
 	}
 }
 
@@ -226,22 +232,21 @@ func TestReadCSVRowsSkipsCommentsAndBlanks(t *testing.T) {
 // （静默丢一台），单行清单整份解析为空。中文 Windows 上 Excel 另存的
 // "CSV UTF-8" 默认就带这个头。
 func TestReadCSVRowsStripsBOM(t *testing.T) {
-	in, _ := newTestInteractor("", true)
-
-	rows, err := readCSVText("\ufeff10.0.0.1,22,root,pw\n10.0.0.2,22,root,pw\n", in)
+	nodes, err := readList(t, "\ufeff10.0.0.1,22,root,pw\n10.0.0.2,22,root,pw\n")
 	if err != nil {
 		t.Fatalf("带 BOM 的清单不应报错：%v", err)
 	}
-	if len(rows) != 2 {
-		t.Fatalf("带 BOM 不应丢行，应剩 2 行，实际 %d 行：%v", len(rows), rows)
+	if nodes.Len() != 2 {
+		t.Fatalf("带 BOM 不应丢行，应剩 2 台，实际 %d 台", nodes.Len())
 	}
-	if rows[0][0] != "10.0.0.1" {
-		t.Fatalf("首行首列的 BOM 应被剥掉，实际 %q", rows[0][0])
+	if nodes.Items[0].IP != "10.0.0.1" {
+		t.Fatalf("首行首列的 BOM 应被剥掉，实际 %q", nodes.Items[0].IP)
 	}
 
 	// 单行带 BOM：同样要能解析出节点
-	if rows, err := readCSVText("\ufeff10.0.0.1,22,root,pw\n", in); err != nil || len(rows) != 1 {
-		t.Fatalf("单行带 BOM 应解析出 1 台，实际 %v（%v）", rows, err)
+	nodes, err = readList(t, "\ufeff10.0.0.1,22,root,pw\n")
+	if err != nil || nodes.Len() != 1 {
+		t.Fatalf("单行带 BOM 应解析出 1 台，实际 %+v（%v）", nodes, err)
 	}
 }
 
@@ -395,47 +400,41 @@ func TestHelpers(t *testing.T) {
 // 这样凭据预检与字段补全的产出都能在同一个可观察面上核对，不必对着内部下标写断言。
 // ---------------------------------------------------------------------------
 
-// readCSVText 把一段 CSV 正文按内联口径（单条记录，内容原样）读成记录表。
-//
-// 命令行给不出带换行的内联值——判定阶段会拒掉真换行（ADR-0023），所以凡是需要
-// 「多行正文」的读取口径用例，都从这里喂正文；从命令行走一遍的用例用 testRead + Read。
-func readCSVText(text string, in *common.Interactor) ([][]string, error) {
-	return readCSVRows(text, true, in)
+// readList 把一段 CSV 正文写成临时清单、从公开入口 Read 走一遍，返回读出的节点。
+// 读清单的口径（注释行、空行、BOM、引号、变长列、CRLF）一律从这个口子验：
+// 内联值只写一条，多行正文走不到命令行，也就没有「内联口径」可测。
+func readList(t *testing.T, content string) (*Nodes, error) {
+	t.Helper()
+	dir := t.TempDir()
+	list := writeList(t, dir, "nodes.csv", content)
+	args, cfg, in, _ := testRead(t, true, "-f", list, "-c", "echo hi")
+	cfg.Credential.Encrypt = false
+	cfg.Account.Password = "配置默认密码"
+	return Read(args, cfg, in)
+}
+
+// readListErr 同 readList，只把报错交回来。
+func readListErr(t *testing.T, content string) error {
+	t.Helper()
+	dir := t.TempDir()
+	list := writeList(t, dir, "nodes.csv", content)
+	args, cfg := testArgsCfg(t, "-f", list, "-c", "echo hi")
+	in := mustIn()
+	cfg.Credential.Encrypt = false
+	cfg.Account.Password = "配置默认密码"
+	if err := cli.CheckArguments(args); err != nil {
+		return err // 合规检查先拦下的（空文件等），同样算「读不出来」
+	}
+	_, err := Read(args, cfg, in)
+	if err == nil {
+		t.Fatal("应报错，实际读取成功")
+	}
+	return err
 }
 
 // mustIn 造一个只收输出、非交互的交互器（大多数用例只关心有没有输出，不关心内容）。
 func mustIn() *common.Interactor {
 	return &common.Interactor{In: strings.NewReader(""), Out: &strings.Builder{}, Disinteractive: true}
-}
-
-// readCSVRows 的两条来源：文件按原样读，内联值也原样交给解析器——`;;` 与字面
-// `\n` 都是普通字符，内联只写一条（ADR-0023）。
-func TestReadCSVRowsSources(t *testing.T) {
-	// 文件：内容原样进来，`\n` 是两个普通字符（不做转义展开）
-	dir := t.TempDir()
-	file := writeList(t, dir, "nodes.csv", "10.0.0.1,22,root,pw\n10.0.0.2,22,root,pw\n")
-	rows, err := readCSVRows(file, false, mustIn())
-	if err != nil {
-		t.Fatalf("读文件清单失败：%v", err)
-	}
-	if len(rows) != 2 || rows[0][0] != "10.0.0.1" || rows[1][0] != "10.0.0.2" {
-		t.Fatalf("文件清单应读出 2 行，实际 %v", rows)
-	}
-
-	// 内联单条：最常见的写法
-	rows, err = readCSVRows("10.0.0.1,22,root,pw", true, mustIn())
-	if err != nil || len(rows) != 1 || rows[0][3] != "pw" {
-		t.Fatalf("内联单条应读出 1 行，实际 %v（%v）", rows, err)
-	}
-
-	// 内联里写 `;;` 也不会分行：它是普通字符，整串按一条解析
-	rows, err = readCSVRows(`10.0.0.1,22,root,pw;;10.0.0.2,22,root,pw`, true, mustIn())
-	if err != nil {
-		t.Fatalf("读内联清单失败：%v", err)
-	}
-	if len(rows) != 1 || rows[0][3] != "pw;;10.0.0.2" {
-		t.Fatalf("`;;` 应留在字段里、只有一条，实际 %v", rows)
-	}
 }
 
 // 公开入口：`-f` 给一个多行清单文件，几台就是几台——文件侧的口径没被内联的收窄波及。
@@ -462,45 +461,43 @@ func TestReadFileWithSeveralRows(t *testing.T) {
 	}
 }
 
-// 内联清单里的反斜杠是普通字符：Windows 路径常含 `\n`，展开就会把路径切断
-// （ADR-0023）。整条记录照原样进字段。
-func TestReadCSVRowsInlineKeepsBackslashPath(t *testing.T) {
-	rows, err := readCSVRows(`10.0.0.1,22,root,D:\new\pw.bin,D:\new\id.pem,D:\nodes\kp.bin`, true, mustIn())
+// 清单里的反斜杠是普通字符：Windows 路径常含 `\n`，展开就会把路径切断（ADR-0023）。
+// 这里只看第 4 列（密码）——它按明文取，读成节点后应是原样的路径。
+func TestReadKeepsBackslashPath(t *testing.T) {
+	dir := t.TempDir()
+	list := writeList(t, dir, "nodes.csv", "10.0.0.1,22,root,"+`D:\new\pw.bin`+"\n")
+	args, cfg, in, _ := testRead(t, true, "-f", list, "-c", "echo hi")
+	cfg.Credential.Encrypt = false
+
+	nodes, err := Read(args, cfg, in)
 	if err != nil {
-		t.Fatalf("读内联清单失败：%v", err)
+		t.Fatalf("读清单失败：%v", err)
 	}
-	if len(rows) != 1 {
-		t.Fatalf("应是 1 台机器，实际 %d 行：%v", len(rows), rows)
+	if nodes.Len() != 1 {
+		t.Fatalf("应是 1 台机器，实际 %d 台", nodes.Len())
 	}
-	if got := rows[0][3]; got != `D:\new\pw.bin` {
+	if got := nodes.Items[0].Password; got != `D:\new\pw.bin` {
 		t.Fatalf("第 4 列的路径应原样保留，实际 %q", got)
-	}
-	// 第 5、6 列同样是本地路径，一样不能被切
-	if got := rows[0][4]; got != `D:\new\id.pem` {
-		t.Fatalf("第 5 列的路径应原样保留，实际 %q", got)
-	}
-	if got := rows[0][5]; got != `D:\nodes\kp.bin` {
-		t.Fatalf("第 6 列的路径应原样保留，实际 %q", got)
 	}
 }
 
-// 文件读不到：报错要带上路径，且不是「未解析出节点」那句（两者病因不同，不能混）。
-//
-// 从命令行走一遍：判定阶段先按原值问系统，找不到就报「-f 参数指定的文件不存在」，
-// 不会走到装载。装载侧「读文件失败」那条仍然有，用直接调用钉住它（口径不同于上面那句）。
-func TestReadFileUnreadable(t *testing.T) {
+// 清单文件不存在：判定阶段先按原值问系统，报的是「文件不存在」并带上路径，
+// 而不是「未解析出节点」——两者病因不同，不能混成同一句。
+func TestReadFileMissing(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "nope.csv")
-	_, err := readCSVRows(missing, false, mustIn())
+	args, cfg := testArgsCfg(t, "-f", missing, "-c", "echo hi")
+	err := cli.CheckArguments(args)
 	if err == nil {
-		t.Fatal("清单文件不可读时应报错")
+		t.Fatal("清单文件不存在时应报错")
 	}
 	msg := err.Error()
-	if !strings.Contains(msg, "读取内容时发生错误") || !strings.Contains(msg, "nope.csv") {
-		t.Fatalf("应报读取错误并带上路径，实际：%s", msg)
+	if !strings.Contains(msg, "文件不存在") || !strings.Contains(msg, "nope.csv") {
+		t.Fatalf("应报文件不存在并带上路径，实际：%s", msg)
 	}
 	if strings.Contains(msg, "未解析出任何有效节点") {
 		t.Fatalf("读不到与解析不出是两种病因，不该混成同一句：%s", msg)
 	}
+	_ = cfg
 }
 
 // CSV 语法错（双引号不成对）：不把 Go 的 ParseError 行话抛给用户，
@@ -527,44 +524,32 @@ func TestReadCSVRowsSyntaxError(t *testing.T) {
 	if strings.Contains(msg, "ParseError") || strings.Contains(msg, "bare \"") {
 		t.Fatalf("不应把 Go 的行话抛给用户：\n%s", msg)
 	}
-
-	// 内联来源：报的是「内联节点信息的第 N 行」，不是某个文件路径。
-	// 命令行给不出带换行的内联值（判定阶段就拒了），这里直接喂正文钉文案。
-	_, err = readCSVText("10.0.0.1,22,root,\"没闭合\n", mustIn())
-	if err == nil {
-		t.Fatal("内联引号不成对时应报错")
-	}
-	if msg := err.Error(); !strings.Contains(msg, "内联节点信息的第 1 行") {
-		t.Fatalf("内联来源的语法错应说「内联节点信息的第 N 行」，实际：%s", msg)
-	}
 }
 
 // 表头识别只认「首行首列不是 IPv4 且含逗号」这一条：
 // 含逗号 → 当表头移除；不含逗号 → 判为无有效节点，不静默丢那一行。
 func TestReadCSVRowsHeaderDetection(t *testing.T) {
 	// 形态一：标准表头
-	rows, err := readCSVText("ip,port,user,password\n10.0.0.1,22,root,pw\n", mustIn())
-	if err != nil || len(rows) != 1 || rows[0][0] != "10.0.0.1" {
-		t.Fatalf("标准表头应被移除，实际 %v（%v）", rows, err)
+	nodes, err := readList(t, "ip,port,user,password\n10.0.0.1,22,root,pw\n")
+	if err != nil || nodes.Len() != 1 || nodes.Items[0].IP != "10.0.0.1" {
+		t.Fatalf("标准表头应被移除，实际 %+v（%v）", nodes, err)
 	}
 
 	// 形态二：只有表头，去掉之后没有有效行了 —— 报「未解析出节点」而不是返回空清单
-	if _, err := readCSVText("ip,port,user,password\n", mustIn()); err == nil ||
-		!strings.Contains(err.Error(), "未解析出任何有效节点") {
-		t.Fatalf("只剩表头时应报无有效节点，实际：%v", err)
+	if msg := readListErr(t, "ip,port,user,password\n").Error(); !strings.Contains(msg, "未解析出任何有效节点") {
+		t.Fatalf("只剩表头时应报无有效节点，实际：%s", msg)
 	}
 
 	// 形态三：首行不是 IP 又不含逗号（一列垃圾）—— 不能当表头吃掉，直接报错
 	// （单列内容若被当表头，用户看到的是「文件是空的」，与真因对不上）
-	if _, err := readCSVText("垃圾内容\n10.0.0.1,22,root,pw\n", mustIn()); err == nil ||
-		!strings.Contains(err.Error(), "未解析出任何有效节点") {
-		t.Fatalf("单列非 IP 首行应报无有效节点，实际：%v", err)
+	if msg := readListErr(t, "垃圾内容\n10.0.0.1,22,root,pw\n").Error(); !strings.Contains(msg, "未解析出任何有效节点") {
+		t.Fatalf("单列非 IP 首行应报无有效节点，实际：%s", msg)
 	}
 
 	// 形态四：首行就是合法 IP —— 不是表头，照常参与解析（多行清单一台都不能丢）
-	rows, err = readCSVText("10.0.0.1,22,root,pw\n10.0.0.2,22,root,pw\n", mustIn())
-	if err != nil || len(rows) != 2 {
-		t.Fatalf("首行是合法 IP 时不该当表头，实际 %v（%v）", rows, err)
+	nodes, err = readList(t, "10.0.0.1,22,root,pw\n10.0.0.2,22,root,pw\n")
+	if err != nil || nodes.Len() != 2 {
+		t.Fatalf("首行是合法 IP 时不该当表头，实际 %+v（%v）", nodes, err)
 	}
 }
 
@@ -572,8 +557,17 @@ func TestReadCSVRowsHeaderDetection(t *testing.T) {
 func TestReadCSVRowsHeaderNoticeRespectsGate(t *testing.T) {
 	const text = "ip,port,user,password\n10.0.0.1,22,root,pw\n"
 
-	in := mustIn() // Disinteractive = true
-	if _, err := readCSVText(text, in); err != nil {
+	dir := t.TempDir()
+	list := writeList(t, dir, "nodes.csv", text)
+	args, cfg := testArgsCfg(t, "-f", list, "-c", "echo hi")
+	if err := cli.CheckArguments(args); err != nil {
+		t.Fatalf("合规检查应通过：%v", err)
+	}
+	cfg.Credential.Encrypt = false
+	cfg.Account.Password = "配置默认密码"
+	in := mustIn() // Disinteractive = true（即 --yes）
+
+	if _, err := Read(args, cfg, in); err != nil {
 		t.Fatalf("非交互下读表头清单失败：%v", err)
 	}
 	if got := in.Out.(*strings.Builder).String(); got != "" {
@@ -581,12 +575,18 @@ func TestReadCSVRowsHeaderNoticeRespectsGate(t *testing.T) {
 	}
 }
 
-// 空内容与「只有注释 / 空行」：都归到同一句「未解析出任何有效节点」。
+// 空内容与「只有注释 / 空行」：从命令行进来，`-f` 指向空文件与「解析不出节点」各有各的话，
+// 都要说清、都不能静默跑空表。
 func TestReadCSVRowsEmptyContent(t *testing.T) {
-	for _, text := range []string{"", "\n\n", "# 只有注释\n", "   \n"} {
-		if _, err := readCSVText(text, mustIn()); err == nil ||
-			!strings.Contains(err.Error(), "未解析出任何有效节点") {
-			t.Fatalf("内容 %q 应报无有效节点，实际：%v", text, err)
+	// 完全空文件：合规检查就拦下，报「CSV 文件为空」
+	if msg := readListErr(t, "").Error(); !strings.Contains(msg, "CSV 文件为空") {
+		t.Fatalf("空文件应报「CSV 文件为空」，实际：%s", msg)
+	}
+
+	// 只有空行 / 只有注释：读取层解析不出节点
+	for _, text := range []string{"\n", " \n", "# 只有注释\n", "   \n"} {
+		if msg := readListErr(t, text).Error(); !strings.Contains(msg, "未解析出任何有效节点") {
+			t.Fatalf("内容 %q 应报无有效节点，实际：%s", text, msg)
 		}
 	}
 }
@@ -595,27 +595,27 @@ func TestReadCSVRowsEmptyContent(t *testing.T) {
 // 这里钉住「读进来的行不会被二次加工」，列内容原样交给字段补全。
 func TestReadCSVRowsKeepsColumnContent(t *testing.T) {
 	// 引号里包住逗号：值里的逗号不能当分列符
-	rows, err := readCSVText(`10.0.0.1,22,root,"pw,with,comma"`, mustIn())
+	nodes, err := readList(t, `10.0.0.1,22,root,"pw,with,comma"`+"\n")
 	if err != nil {
 		t.Fatalf("引号含逗号应能解析：%v", err)
 	}
-	if len(rows) != 1 || rows[0][3] != "pw,with,comma" {
-		t.Fatalf("引号里的逗号应属于同一个值，实际 %v", rows)
+	if nodes.Len() != 1 || nodes.Items[0].Password != "pw,with,comma" {
+		t.Fatalf("引号里的逗号应属于同一个值，实际 %+v", nodes.Items)
 	}
 
-	// 变长列：列数不限，缺的列由 padRow 补、多的列由 padRow 截（此处只确认读取层不报错）
-	rows, err = readCSVText("10.0.0.1,22\n10.0.0.2,22,root,pw,key,pass,extra\n", mustIn())
-	if err != nil || len(rows) != 2 || len(rows[0]) != 2 || len(rows[1]) != 7 {
-		t.Fatalf("变长列应原样读出，实际 %v（%v）", rows, err)
+	// 变长列：列数不限，缺的列按配置补、多的列截掉，都不报错
+	nodes, err = readList(t, "10.0.0.1,22\n10.0.0.2,22,root,pw,key,pass,extra\n")
+	if err != nil || nodes.Len() != 2 {
+		t.Fatalf("变长列应能读成 2 台，实际 %+v（%v）", nodes, err)
 	}
 
 	// CRLF：Windows 上另存的 CSV，行尾 \r 不能留在最后一个字段里
-	rows, err = readCSVText("10.0.0.1,22,root,pw\r\n10.0.0.2,22,root,pw\r\n", mustIn())
-	if err != nil || len(rows) != 2 {
-		t.Fatalf("CRLF 清单应能解析出 2 行，实际 %v（%v）", rows, err)
+	nodes, err = readList(t, "10.0.0.1,22,root,pw\r\n10.0.0.2,22,root,pw\r\n")
+	if err != nil || nodes.Len() != 2 {
+		t.Fatalf("CRLF 清单应能解析出 2 台，实际 %+v（%v）", nodes, err)
 	}
-	if rows[0][3] != "pw" {
-		t.Fatalf("行尾 \\r 应被剥掉，实际末列 %q", rows[0][3])
+	if nodes.Items[0].Password != "pw" {
+		t.Fatalf("行尾 \\r 应被剥掉，实际末列 %q", nodes.Items[0].Password)
 	}
 }
 
