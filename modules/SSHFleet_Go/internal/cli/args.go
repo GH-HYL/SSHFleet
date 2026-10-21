@@ -260,10 +260,18 @@ func (a *Args) Summary() string {
 		"k=" + keyVal,
 		"answer=" + orEmpty(a.Answer),
 	}
-	// 新密码是明确知道身份的凭据：明文密文都脱敏，不给"照抄重跑"留口子
+	// 新密码是明确知道身份的凭据：明文密文都脱敏，不给"照抄重跑"留口子。
+	// 报的是解析后的新密码（NewPassword）而不是旗标原值：加密模式下原值是一份密文
+	// 文件的路径，脱敏出来是一串路径，事后翻日志看不出这次改成了什么。
 	changePassword := "''"
-	if a.ChangePassword != "" {
-		changePassword = "'" + common.MaskSecret(a.ChangePassword) + "'"
+	switch {
+	case a.NewPassword != "":
+		changePassword = "'" + common.MaskSecret(a.NewPassword) + "'"
+	case a.ChangePassword != "":
+		// 给了 --change-password 却没解析结果：只有 Summary 早于合规检查被调用才会走到
+		// （新密码在 checkPasswdChange 里解）。明写「未解析」而不是 ****——那个形态与
+		// 4 位以内的密码一模一样，看日志的人分不出「密码短」还是「根本没解」。
+		changePassword = "'（未解析）'"
 	}
 	fields = append(fields, "change_password="+changePassword)
 	if a.KeyStatus {

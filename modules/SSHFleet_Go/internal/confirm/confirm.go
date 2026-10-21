@@ -184,8 +184,10 @@ func buildInfoTable(args *cli.Args, nodes *nodelist.Nodes, note string) [][2]str
 	case cli.ModeDownload:
 		t = append(t, modeLabel, [2]string{"远程路径", args.Download}, [2]string{"本地路径", args.Path}, [2]string{"", ""})
 	case cli.ModePasswd:
-		// 新密码是明确知道身份的凭据：按下确认之前看得见形态，但只看得到脱敏形态
-		t = append(t, modeLabel, [2]string{"新密码", common.MaskSecret(args.ChangePassword)}, [2]string{"", ""})
+		// 新密码是明确知道身份的凭据：按下确认之前看得见形态，但只看得到脱敏形态。
+		// 取 NewPassword（解析后的明文）而不是 ChangePassword（旗标原值）：加密模式下
+		// 旗标原值是一份密文文件的路径，脱敏出来是一串路径，屏上核不到这次到底要设什么。
+		t = append(t, modeLabel, [2]string{"新密码", common.MaskSecret(args.NewPassword)}, [2]string{"", ""})
 	}
 	t = append(t, answerRows(args)...)
 	t = append(t,
