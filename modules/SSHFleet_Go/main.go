@@ -11,7 +11,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"runtime"
 	"runtime/debug"
 	"strings"
 	"syscall"
@@ -24,7 +23,6 @@ import (
 	"sshfleet/internal/confirm"
 	"sshfleet/internal/credential"
 	"sshfleet/internal/dangercheck"
-	"sshfleet/internal/diagnose"
 	"sshfleet/internal/log"
 	"sshfleet/internal/nodelist"
 	"sshfleet/internal/output"
@@ -36,7 +34,7 @@ import (
 // 版本号：单一出处（显示在帮助信息首行下方，经 cli.Parse 传入 Usage）。
 // 与 CHANGELOG 顶部当天段落的段头**同一个号**——开段、抬号时在同一次提交里同步改，
 // 两处不一致即为错误。同一天的改动共用一个号，不因改动多而另起号。
-const appVersion = "12.0.0"
+const appVersion = "12.0.1"
 
 // versionWithBuildID 版本号拼上**构建标识**：git 短提交号（仓库内编译时由 go build
 // 自动注入 vcs.revision；工作区有未提交改动时加 -dirty）+ HEAD 提交时间。
@@ -382,7 +380,7 @@ func main() {
 
 	execStart := time.Now()
 
-	// 归档目录：本次执行的全部产物（执行日志 / 终端输出 / 报告 / xlsx / 取证日志 / 资源备份）
+	// 归档目录：本次执行的全部产物（执行日志 / 终端输出 / 报告 / xlsx / 资源备份）
 	archive, err := output.CreateArchive(args)
 	if err != nil {
 		fatal("output", err)
@@ -400,18 +398,6 @@ func main() {
 	execLogPath := filepath.Join(archive.Dir, config.BuiltinPaths.Exec)
 	logger.Info(fmt.Sprintf("执行期日志已轮转至：%s（执行结束自动切回）", execLogPath))
 
-	// 取证日志（见 internal/diagnose）：与 report.txt 同放归档目录，一次执行一个文件。
-	// 记录器在这里一次建成、落点此后再不变——它只写这一个文件，不参与执行流程。
-	// 建不出来时只告警、不中断：取证是附加物，不能因为它拖垮这次执行。
-	diag := diagnose.New(nil)
-	if diagLog, derr := log.InitExec(archive.Dir, config.BuiltinPaths.Diagnose); derr != nil {
-		logger.Warn(fmt.Sprintf("无法创建 %s 文件: %v", config.BuiltinPaths.Diagnose, derr))
-	} else {
-		defer func() { _ = diagLog.Close() }()
-		diag = diagnose.New(diagLog)
-	}
-	diag.Environment(versionWithBuildID(), runtime.GOOS, runtime.GOARCH, common.ColorEnabled, os.Getenv("TERM"))
-
 	mode := args.ModeName()
 	if dangerNote != "" {
 		execLog.Warn(dangerNote)
@@ -428,7 +414,7 @@ func main() {
 	// 单节点结果的三个去向（终端明细 / output.txt / 执行期日志）与进度界面的
 	// 懒创建、上打提示都收在 output 的呈现器里；main 只构造并接上 batch 的三个事件。
 	// （呈现器只做呈现，不控制生命周期——主干与退出权仍在本函数手里。）
-	reporter := output.NewReporter(execLog, outputFile, mode, args.Answers, nodes.Len(), execStart, in.Disinteractive, diag)
+	reporter := output.NewReporter(execLog, outputFile, mode, args.Answers, nodes.Len(), execStart, in.Disinteractive)
 	// 改密的入场信号为空 = 整场不喂、每台机器都干等到超时：这种配置要在开工前拦住。
 	// 取的判据与执行侧同一处（Keywords.PasswordExpired），守卫与被守的东西不会各说各话。
 	if args.ChangePassword != "" && len(errorKeywords.PasswordExpired()) == 0 {
@@ -437,15 +423,11 @@ func main() {
 			"提示：该分类在 config/keywords_error.conf，别删它"))
 	}
 	execResults, err := batch.Run(execCtx, args, cfg, nodes, execLog, prompts, errorKeywords, upload, batch.Hooks{
-		OnNotice:    reporter.Notice,
-		OnProgress:  reporter.Progress,
-		OnResult:    reporter.Result,
-		OnRawOutput: diag.RemoteRaw,
+		OnNotice:   reporter.Notice,
+		OnProgress: reporter.Progress,
+		OnResult:   reporter.Result,
 	})
 	reporter.Stop()
-	// 诊断汇总：一次运行里「远端带 CR 的节点数 / 最终文本仍带控制字符的节点数」，
-	// 是读日志时最先看的一行（全文见上面的逐节点记录）。
-	diag.Summary()
 	// 先认错，再拿结果：Run 在开工前失败（如上传源含 FIFO/设备/socket、文件不可读、脚本读不到）
 	// 时返回的是 (*Results)(nil)，下面任何一次取字段都会 panic，那条本该给用户看的错反而
 	// 永远打不出来。此路径上进度界面尚未创建，Stop 是空操作，提前 fatal 不影响收尾。

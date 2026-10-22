@@ -54,9 +54,6 @@ type Hooks struct {
 	OnNotice   func(string)
 	OnProgress RenderFunc
 	OnResult   func(ssh.Result)
-	// OnRawOutput 远端原始输出（整备之前的字节）——只为诊断留痕，nil 表示不收集。
-	// 在 worker 协程里回调，实现方须自己保证并发安全。
-	OnRawOutput func(seq int, ip, raw string)
 }
 
 // Run 主干第 8 步入口：构建任务 → 并发执行 → 聚合进度 → 返回结果。
@@ -131,10 +128,6 @@ func Run(ctx context.Context, a *cli.Args, cfg *config.Config, nodes *nodelist.N
 	mode := a.ModeName()
 	work := func(ctx context.Context, t *task) ssh.Result {
 		client := ssh.NewClient(newConfig(t.node))
-		// 诊断：登记远端原始输出（整备之前）。未接诊断时是 nil，采集侧什么也不做。
-		if hooks.OnRawOutput != nil {
-			client.SetRawOutputHook(hooks.OnRawOutput)
-		}
 		onProgress := func(p ssh.Progress) { agg.OnProgress(p) }
 
 		var res *ssh.Result

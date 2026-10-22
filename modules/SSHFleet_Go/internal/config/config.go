@@ -67,7 +67,6 @@ type Paths struct {
 	OutputXlsx        string `toml:"output_xlsx"`
 	Report            string `toml:"report"`
 	ResultsXlsx       string `toml:"results_xlsx"`
-	Diagnose          string `toml:"diagnose"`
 }
 
 // Interactive 远端交互代填的匹配口径。两个开关同时管触发词与中止词。
@@ -120,9 +119,6 @@ var BuiltinPaths = Paths{
 	OutputXlsx:        "terminal-output.xlsx",
 	Report:            "report.txt",
 	ResultsXlsx:       "results.xlsx",
-	// Diagnose 取证日志：与 report.txt 同放归档目录，一次执行一个文件、不轮转。
-	// 只为「终端看不到输出」这类要真机取证的问题存在（见 internal/diagnose）。
-	Diagnose: "SSHFleetDiagnose.log",
 }
 
 // Load 读取并校验配置文件，返回可直接使用的配置。
