@@ -22,7 +22,7 @@ find . -maxdepth 2 -iname 'glossary*' -not -path './.git/*'
 
 # 状态怎么记的（有的仓库用 Status: 行，有的用文件名，有的靠外部系统）
 grep -rn -i 'status' --include='*.md' <议题目录> | head -5
-grep -rl -i 'doc-format\|issue-tracker\|文档规范' --include='*.md' . | head
+grep -rl -i 'doc-guide\|issue-tracker\|文档规范' --include='*.md' . | head
 ```
 
 把结果记下来，下面每一步都按**这个仓库实际的样子**做。**查不到就说不存在**，不要套用别处的习惯。

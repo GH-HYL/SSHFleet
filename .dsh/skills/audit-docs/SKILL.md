@@ -45,7 +45,7 @@ git diff --name-only <基点>...HEAD
 
 ```bash
 ls *.md docs/*.md 2>/dev/null
-grep -rl -i '文档规范\|contributing\|doc-format\|issue-tracker' --include='*.md' . | head
+grep -rl -i '文档规范\|contributing\|doc-guide\|issue-tracker' --include='*.md' . | head
 find . -type d \( -name adr -o -name issues -o -name specs \) -not -path './.git/*' | head
 find . -maxdepth 2 -iname 'glossary*' -not -path './.git/*'
 # 成文的「文档纪律」与「格式模板」分开找：前者答「不许怎么写」，后者答「长什么样」
@@ -73,7 +73,7 @@ grep -rln -i '纪律\|禁止\|MUST NOT\|坏味道' --include='*.md' docs/ | head
 ### A. 一致性
 
 ```
-只读审计，不改任何文件。
+本轮只做只读分析，不改任何文件。
 diff：git diff <基点>...HEAD
 受众：<第零步的结论>
 本轮意图清单：<编号清单>
@@ -90,7 +90,7 @@ diff：git diff <基点>...HEAD
 ### B. 规范符合度
 
 ```
-只读审计，不改任何文件。
+本轮只做只读分析，不改任何文件。
 diff：git diff <基点>...HEAD
 受众：<第零步的结论>
 本仓库的规范与纪律：<第二步查到的路径+章节，或「无」>
@@ -120,7 +120,7 @@ diff：git diff <基点>...HEAD
 ### C. 事实准确性
 
 ```
-只读审计，不改任何文件。
+本轮只做只读分析，不改任何文件。
 diff：git diff <基点>...HEAD
 
 凡是断言仓库事实的地方，逐条回源码核对：
