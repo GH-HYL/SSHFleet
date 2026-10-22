@@ -48,3 +48,8 @@ Status: needs-triage
   - **规范轴**：小节沿用 `2026-10-21-1413-命令行路径规范化` 的「只登记」形态，**未套** spec 模板的 Solution / User Stories / 测试决策——因为方案未定，按《个人开发规范》二·1 该先定方案再补；证据载体用 `findings-<日期>.md`，符合 `issue-tracker.md` 的底本白名单。
   - **事实轴**，改了三处：① findings 里 `sudoers.dist` 的引文按实际输出重抄（原先写成 `sed -n '55,58p'` 且多引了一行 `HOME`，与文件不符；实际是 56–58 行、只有 locale 那一行）；② RHEL / CentOS 的 `env_keep` 从「事实」降为「未验证的假设」，spec 与 findings 两处同步改口；③ `PATH` 那条补上「默认配置下、sudoers 设了 `secure_path`」的前提，并在 findings 补第 51 行作为依据。
   - 仍存的空白：sudo 的行为没有实测（本会话起不来），CentOS 侧全未验证——两条都已写进 findings 第八节，不在此处掩盖。
+- 2026-10-22：**本规格的结论已由 ADR-0024 取代**，重写 spec 时以 ADR 为准，不要照本文抄：
+  - 「已核实的事实」第 2 条（「这段 export 过不了 sudo」）与「待定」第 2 项（推荐 `sudo env` 后置）已作废——ADR-0024 的结论是**拼接形态不变**、`export` 仍拼在 `sudo` 之前；
+  - 「待定」第 3 项已定为 `C`，「待定」第 1 项（语言目标）随之为「整批稳定英文」；
+  - 落点改为**三份**出厂配置模板（`SSHFleet.conf` / `SSHFleet-for-linux.conf` / `SSHFleet-for-windows.conf`），不是单份；
+  - 2026-10-22 的回顾审计记录见同目录 `audit-run-2026-10-22/report.md`，交接入口见同目录 `README.md`。
