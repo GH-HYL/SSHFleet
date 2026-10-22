@@ -6,8 +6,11 @@
 #     （这个脚本存在的唯一目的就是供 Linux / 自动化使用）
 #   - build-windows.bat 相反需要 CRLF（cmd 解析批处理），且首字节必须是 UTF-8 BOM
 #     ——BOM 属内容，不受本文件影响，已随提交保存（见工单 06）
+#
+# 默认一律 LF（下行 eol=lf）：跨平台来回切编辑器时，行尾不会被谁偷偷换掉，
+# 也不会再出现「整份文件都显示改了、其实一个字没动」。要 CRLF 的只有 *.bat。
 
-* text=auto
+* text=auto eol=lf
 
 .gitattributes text eol=lf
 .gitignore text eol=lf
