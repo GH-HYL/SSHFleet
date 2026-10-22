@@ -1,6 +1,6 @@
 ---
-name: audit-conversation-for-DSH
-description: 【对话忠实度审计 · DSH 版】文档写的，是不是对话最后真正定下的那个。长对话末尾写总结时，模型常凭思维惯性写出已推翻或从没确认过的结论，而这种错在文档内部读起来完全自洽。本技能读 DSH 会话记录（zstd 多帧目录树）逐条比对，只审「文档 vs 对话」，不审代码、不跑实验。单 agent 完成。核对文档是否靠记忆惯性写的时用。
+name: audit-conversation
+description: 【对话忠实度审计】文档写的，是不是对话最后真正定下的那个。长对话末尾写总结时，模型常凭思维惯性写出已推翻或从没确认过的结论，而这种错在文档内部读起来完全自洽。本技能读会话记录逐条比对，只审「文档 vs 对话」，不审代码、不跑实验。单 agent 完成。核对文档是否靠记忆惯性写的时用。
 disable-model-invocation: true
 ---
 
@@ -13,6 +13,19 @@ disable-model-invocation: true
 **由一个 agent 全程完成，不拆并行。** 工作内容单一（读对话、对文档），拆分只会让各路了半边对话、谁也判不出「结论变轨点」。
 
 **整个审计作为后台任务（subagent）跑，主 Agent（orchestrator）不亲自审。** 派出去之后，主 Agent 可以继续做别的信息收集，**真没活干了自然结束本轮**——**不要 `sleep`、不要循环轮询、不要反复查任务状态或输出文件**；跑完会把报告送回来，那就是下一轮。**内部仍是单 agent**，后台不等于拆轴。
+
+## 取数：先认环境，再读附件
+
+本文只写**行为与判据**。会话记录长什么样、怎么翻、哪些行算用户原话，**按当前环境取对应附件**：
+
+| 当前环境 | 怎么认 | 读哪份 |
+| --- | --- | --- |
+| **DSH** | 会话根 `~/.dsh/sessions`，目录里是 `session.v4.jsonl.zstd`（多帧 zstd） | [SESSIONS-DSH.md](./SESSIONS-DSH.md) |
+| **WorkBuddy** | 会话根 `~/.workbuddy/projects`，明文 `.jsonl` | [SESSIONS-WORKBUDDY.md](./SESSIONS-WORKBUDDY.md) |
+
+**两份附件不可混用**：路径规则、字段名、用户原话判据都不一样，照另一份取数会取错。认不出当前环境就先问，不要挑一份看着像的。
+
+附件读完回到本文——下面是两套环境共用的判据与产出。
 
 ## 为什么只审对话
 
@@ -32,85 +45,11 @@ disable-model-invocation: true
 
 受众还决定**「哪些内容不该出现」**：使用者文档里出现「实验形态」「源码推断」这类内容，**本身就是一条审计发现**——不是内容对不对的问题，是它不该在这里。
 
-## 一、定位会话记录
-
-```
-<DSH 会话根>/<工作区转写目录>/<会话目录>/session.v4.jsonl.zstd
-```
-
-- 会话根：`$USERPROFILE/.dsh/sessions`（Windows）或 `~/.dsh/sessions`
-- 工作区转写目录：工作区绝对路径，`\` 与 `:` 换成 `-`，两侧补 `--`。`D:\work\p` → `--D-work-p--`
-- 会话目录：主会话 `session-<uuid>`；子 agent 是裸 `<uuid>`
-
-**三个易错点**：盘符后的冒号要先吃掉（否则 `D--work`）；连续分隔符压成一个；首尾 `--` 是补的。
-
-目录不存在就模糊匹配：`ls -1 "$ROOT" | grep -i "${WS##*/}"`
-
-### 按标题找会话
-
-```bash
-node -e '
-const z=require("zlib"),fs=require("fs");
-const M=Buffer.from([0x28,0xb5,0x2f,0xfd]);
-function dec(f){const b=fs.readFileSync(f);const ix=[];let i=0;
- while((i=b.indexOf(M,i))!==-1){ix.push(i);i++;}
- let o="";for(let k=0;k<ix.length;k++){const s=ix[k],e=k+1<ix.length?ix[k+1]:b.length;
-  try{o+=z.zstdDecompressSync(b.subarray(s,e)).toString("utf8")}catch(e){}}return o;}
-for(const d of fs.readdirSync(".")){const f=d+"/session.v4.jsonl.zstd";
- if(!fs.existsSync(f))continue;
- const t=dec(f);let title="";
- for(const ln of t.split("\n").slice(0,80)){try{const m=JSON.parse(ln);
-  if(m.type==="session/title"&&m.data&&m.data.title)title=m.data.title;}catch(e){}}
- const m=JSON.parse(t.split("\n")[0]);
- console.log(d,"|",new Date(m.createdAt).toISOString(),"|d"+m.delegationDepth,"|",title);}
-'
-```
-
-**`depth0` 才是主会话**；`depth1` 以上是子 agent。同工作区同时段可能有多条 `depth0`，按用户给的时间点或标题定位，别默认取最新。
-
-### 导出
-
-```bash
-mkdir -p build/review
-node -e '
-const z=require("zlib"),fs=require("fs");
-const M=Buffer.from([0x28,0xb5,0x2f,0xfd]);
-const b=fs.readFileSync(process.argv[1]);const ix=[];let i=0;
-while((i=b.indexOf(M,i))!==-1){ix.push(i);i++;}
-let o="";for(let k=0;k<ix.length;k++){const s=ix[k],e=k+1<ix.length?ix[k+1]:b.length;
- try{o+=z.zstdDecompressSync(b.subarray(s,e)).toString("utf8")}catch(e){}}
-process.stdout.write(o);
-' "$ROOT/$T/session-<uuid>/session.v4.jsonl.zstd" > build/review/session-export.jsonl
-```
-
-**三个坑**：文件是**多帧 zstd 拼接**（`zstd -dc` 只解第一帧，必须按 magic 切帧）；写入是**边跑边追加**，最后几步可能缺席；产物落**工作区内**的 `build/`。
-
-## 二、只有用户原话是权威
-
-**只有 `source.kind === "user"` 的 `user/message` 是用户原话。** 其余都不是：`system-reminder`、`runtime-context`、`time-context`，**以及子 agent 的回报**——那些也是 `user/message` 形态，但那是助手派出去的。
-
-```bash
-node -e '
-const fs=require("fs");
-const ls=fs.readFileSync("build/review/session-export.jsonl","utf8").split("\n").filter(Boolean);
-let n=0;
-for(const l of ls){try{const m=JSON.parse(l);
- if(m.type!=="user/message")continue;
- if(!(m.source&&m.source.kind==="user"))continue;
- const c=m.data&&m.data.content;
- const txt=Array.isArray(c)?c.map(x=>x.text||"").join(""):String(c||"");
- n++;console.log("### U"+n+" ###\n"+txt.slice(0,1500)+"\n");
-}catch(e){}}
-'
-```
-
-**把 U1…Un 完整读一遍再动笔**，并当作引用编号。几十轮的长对话，真·原话常常只有二三十条。文件常有几 MB，**分段读，别一次塞进上下文**——那正好复制了本技能要防的毛病。
-
-## 三、审计四问
+## 一、审计四问
 
 ### Q1 结论是最后收敛的那个吗
 
-先找**变轨点**：顺 `assistant/message` 搜「撤回」「纠正」「推翻」「改为」，标出轮次；再看文档落在哪一段。长对话会反复推翻，**取最后一次**。
+先找**变轨点**：顺助手发出的消息搜「撤回」「纠正」「推翻」「改为」，标出轮次；再看文档落在哪一段。长对话会反复推翻，**取最后一次**。
 
 ### Q2 每条结论都有用户的明确同意吗
 
@@ -140,7 +79,7 @@ for(const l of ls){try{const m=JSON.parse(l);
 
 **若文档是面向使用者的（手册、报错、提示），多问一层**：用户描述的是**他遇到什么、想做什么**，文档里有没有变成**机器视角的说明**？真实形态：用户说「执行 `ls` 时中文文件名显示成方块」，报错或文档写成「UTF-8 字节被按 936 码页解释」——**后者是对的，但不是给使用者看的**。判据：把这句话给使用者，他知不知道下一步做什么。
 
-## 四、症状表
+## 二、症状表
 
 | 症状 | 表现 |
 | --- | --- |
@@ -151,8 +90,9 @@ for(const l of ls){try{const m=JSON.parse(l);
 | 立场倒置 | 用户说代价无所谓，文档用成本否掉候选 |
 | 约束失忆 | 明令的禁令，文档一个字没提 |
 | 复审节错载体 | 塞了触发条件 / 补测计划 / 待办清单——那是工单形态 |
+| 系统噪音当原话 | 把子 agent 回报、后台任务通知之类当成用户表态 |
 
-## 五、产出
+## 三、产出
 
 写报告，**不改文档**。
 
@@ -176,19 +116,19 @@ for(const l of ls){try{const m=JSON.parse(l);
 
 **区分必须与建议**：必须 = 与用户原话直接矛盾、推测当事实、引用错误；其余进建议。**找不出问题就明说**，加一条假问题整份报告就废了。
 
-## 六、如果仓库里有成文的文档纪律
+## 四、如果仓库里有成文的文档纪律
 
 形体层面的问题（复审节写了待办、决策没标授权），**先查仓库有没有把这类要求写下来**：
 
-- 本仓库落点：`docs/agents/doc-guide.md`——它对 ADR、spec、工单、手册、使用者可见文本**各有一节纪律**。按审计对象的那一份去对。
+- 常见落点：`docs/agents/doc-guide.md`——它对 ADR、spec、工单、手册、使用者可见文本**各有一节纪律**。按审计对象的那一份去对。
 - **有就引用它的原文**，比自己拟判据站得住，也不与既有约定打架；**没有就明说**，按「与同类文件体例一致」处理。
 - 这是**判定依据**，不是审计对象。文档之间的自洽走 `/audit-docs`。
 
-## 七、汇总给开发者：三段式
+## 五、汇总给开发者：三段式
 
 **最终回复按下面三段排，顺序固定，直接输出到终端；三段式本身不另存文件。** 某段没有内容就**整段省略**，不要写「无」占位。
 
-第五节那张报告表照旧，本段是在它之上收口一次，**不另存汇总文件**。
+第三节那张报告表照旧，本段是在它之上收口一次，**不另存汇总文件**。
 
 ### 第一段：过程与待验证
 
@@ -199,7 +139,7 @@ for(const l of ls){try{const m=JSON.parse(l);
 
 ### 第二段：缺陷清单
 
-第五节的「必须修正」按这里重排：**与用户原话直接矛盾的、拿推测当事实的、引用错的**，都归第二段。逐条给文档位置 + 现象 + 依据（`U几` / 原话片段）。
+第三节的「必须修正」按这里重排：**与用户原话直接矛盾的、拿推测当事实的、引用错的**，都归第二段。逐条给文档位置 + 现象 + 依据（`U几` / 原话片段）。
 
 **只列不改**——审计阶段不改被审文档；**不排优先级，不写修法**，修法等授权。
 
@@ -216,13 +156,14 @@ for(const l of ls){try{const m=JSON.parse(l);
 - **每轮末尾报进度**：`已问 3 / 共 12，剩 9`。**没清零不许收工**；总数变了按新数报。
 - **收工判据**：清单清零，且最后一轮没有新增。问了三四个就结束，就是漏。
 
-**为什么分批**：`grilling` 的规矩是一轮问完整个 frontier，但三段式本身已经不短，二三十个问题一起倒出来会刷屏。这里只取 frontier 里最靠前的三到五条；总清单只给标题，展开的只有当前这一轮那三到五个。
+**为什么分批**：`grilling` 的规矩是一轮问完整个 frontier，但三段式本身已经不短，二三十个问题一起倒出来会刷屏。这里只取 frontier 里最靠前的三到五条；总清单只给标题，展开的只有当前这一轮那三到五条。
 
-**`✅` 有依据的不进任何一段**——三段式只放「要处置的」，不是把第五节重抄一遍。
+**`✅` 有依据的不进任何一段**——三段式只放「要处置的」，不是把第三节重抄一遍。
 
 ## 边界
 
 - 不审代码、不跑实验、不核实技术事实。
 - 审计阶段不改被审文档；会话导出落 `build/review/`，不进被审目录。
-- 只审主会话（`depth>0` 算助手推导的一部分）。
+- **只审主会话**。子 agent 的会话算助手推导的一部分，不作为依据，也不单独审。
 - 会话进行中时，当前步未必落盘；以已落盘为准，并在报告注明截止到哪条用户消息。
+- **不跨环境取数**。DSH 的会话在 `~/.dsh/sessions`（zstd 多帧），WorkBuddy 的在 `~/.workbuddy/projects`（明文 jsonl），各读各的附件，别混读。
