@@ -29,24 +29,9 @@ type Client struct {
 	// 账号过期、密码必须修改、/etc/nologin 通知等都只在这里出现——x/crypto 在没有
 	// BannerCallback 时会把它整包丢弃，所以必须自己接住（ADR-0005）。
 	banner string
-
-	// rawOutputHook 远端原始输出（整备之前、原样字节）的去向；nil 表示不收集。
-	// 只为诊断存在：出问题时需要「远端到底回了什么字节」，而 Output 已经过整备，
-	// 事后无法从它还原原始形态。见 internal/diagnose。
-	rawOutputHook func(seq int, ip, raw string)
 }
 
 func NewClient(cfg *Config) *Client { return &Client{cfg: cfg} }
-
-// SetRawOutputHook 登记「远端原始输出」的出口（诊断用；整备之前调用）。
-func (c *Client) SetRawOutputHook(fn func(seq int, ip, raw string)) { c.rawOutputHook = fn }
-
-// reportRaw 把整备之前的原始输出交给登记方（未登记时什么也不做）。
-func (c *Client) reportRaw(seq int, raw string) {
-	if c.rawOutputHook != nil {
-		c.rawOutputHook(seq, c.cfg.IP, raw)
-	}
-}
 
 // Connect 建立连接：拨号超时 = ConnectTimeout，握手宽限 +2 秒；主机密钥跳过校验。
 func (c *Client) Connect(ctx context.Context) error {

@@ -28,7 +28,6 @@ import (
 	"sshfleet/internal/cli"
 	"sshfleet/internal/common"
 	"sshfleet/internal/config"
-	"sshfleet/internal/diagnose"
 	"sshfleet/internal/log"
 	"sshfleet/internal/ssh"
 	"sshfleet/internal/verdict"
@@ -66,10 +65,6 @@ type Reporter struct {
 	// quiet 非交互模式（--yes）：运行期提示只进日志、不上屏（L61 的静默总闸门）。
 	// 报错与结果明细不受影响——挡的只有"教学类"那一路。
 	quiet bool
-
-	// diag 诊断记录器（可为 nil）：把「最终交给终端的这段文本」的字节构成记进日志。
-	// 只为取证——目标环境这边碰不到，测试机会只有一次（见 internal/diagnose）。
-	diag *diagnose.Recorder
 }
 
 // NewReporter 构造呈现器。
@@ -84,7 +79,7 @@ type Reporter struct {
 //   - quiet: 非交互模式（--yes）。运行期提示不上屏，只进日志（L61 静默闸门）
 //
 // 成败与分类不在这里定——结果到手时判定已在 batch 的 worker 协程里做完，呈现层只读结论。
-func NewReporter(execLog *log.Logger, outputFile io.Writer, mode cli.Mode, answers []ssh.Answer, total int, start time.Time, quiet bool, diag *diagnose.Recorder) *Reporter {
+func NewReporter(execLog *log.Logger, outputFile io.Writer, mode cli.Mode, answers []ssh.Answer, total int, start time.Time, quiet bool) *Reporter {
 	return &Reporter{
 		logger:  execLog,
 		outFile: outputFile,
@@ -95,7 +90,6 @@ func NewReporter(execLog *log.Logger, outputFile io.Writer, mode cli.Mode, answe
 		out:     os.Stdout,
 		plain:   !isTerminal(os.Stdout),
 		quiet:   quiet,
-		diag:    diag,
 	}
 }
 
@@ -134,11 +128,6 @@ func (r *Reporter) Result(res ssh.Result) {
 
 	// 终端明细：非传输类（命令 / 脚本 / 改密）上屏；传输类（上传 / 下载）不上屏——
 	// 那两条路有进度界面负责呈现明细。
-	// 诊断：每条结果都记（含传输类——它们不上屏，但汇总里的节点数要算全，
-	// 否则「收到结果 N 条」与「最终文本 N 个」两对数会对不上）。
-	if r.diag != nil {
-		r.diag.ResultDetail(res.Seq, res.IP, line)
-	}
 	if !r.mode.Info().Transfer {
 		r.printAbove(line)
 	}
