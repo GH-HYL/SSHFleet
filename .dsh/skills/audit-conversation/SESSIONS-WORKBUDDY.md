@@ -74,7 +74,7 @@ for ts, sid, cwd, title, uq in sorted(rows):
 PY
 ```
 
-**同一工作区会有多个会话**（每次新开一个就多一个目录、多一个 jsonl），按用户给的时间点或标题定位，**别默认取最新**。实测本机 21 个项目目录下共有 26 个会话，重名情况真实存在。
+**同一工作区会有多个会话**（一个项目目录下可能同时躺着多个 `.jsonl`），按用户给的时间点或标题定位，**别默认取最新**。不同会话的标题重名，是常有的事。
 
 ### 导出用户原话
 
@@ -98,24 +98,24 @@ for ln in open(f, encoding="utf-8", errors="replace"):
 PY
 ```
 
-**三个坑**：文件常有几 MB（本次会话记录 1.5 MB），**分段读，别一次塞进上下文**——那正好复制了本技能要防的毛病；会话进行中，**当前这一步还没落盘**，以已落盘为准；`subagents/` 下的文件不属于主会话，别混进来。
+**三个坑**：文件往往不小，**分段读，别一次塞进上下文**——那正好复制了本技能要防的毛病；会话进行中，**当前这一步还没落盘**，以已落盘为准；`subagents/` 下的文件不属于主会话，别混进来。
 
 ## 二、只有 `<user_query>` 里的内容是权威
 
 **WorkBuddy 把每轮真实输入包在 `<user_query>...</user_query>` 里，前面塞一堆注入块，全部挂在 `role: "user"` 下。**
 
-实测本会话 24 条 user message 的标签频次：
+user message 里常见的标签：
 
-| 标签 | 次数 | 是什么 |
-| --- | --- | --- |
-| `<system-reminder>` | 38 | 身份、时间、memory、沙箱提醒，系统注入 |
-| `<user_query>` | 19 | **唯一真实输入** |
-| `<current_time>` | 19 | 时间戳注入 |
-| `<memory_and_skills_reminder>` | 19 | 系统提醒 |
-| `<craft_mode>` | 14 | 模式切换通知 |
-| `<teammate-message>` | 4 | 子 agent 回报 / 团队调度 |
-| `<task-notification>` | 1 | 后台任务完成 |
-| `<user_references>`、`<attached_files>` | 2 | 附件与文件引用 |
+| 标签 | 是什么 |
+| --- | --- |
+| `<system-reminder>` | 身份、时间、memory、沙箱提醒，系统注入 |
+| `<user_query>` | **唯一真实输入** |
+| `<current_time>` | 时间戳注入 |
+| `<memory_and_skills_reminder>` | 系统提醒 |
+| `<craft_mode>` | 模式切换通知 |
+| `<teammate-message>` | 子 agent 回报 / 团队调度 |
+| `<task-notification>` | 后台任务完成 |
+| `<user_references>`、`<attached_files>` | 附件与文件引用 |
 
 **最容易误判的一类**：`<teammate-message>` 和 `<task-notification>`。它们同样以 `role: "user"` 落盘，看起来像用户在说话，但那是框架自动通知。子 agent 自己的会话（`subagents/agent-*.jsonl`）第一条 user 消息就是 `<teammate-message teammate_id="team-lead">`——那是助手派出去的活，**一律不算用户原话**。
 
@@ -137,4 +137,4 @@ for k, v in tag.most_common(): print("%-30s %d" % (k, v))
 PY
 ```
 
-**把 U1…Un 完整读一遍再动笔**，并当作引用编号。几十轮的长对话，真·原话常常只有二三十条。
+**把 U1…Un 完整读一遍再动笔**，并当作引用编号。长对话里真·原话的条数远少于消息总数。
