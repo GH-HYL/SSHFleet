@@ -14,9 +14,15 @@
 
 **只看 `delegationDepth` 为 0 的**——那才是主会话，`depth1` 以上是子 agent。同工作区同时段可能有多条，按用户给的时间点或标题定位，别默认取最新。
 
-## 二、怎么把文件读出来
+## 二、哪些行算用户原话
 
-文件是**多帧 zstd 拼接**，`zstd -dc` 只解第一帧，必须按 magic（`28 b5 2f fd`）切帧：
+**`type === "user/message"` 且 `m.data.source.kind === "user"`。** 其余都不是：`system-reminder`、`runtime-context`、`time-context`，**以及子 agent 的回报**——那些也是 `user/message` 形态，但那是助手派出去的。
+
+## 三、把原话导出来
+
+### 1. 先切帧
+
+文件是**多帧 zstd 拼接**，`zstd -dc` 只解第一帧，必须按 magic（`28 b5 2f fd`）切帧。产物落**工作区内**的 `build/`：
 
 ```bash
 mkdir -p build/review
@@ -31,11 +37,7 @@ process.stdout.write(o);
 ' "$ROOT/$T/session-<uuid>/session.v4.jsonl.zstd" > build/review/session-export.jsonl
 ```
 
-产物落**工作区内**的 `build/`。
-
-## 三、哪些行算用户原话
-
-**`type === "user/message"` 且 `m.data.source.kind === "user"`。** 其余都不是：`system-reminder`、`runtime-context`、`time-context`，**以及子 agent 的回报**——那些也是 `user/message` 形态，但那是助手派出去的。
+### 2. 再筛出用户原话
 
 ```bash
 node -e '
