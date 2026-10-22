@@ -1,7 +1,6 @@
 ---
 name: audit-retrofit
 description: 【回顾审计】任何阶段的产出，够不够格当下一步的依据。只有 ADR 时审它能不能派生工单；有议题时审规格是否忠实于 ADR；流程走完时审实现是否符合方向。主 Agent 先摸底定锚，派分发审查提示词有没有漏，再派多轴并行审，另派复核员自建框架。新开会话独立复核时用。
-disable-model-invocation: true
 ---
 
 # 回顾审计
