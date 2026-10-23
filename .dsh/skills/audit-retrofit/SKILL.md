@@ -98,8 +98,7 @@ description: 【回顾审计】一个议题从问题、决策、规格到实现�
 | 规范来源检索顺序：仓库文档 → 缺省 smell 基线                       | **它的收尾**：`## Standards` / `## Spec` 两节并列 + 一行总结。本技能收口只有回执 + 三段式                                  |
 | smell 基线十二条，以及它自带的三个约束（仓库文档压过基线、smell 一律算判断题、工具能抓的跳过） | **前台并发**：它要求两个子 agent 前台同时发。本技能的子 agent 一律后台跑                                                    |
 | diff 取点：三点 `...` 对 merge-base                                | **`Under 400 words` 上限**：回执不限字数，证据写全进文件                                                                    |
-|                                                                    | **它的 issue tracker 前置**（提示你去跑 `/setup-matt-pocock-skills`）。本仓库议题在 `docs/issues/<slug>/`                    |
-|                                                                    | **「没有 spec 就跳过 Spec 轴」**：本技能不跳——没有 spec 就纯按锚判                                                          |
+| —                                                                  | **它的两个前置**：`/setup-matt-pocock-skills` 那套 issue tracker（本仓库议题在 `docs/issues/<slug>/`）、「没有 spec 就跳过 Spec 轴」（本技能不跳，没有 spec 就纯按锚判） |
 
 子 agent 提示词里固定写这一句：**本轮只用 `/code-review` 的轴与基线，不用它的基准、收尾、字数上限与并发方式；spec 是被审对象，不是判据。**
 
