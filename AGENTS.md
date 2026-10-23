@@ -94,6 +94,10 @@ Issues、spec 和 ticket 以仓库内 `docs/issues/<feature-slug>/` 下的 markd
 
 五个标准分诊角色，标签名与角色名一致（`needs-triage`、`needs-info`、`ready-for-agent`、`ready-for-human`、`wontfix`）。详见 `docs/agents/triage-labels.md`。
 
+### Skills index
+
+**哪个环节用哪个技能，见 `docs/个人开发规范.md`「附：技能一览」**——含仓库 `.dsh/skills/` 下的审计、提问、交接类技能。
+
 ### Domain docs
 
 单上下文（single-context）：根目录 `GLOSSARY.md` + `docs/adr/`。详见 `docs/agents/domain.md`。
