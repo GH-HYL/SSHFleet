@@ -80,6 +80,28 @@ func sftpAvail(client *sftp.Client, p string, asRoot bool) (int64, bool) {
 	return availBytes(st, asRoot), true
 }
 
+// spaceShortAfterFailure 写失败之后再看一眼两侧：确实是哪一处不够，就说那一处；
+// 够就什么都不说。
+//
+// 两种结果都只影响呈现——删是必做的，探测不该改变上传结果。所以任何一侧探不出来都只是
+// 少一个解释，不是多一条失败。
+func spaceShortAfterFailure(client *sftp.Client, remotePath string, sudo bool, targetNeed, tmpNeed int64) string {
+	if avail, ok := sftpAvail(client, remotePath, sudo); ok {
+		if msg, short := judgeSpace(sideTarget, remotePath, avail, targetNeed, false); short {
+			return msg
+		}
+	}
+	if sudo {
+		probe := tmpProbePath()
+		if avail, ok := sftpAvail(client, probe, false); ok {
+			if msg, short := judgeSpace(sideTmp, probe, avail, tmpNeed, false); short {
+				return msg
+			}
+		}
+	}
+	return ""
+}
+
 // tmpProbePath 暂存目录所在的分区路径。
 //
 // 探的是暂存目录的父目录而不是它自己：tmpRoot 下每个文件才建一个随机子目录，
