@@ -1,6 +1,6 @@
 # 上传前的空间预检与「哪一侧满了」的归类 · 规格
 
-Status: 待执行（ready-for-agent）
+Status: done（2026-10-27 实施，工单 01 / 02 全部完成，随 `[12.1.0]` 发布）
 
 > 决策依据：ADR-0026（为什么用 SFTP 的 `StatVFS` 而不是跑 `df`、两侧判据为什么不同、硬比为什么不留余量）。
 > 本节只写「要做成什么样」。范围的由来：本议题原本是「摸清磁盘满在目标机上长什么样」，
@@ -141,3 +141,4 @@ mount -o remount,size=8M /tmp                        # 跑完记得 remount 回�
 - 2026-10-26：建立。作者定：传前必检、失败后再检一次、分类按两侧分开、判据硬比不留余量、目标侧按总量、暂存侧按最大单文件。
 - 2026-10-26：接缝已确认（作者：可自建临时账号在 WSL2 上测）。同日用 `pkg/sftp v1.13.11` 对 WSL2 的 OpenSSH 10.2p1 实跑，确认扩展可用、`Bfree`/`Bavail` 在满盘时差到 4.5MB vs 16KB，并把造卷配方写进 Testing Decisions。
 - 2026-10-26：拆成两条工单——`issues/01-preflight-full-check.md`（传前判满）、`issues/02-post-failure-recheck.md`（失败后再查，被 01 阻塞）。原来那张摸底工单已删：它的三件事分别由 ADR-0022、本规格与 01 的验收接走，留着只会让人照着做一遍已经不必做的事。
+- 2026-10-27：**落地收口**。工单 01、02 均完成，真机验收（WSL2 Ubuntu 26.04 / OpenSSH 10.2p1）证据写在各工单的 `## Comments` 里；`go build` / `go vet` / `go test` 全绿，`-tags integration` 整套（含回滚八场景）在真机全过。分类名与语料已接线，手册 2.3 与 CHANGELOG `[12.1.0]` 同步。本规格的 `Status` 随之由 `ready-for-agent` 改为 `done`。
