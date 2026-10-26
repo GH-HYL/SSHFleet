@@ -72,6 +72,8 @@ func precheckCredentials(rows [][]string, args *cli.Args, cfg *config.Config) (*
 
 		// 私钥内容：PEM 校验 + 内容捕获
 		if key != "" {
+			// 第 5 列（以及配置里的 credential.key）是私钥路径，不归 secret_dir 管：
+			// 原值直接交给 os，短名字就是当前目录下的那个文件。现状仍会拼一次，随工单 03 改正。
 			kpath, rerr := resolveCredentialPath(key, cfg.Credential.SecretDir)
 			if rerr != nil {
 				return nil, rerr
@@ -240,8 +242,10 @@ func (c *credCache) keyPEM(path string) (string, []string) {
 	return content, problems
 }
 
-// resolveCredentialPath 清单凭据列路径解析：「相对路径拼 secret_dir」这条规则
-// 只对清单生效（配置里的路径一律写全），secret_dir 未配置时报错给出路。
+// resolveCredentialPath 「相对名拼 secret_dir」这条规则只对**清单第 4/6 列**生效——
+// 内联清单是同一条记录，且只有打开加密时那两格才是文件路径。第 5 列与配置里的凭据字段
+// 不该经过它；secret_dir 未配置时报错给出路。
+// 现状：第 5 列仍会调它一次，随「命令行路径规范化」工单 03 改正。
 func resolveCredentialPath(raw, secretDir string) (string, error) {
 	resolved, err := credential.ResolveSecretPath(raw, secretDir)
 	if err != nil {
