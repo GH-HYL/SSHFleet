@@ -624,7 +624,8 @@ func TestParsePasswdModeDefaultsTimeout(t *testing.T) {
 // 于是别的选项出问题也提示 -u，使用者对着提示改不动自己的命令行（2026-10-15 审计实测）。
 //
 // 2026-10-15 口径收窄后，本检查只作用于两个远端参数（-u 的 -p、-d）——
-// 本地四个能验存在性，不走这条。
+// 本地四个能验存在性，不走这条。2026-10-26 起它连同「绝对 / 干净」一起收进
+// checkRemotePath，跑在合规检查阶段（解析阶段只装值，不做远端检查）。
 func TestParsePathSpaceErrorNamesCurrentFlag(t *testing.T) {
 	cfg := helpTestCfg()
 	cases := []struct {
@@ -635,7 +636,11 @@ func TestParsePathSpaceErrorNamesCurrentFlag(t *testing.T) {
 		{"-p", []string{"-f", "172.28.118.49,22,root,pw", "-u", "afile.txt", "-p", "/opt/my dir/"}},
 	}
 	for _, c := range cases {
-		_, err := Parse(cfg, "test", c.args)
+		a, perr := Parse(cfg, "test", c.args)
+		if perr != nil {
+			t.Fatalf("Parse 不该在这里报错：%v", perr)
+		}
+		err := CheckArguments(a)
 		if err == nil {
 			t.Fatalf("%s 带空格应报错，实际通过", c.flag)
 		}
@@ -648,7 +653,11 @@ func TestParsePathSpaceErrorNamesCurrentFlag(t *testing.T) {
 // 远端路径带空格的提示里不能出现**别的**选项。
 func TestParsePathSpaceErrorHasNoWrongFlag(t *testing.T) {
 	cfg := helpTestCfg()
-	_, err := Parse(cfg, "test", []string{"-f", "172.28.118.49,22,root,pw", "-d", "/var/my log", "-p", "./logs/"})
+	a, perr := Parse(cfg, "test", []string{"-f", "172.28.118.49,22,root,pw", "-d", "/var/my log", "-p", "./logs/"})
+	if perr != nil {
+		t.Fatalf("Parse 不该在这里报错：%v", perr)
+	}
+	err := CheckArguments(a)
 	if err == nil {
 		t.Fatal("-d 带空格应报错，实际通过")
 	}
@@ -797,7 +806,7 @@ func TestPathSpaceCheckKeepsRemotePaths(t *testing.T) {
 			if err == nil {
 				t.Fatal("远端路径带空格应报错，实际通过")
 			}
-			if !strings.Contains(err.Error(), "不能有空格") {
+			if !strings.Contains(err.Error(), "不能含空格或制表符") {
 				t.Fatalf("远端路径带空格应报空格，实际：%v", err)
 			}
 		})
@@ -840,5 +849,44 @@ func TestSummaryPasswdFieldBeforeDecode(t *testing.T) {
 	a := &Args{ChangePassword: "/home/hyl/secret/new_pw.txt"} // 未经 CheckArguments
 	if got := a.Summary(); !strings.Contains(got, "change_password='（未解析）'") {
 		t.Fatalf("未解析时应写明，实际：%s", got)
+	}
+}
+
+// 远端路径必须「绝对、干净」：本机解析不了它，只能按 POSIX 语义看形态。
+// 四类不像话的写法都要在参数阶段拦下，别等远端回一句看不懂的失败。
+func TestRemotePathMustBeAbsoluteAndClean(t *testing.T) {
+	dir := t.TempDir()
+	local := filepath.Join(dir, "f.txt")
+	if err := os.WriteFile(local, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cases := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"-d 相对路径", []string{"-d", "var/log", "-p", dir}, "必须是绝对路径"},
+		{"-d 连续斜杠", []string{"-d", "/var//log", "-p", dir}, "连续的 //"},
+		{"-d 含 ..", []string{"-d", "/var/log/../log", "-p", dir}, ".. 这种段"},
+		{"-d 两端空白", []string{"-d", " /var/log ", "-p", dir}, "空格"},
+		{"上传 -p 相对路径", []string{"-u", local, "-p", "opt/app/"}, "必须是绝对路径"},
+		{"上传 -p 连续斜杠", []string{"-u", local, "-p", "/opt//app/"}, "连续的 //"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			args := append([]string{"-f", "172.28.118.49,22,root,pw"}, c.args...)
+			a, err := Parse(helpTestCfg(), "test", args)
+			if err != nil {
+				t.Fatalf("Parse 不该在这里报错：%v", err)
+			}
+			cerr := CheckArguments(a)
+			if cerr == nil {
+				t.Fatalf("%s 应被拦下，实际通过", c.name)
+			}
+			if !strings.Contains(cerr.Error(), c.want) {
+				t.Fatalf("报错应含 %q，实际：%v", c.want, cerr)
+			}
+		})
 	}
 }
