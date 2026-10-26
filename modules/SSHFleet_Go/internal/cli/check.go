@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -85,8 +86,13 @@ func CheckArguments(a *Args) error {
 		if !strings.HasPrefix(a.Download, "/") {
 			return fmt.Errorf("下载模式：-d 参数指定的远程路径必须是绝对路径，当前值：%s\n提示：服务器上的路径要从 / 写起，例如 /var/log/app", a.Download)
 		}
-		if info, err := os.Stat(a.Path); err != nil || !info.IsDir() {
-			return fmt.Errorf("下载模式：-p 参数指定的本地路径必须是已存在的目录，当前值：%s\n提示：这个目录要在本机上先建好，工具不会替你建", a.Path)
+		if info, err := os.Stat(a.Path); err != nil {
+			return fmt.Errorf("下载模式：-p 参数指定的本地目录读不到：%s\n原因：%s\n提示：这个目录要在本机上先建好，工具不会替你建", a.Path, systemReason(err))
+		} else if !info.IsDir() {
+			// 不是目录时去要一句系统原文：本机自己的措辞随平台变（Windows 与 POSIX 不同），
+			// 我们不去编一句「not a directory」冒充它。
+			_, dirErr := os.ReadDir(a.Path)
+			return fmt.Errorf("下载模式：-p 参数指定的本地路径不是目录：%s\n原因：%s\n提示：这个目录要在本机上先建好，工具不会替你建", a.Path, systemReason(dirErr))
 		}
 	}
 
@@ -97,7 +103,7 @@ func CheckArguments(a *Args) error {
 		}
 		info, err := os.Lstat(a.Upload)
 		if err != nil {
-			return fmt.Errorf("-u 参数指定的上传文件或目录不存在：%s\n提示：-u 后面要写本机上真实存在的文件或目录", a.Upload)
+			return fmt.Errorf("-u 参数指定的上传文件或目录读不到：%s\n原因：%s\n提示：-u 后面要写本机上真实存在的文件或目录", a.Upload, systemReason(err))
 		}
 		if info.Mode()&os.ModeSymlink != 0 {
 			return fmt.Errorf("-u 参数指定的上传文件或目录是符号链接，不能上传：%s\n提示：请直接写它指向的真实文件或目录", a.Upload)
@@ -127,7 +133,7 @@ func CheckArguments(a *Args) error {
 		}
 		data, err := os.ReadFile(a.Script)
 		if err != nil {
-			return fmt.Errorf("-s 参数指定的脚本文件不可读：%s\n提示：请检查文件是否存在、当前用户有没有读权限", a.Script)
+			return fmt.Errorf("-s 参数指定的脚本文件读不到：%s\n原因：%s\n提示：请检查文件是否存在、当前用户有没有读权限", a.Script, systemReason(err))
 		}
 		if len(data) == 0 {
 			return fmt.Errorf("-s 参数指定的脚本文件为空：%s\n提示：请先写入内容再执行", a.Script)
@@ -163,7 +169,7 @@ func CheckArguments(a *Args) error {
 		if src.IsFile {
 			data, err := os.ReadFile(src.Path)
 			if err != nil {
-				return fmt.Errorf("-f 参数指定的 CSV 文件不可读：%s\n提示：请检查文件是否存在、当前用户有没有读权限", src.Path)
+				return fmt.Errorf("-f 参数指定的 CSV 文件读不到：%s\n原因：%s\n提示：请检查文件是否存在、当前用户有没有读权限", src.Path, systemReason(err))
 			}
 			if len(data) == 0 {
 				return fmt.Errorf("-f 参数指定的 CSV 文件为空：%s\n提示：一行写一台机器，只写 IP 就能跑（端口、用户名、密码走配置）", src.Path)
@@ -305,4 +311,21 @@ func utf8ValidExceptBOM(data []byte) bool {
 		data = data[3:]
 	}
 	return utf8.Valid(data)
+}
+
+// systemReason 取系统给的那一段原因，去掉前面重复的路径。
+//
+// 报错第一行已经点过当前值了，这里只留错因本身：`open /x/y: no such file or directory`
+// 取成 `no such file or directory`。两种形态都剥——*fs.PathError（stat / open / read）
+// 与 *os.LinkError（rename 一类）。
+func systemReason(err error) string {
+	var pe *fs.PathError
+	if errors.As(err, &pe) {
+		return pe.Err.Error()
+	}
+	var le *os.LinkError
+	if errors.As(err, &le) {
+		return le.Err.Error()
+	}
+	return err.Error()
 }

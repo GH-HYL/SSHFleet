@@ -16,7 +16,9 @@ import (
 // 检查范围随 -k 变：
 //   - 不带 -k：只查第 1–4 列
 //   - 带 -k：额外查第 5 列（私钥必须可用；清单与配置都没有私钥时报错退出）
-//   - 第 6 列永不检查：工具无法判定私钥是否加密，报了就是误报，只能靠用户自觉
+//   - 第 6 列的**内容**永不检查：工具无法判定私钥是否加密，报了就是误报，只能靠用户自觉。
+//     唯一的例外是配置缺项——那格写了相对名却没配 secret_dir 时按行报出来，因为那不是
+//     「口令对不对」的问题，而是它压根不知道该去哪个目录找。
 //
 // 同一凭据在一次预检内只读一次：清单多行常共用同一个密码文件，逐行读会重复读盘解密 N 次，
 // 并在内存里留下 N 份相同明文；命中缓存的行直接复用首次结果。
@@ -32,7 +34,9 @@ func precheckCredentials(rows [][]string, args *cli.Args, cfg *config.Config) (*
 		rc := rowCreds{}
 
 		passwordRaw := strings.TrimSpace(row[3])
-		keyRaw := strings.TrimSpace(row[4])
+		// 第 5 列**原值**直交系统：不去空白、不拼 secret_dir、不展开 ~——
+		// 照 --convert-secret 的做法，读到什么就按什么找，找不到时把系统原因报出来。
+		keyRaw := row[4]
 
 		// 私钥：写了 -k 才用密钥登录，路径取「清单第 5 列 > 配置 account.key」
 		key := ""
@@ -55,7 +59,13 @@ func precheckCredentials(rows [][]string, args *cli.Args, cfg *config.Config) (*
 
 		// 密码列：取值 + 校验
 		if passwordRaw != "" {
-			plain, problems, fatalErr := cache.password(credentialValueSpec(passwordRaw, encrypted, cfg.Credential.SecretDir), encrypted, true)
+			spec, missingDir := credentialValueSpec(passwordRaw, encrypted, cfg.Credential.SecretDir)
+			if missingDir {
+				errs = append(errs, relativeColumnError(idx, row[0], "密码", passwordRaw))
+				pre.rows[idx] = rc
+				continue
+			}
+			plain, problems, fatalErr := cache.password(spec, encrypted, true)
 			if fatalErr != nil {
 				return nil, fatalErr
 			}
@@ -73,14 +83,18 @@ func precheckCredentials(rows [][]string, args *cli.Args, cfg *config.Config) (*
 		// 私钥内容：PEM 校验 + 内容捕获
 		if key != "" {
 			// 第 5 列（以及配置里的 credential.key）是私钥路径，不归 secret_dir 管：
-			// 原值直接交给 os，短名字就是当前目录下的那个文件。现状仍会拼一次，随工单 03 改正。
-			kpath, rerr := resolveCredentialPath(key, cfg.Credential.SecretDir)
-			if rerr != nil {
-				return nil, rerr
-			}
-			keyPlain, problems := cache.keyPEM(kpath)
-			if len(problems) > 0 {
-				errs = append(errs, prefixProblems(rowPrefix(idx, row[0], "密钥"), problems)...)
+			// 原值直接交给 os，短名字就是当前目录下的那个文件。
+			keyPlain, keyCodes := cache.keyPEM(key)
+			if len(keyCodes) > 0 {
+				for _, ce := range keyCodes {
+					line := rowPrefix(idx, row[0], "密钥") + credential.CredErrorLabel(ce.Code, key, ce.Detail)
+					if ce.Code == credential.CodeMissing {
+						// 找不到时补一句去路：这一列不拼 secret_dir，写相对名就是按当前目录找，
+						// 与「配置里有个凭据目录」没有关系（ADR-0025 决定 4）。
+						line += "（提示：第 5 列不拼 secret_dir，写本机绝对路径最稳妥）"
+					}
+					errs = append(errs, line)
+				}
 				pre.rows[idx] = rc
 				continue
 			}
@@ -96,7 +110,13 @@ func precheckCredentials(rows [][]string, args *cli.Args, cfg *config.Config) (*
 			if !rc.keyFromConfig {
 				passRaw := strings.TrimSpace(row[5])
 				if passRaw != "" {
-					plain, _, fatalErr := cache.password(credentialValueSpec(passRaw, encrypted, cfg.Credential.SecretDir), encrypted, false)
+					spec, missingDir := credentialValueSpec(passRaw, encrypted, cfg.Credential.SecretDir)
+					if missingDir {
+						errs = append(errs, relativeColumnError(idx, row[0], "口令", passRaw))
+						pre.rows[idx] = rc
+						continue
+					}
+					plain, _, fatalErr := cache.password(spec, encrypted, false)
 					if fatalErr != nil {
 						return nil, fatalErr
 					}
@@ -186,15 +206,27 @@ func (p *precheckResult) unusedKeyNotice() string {
 
 // credentialValueSpec 把一个凭据位置的取值解释成读取口径：
 // 打开加密时它是文件的路径（相对路径拼 secret_dir），不加密时它就是密码 / 口令本身。
-func credentialValueSpec(raw string, encrypted bool, secretDir string) string {
+//
+// 第二个返回值表示「写的是相对名、但 secret_dir 没配」——这是**配置缺项**，不是这一行的
+// 写法问题，所以调用方要按行报出去、并把两条去路都给出来（配上 secret_dir，或那一格改写
+// 本机绝对路径）。以前这里把这种情形悄悄降级成「按原样找」，于是报出来的是一句
+// 「密码文件不存在」，看不出该去配哪儿。
+func credentialValueSpec(raw string, encrypted bool, secretDir string) (string, bool) {
 	if !encrypted {
-		return strings.TrimSpace(raw)
+		return strings.TrimSpace(raw), false
 	}
-	p, err := resolveCredentialPath(raw, secretDir)
+	p, err := credential.ResolveSecretPath(raw, secretDir)
 	if err != nil {
-		return strings.TrimSpace(raw) // 拼不了就原样交给读取层，由它按路径不存在报错
+		return "", true
 	}
-	return p
+	return p, false
+}
+
+// relativeColumnError 第 4/6 列写了相对名、但配置里没有 secret_dir 时那一行的话。
+// 行号与列名由 rowPrefix 给出；这里把 secret_dir、配置文件段落与两条去路一次说清。
+func relativeColumnError(idx int, ip, kind, raw string) string {
+	return fmt.Sprintf("%s写的是相对路径，但配置里没配 credential.secret_dir：%s（提示：在 %s 的 [credential] 段配上 secret_dir，或这一格改写本机绝对路径）",
+		rowPrefix(idx, ip, kind), raw, cli.ConfigShown)
 }
 
 // ---- 一次运行内的凭据读取去重 ----
@@ -211,6 +243,7 @@ type credCache struct {
 type credEntry struct {
 	plain    string
 	problems []string
+	codes    []credential.CredError // 私钥那支按码分支，见 keyPEM
 }
 
 func newCredCache() *credCache {
@@ -231,30 +264,16 @@ func (c *credCache) password(value string, encrypted bool, requireNonempty bool)
 	return plain, problems, nil
 }
 
-// keyPEM 私钥 PEM 文件（读盘 + 校验，带缓存）。
-func (c *credCache) keyPEM(path string) (string, []string) {
+// keyPEM 私钥 PEM 文件（读盘 + 校验，带缓存）。交出**错误码**而不是文案：
+// 调用方要按「找不到」这一种补去路，比不得文案。
+func (c *credCache) keyPEM(path string) (string, []credential.CredError) {
 	key := "pem|" + path
 	if e, ok := c.entries[key]; ok {
-		return e.plain, e.problems
+		return e.plain, e.codes
 	}
-	content, problems := credential.ReadCredentialPEM(path)
-	c.entries[key] = credEntry{plain: content, problems: problems}
-	return content, problems
-}
-
-// resolveCredentialPath 「相对名拼 secret_dir」这条规则只对**清单第 4/6 列**生效——
-// 内联清单是同一条记录，且只有打开加密时那两格才是文件路径。第 5 列与配置里的凭据字段
-// 不该经过它；secret_dir 未配置时报错给出路。
-// 现状：第 5 列仍会调它一次，随「命令行路径规范化」工单 03 改正。
-func resolveCredentialPath(raw, secretDir string) (string, error) {
-	resolved, err := credential.ResolveSecretPath(raw, secretDir)
-	if err != nil {
-		if errors.Is(err, credential.ErrRelativeNoSecretDir) {
-			return "", fmt.Errorf("凭据列包含相对路径，但 secret_dir 未配置")
-		}
-		return "", err
-	}
-	return resolved, nil
+	content, codes := credential.ReadCredentialPEMProblems(path)
+	c.entries[key] = credEntry{plain: content, codes: codes}
+	return content, codes
 }
 
 // rowPrefix 凭据问题文案的清单行前缀：行号 + IP + 列名（如「行 3 (IP: 1.2.3.4): 密码文件」）。

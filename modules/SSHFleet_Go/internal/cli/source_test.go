@@ -158,8 +158,8 @@ func TestCheckFSemicolonPairIsOneRecord(t *testing.T) {
 	if err == nil {
 		t.Fatal("既不是文件也不像一行节点信息，应报错")
 	}
-	if !strings.Contains(err.Error(), "文件不存在") {
-		t.Fatalf("应与路径打错同形（文件不存在），实际：%v", err)
+	if !strings.Contains(err.Error(), "参数指定的文件读不到") || !strings.Contains(err.Error(), "原因：") {
+		t.Fatalf("应与路径打错同形（读不到 + 系统原文），实际：%v", err)
 	}
 	if strings.Contains(err.Error(), "内联只写一条") {
 		t.Fatalf("`;;` 不该触发专门提示：%v", err)
@@ -193,6 +193,10 @@ func TestCheckFRejectsNewline(t *testing.T) {
 }
 
 // 命令行给的路径不加工：Windows 风格分隔符在 Linux 上不会被换成 `/` 后再试。
+//
+// 断言落在**报错文案里出现的是原值**上。「出错之后 FIsInline 仍为真」那种断言不成立：
+// 合规检查在 `-f` 取值失败的那一刻就返回了，FIsInline 只在成功路径上回填。
+// 钉住原值才是这条用例真正想说的话。
 func TestParseDoesNotRewriteWindowsStylePath(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Windows 的 `\\` 本来就能被系统解析，这条钉的是「不做字符串加工」")
@@ -210,11 +214,12 @@ func TestParseDoesNotRewriteWindowsStylePath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Parse 不该报错：%v", err)
 	}
-	if err := CheckArguments(a); err == nil || !strings.Contains(err.Error(), "文件不存在") {
-		t.Fatalf("应报文件不存在，实际：%v", err)
+	cerr := CheckArguments(a)
+	if cerr == nil {
+		t.Fatalf("原值在 Linux 上找不到，应报错（报不出就说明被改写成 / 之后又找到了）")
 	}
-	if a.FIsInline != true {
-		t.Fatal("原值找不到就按内联处理，不该被改写成 / 之后认成文件")
+	if !strings.Contains(cerr.Error(), winStyle) {
+		t.Fatalf("报错文案里应是原值 %q，实际：%v", winStyle, cerr)
 	}
 }
 
@@ -232,9 +237,10 @@ func TestParseDoesNotTrimPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Parse 不该报错：%v", err)
 	}
-	// 判定在合规检查阶段做：它报「文件不存在」就说明原值没被去空白后认成文件。
-	if err := CheckArguments(a); err == nil || !strings.Contains(err.Error(), "文件不存在") {
-		t.Fatalf("应报文件不存在，实际：%v", err)
+	// 判定在合规检查阶段做：它报「读不到」就把**原值**（带前导空格的那个）回显在消息里，
+	// 说明没被去空白后认成文件。
+	if err := CheckArguments(a); err == nil || !strings.Contains(err.Error(), " "+file) {
+		t.Fatalf("应报原值读不到并把原值回显出来，实际：%v", err)
 	}
 }
 
@@ -255,7 +261,7 @@ func TestSameGateForFAndA(t *testing.T) {
 			if err == nil {
 				t.Fatalf("%s %s 应报错", tc.flag, tc.raw)
 			}
-			want := tc.flag + " 参数指定的文件不存在：" + tc.raw
+			want := tc.flag + " 参数指定的文件读不到：" + tc.raw
 			if !strings.Contains(err.Error(), want) {
 				t.Fatalf("应与另一侧同形（含 %q），实际：%v", want, err)
 			}

@@ -481,7 +481,7 @@ func TestReadKeepsBackslashPath(t *testing.T) {
 	}
 }
 
-// 清单文件不存在：判定阶段先按原值问系统，报的是「文件不存在」并带上路径，
+// 清单文件不存在：判定阶段先按原值问系统，报的是「读不到」+ 系统原文 + 去路，
 // 而不是「未解析出节点」——两者病因不同，不能混成同一句。
 func TestReadFileMissing(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "nope.csv")
@@ -491,8 +491,8 @@ func TestReadFileMissing(t *testing.T) {
 		t.Fatal("清单文件不存在时应报错")
 	}
 	msg := err.Error()
-	if !strings.Contains(msg, "文件不存在") || !strings.Contains(msg, "nope.csv") {
-		t.Fatalf("应报文件不存在并带上路径，实际：%s", msg)
+	if !strings.Contains(msg, "文件读不到") || !strings.Contains(msg, "nope.csv") || !strings.Contains(msg, "\n原因：") {
+		t.Fatalf("应报读不到、带上路径与系统原文，实际：%s", msg)
 	}
 	if strings.Contains(msg, "未解析出任何有效节点") {
 		t.Fatalf("读不到与解析不出是两种病因，不该混成同一句：%s", msg)
@@ -1044,14 +1044,10 @@ func TestReadPrecheckEncryptSwitchMismatch(t *testing.T) {
 	}
 }
 
-// 清单里的相对路径拼 secret_dir，但 secret_dir 没配。
-//
-// 两列的落点不同，值得分开钉住：
-//   - 密码 / 口令列经 credentialValueSpec，「拼不了就原样交给读取层」，最后报的是「文件不存在」；
-//   - 私钥列直接调 resolveCredentialPath，拼不了就**当场**报「secret_dir 未配置」——
-//     这句才是给得出路的那句，不能只让用户看到「密钥文件不存在 → id.pem」而去猜目录配在哪。
+// 清单第 4/6 列的相对名要拼 secret_dir；第 5 列不拼。三件事分开钉住。
 func TestReadPrecheckRelativePathNeedsSecretDir(t *testing.T) {
-	// 密码列：拼不上时按原样当路径找，落到「密码文件不存在」
+	// 一、密码列写相对名、secret_dir 没配：报在**这一行**上，四样都要给全——
+	// 行号、secret_dir、配置文件段落 [credential]、两条去路。
 	args, cfg, in, _ := testRead(t, true, "-f", "10.0.0.1,22,root,pw.bin", "-c", "echo hi")
 	cfg.Credential.Encrypt = true
 	cfg.Credential.SecretDir = ""
@@ -1060,45 +1056,60 @@ func TestReadPrecheckRelativePathNeedsSecretDir(t *testing.T) {
 	if err == nil {
 		t.Fatal("相对路径且未配 secret_dir 时应报错")
 	}
-	if !strings.Contains(err.Error(), "密码文件不存在") {
-		t.Fatalf("密码列应报文件不存在，实际：%s", err)
+	for _, want := range []string{"行 1", "secret_dir", "[credential]", "改写本机绝对路径"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("报错应含 %q，实际：%s", want, err)
+		}
 	}
 
-	// 私钥列：当场报「secret_dir 未配置」，把出路说清。
-	// 密码列给一个**绝对路径**的合规密文文件，只是为了让预检走到私钥那一列——
-	// 密码列先报错会把它挡住，那样验到的还是密码列。
+	// 二、配了 secret_dir：第 4 列的相对名拼得上，能读出密码。
 	key := testKey()
 	t.Setenv("SSHFLEET_KEY", key)
-	absPw := writeSecret(t, t.TempDir(), "abs.bin", "密码", key)
-	args, cfg, in, _ = testRead(t, true, "-f", "10.0.0.1,22,root,"+absPw+",id.pem", "-c", "echo hi", "-k")
-	cfg.Credential.Encrypt = true
-	cfg.Credential.SecretDir = ""
-
-	_, err = Read(args, cfg, in)
-	if err == nil {
-		t.Fatal("私钥列为相对路径且未配 secret_dir 时应报错")
-	}
-	if !strings.Contains(err.Error(), "凭据列包含相对路径，但 secret_dir 未配置") {
-		t.Fatalf("私钥列应报 secret_dir 未配置，实际：%s", err)
-	}
-
-	// 配了 secret_dir：相对路径拼上去，文件都在，应能读通
 	dir := t.TempDir()
 	pwName := "pw.bin"
 	pemName := "id.pem"
 	writeSecret(t, dir, pwName, "拼出来的密码", key)
-	writePEM(t, dir, pemName)
+	pemPath, _ := writePEM(t, dir, pemName)
 
-	args, cfg, in, _ = testRead(t, true, "-f", "10.0.0.1,22,root,"+pwName+","+pemName, "-c", "echo hi", "-k")
+	args, cfg, in, _ = testRead(t, true, "-f", "10.0.0.1,22,root,"+pwName+","+pemPath, "-c", "echo hi", "-k")
 	cfg.Credential.Encrypt = true
 	cfg.Credential.SecretDir = dir
 
 	nodes, err := Read(args, cfg, in)
 	if err != nil {
-		t.Fatalf("配了 secret_dir 后相对路径应能拼出来：%v", err)
+		t.Fatalf("配了 secret_dir 后第 4 列相对名应能拼出来：%v", err)
 	}
 	if nodes.Items[0].Password != "拼出来的密码" {
 		t.Fatalf("相对路径应拼到 secret_dir 下，实际密码 %q", nodes.Items[0].Password)
+	}
+
+}
+
+// 第 5 列写相对名、secret_dir 目录里**真有**同名文件：仍然不拼，
+// 报的是 `id.pem` 本身（不带目录前缀），并点明列名与去路。
+func TestReadPrecheckKeyColumnNeverJoinsSecretDir(t *testing.T) {
+	key := testKey()
+	t.Setenv("SSHFLEET_KEY", key)
+	dir := t.TempDir()
+	pemName := "id.pem"
+	writePEM(t, dir, pemName)
+	absPw := writeSecret(t, t.TempDir(), "abs.bin", "密码", key)
+	args, cfg, in, _ := testRead(t, true, "-f", "10.0.0.1,22,root,"+absPw+","+pemName, "-c", "echo hi", "-k")
+	cfg.Credential.Encrypt = true
+	cfg.Credential.SecretDir = dir // 目录里确实有 id.pem，这里就是要证明它不被拼上去
+
+	_, err := Read(args, cfg, in)
+	if err == nil {
+		t.Fatal("第 5 列写相对名、当前目录没有该文件时应报错")
+	}
+	msg := err.Error()
+	for _, want := range []string{"行 1", "密钥文件", "→ " + pemName, "不拼 secret_dir"} {
+		if !strings.Contains(msg, want) {
+			t.Fatalf("第 5 列的报错应含 %q，实际：%s", want, msg)
+		}
+	}
+	if strings.Contains(msg, dir) {
+		t.Fatalf("第 5 列不该拼 secret_dir，报错里却出现了目录：%s", msg)
 	}
 }
 
@@ -1220,5 +1231,32 @@ func TestUnusedKeyNoticeThroughRead(t *testing.T) {
 	}
 	if strings.Contains(out.String(), "配了私钥，本次没加 -k") {
 		t.Fatalf("加了 -k 之后不该再提醒，实际：%q", out.String())
+	}
+}
+
+// 第 6 列（私钥口令）取不到仍不报错：本地判断不了私钥要不要口令，报了就是误报，
+// 只能交给远端那一步（既有决策，本轮不动）。
+func TestReadPrecheckKeyPassphraseMissingIsNotAnError(t *testing.T) {
+	key := testKey()
+	t.Setenv("SSHFLEET_KEY", key)
+	dir := t.TempDir()
+	pwFile := writeSecret(t, dir, "pw.bin", "密码", key)
+	pemPath, pemContent := writePEM(t, dir, "id.pem")
+
+	// 第 6 列给一个**绝对**但不存在的路径：要验的是「文件取不到不拦」，
+	// 不是「写相对名却没配 secret_dir」（那种是配置缺项，4/6 列都要报）。
+	gone := filepath.Join(dir, "nosuch.bin")
+	args, cfg, in, _ := testRead(t, true, "-f", "10.0.0.1,22,root,"+pwFile+","+pemPath+","+gone, "-c", "echo hi", "-k")
+	cfg.Credential.Encrypt = true
+
+	nodes, err := Read(args, cfg, in)
+	if err != nil {
+		t.Fatalf("第 6 列取不到口令不该拦启动：%v", err)
+	}
+	if nodes.Items[0].KeyContent != pemContent {
+		t.Fatalf("私钥应照常读到，实际 %q", nodes.Items[0].KeyContent)
+	}
+	if nodes.Items[0].KeyPassphrase != "" {
+		t.Fatalf("口令取不到就该留空，实际 %q", nodes.Items[0].KeyPassphrase)
 	}
 }

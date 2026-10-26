@@ -273,17 +273,19 @@ SKIP 用例（上面这条命令不带 `-v`，看不出 SKIP；另跑一次 `go 
 
 ---
 
-## 六、结果：改后验证（待填，判据已给）
+## 六、结果：改后验证（判据见 4.3 / 4.4）
 
-> 这一节等代码改完、作者重新提交后再跑。判据写在 4.3 / 4.4 那两张表的右列，跑法完全一样。**此刻不要填。**
+> 2026-10-26 落地后重跑。二进制 `build\win-verify\SSHFleet-new.exe`（同日同沙盒，目标机仍是 WSL2 Ubuntu 26.04 + `wbverify`）。
 
 | # | 改后实测 | 与 5.3 有无差别 | 是否满足判据 |
 | --- | --- | --- | --- |
-| D1 | | | |
-| D2 | | | |
-| D3 | | | |
-| D4 | | | |
-| D5 | | | |
+| D1 | `r='b.sh'`；`s='D:\Desktop\Code\SSHFleet\build\win-verify\scripts\a\b.sh'`（原样） | 有：`s=` 由 `D:/…/b.sh` 变回 `D:\…\b.sh` | 满足 |
+| D2 | `r='b.txt'`；`u='D:\Desktop\Code\SSHFleet\build\win-verify\scripts\a\b.txt'`；`p='/opt/'` | 有：`u=` 同上，分隔符不再被换 | 满足 |
+| D3 | `r='deploy'`；Trace `脚本后缀 "" 未配解释器`；`s=` 原样 | 无（改前也是空串，见 5.5 第 7 条） | 满足 |
+| D4 | `r='app.log'`；`d='/tmp/app.log'`；成功 1；落盘 `dl\127.0.0.1\app.log` | 无 | 满足 |
+| D5 | `r='a_b.log'`；`d='/tmp/a\b.log'`（原样）；失败 1，分类「本机写入失败」，明细原文 `a\b.log: 下载失败 - sshfleet.transfer.local_file_failed: name not usable as a local file name: a\b.log`；`dl\` 没多出文件 | 有：改前是「远程路径不存在」（`d=` 被换成 `/tmp/a/b.log` 后远端没有），改后是「本机写入失败」且文件名是整段 `a\b.log` | 满足 |
+
+> 顺手确认两条也重跑了：E1 的 `-p '\opt\app\'` 现在**被合规检查拦下**，报错回显原值 `\opt\app\`，日志里没有 `p=`（与 4.5 的判据一致）；E2 的 `d=` 是原值 `/tmp/a\b.log`。
 
 ---
 

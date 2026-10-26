@@ -9,7 +9,7 @@ package cli
 
 import (
 	"fmt"
-	"path"
+	"path/filepath"
 	"strings"
 
 	"sshfleet/internal/common"
@@ -17,8 +17,13 @@ import (
 	"sshfleet/internal/ssh"
 )
 
-// configShown 面向用户展示的配置文件路径（与 main 的 configPathShown 同形：不带 ./）。
-const configShown = "config/SSHFleet.conf"
+// ConfigShown 面向用户展示的配置文件路径（与 main 的 configPathShown 同形：不带 ./）。
+// 导出是给 nodelist 的报错用的：那边的提示要把「去哪个文件的 [credential] 段配」说清楚，
+// 路径只写在这一处。
+const ConfigShown = "config/SSHFleet.conf"
+
+// configShown 包内旧名，保持既有调用点不动。
+const configShown = ConfigShown
 
 // interpreterOf 解析本次执行用的解释器：
 //   - 脚本模式（-s）：按文件后缀查映射，命中用它；没命中回退到命令解释器
@@ -42,8 +47,12 @@ func interpreterOf(a *Args, cfg *config.Config) string {
 
 // MatchScriptInterpreter 按脚本文件名后缀查映射：命中返回 (解释器, true)。
 // 只取文件名的最后一段扩展名，比较忽略大小写（配置里的后缀键在加载时已归一为小写）。
+//
+// 后缀按**本机**规则取（`filepath.Ext`）：脚本是本地文件，Windows 上 `D:\a\b.sh` 的最后
+// 一段是 `b.sh`。用 POSIX 的 `path.Ext` 会拿整条 `D:\a\b.sh` 当最后一段——那一段里没有
+// 点就直接判成「没有后缀」，静默回退到默认解释器。
 func MatchScriptInterpreter(scriptPath string, table map[string]string) (string, bool) {
-	ext := strings.ToLower(path.Ext(scriptPath))
+	ext := strings.ToLower(filepath.Ext(scriptPath))
 	if ext == "" {
 		return "", false
 	}
@@ -61,7 +70,7 @@ func ConfirmInterpreterFallback(a *Args, cfg *config.Config, in *common.Interact
 	if _, ok := MatchScriptInterpreter(a.Script, cfg.Interpreter.Script); ok {
 		return nil
 	}
-	ext := path.Ext(a.Script)
+	ext := filepath.Ext(a.Script)
 	ok, err := in.Confirm(common.ConfirmReq{
 		Prompt: fmt.Sprintf(
 			"脚本后缀 %q 没有配置解释器\n"+
