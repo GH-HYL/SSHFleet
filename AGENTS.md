@@ -96,7 +96,7 @@ Issues、spec 和 ticket 以仓库内 `docs/issues/<feature-slug>/` 下的 markd
 
 ### Skills index
 
-**哪个环节用哪个技能，见 `docs/个人开发规范.md`「附：技能一览」**——含仓库 `.dsh/skills/` 下的审计、提问、交接类技能。
+**哪个环节用哪个技能，见 `docs/个人开发规范.md`「附：技能一览」**——表里只收执行者自己该调的；审计、交接这类由开发者自己敲，位置见 `.dsh/skills/`。
 
 ### Domain docs
 
