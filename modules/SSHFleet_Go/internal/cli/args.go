@@ -367,13 +367,7 @@ func Parse(cfg *config.Config, version string, raw []string) (*Args, error) {
 	// 其余会落到这里）② 路径含空格未加引号 ③ 参数多打或打错。
 	// 不拦的话它们被静默忽略，会造成"看起来成功、实际少传"（2026-09-14 实测）。
 	if extra := fs.Args(); len(extra) > 0 {
-		return nil, fmt.Errorf(
-			"出现多余的参数（未被使用）：%s\n常见原因：\n"+
-				"  ① 通配符被终端展开——`-u /x/abc/*` 会变成多个路径。上传目录不需要通配符，"+
-				"直接写目录本身即可（目录内容会按原有层级传过去）\n"+
-				"  ② 路径含空格但没加引号——请写成 \"路径 含 空格\"\n"+
-				"  ③ 参数打多了或打错了",
-			strings.Join(extra, " "))
+		return nil, extraArgsError(raw, extra)
 	}
 
 	// -t / -T / -n：转 int，非法留给 CheckArguments 报错
@@ -432,16 +426,14 @@ func Parse(cfg *config.Config, version string, raw []string) (*Args, error) {
 
 	// 本地路径参数：命令行给什么就是什么。
 	//
-	// **一个字节都不加工**（ADR-0025 决定 1）：不去两端空白、不换分隔符、不归一盘符、
-	// 不做路径压平。以前这里过一遍 normalizePath，于是 `-s 'a\b.sh'` 变成 `a/b.sh`——
+	// **一个字节都不加工**（ADR-0025 第零节）：不去两端空白、不换分隔符、不归一盘符、
+	// 不做 Abs、不做路径压平。以前这里过一遍 normalizePath，于是 `-s 'a\b.sh'` 变成 `a/b.sh`——
 	// 打开的不是他写的那条路径；而同样的写法给 `-f` 却报不存在。路径该由对应系统解析，
-	// 程序只负责把值原样交给它。
-	//
-	// 空格检查**不在这里**：本地路径能靠存在性验证给出准确答案（「文件不存在：X」比
-	// 「取值中间不能有空格」准得多），拿空格去拦反而把更准的报错截胡。见下面的远端检查。
+	// 程序只负责把它原样交过去。
 
-	// 远端两个值（上传的 -p、下载的 -d）的形态检查不在这里：它们与本机解析无关，
-	// 统一放在合规检查阶段（见 check.go 的 checkRemotePath），一个入口一处规矩。
+	// 远端两个值（上传的 -p、下载的 -d）也不在这里检查：那里只判「绝对」与「没有回车换行」，
+	// 两端空白顺手过滤掉，其余形态一概不判——它们是交给远端的字符串，不归本机判
+	// （见 check.go 的 checkRemotePath）。
 
 	a.Remark = defaultRemark(&a)
 	return &a, nil
@@ -456,6 +448,45 @@ func toInt(raw string) (int, bool) {
 		return 0, true
 	}
 	return v, false
+}
+
+// extraArgsError 多出来的位置参数：尽量点出它跟在哪个选项后面。
+//
+// 最常见的来源是「值里有空格但没加引号」——本地 shell 按空格切成两段，我们只收到前半段，
+// 后半段落在这里。这件事只能在本机判，而且必须早于任何 `os` 调用：`os` 拿到的永远是一段，
+// 它只会说「不存在」，看的人会以为自己路径写错。
+func extraArgsError(raw []string, extra []string) error {
+	joined := strings.Join(extra, " ")
+	head := "出现多余的参数（未被使用）：" + joined
+	if owner := splitOwner(raw, extra[0]); owner != "" {
+		head = fmt.Sprintf("%s 的值后面还有一段没法识别：%s", owner, joined)
+	}
+	return fmt.Errorf("%s\n常见原因：\n"+
+		"  ① 值里有空格但没加引号——shell 按空格把参数切成了两段\n"+
+		"  ② 通配符被终端展开（`-u /x/abc/*` 会变成多个路径；上传目录不需要通配符）\n"+
+		"  ③ 参数打多了或打错了\n"+
+		"提示：本来想写成一个值的，把整条用双引号包起来，例如 -p \"/opt/my dir/\"（bash、Git Bash、cmd、PowerShell 都认双引号）",
+		head)
+}
+
+// splitOwner 回溯第一个多余段，看它是不是紧跟在「某个选项的值」后面，返回那个选项名。
+// 只认最有把握的形态：多余段前面是一个值、值前面是一个以 `-` 开头的选项。
+func splitOwner(raw []string, first string) string {
+	pos := -1
+	for i, tok := range raw {
+		if tok == first {
+			pos = i
+			break
+		}
+	}
+	if pos < 2 {
+		return ""
+	}
+	value, flag := raw[pos-1], raw[pos-2]
+	if flag == "--" || !strings.HasPrefix(flag, "-") || strings.HasPrefix(value, "-") {
+		return ""
+	}
+	return flag
 }
 
 // defaultRemark 未指定 -r 时自动生成：命令取首词，脚本 / 上传 / 下载取路径文件名。

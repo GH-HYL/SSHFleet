@@ -71,16 +71,27 @@ func decodeCredential(content string, encrypted bool) (string, CredCode, string,
 // 返回 (明文, 问题文案列表, 致命错误)；列表空 = 通过。
 // 文案每条已含来源，调用方只需拼上自己的前缀（行号 / IP / 列名）。
 func ReadCredential(value string, encrypted bool, requireNonempty bool) (string, []string, error) {
+	return ReadCredentialRow(value, encrypted, requireNonempty, value)
+}
+
+// ReadCredentialRow 同上，但错误文案里回显 `shown` 而不是 `value`。
+//
+// 清单逐行场景专用：加密刚打开、清单第 4/6 列还写着明文密码时，那个值会被当相对名
+// 去拼 `secret_dir`，`value` 于是变成一条**把密码裹在路径里**的串；而这段文字要进
+// 终端与工具日志，日志常常要发给别人看。调用方用 `shownCredential` 决定脱不脱敏。
+func ReadCredentialRow(value string, encrypted bool, requireNonempty bool, shown string) (string, []string, error) {
 	plain, credErrs, fatalErr := readCredentialCore(value, encrypted, requireNonempty)
 	if fatalErr != nil {
 		return "", nil, fatalErr
 	}
-	return plain, credProblems(credErrs, value), nil
+	return plain, credProblems(credErrs, shown), nil
 }
 
 // readCredentialCore 结构化读取核心（包内 seam）：错误保持错误码形态，文案统一由 ReadCredential 组装。
 func readCredentialCore(value string, encrypted bool, requireNonempty bool) (string, []CredError, error) {
-	text := strings.TrimSpace(value)
+	// 值原样往下走：路径交给 `os`、密码交给解码，本程序不去首尾空白（ADR-0025 第零节）。
+	// 以前这里先 `TrimSpace` 一次，同一格的值在「判存在」与「读内容」两处口径不同。
+	text := value
 
 	if !encrypted {
 		if text == "" {

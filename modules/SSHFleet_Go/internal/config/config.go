@@ -18,6 +18,10 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
+// ShownPath 面向用户展示的配置文件路径：不带 `./`，它不是路径的一部分。
+// **只此一处定义**——报错、提示与手册要提这个文件时都指过来，别再各写一份字面量。
+const ShownPath = "config/SSHFleet.conf"
+
 // Account 登录账号。
 type Account struct {
 	Port     int    `toml:"port"`
@@ -34,7 +38,7 @@ type Credential struct {
 	KeyPassword string `toml:"key_password"`
 	// SecretDir 凭据目录，只服务内联清单与 csv 的第 4、6 列：那两列写相对名时拼到这里。
 	// 清单第 5 列（私钥）、命令行参数、配置里其余的路径都不使用它；加密关着时它没有用途，
-	// 既不参与补齐，也不该被校验。第 5 列现在仍会拼一次，随「命令行路径规范化」工单 03 改正。
+	// 既不参与补齐，也不做任何校验——那时写成什么都不该拦人。
 	SecretDir string `toml:"secret_dir"`
 }
 
@@ -401,7 +405,7 @@ func normalizeConfigPath(name, raw string) (string, error) {
 	if strings.HasPrefix(p, "~") {
 		return "", fmt.Errorf(
 			"%s 不支持 ~，当前值：%s\n"+
-				"原因：~ 只在清单里能用，配置里要写全路径\n"+
+				"原因：~ 不会被展开，写什么就按什么找\n"+
 				"提示：%s，例如 %s", name, raw, absHint, example)
 	}
 

@@ -109,13 +109,16 @@ func answerReadError(src source, err error) error {
 }
 
 // answerLineError 某一条代填不合规。行号是文本里的行号——空行与注释行照样数，
-// 报出来的号照着文本就能找到。原因另起一行：外层的报错前缀已经是「原因：」。
+// 报出来的号照着文本就能找到。
+//
+// 内层那句已经是完整的解释（缺触发词 / 触发词为空），并进「不合规」这一行：
+// `main` 的外层包装改成冒号收尾之后，另起一行没有标签，读起来像半句话。
 func answerLineError(src source, row common.CSVRow, err error) error {
 	rowText := strings.Join(row.Fields, ",")
 	if src.IsFile {
-		return fmt.Errorf("-a 参数指定的代填文件 %s 第 %d 行不合规：%s\n%v", src.Path, row.Line, rowText, err)
+		return fmt.Errorf("-a 参数指定的代填文件 %s 第 %d 行不合规：%s（%s）", src.Path, row.Line, rowText, err)
 	}
-	return fmt.Errorf("-a 的值第 %d 行不合规：%s\n%v", row.Line, rowText, err)
+	return fmt.Errorf("-a 的值第 %d 行不合规：%s（%s）", row.Line, rowText, err)
 }
 
 // answerEmptyError 一份取值里一条代填都没有：报出来，不静默跑空表。

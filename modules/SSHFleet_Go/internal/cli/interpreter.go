@@ -17,14 +17,6 @@ import (
 	"sshfleet/internal/ssh"
 )
 
-// ConfigShown 面向用户展示的配置文件路径（与 main 的 configPathShown 同形：不带 ./）。
-// 导出是给 nodelist 的报错用的：那边的提示要把「去哪个文件的 [credential] 段配」说清楚，
-// 路径只写在这一处。
-const ConfigShown = "config/SSHFleet.conf"
-
-// configShown 包内旧名，保持既有调用点不动。
-const configShown = ConfigShown
-
 // interpreterOf 解析本次执行用的解释器：
 //   - 脚本模式（-s）：按文件后缀查映射，命中用它；没命中回退到命令解释器
 //   - 命令模式（-c）：用命令解释器
@@ -76,7 +68,7 @@ func ConfirmInterpreterFallback(a *Args, cfg *config.Config, in *common.Interact
 			"脚本后缀 %q 没有配置解释器\n"+
 				"  想换别的解释器：在 %s 的 [interpreter.script] 里加一行，如 %q = \"解释器名\"\n"+
 				"  继续用 %s 作为解释器吗？",
-			ext, configShown, ext, cfg.Interpreter.Command),
+			ext, config.ShownPath, ext, cfg.Interpreter.Command),
 		DefaultYes: false,
 		Trace:      fmt.Sprintf("非交互模式（--yes）跳过确认：脚本后缀 %q 未配解释器，直接回退到 %s", ext, cfg.Interpreter.Command),
 	})
@@ -115,5 +107,5 @@ func checkAnswerInterpreter(a *Args) error {
 			"提示：请改 %s 的 [interpreter]，换成上面这些；或去掉 -a 后重跑",
 		a.Interpreter,
 		strings.Join(ssh.SupportedInterpreters(), "、"),
-		configShown)
+		config.ShownPath)
 }

@@ -351,7 +351,7 @@ func (c *Client) DownloadFiles(ctx context.Context, remotePath, localPath string
 	var costTotal float64
 	pacer := &progressPacer{}
 
-	for _, file := range files {
+	for i, file := range files {
 		select {
 		case <-ctx.Done():
 			// 同上传侧：只记结构事实，并陈述「在哪一步被中断」（见上传循环处说明）。
@@ -386,7 +386,9 @@ func (c *Client) DownloadFiles(ctx context.Context, remotePath, localPath string
 		}
 		if badName != "" {
 			// 悄悄换成 `b.log` 落盘会让人以为远端那个文件叫这名；多建一层目录更糟。
-			failed++
+			// 一个错误就全部终止：同批剩下的（含当前这个）一并计为失败，
+			// 否则 total 与「成功 + 失败」对不上，使用者分不清是被跳过了还是统计错了。
+			failed += len(files) - i
 			msg := fmt.Sprintf("%s: 下载失败 - %s", badName, Message(EnvTransfer, transferLocalFileFailed,
 				"name not usable as a local file name: "+badName))
 			lines = append(lines, msg)
@@ -398,7 +400,7 @@ func (c *Client) DownloadFiles(ctx context.Context, remotePath, localPath string
 		}
 
 		if err := os.MkdirAll(filepath.Dir(localFilePath), 0o755); err != nil {
-			failed++
+			failed += len(files) - i // 同上：剩余项一并计失败
 			msg := fmt.Sprintf("%s: 下载失败 - %s", file.relativePath, Message(EnvTransfer, transferLocalDirFailed, err.Error()))
 			lines = append(lines, msg)
 			result.Error = strPtr(msg)

@@ -110,13 +110,15 @@ func TestPasswdModeNameAndMaskedSummary(t *testing.T) {
 //
 // 确认屏与报告显示的是 NewPassword 的形态（见 confirm / output 的测试），所以「屏上看到的
 // 就是实际设进去的那个值」这件事，前提正是这里——不在这里钉住，那个断言只是拿夹具自证。
-func TestCheckPasswdChangeTrimsOuterSpace(t *testing.T) {
+// 明文新密码原样保留：它不是路径，也没有第二个事实来源，程序不该替他去首尾空白
+// （ADR-0025 第零节）。去空白会把他设的密码悄悄改掉，而屏幕上看到的还是带空格那串。
+func TestCheckPasswdChangeKeepsOuterSpace(t *testing.T) {
 	a := &Args{ChangePassword: " NewPass123 "}
 	if err := checkPasswdChange(a); err != nil {
 		t.Fatalf("明文新密码应通过：%v", err)
 	}
-	if a.NewPassword != "NewPass123" {
-		t.Fatalf("首尾空白应去掉，实际：%q", a.NewPassword)
+	if a.NewPassword != " NewPass123 " {
+		t.Fatalf("首尾空白应原样保留，实际：%q", a.NewPassword)
 	}
 }
 
