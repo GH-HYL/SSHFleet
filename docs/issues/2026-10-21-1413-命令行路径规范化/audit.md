@@ -1,6 +1,6 @@
 # Windows 侧基线：路径取名与后缀规则（2026-10-26）
 
-Status: ready-for-agent
+Status: ready-for-human
 
 **这份文件是什么**：工单 02（`issues/02-path-ownership-libs.md`）的验收在 Linux 上验不出来——`path` 与 `filepath` 的差别按 `GOOS` 在**编译期**就定了，交叉编出来的 Windows 二进制在 Ubuntu 上跑不了，`GOOS=windows go test` 只能编译不能执行。所以「验」这一步交给 Windows 环境里的一台机器（同一个仓库，经 git 同步）。
 
@@ -193,48 +193,83 @@ $here = (Get-Location).Path     # 每个新开的 PowerShell 窗口都要重设�
 
 ---
 
-## 五、结果：改前基线（待填）
+## 五、结果：改前基线
 
 ### 5.1 环境与状态
 
 | 项 | 值 |
 | --- | --- |
-| 执行日期 | |
-| 仓库 HEAD | |
-| go version | |
-| go env GOOS | |
-| `func normalizePath` 是否命中 | |
-| `filepath.Base(remotePath)` 是否命中 | |
-| 目标机 | （有无、IP） |
+| 执行日期 | 2026-10-26 |
+| 仓库 HEAD | `0da83af`（master）：`docs(命令行路径): 交接文档修四处坑，补一条给 Windows 侧的指令` |
+| go version | 仓库根目录：`go1.26.4 windows/amd64`；**模块目录内：`go1.27.0`**（`GOTOOLCHAIN=auto` 自动切到 1.27） |
+| go env GOOS | `windows` |
+| `func normalizePath` 是否命中 | 命中：`modules\SSHFleet_Go\internal\cli\args.go:507`（本文写的 `:441` 是行号漂移，同一个函数） |
+| `filepath.Base(remotePath)` 是否命中 | 命中 3 处：`internal\ssh\sftp.go:258`、`:299`、`:356` |
+| 目标机 | 有：WSL2 `Ubuntu 26.04`，经 localhostForwarding 以 `127.0.0.1:22` 访问；登录账号为**自建非 root 账号 `wbverify`**（NOPASSWD sudo）。CentOS-7 未使用 |
 
 ### 5.2 测试基线（`go test ./...` 全文）
 
 ```text
-（待填）
+?   	sshfleet	[no test files]
+?   	sshfleet/internal/batch	[no test files]
+ok  	sshfleet/internal/cli	8.471s
+ok  	sshfleet/internal/common	0.504s
+ok  	sshfleet/internal/config	8.504s
+ok  	sshfleet/internal/confirm	1.610s
+ok  	sshfleet/internal/credential	9.245s
+ok  	sshfleet/internal/dangercheck	3.799s
+?   	sshfleet/internal/log	[no test files]
+ok  	sshfleet/internal/nodelist	12.943s
+ok  	sshfleet/internal/output	12.576s
+ok  	sshfleet/internal/result	0.343s
+ok  	sshfleet/internal/ssh	0.502s
+ok  	sshfleet/internal/verdict	4.519s
 ```
+
+无 `FAIL`、无 `build failed`、无 `no such tool`，也没有 `[警告]` 类非测试行。全量退出码 0。
+
+SKIP 用例（上面这条命令不带 `-v`，看不出 SKIP；另跑一次 `go test ./... -v` 抓的）：
+
+```text
+--- SKIP: TestParseDoesNotRewriteWindowsStylePath (0.00s)
+--- SKIP: TestConvertSecretEncryptsPlainFile (0.00s)
+```
+
+`TestParseDoesNotRewriteWindowsStylePath` 是 SKIP，符合 3.3 的预期。第二条 `TestConvertSecretEncryptsPlainFile` 本文没提，同样算基线。
 
 ### 5.3 五条验收
 
-（把日志里的 `r=` 与 `s=` / `u=` 两格都抄上，别只抄备注。）
-
 | # | 命令 | 实测（日志原文 / 文件名 / 落盘结果） |
 | --- | --- | --- |
-| D1 | `-s ...\scripts\a\b.sh` | |
-| D2 | `-u ...\scripts\a\b.txt -p /opt/` | |
-| D3 | `-s ...\scripts\dir.v2\deploy` | |
-| D4 | `-d /tmp/app.log` | |
-| D5 | `-d "/tmp/a\b.log"` | |
+| D1 | `-s ...\scripts\a\b.sh` | `r='b.sh'`；`s='D:/Desktop/Code/SSHFleet/build/win-verify/scripts/a/b.sh'`；归档目录 `history\2026-10-26_19-36-06_script_b.sh`；连接 127.0.0.1:22 被拒（预期内，日志行齐备） |
+| D2 | `-u ...\scripts\a\b.txt -p /opt/` | `r='b.txt'`；`u='D:/Desktop/Code/SSHFleet/build/win-verify/scripts/a/b.txt'`；`p='/opt/'`；归档目录 `history\2026-10-26_19-36-14_upload_b.txt` |
+| D3 | `-s ...\scripts\dir.v2\deploy` | `r='deploy'`；`s='D:/Desktop/Code/SSHFleet/build/win-verify/scripts/dir.v2/deploy'`；Trace：`非交互模式（--yes）跳过确认：脚本后缀 "" 未配解释器，直接回退到 bash`，**后缀已是空串** |
+| D4 | `-d /tmp/app.log` | `r='app.log'`；`d='/tmp/app.log'`；终端「成功 1 / 失败 0」；落盘 `dl\127.0.0.1\app.log`（2 字节） |
+| D5 | `-d "/tmp/a\b.log"` | `r='b.log'`；`d='/tmp/a/b.log'`（`\` 已被换成 `/`）；终端「失败 1」、`失败分类统计 >>> 远程路径不存在 ×1`；`dl\` 里**没有多出文件**（只有 D4 那个 `127.0.0.1\app.log`） |
+
+> D4/D5 第一次（用 root 账号跑）报「远程路径不存在」是假象：进 `/tmp` 一看，19:40 造的两个文件已被 WSL 清空（发行版重启时 systemd 清 `/tmp`）。换成 `wbverify` 重建文件后重跑，上表记的是重跑结果。
 
 ### 5.4 顺手确认
 
 | # | 看哪一格 | 实测 |
 | --- | --- | --- |
-| E1 | `p=` | |
-| E2 | `d=` | |
+| E1 | `p=` | `p='/opt/app/'`。改前确实把 `\opt\app\` 换成了 `/opt/app/`，于是凑巧通过「必须用 / 开头」的合规检查——日志里有 `p=`、有「合规性检查通过」 |
+| E2 | `d=` | `d='/tmp/a/b.log'`。`\` 同样被换成了 `/` —— 4.6 第 3 点就此有答案，见 5.5 第 8 条 |
 
 ### 5.5 异常与意外
 
-（任何不对劲的地方：输出与描述对不上、报了你没预期的错、日志里出现本文没提过的行。**你觉得奇怪的地方就是我要的信息**，不要因为「不影响任务」就不写。）
+1. **工作区不干净（已按第二节上报，未清理）**：开工时 `git status --short` 有一条 `D docs/issues/2026-10-21-1413-命令行路径规范化/指令-Windows环境.txt`（未暂存）。因此构建标识带脏标记：`版本: v12.0.1+0da83af-dirty (2026-10-26 10:46:10)`。本文只提交自己，那条删除留在工作区没动。
+2. **`go version` 达不达标取决于在哪个目录敲**：仓库根目录回 `go1.26.4`，`modules\SSHFleet_Go` 内回 `go1.27.0`。`go.mod` 写 `go 1.27`，`GOTOOLCHAIN=auto` 自动下载并切到 1.27，构建与测试都正常。3.1 若在仓库根判「≥ 1.27」会误判为不达标。
+3. **B 的判据要排在 4.1 之后才成立**：裸 `.\SSHFleet.exe --help` 直接退出码 1，报 `[ERROR] [function:config] 加载配置文件失败：config/SSHFleet.conf`。程序启动第一步就读配置，`--help` 也不例外。拷完配置后才打出帮助，首行下方确实是版本行。
+4. **4.1 漏了三份规则文件**：只拷 `SSHFleet-for-windows.conf` 时，任何实跑都先死在 `[ERROR] [function:cli] 规则文件缺失：./config/keywords_dangerous.conf、./config/keywords_error.conf、./config/keywords_passwd.conf`。从 `modules\SSHFleet_Go\config\` 补拷这三份才能跑。建议把这一句补进 4.1。
+5. **归档目录名不是本文猜的「脚本」**：实际是 `2026-10-26_19-36-06_script_b.sh` / `..._upload_b.txt` / `..._script_deploy`，前缀是 `script` / `upload` 这类 ASCII 词，备注 `b.sh` 原样接在后面。路径本身没进目录名，也没看到 `_` 替换 `\` 或 `:` 的形态。
+6. **4.6 第 1 点成立**：D1/D2 改前 `r=` 已经是 `b.sh` / `b.txt`，不是整段。原因是 `normalizePath` 先把 `\` 换成 `/`，之后 `path.Base` 才切得对。工单 02 的 `Blocked by: 01` 说法确实反了：整段退化发生在「01 删掉 `normalizePath` 之后」，02 是来堵这个洞的。
+7. **4.6 第 2 点不成立，比预判更彻底**：D3 改前的后缀**已经是空串 `""`**，不是 `.v2/deploy`。取后缀用的是 `path.Ext`（`internal\cli\interpreter.go:64`），它只看最后一个 `/` 之后那一段——`deploy` 没有点，于是 `""`。这意味着 D3 在「改前」与「02 落地后」都是空串，判据两栏都满足；真正会冒出 `.v2\deploy` 的窗口是「01 已删 `normalizePath`、02 还没补」。
+8. **4.6 第 3 点有答案**：D5 改前不是「悄悄落成 `b.log`」，而是**远端文件不存在**。`-d` 的值先过 `normalizePath` 变成 `/tmp/a/b.log`（E2 的 `d=` 直接印证），目标机上没有这个路径，于是按「远程路径不存在」失败，`dl\` 不多出文件。也就是说改前 D5 与改后 D5 **表现为同一种失败**，差别只在报错与回显里的路径（改前 `/tmp/a/b.log`，改后应回显原值 `/tmp/a\b.log`）——第六节验的时候只看「失败」不够，要连报错原文一起对照。
+9. **`--help` 输出经管道会黏行**：`... (2026-10-26 10:46:10)用法:` 挤在同一行，`密钥管理选项:  模式（五选一）` 也黏着。像是用 `\r` 做整行刷新被管道吞了换行。只影响观测，不影响判据，没深查。
+10. **测试账号**：D4/D5 一开始用了 root，被作者当场纠正。root 登录会被 `effectiveSudo := useSudo && cfg.User != "root"` 这道门禁挡掉，`sudo` 路径根本没跑。后来在 Ubuntu 里自建 `wbverify`（`sudo` 组 + `/etc/sudoers.d/wbverify` NOPASSWD），配置 `sudo = true` 因此真正走了提权路径。root 密码已锁回（`passwd -l root`）。
+11. **节点用 `127.0.0.1:22`**：WSL2 的 localhostForwarding 把 Windows 侧 22 转到发行版内 22，`Test-NetConnection 127.0.0.1:22` 回 True。4.4 写「换成真值」，这里的真值就是 `127.0.0.1`。
+12. **沙盒保留了**：`build\win-verify\` 下 exe、config、scripts、dl、history、`test-baseline.txt` 全在，第六节可以直接复用（`/tmp` 的远端文件会被清，重跑前要重建）。
 
 ---
 
@@ -267,3 +302,4 @@ $here = (Get-Location).Path     # 每个新开的 PowerShell 窗口都要重设�
 ## Comments
 
 - 2026-10-26：建立。工单 02 的五条验收依赖 Windows，Ubuntu 侧只能验到「Linux 上两种切法结果一样」，故把验证环节外派到 Windows 环境，结果落本文件。同日实跑过一次 Linux 侧全量测试：11 包 ok，唯一红是 `TestParseDoesNotRewriteWindowsStylePath`（`source_test.go:217`），该条归工单 06 清理，01–04 只承诺「不新增红」。
+- 2026-10-26（Windows 侧）：改前基线已填，见第五节。全量测试 12 包 ok、2 条 SKIP、无红；D1–D5 与 E1–E2 全部实跑，目标机为 WSL2 Ubuntu 26.04（`127.0.0.1:22`），登录用自建非 root 账号 `wbverify`。三处与正文预判不符的地方记在 5.5 第 6–8 条，其中第 6 条（`Blocked by: 01` 的方向）建议在工单 02 里更正。第六节按要求留空，等代码改完再跑。
