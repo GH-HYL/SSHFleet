@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 
+	"sshfleet/internal/common"
 	"sshfleet/internal/credential"
 )
 
@@ -29,7 +30,7 @@ func checkPasswdChange(a *Args) error {
 	if a.credentialEncrypted {
 		if _, err := os.Stat(a.ChangePassword); err != nil {
 			return fmt.Errorf("--change-password 的值读不到：%s\n原因：%s\n提示：打开加密时这里写密文文件的本机绝对路径（用 --convert-secret 转出来的那个文件）",
-				a.ChangePassword, systemReason(err))
+				a.ChangePassword, common.SystemReason(err))
 		}
 	}
 	plain, problems, err := credential.ReadCredential(a.ChangePassword, a.credentialEncrypted, true)
