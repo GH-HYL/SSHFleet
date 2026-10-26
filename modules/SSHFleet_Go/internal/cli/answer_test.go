@@ -271,11 +271,14 @@ func TestCheckAnswerRejectsMissingTrigger(t *testing.T) {
 	}
 }
 
-// 不含逗号又不指向已有文件：照 -f 的同一形状判定，报「文件不存在」。
+// 不含逗号又不指向已有文件：照 -f 的同一形状判定，报「读不到」+ 系统原文 + 去路。
 func TestCheckAnswerValueWithoutCommaIsFile(t *testing.T) {
 	err := answerErr(t, "不存在的文件")
-	if err == nil || !strings.Contains(err.Error(), "文件不存在") {
-		t.Fatalf("应报文件不存在，实际：%v", err)
+	if err == nil || !strings.Contains(err.Error(), "参数指定的文件读不到") {
+		t.Fatalf("应报文件读不到，实际：%v", err)
+	}
+	if !strings.Contains(err.Error(), "\n原因：") || !strings.Contains(err.Error(), "\n提示：") {
+		t.Fatalf("三行套应齐（原因 / 提示），实际：%v", err)
 	}
 }
 

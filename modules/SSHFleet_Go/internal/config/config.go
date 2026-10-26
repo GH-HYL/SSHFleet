@@ -342,12 +342,17 @@ func definedStr(md toml.MetaData, path ...string) string {
 
 // resolveCredentialPaths 归一化配置里的路径字段。
 //
-//	secret_dir / key 恒为路径（取值不随加密开关变）
+//	secret_dir 只在打开加密时有用（那时清单第 4/6 列才可能有相对名要补），关着不校验
+//	key 恒为路径（取值不随加密开关变）
 //	password / key_password 只在打开加密时是路径；不加密时是密码 / 口令本身，原样保留
 func resolveCredentialPaths(cfg *Config) error {
 	var err error
-	if cfg.Credential.SecretDir, err = normalizeConfigPath("credential.secret_dir", cfg.Credential.SecretDir); err != nil {
-		return err
+	// secret_dir 的校验跟着加密开关走（ADR-0025 决定 4）：关着加密时它没有任何用途，
+	// 写成相对目录也不该拦人——那只是留着的旧值，不是这次的错。
+	if cfg.Credential.Encrypt {
+		if cfg.Credential.SecretDir, err = normalizeConfigPath("credential.secret_dir", cfg.Credential.SecretDir); err != nil {
+			return err
+		}
 	}
 	if cfg.Credential.Key, err = normalizeConfigPath("credential.key", cfg.Credential.Key); err != nil {
 		return err

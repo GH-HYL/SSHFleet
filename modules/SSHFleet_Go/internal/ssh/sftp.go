@@ -19,6 +19,23 @@ import (
 // tmpRoot sudo 模式下的远端临时目录根（旧实现同名，上传前会整体清理）。
 const tmpRoot = "/tmp/.SSHFleet_tmp/"
 
+// localRelUsable 远端给出的名字能不能在本机原样落盘。
+//
+// 逐段检查：`rel` 是远端枚举出来的相对路径（`sub/a.log` 这种，段间是 POSIX 的 `/`），
+// 每一段都要是**一个**可用的本机文件名——含本机分隔符（Windows 上 `a\b.log`）就不行，
+// `filepath.Base` 切完会变短；保留设备名（NUL 之类）由 IsLocal 挡。
+func localRelUsable(rel string) bool {
+	for _, elem := range strings.Split(rel, "/") {
+		if elem == "" || elem == "." || elem == ".." {
+			return false
+		}
+		if filepath.Base(elem) != elem || !filepath.IsLocal(elem) {
+			return false
+		}
+	}
+	return true
+}
+
 // UploadFiles 上传本地文件清单到远程目录（对位旧 UploadFiles）。
 // 前置：远程目标目录**必须已存在**（用户 2026-09-11 裁定 Q7：工具不建目录，错路径当场报错）。
 //
@@ -255,7 +272,8 @@ func (c *Client) DownloadFiles(ctx context.Context, remotePath, localPath string
 	rootIsLink := false
 	if lfi, lerr := sftpClient.Lstat(remotePath); lerr == nil && lfi.Mode()&os.ModeSymlink != 0 {
 		rootIsLink = true
-		symlinks = append(symlinks, filepath.Base(remotePath))
+		// 名字按**远端**规则切：这条路径是远端的，`\` 在那边只是一个普通字符
+		symlinks = append(symlinks, path.Base(remotePath))
 	}
 
 	switch {
@@ -296,7 +314,8 @@ func (c *Client) DownloadFiles(ctx context.Context, remotePath, localPath string
 		}
 
 	default:
-		files = append(files, remoteFile{relativePath: filepath.Base(remotePath), size: fi.Size()})
+		// 单文件：名字按远端规则切——`/var/log/a\b.log` 在远端是一个名叫 `a\b.log` 的文件
+		files = append(files, remoteFile{relativePath: path.Base(remotePath), size: fi.Size()})
 		totalBytes = fi.Size()
 	}
 
@@ -347,13 +366,35 @@ func (c *Client) DownloadFiles(ctx context.Context, remotePath, localPath string
 
 		fileStart := time.Now()
 
+		// 名字一律取自远端、按**远端**规则切；落到本机时用的就是这个原名，
+		// 不改名、不换目录（ADR-0025 决定 1 的收尾那条）。写不下去就按失败报。
 		var remoteFilePath, localFilePath string
+		badName := ""
 		if fi.IsDir() {
 			remoteFilePath = remotePath + "/" + file.relativePath
 			localFilePath = filepath.Join(ipDir, file.relativePath)
+			if !localRelUsable(file.relativePath) {
+				badName = file.relativePath
+			}
 		} else {
+			name := path.Base(remotePath)
+			if !localRelUsable(name) {
+				badName = name
+			}
 			remoteFilePath = remotePath
-			localFilePath = filepath.Join(ipDir, filepath.Base(remotePath))
+			localFilePath = filepath.Join(ipDir, name)
+		}
+		if badName != "" {
+			// 悄悄换成 `b.log` 落盘会让人以为远端那个文件叫这名；多建一层目录更糟。
+			failed++
+			msg := fmt.Sprintf("%s: 下载失败 - %s", badName, Message(EnvTransfer, transferLocalFileFailed,
+				"name not usable as a local file name: "+badName))
+			lines = append(lines, msg)
+			result.Error = strPtr(msg)
+			if onProgress != nil {
+				onProgress(Progress{Seq: seq, IP: c.cfg.IP, DownloadedBytes: downloadedBytes, TotalBytes: totalBytes, TotalFiles: totalFiles, SuccessFiles: success, FailedFiles: failed})
+			}
+			break
 		}
 
 		if err := os.MkdirAll(filepath.Dir(localFilePath), 0o755); err != nil {

@@ -34,7 +34,7 @@ import (
 // 版本号：单一出处（显示在帮助信息首行下方，经 cli.Parse 传入 Usage）。
 // 与 CHANGELOG 顶部当天段落的段头**同一个号**——开段、抬号时在同一次提交里同步改，
 // 两处不一致即为错误。同一天的改动共用一个号，不因改动多而另起号。
-const appVersion = "12.0.1"
+const appVersion = "12.0.2"
 
 // versionWithBuildID 版本号拼上**构建标识**：git 短提交号（仓库内编译时由 go build
 // 自动注入 vcs.revision；工作区有未提交改动时加 -dirty）+ HEAD 提交时间。
@@ -125,6 +125,16 @@ func fatal(where string, err error) {
 	os.Exit(1)
 }
 
+// wrapFatal 把内层错误并到外层那句话上：外层只占第一行，内层自己的「原因：」
+// 「提示：」原样跟在后头。
+//
+// 这么改是为了**一屏只有一个「原因：」**（ADR-0025 决定 6）。内层（本地路径读不到、
+// 配置项不合法这些）现在自带完整的「问题 / 原因 / 提示」三行，外层再套一个「原因：」
+// 就会出现两个，看的人得先分辨哪个是系统说的、哪个是工具自己加的。
+func wrapFatal(head string, err error) error {
+	return errors.New(head + "：" + strings.TrimRight(err.Error(), "\r\n"))
+}
+
 // toolLogPath 工具日志的绝对路径；日志还没建起来时返回空串。
 func toolLogPath() string {
 	if toolLog == nil {
@@ -195,7 +205,7 @@ func main() {
 	// ---- 步骤 1：加载配置 --------------------------------------------
 	cfg, err := config.Load(configPath)
 	if err != nil {
-		fatal("config", fmt.Errorf("加载配置文件失败：%s\n原因：%v", configPathShown, err))
+		fatal("config", wrapFatal(fmt.Sprintf("加载配置文件失败（%s）", configPathShown), err))
 	}
 
 	// ---- 步骤 2：初始化日志 ------------------------------------------
@@ -220,7 +230,7 @@ func main() {
 		if errors.Is(err, cli.ErrHelp) {
 			return // 帮助已打印，以 0 退出
 		}
-		fatal("cli", fmt.Errorf("选项/参数解析失败\n原因：%v", err))
+		fatal("cli", wrapFatal("选项/参数解析失败", err))
 	}
 
 	// 交互器：全工具唯一的用户交互入口（In/Out 注入 + 非交互标志）
@@ -229,7 +239,7 @@ func main() {
 	// ---- 步骤 4：工具模式分流（keygen / key-status / convert-secret）-----
 	// 独立工具与批量执行解耦，处理完直接退出，不进入后续步骤。
 	if err := cli.CheckKeyToolExclusivity(args); err != nil {
-		fatal("cli", fmt.Errorf("选项/参数合规性检查未通过\n原因：%v", err))
+		fatal("cli", wrapFatal("选项/参数合规性检查未通过", err))
 	}
 	if args.GenKey {
 		logger.Info("进入密钥管理模式（--gen-key）")
@@ -267,7 +277,7 @@ func main() {
 		fatal("cli", err)
 	}
 	if err := cli.CheckArguments(args); err != nil {
-		fatal("cli", fmt.Errorf("选项/参数合规性检查未通过\n原因：%v", err))
+		fatal("cli", wrapFatal("选项/参数合规性检查未通过", err))
 	}
 	// 解析结果落到日志：放在合规检查之后，因为 --change-password 的**新密码**要到这一步
 	// 才解出来（checkPasswdChange 读密文文件、解密、去首尾空白，填进 NewPassword）。
@@ -289,7 +299,7 @@ func main() {
 	// 危险命令检测：规则文件加载（含规则校验）+ 命中判定 + 处置
 	dangerRules, err := dangercheck.LoadRules(config.BuiltinPaths.DangerousKeywords)
 	if err != nil {
-		fatal("dangercheck", fmt.Errorf("危险关键词内容检查未通过\n原因：%v", err))
+		fatal("dangercheck", wrapFatal("危险关键词内容检查未通过", err))
 	}
 	errorKeywords, err := verdict.LoadKeywords(config.BuiltinPaths.ErrorKeywords)
 	if err != nil {
@@ -304,7 +314,7 @@ func main() {
 	prompts := passwdPromptsOf(passwdCfg)
 	dangerReport, err := dangercheck.Check(args.Command, args.Script, dangerRules)
 	if err != nil {
-		fatal("dangercheck", fmt.Errorf("危险关键词内容检查未通过\n原因：%v", err))
+		fatal("dangercheck", wrapFatal("危险关键词内容检查未通过", err))
 	}
 	dangerNote := "" // 危险命令放行留痕（spec D35/D46）：先写工具日志，归档后同样写入执行日志
 	switch {
@@ -391,7 +401,7 @@ func main() {
 	// 节点级运行明细。执行开始即轮转过去，结束后切回工具日志并在此声明去向。
 	execLog, err := log.InitExec(archive.Dir, config.BuiltinPaths.Exec)
 	if err != nil {
-		fatal("log", fmt.Errorf("创建执行期日志失败\n原因：%v", err))
+		fatal("log", wrapFatal("创建执行期日志失败", err))
 	}
 	defer func() { _ = execLog.Close() }()
 	execLogRef = execLog // 交给 fatal：批量执行阶段的致命错误也要落进本次执行的档案

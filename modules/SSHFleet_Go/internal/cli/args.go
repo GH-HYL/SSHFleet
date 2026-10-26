@@ -430,16 +430,15 @@ func Parse(cfg *config.Config, version string, raw []string) (*Args, error) {
 	// 统一在合规检查阶段做（见 check.go 的 -f 段）。值一律原样留着——命令行给的路径
 	// 交给系统解析，不换分隔符、不去空白（ADR-0023）。
 
-	// 本地路径参数：只做字符串层规范化（顺序与旧版一致）。
+	// 本地路径参数：命令行给什么就是什么。
+	//
+	// **一个字节都不加工**（ADR-0025 决定 1）：不去两端空白、不换分隔符、不归一盘符、
+	// 不做路径压平。以前这里过一遍 normalizePath，于是 `-s 'a\b.sh'` 变成 `a/b.sh`——
+	// 打开的不是他写的那条路径；而同样的写法给 `-f` 却报不存在。路径该由对应系统解析，
+	// 程序只负责把值原样交给它。
 	//
 	// 空格检查**不在这里**：本地路径能靠存在性验证给出准确答案（「文件不存在：X」比
 	// 「取值中间不能有空格」准得多），拿空格去拦反而把更准的报错截胡。见下面的远端检查。
-	for _, val := range []*string{&a.Script, &a.Upload, &a.Path, &a.Download} {
-		if *val == "" {
-			continue
-		}
-		*val = normalizePath(*val)
-	}
 
 	// 远端路径：验不了存在性，只能靠匹配拦——路径中间有空格说明引号漏了或参数打错了。
 	// 两处：上传的 -p（远端目录）、下载的 -d（远端路径）。
@@ -502,31 +501,11 @@ func pathWithoutSpace(flag, p string) error {
 		flag, p, flag, what)
 }
 
-// normalizePath 字符串层面的路径规范化（对位旧 args_normalize_path）：
-// 统一分隔符为 /、处理 . 与 ..、不增删结尾 /、Windows 盘符转大写 C:/ 形式。
-func normalizePath(p string) string {
-	p = strings.TrimSpace(p)
-	p = strings.ReplaceAll(p, "\\", "/")
-	endsSlash := strings.HasSuffix(p, "/")
-
-	if len(p) >= 2 && p[1] == ':' && isDriveLetter(p[0]) {
-		rest := strings.TrimLeft(p[2:], "/")
-		if rest == "" {
-			return strings.ToUpper(p[:1]) + ":/"
-		}
-		return strings.ToUpper(p[:1]) + ":/" + rest
-	}
-
-	cleaned := path.Clean(p)
-	if endsSlash && cleaned != "/" {
-		cleaned += "/"
-	}
-	return cleaned
-}
-
-func isDriveLetter(b byte) bool { return (b >= 'A' && b <= 'Z') || (b >= 'a' && b <= 'z') }
-
 // defaultRemark 未指定 -r 时自动生成：命令取首词，脚本 / 上传 / 下载取路径文件名。
+//
+// **取名字的那套规则跟着路径归属走**（ADR-0025 决定 2）：本地路径（`-s`、`-u`）用本机的
+// `filepath.Base`，远端路径（`-d`）用 POSIX 的 `path.Base`。用反了只在 Windows 上显形——
+// 那一边 `\` 既是分隔符又是合法文件名字符，拿 POSIX 规则切 `D:\a\b.sh` 会切出整段。
 //
 // **不截断长度**。8 字符截断是 M1 骨架时加的，那时备注只喂 history 目录名；
 // M2 把确认屏加进来、把备注也原样显示了出来，屏上于是出现「afile.txt → afile.tx」
@@ -548,10 +527,11 @@ func defaultRemark(a *Args) string {
 		}
 		return SanitizeRemark(fields[0])
 	case a.Script != "":
-		return SanitizeRemark(path.Base(a.Script))
+		return SanitizeRemark(filepath.Base(a.Script))
 	case a.Upload != "":
-		return SanitizeRemark(path.Base(a.Upload))
+		return SanitizeRemark(filepath.Base(a.Upload))
 	case a.Download != "":
+		// 远端名字按远端规则切：远端那条路径里 `\` 只是一个普通字符
 		return SanitizeRemark(path.Base(a.Download))
 	}
 	return ""

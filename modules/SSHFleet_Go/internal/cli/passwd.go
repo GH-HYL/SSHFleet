@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"sshfleet/internal/credential"
@@ -22,6 +23,14 @@ func checkPasswdChange(a *Args) error {
 	}
 	if err := checkPasswdChangeExclusive(a); err != nil {
 		return err
+	}
+	// 打开加密时这个值是密文文件的路径：读不到就先给三行套（问题 / 原因 / 提示），
+	// 原因取系统原文——只说「值有问题」，看的人得自己猜是路径写错还是文件被挪了。
+	if a.credentialEncrypted {
+		if _, err := os.Stat(a.ChangePassword); err != nil {
+			return fmt.Errorf("--change-password 的值读不到：%s\n原因：%s\n提示：打开加密时这里写密文文件的本机绝对路径（用 --convert-secret 转出来的那个文件）",
+				a.ChangePassword, systemReason(err))
+		}
 	}
 	plain, problems, err := credential.ReadCredential(a.ChangePassword, a.credentialEncrypted, true)
 	if err != nil {

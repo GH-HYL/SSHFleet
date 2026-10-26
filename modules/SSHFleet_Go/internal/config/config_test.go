@@ -1,6 +1,8 @@
 package config
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -84,5 +86,28 @@ func TestValidateInterpreter(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), c.want) {
 			t.Fatalf("%s：应含 %q，实际 %v", c.name, c.want, err)
 		}
+	}
+}
+
+// 加密关着时 secret_dir 没有用途，写成相对目录不该拦人（ADR-0025 决定 4）。
+// 用随包发布的那份模板改两行，走真正的装载入口。
+func TestLoadAllowsRelativeSecretDirWhenEncryptOff(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "config", "SSHFleet-for-linux.conf"))
+	if err != nil {
+		t.Fatalf("读模板失败：%v", err)
+	}
+	conf := strings.Replace(string(raw), `secret_dir   = "/opt/SSHFleet/keys"`, `secret_dir   = "keys"`, 1)
+	conf = strings.Replace(conf, "encrypt      = true", "encrypt      = false", 1)
+	path := filepath.Join(t.TempDir(), "SSHFleet.conf")
+	if err := os.WriteFile(path, []byte(conf), 0o644); err != nil {
+		t.Fatalf("写临时配置失败：%v", err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("加密关着、secret_dir 写相对路径时不该报错：%v", err)
+	}
+	if cfg.Credential.SecretDir != "keys" {
+		t.Fatalf("关着加密时不该加工这个值，实际 %q", cfg.Credential.SecretDir)
 	}
 }

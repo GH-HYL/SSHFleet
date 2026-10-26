@@ -97,11 +97,13 @@ func readCredentialCore(value string, encrypted bool, requireNonempty bool) (str
 	}
 
 	if _, err := os.Stat(text); err != nil {
-		return "", []CredError{{CodePathMissing, ""}}, nil
+		// 把系统说的那一句带上（`no such file or directory` / `permission denied`）：
+		// 单说「不存在」会把权限问题也说成不存在，清单行里也读不出真因（ADR-0025 决定 6）。
+		return "", []CredError{{CodePathMissing, systemReasonOf(err)}}, nil
 	}
 	content, err := os.ReadFile(text)
 	if err != nil {
-		return "", []CredError{{CodeReadError, err.Error()}}, nil
+		return "", []CredError{{CodeReadError, systemReasonOf(err)}}, nil
 	}
 	plain, code, detail, fatalErr := decodeCredential(strings.TrimSpace(string(content)), true)
 	if fatalErr != nil {
@@ -123,14 +125,23 @@ func ReadCredentialPEM(path string) (string, []string) {
 	return content, credProblems(credErrs, path)
 }
 
+// ReadCredentialPEMProblems 与 ReadCredentialPEM 同源，只是把**错误码**交出去。
+//
+// 调用方要按错因分支时（例如「文件根本不在」才补一句去路），别去比对文案——
+// 文案会改，码不会。
+func ReadCredentialPEMProblems(path string) (string, []CredError) {
+	return readCredentialPEMCore(path)
+}
+
 // readCredentialPEMCore 私钥 PEM 结构化读取核心（包内 seam）。
 func readCredentialPEMCore(path string) (string, []CredError) {
 	if _, err := os.Stat(path); err != nil {
-		return "", []CredError{{CodeMissing, ""}}
+		// 系统那一句要带上：私钥位置同样可能不是「不存在」而是权限问题（ADR-0025 决定 6）
+		return "", []CredError{{CodeMissing, systemReasonOf(err)}}
 	}
 	content, err := os.ReadFile(path)
 	if err != nil {
-		return "", []CredError{{CodeReadError, err.Error()}}
+		return "", []CredError{{CodeReadError, systemReasonOf(err)}}
 	}
 	text := strings.TrimSpace(string(content))
 	if text == "" {
@@ -140,6 +151,19 @@ func readCredentialPEMCore(path string) (string, []CredError) {
 		return "", []CredError{{CodeBadPEM, ""}}
 	}
 	return text, nil
+}
+
+// systemReasonOf 只留系统给的那一句错因，去掉前面的路径（文案里已经点过路径了）。
+func systemReasonOf(err error) string {
+	var pe *os.PathError
+	if errors.As(err, &pe) {
+		return pe.Err.Error()
+	}
+	var le *os.LinkError
+	if errors.As(err, &le) {
+		return le.Err.Error()
+	}
+	return err.Error()
 }
 
 // ---- 错误码 → 用户文案（单一事实来源，校验汇总 / 退出指引两条路径共用） ----
@@ -201,7 +225,6 @@ var ErrRelativeNoSecretDir = errors.New("相对路径但 secret_dir 未配置")
 // 打开加密时——那时那两格写的是「装了密文的文件」。清单第 5 列（私钥）、配置里的凭据字段、
 // 命令行给的路径都不经过这里：它们原值交给系统，本程序不碰（见 convert.go 的 ConvertSecret）。
 // 存在性校验由调用方负责（清单场景经 ReadCredential 的 missing 分流）。
-// 注：第 5 列与配置侧也照这条收口，见 docs/issues/2026-10-21-1413-命令行路径规范化/ 的工单 03。
 func ResolveSecretPath(raw, secretDir string) (string, error) {
 	p := expandHomeTilde(strings.TrimSpace(raw))
 	if filepath.IsAbs(p) {

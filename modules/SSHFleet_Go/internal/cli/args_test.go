@@ -701,12 +701,56 @@ func TestCheckErrorsNameTheirFlag(t *testing.T) {
 	}
 }
 
+// 命令行给的路径一个字节都不改：去空白、换分隔符、压 `..`、补结尾 `/` 这些加工全部退出
+// 解析阶段（ADR-0025 决定 1）。以前 `-s a\b.sh` 会被悄悄变成 `a/b.sh`，打开的不是写的那条路径。
+func TestParseKeepsPathValuesVerbatim(t *testing.T) {
+	cases := []struct {
+		name string
+		args []string
+		got  func(*Args) string
+		want string
+	}{
+		{"-s 反斜杠", []string{"-s", `docs/a\b.sh`, "-f", "172.28.118.49,22,root,pw"}, func(a *Args) string { return a.Script }, `docs/a\b.sh`},
+		{"-s 两端空白", []string{"-s", " a.sh ", "-f", "172.28.118.49,22,root,pw"}, func(a *Args) string { return a.Script }, " a.sh "},
+		{"-u 重复分隔符与 ..", []string{"-u", "a/../b//c/", "-p", "/opt/", "-f", "172.28.118.49,22,root,pw"}, func(a *Args) string { return a.Upload }, "a/../b//c/"},
+		{"上传 -p 反斜杠", []string{"-u", "afile.txt", "-p", `\opt\app\`, "-f", "172.28.118.49,22,root,pw"}, func(a *Args) string { return a.Path }, `\opt\app\`},
+		{"-d 反斜杠", []string{"-d", `\var\log`, "-p", ".", "-f", "172.28.118.49,22,root,pw"}, func(a *Args) string { return a.Download }, `\var\log`},
+		{"-d 里的 ..", []string{"-d", "/var/log/../log", "-p", ".", "-f", "172.28.118.49,22,root,pw"}, func(a *Args) string { return a.Download }, "/var/log/../log"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			a, err := Parse(helpTestCfg(), "test", c.args)
+			if err != nil {
+				t.Fatalf("Parse 不该报错：%v", err)
+			}
+			if got := c.got(a); got != c.want {
+				t.Fatalf("值应逐字相同：期望 %q，实际 %q", c.want, got)
+			}
+		})
+	}
+}
+
+// 上传的 -p 不以 / 开头时报错，回显的必须是**原值**（不是被改写后的形态）——
+// 这条是「程序不再替他换分隔符」最直接的证据。
+func TestUploadPathErrorEchoesRawValue(t *testing.T) {
+	a, err := Parse(helpTestCfg(), "test", []string{"-u", "afile.txt", "-p", `\opt\app\`, "-f", "172.28.118.49,22,root,pw"})
+	if err != nil {
+		t.Fatalf("Parse 不该报错：%v", err)
+	}
+	cerr := CheckArguments(a)
+	if cerr == nil {
+		t.Fatal(`-p '\\opt\\app\\' 不以 / 开头，应报错`)
+	}
+	if !strings.Contains(cerr.Error(), `\opt\app\`) {
+		t.Fatalf("报错里应回显原值 %q，实际：%v", `\opt\app\`, cerr)
+	}
+}
+
 // 空格检查只该管**远端**参数——远端验不了存在性，只能靠匹配拦。
 // 本地四个（-s / -u / -f / -d 的 -p）能验存在性，报「不存在」比报「有空格」准得多，
 // 且空格检查会把更准的报错截胡（2026-10-15 审计实测：七条真错被截）。
 func TestPathSpaceCheckSkipsLocalPaths(t *testing.T) {
 	cfg := helpTestCfg()
-
 	local := []struct {
 		name string
 		args []string
