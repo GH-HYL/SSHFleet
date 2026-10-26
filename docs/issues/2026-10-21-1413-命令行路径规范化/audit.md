@@ -31,7 +31,7 @@ Select-String -Path modules\SSHFleet_Go\internal\ssh\sftp.go  -Pattern "filepath
 
 **两条都命中 = 改前状态，继续。**
 
-命中不了 = 代码已被改过（或你在别的分支上）。**立刻停止**，把 `git log -1 --format="%h %ad %s"` 与这两条的输出写进第七节，不要往下跑——在错误的代码状态上测出来的数没有用。
+命中不了 = 代码已被改过（或你在别的分支上）。**立刻停止**，把 `git log -1 --format="%h %ad %s"` 与这两条的输出写进 5.1 与 5.5，不要往下跑——在错误的代码状态上测出来的数没有用。
 
 背景（愿意看就看）：
 
@@ -99,11 +99,13 @@ go test ./... 2>&1 | Tee-Object -FilePath ..\..\build\win-verify\test-baseline.t
 Set-Location <仓库根>\build\win-verify
 New-Item -ItemType Directory -Force config,scripts\a,scripts\dir.v2,dl | Out-Null
 Copy-Item ..\..\modules\SSHFleet_Go\config\SSHFleet-for-windows.conf config\SSHFleet.conf -Force
-"echo hello" | Set-Content -Encoding utf8 scripts\a\b.sh
-"hi"         | Set-Content -Encoding utf8 scripts\a\b.txt
-"deploy"     | Set-Content -Encoding utf8 scripts\dir.v2\deploy
-"127.0.0.1,22,root,x" | Set-Content -Encoding utf8 nodes-dummy.csv
+"echo hello" | Set-Content -Encoding ascii scripts\a\b.sh
+"hi"         | Set-Content -Encoding ascii scripts\a\b.txt
+"deploy"     | Set-Content -Encoding ascii scripts\dir.v2\deploy
+"127.0.0.1,22,root,x" | Set-Content -Encoding ascii nodes-dummy.csv
 ```
+
+> **必须用 `-Encoding ascii`，不要用 `utf8`。** Windows PowerShell 5.1 的 `utf8` 会写 BOM，BOM 进了 csv 第一列（IP 变成 `\ufeff127.0.0.1`）、进了 sh 首行（远端会报 `echo: command not found`）。这几个文件内容全是 ASCII，用 `ascii` 最省事。
 
 再改 `config\SSHFleet.conf` **两行**：`[account]` 的 `password` 填明文密码；`[credential]` 的 `encrypt = true` 改 `encrypt = false`。
 
@@ -112,6 +114,8 @@ Copy-Item ..\..\modules\SSHFleet_Go\config\SSHFleet-for-windows.conf config\SSHF
 ### 4.2 为什么看日志而不是看屏
 
 程序会把解析结果写进 `history\SSHFleetTools.log`，其中 `r='...'` 是自动备注、`s=` 脚本、`u=` 上传、`d=` 下载、`p=` 目录。`--yes` 会跳过确认屏直接去连机器——D1–D3 用连不上的 `127.0.0.1` 正好：连接失败不影响那几行日志，而那才是要看的。
+
+> **但日志不是万能的**：那一行写在「选项/参数合规性检查通过」之后（`main.go:275`）。**命令被合规检查拦下时，日志里根本没有 `r=`**，只有终端上的报错文案。所以：D1–D3 在改前都合规，走日志；E1 的改后会失败，那时只能看报错原文。
 
 ### 4.3 D1–D3：不需要目标机
 
@@ -123,25 +127,29 @@ $here = (Get-Location).Path
 .\SSHFleet.exe -f nodes-dummy.csv -s "$here\scripts\dir.v2\deploy" --yes
 ```
 
-每条跑完，抄两样：
+每条跑完，**立刻**抄这两样（别三条全跑完再抄，日志是追加的，混在一起分不清哪条是哪条）：
 
 ```powershell
-Get-ChildItem history | Sort-Object LastWriteTime | Select-Object -Last 1 -ExpandProperty Name
-Get-Content history\SSHFleetTools.log -Tail 40
+if (Test-Path history) { Get-ChildItem history | Sort-Object LastWriteTime | Select-Object -Last 1 -ExpandProperty Name }
+if (Test-Path history\SSHFleetTools.log) { Get-Content history\SSHFleetTools.log -Tail 30 }
 ```
 
-| # | 看哪一格 | 改后应该是（判据，不是现在的预期） |
-| --- | --- | --- |
-| D1 | `r='...'` 或最新 `history\` 归档目录名 | `b.sh` |
-| D2 | `r='...'` 或最新归档目录名 | `b.txt` |
-| D3 | 含「脚本后缀」的那行 Trace：`非交互模式（--yes）跳过确认：脚本后缀 "…" 未配解释器…` | 后缀是空串，即 `""` |
+| # | 看哪一格 | 顺带记一格 | 改后应该是（判据，不是现在的预期） |
+| --- | --- | --- | --- |
+| D1 | `r='...'`（自动备注） | `s='...'`（脚本路径） | `r='b.sh'`；`s=` 原样是 `D:\...\b.sh` |
+| D2 | `r='...'` | `u='...'` | `r='b.txt'`；`u=` 原样是 `D:\...\b.txt` |
+| D3 | 含「脚本后缀」的那行 Trace：`非交互模式（--yes）跳过确认：脚本后缀 "…" 未配解释器…` | `s='...'` | 后缀是空串，即 `""` |
+
+**`s=` / `u=` 这两格比备注更有说服力**：它们记的是进入后续环节的实际值。按代码推断，改前它们会是 `D:/.../b.sh`（`\` 已被换成 `/`），改后应当是 `D:\...\b.sh` 原样——这正是工单 01 要的「逐字相同」。**这是推断，以你测出来的为准。**
+
+`history\` 下的归档目录名（形如 `2026-10-26_11-02-33_脚本_b.sh`）也可以抄，但它只在执行阶段才建；连接失败时可能没有，没有就跳过。
 
 > D3 若日志里没有那行 Trace，照实报告，不要自己下结论（可能是后缀被当成已配置，或这次没走回退分支）。
 
 ### 4.4 D4–D5：要目标机
 
 ```powershell
-"IP,22,root,PASSWORD" | Set-Content -Encoding utf8 nodes.csv   # 换成真值
+"IP,22,root,PASSWORD" | Set-Content -Encoding ascii nodes.csv   # 换成真值，别留占位符
 
 .\SSHFleet.exe -f nodes.csv -d /tmp/app.log -p .\dl\ --yes
 .\SSHFleet.exe -f nodes.csv -d "/tmp/a\b.log" -p .\dl\ --yes
@@ -164,11 +172,13 @@ echo y > '/tmp/a\b.log'
 ### 4.5 E1–E2：顺手确认
 
 ```powershell
+$here = (Get-Location).Path     # 每个新开的 PowerShell 窗口都要重设一次
+
 .\SSHFleet.exe -f nodes-dummy.csv -u "$here\scripts\a\b.txt" -p '\opt\app\' --yes
 .\SSHFleet.exe -f nodes-dummy.csv -d '/tmp/a\b.log' -p .\dl\ --yes
 ```
 
-- **E1**：看 `p='...'`。若 `p='/opt/app/'`，说明改前确实把 `\` 换成了 `/`（于是凑巧通过了「必须以 / 开头」）；改后同一条应当直接报错并回显 `\opt\app\` 原值。这是工单 01 的判据。
+- **E1**：看 `p='...'`。若 `p='/opt/app/'`，说明改前确实把 `\` 换成了 `/`（于是凑巧通过了「必须以 / 开头」）；改后同一条会**被合规检查拦下，日志里没有 `p=`**，只能看终端报错——报错里应当回显 `\opt\app\` 原值。这是工单 01 的判据。
 - **E2**：看 `d='...'`。若 `d='/tmp/a/b.log'`，就回答了 4.6 第 3 点，D5 的目标机可以省掉。
 
 ### 4.6 记录纪律与三条待证推断
@@ -204,6 +214,8 @@ echo y > '/tmp/a\b.log'
 ```
 
 ### 5.3 五条验收
+
+（把日志里的 `r=` 与 `s=` / `u=` 两格都抄上，别只抄备注。）
 
 | # | 命令 | 实测（日志原文 / 文件名 / 落盘结果） |
 | --- | --- | --- |
@@ -242,15 +254,13 @@ echo y > '/tmp/a\b.log'
 
 ## 七、交付方式（靠 git 回来）
 
-1. 填完第五节（改后那一轮填第六节），把 `Status:` 改成 `ready-for-human` 并注明「改前基线已填，待作者复核」。
-2. **只 commit 本文件**：`git add docs/issues/2026-10-21-1413-命令行路径规范化/audit.md`，提交信息：
-   ```text
-   docs(命令行路径): Windows 侧改前基线实测
-
-   工单 02 的验收在 Linux 上验不出来（path/filepath 按 GOOS 在编译期定），
-   这部分交给 Windows 环境跑，结果贴在本文件第五节。
+1. 填完第五节（改后那一轮填第六节），把顶部的 `Status:` 改成 `ready-for-human`——**只写这一个标签字符串**，「改前基线已填、待作者复核」这类话记到 `## Comments` 里另起一行，别塞进 `Status:` 行（状态行只放标签，`docs/agents/triage-labels.md`）。
+2. **只 commit 本文件**。路径里有中文，PowerShell 5.1 下手打容易乱码，用通配更稳：
+   ```powershell
+   git add "docs/issues/2026-10-21-1413-*/audit.md"
+   git commit -m "docs(命令行路径): Windows 侧改前基线实测" -m "工单 02 的验收在 Linux 上验不出来（path/filepath 按 GOOS 在编译期定），这部分交给 Windows 环境跑，结果贴在本文件第五节。"
    ```
-3. `git push`。沙盒里的 txt 与 exe 都不提交（`build/` 已在 `.gitignore` 里）。
+3. `git push`。沙盒里的 txt、exe、history 都不提交（`build/` 已在 `.gitignore` 里）。提交前 `git status --short` 确认**只有 audit.md 一个文件**。
 
 ---
 
