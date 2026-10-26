@@ -68,6 +68,11 @@ func (c *Client) UploadFiles(ctx context.Context, files []LocalFile, skipped []s
 	for _, f := range files {
 		totalBytes += f.Size
 	}
+
+	// sudo 生效判断：root 用户无需 sudo（旧行为）。
+	// 挪到预检之前：空间预检要靠它决定「探不探暂存目录」与「目标侧按 root 还是普通账号算」。
+	effectiveSudo := useSudo && c.cfg.User != "root"
+
 	// 首发进度：必须在路径检查之前，便于上层立刻建立该节点进度
 	if onProgress != nil {
 		onProgress(Progress{Seq: seq, IP: c.cfg.IP, TotalBytes: totalBytes, TotalFiles: len(files)})
@@ -86,6 +91,28 @@ func (c *Client) UploadFiles(ctx context.Context, files []LocalFile, skipped []s
 		return result
 	}
 
+	// 空间预检（ADR-0026）：装不下就停在写第一个文件之前，目标机上不会有任何本次的东西。
+	//
+	// 两侧各按自己的峰值判：目标侧按本次总量（文件在目标目录里累加），暂存侧按最大单文件
+	// （sudo 路径传一个就移一个，暂存区任何时刻只压着一个）。
+	//
+	// 探测失败按侧降级：拿不到数就少那一侧的判断，另一侧照常，绝不因为探测不出来挡住上传。
+	if avail, ok := sftpAvail(sftpClient, remotePath, effectiveSudo); ok {
+		if msg, short := judgeSpace(sideTarget, remotePath, avail, totalBytes, true); short {
+			result.Error = strPtr(msg)
+			return result
+		}
+	}
+	if effectiveSudo {
+		probe := tmpProbePath()
+		if avail, ok := sftpAvail(sftpClient, probe, false); ok {
+			if msg, short := judgeSpace(sideTmp, probe, avail, maxFileSize(files), true); short {
+				result.Error = strPtr(msg)
+				return result
+			}
+		}
+	}
+
 	// 本地文件预检
 	for _, f := range files {
 		if _, err := os.Stat(f.Path); err != nil {
@@ -94,9 +121,6 @@ func (c *Client) UploadFiles(ctx context.Context, files []LocalFile, skipped []s
 			return result
 		}
 	}
-
-	// sudo 生效判断：root 用户无需 sudo（旧行为）
-	effectiveSudo := useSudo && c.cfg.User != "root"
 
 	success, failed := 0, 0
 	var uploadedBytes int64

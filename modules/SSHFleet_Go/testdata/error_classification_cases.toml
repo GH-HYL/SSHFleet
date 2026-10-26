@@ -519,3 +519,23 @@ mode = "upload"
 success_files = 0
 failed_files = 1
 expected = "上传回滚未清干净"
+
+[[cases]]
+name = "上传前判满：目标分区装不下（一个文件都没传）"
+# 预检判满也走同一条路：执行侧只写报文，分类名由判据表给。
+# 计数都是 0 —— 一个文件都没动，与「上传目标不是目录」那一档同形。
+error = "sshfleet.transfer.target_space_short: /data/app: 1 GB available, 3 GB needed; no file written"
+output = ""
+mode = "upload"
+success_files = 0
+failed_files = 0
+expected = "目标磁盘已满"
+
+[[cases]]
+name = "上传前判满：暂存目录装不下（--sudo 才有这一档）"
+error = "sshfleet.transfer.tmp_space_short: /tmp: 48 MB available, 320 MB needed; no file written"
+output = ""
+mode = "upload"
+success_files = 0
+failed_files = 0
+expected = "/tmp 空间不足"

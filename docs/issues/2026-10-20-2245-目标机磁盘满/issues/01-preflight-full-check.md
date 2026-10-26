@@ -4,7 +4,7 @@
 
 **被谁阻塞**：无，可立即开工。
 
-**状态**：待执行（ready-for-agent）
+**状态**：已完成（done）—— 2026-10-27
 
 **依据**：`../spec.md`「Implementation Decisions」；决策理由见 ADR-0026
 
@@ -22,3 +22,9 @@
 - [ ] `go build ./...`、`go vet ./...`、`go test ./...` 全绿
 
 ## Comments
+
+- 2026-10-27：**实现**。判据与报文做成一组纯函数（可用量换算、两侧硬比、人读大小），接线放在进入逐文件循环之前；探测失败按侧降级，两侧都探不到等于没有预检。`effectiveSudo` 的定义挪到预检之前——它决定目标侧按 root 还是普通账号算，也决定探不探暂存侧。
+- 2026-10-27：**配置接线**。判据表在「上传失败已回滚」之后加了「目标磁盘已满」「/tmp 空间不足」两条，keywords 写的是报文全前缀；语料补两条，`go test ./internal/verdict` 直接锁住「报文 → 分类名」。
+- 2026-10-27：**真机验收（WSL2 Ubuntu 26.04 / OpenSSH 10.2p1，账号 probe1）**。目标机上一块 64MB 的 ext4 loop 卷（可用 52MB），本地造一个 200MB 的稀疏文件传过去：统计块「目标磁盘已满」，错误详情 `sshfleet.transfer.target_space_short: /mnt/small64/w: 51 MB available, 200 MB needed; no file written`，成功/失败计数都是 0，目标机上没有新增文件。空间够的那条用例传 4KB，照常传成。两条都 `PASS`。
+- 2026-10-27：**踩到的两个坑记在这里**。① Git Bash 会把 `SSHFLEET_TEST_FULLDIR=/mnt/small64/w` 改写成 `C:/Program Files/…/mnt/small64/w`，跑真机用例要 `MSYS_NO_PATHCONV=1`；② WSL 的 loop 挂载会掉，掉了之后 `/mnt/small64` 退回成根分区，200MB 写得进去、用例「通过」但什么都没验到——所以用例里加了一道守卫：先探这块卷的可用量，装得下 200MB 就直接失败退出。
+- 2026-10-27：`go build ./...`、`go vet ./...`、`go test ./...` 全绿；版本号随本次功能抬到 12.1.0，手册 2.3 与 CHANGELOG 同步。

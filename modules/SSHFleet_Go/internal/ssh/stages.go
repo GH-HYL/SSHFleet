@@ -36,6 +36,8 @@ const (
 	transferTmpFailed         = "tmp_failed"         // sudo 路径的临时目录 / 文件
 	transferSudoFailed        = "sudo_failed"        // sudo mv 到最终位置失败
 	transferRemoteExists      = "remote_exists"      // 目标机上已有同名文件
+	transferTargetSpaceShort  = "target_space_short" // 目标目录所在分区的可用量不够
+	transferTmpSpaceShort     = "tmp_space_short"    // sudo 路径的暂存目录所在分区不够
 	transferRolledBack        = "rolled_back"        // 上传失败后，本次写进去的文件已清干净
 	transferRollbackPartial   = "rollback_partial"   // 回滚没清干净：还剩哪些路径
 	transferPartialLeft       = "partial_left"       // 写到一半的文件没删掉（上传，远端）
