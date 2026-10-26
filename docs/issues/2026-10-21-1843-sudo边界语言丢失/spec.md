@@ -52,4 +52,4 @@ Status: needs-triage
   - 「已核实的事实」第 2 条（「这段 export 过不了 sudo」）与「待定」第 2 项（推荐 `sudo env` 后置）已作废——ADR-0024 的结论是**拼接形态不变**、`export` 仍拼在 `sudo` 之前；
   - 「待定」第 3 项已定为 `C`，「待定」第 1 项（语言目标）随之为「整批稳定英文」；
   - 落点改为**三份**出厂配置模板（`SSHFleet.conf` / `SSHFleet-for-linux.conf` / `SSHFleet-for-windows.conf`），不是单份；
-  - 2026-10-22 的回顾审计记录见同目录 `audit-run-2026-10-22/report.md`，交接入口见同目录 `README.md`。
+  - 2026-10-22 的回顾审计记录见同目录 `audit-run-2026-10-22/report.md`，交接入口见同目录 `handoff.md`。
