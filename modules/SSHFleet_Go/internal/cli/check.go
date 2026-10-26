@@ -66,10 +66,12 @@ func CheckArguments(a *Args) error {
 	// -p
 	if a.Path != "" {
 		if a.Upload != "" {
-			// 上传时 -p 是**服务器上的目录**：按远端语义检查，与本机解析无关
-			if err := checkRemotePath("-p", "上传目录", a.Path); err != nil {
-				return err
+			// 上传时 -p 是**服务器上的目录**：远端值，本机只判形态（见 checkRemotePath）
+			trimmed, perr := checkRemotePath("-p", "上传目录", a.Path)
+			if perr != nil {
+				return perr
 			}
+			a.Path = trimmed // 两端空白已过滤掉，后面用的就是它
 			if !strings.HasSuffix(a.Path, "/") {
 				// 消歧义约束（ADR-0002）：断言「这是目录」，排除把 -p 当目标文件名的误读
 				return fmt.Errorf("上传模式：-p 必须是以 / 结尾的目录，当前值：%s\n提示：-p 只表示\"放到哪个目录\"，工具不会替你改文件名，所以要以 / 收尾", a.Path)
@@ -85,16 +87,17 @@ func CheckArguments(a *Args) error {
 			return fmt.Errorf("-d 参数必须搭配 -p 参数使用\n提示：-p 写文件要存到本机的哪个目录，例如 -p ./logs/")
 		}
 		// -d 恒为远端路径：同一套远端形态检查
-		if err := checkRemotePath("-d", "远程路径", a.Download); err != nil {
-			return err
+		trimmed, perr := checkRemotePath("-d", "远程路径", a.Download)
+		if perr != nil {
+			return perr
 		}
+		a.Download = trimmed // 两端空白已过滤掉
 		if info, err := os.Stat(a.Path); err != nil {
 			return fmt.Errorf("下载模式：-p 参数指定的本地目录读不到：%s\n原因：%s\n提示：这个目录要在本机上先建好，工具不会替你建", a.Path, systemReason(err))
 		} else if !info.IsDir() {
-			// 不是目录时去要一句系统原文：本机自己的措辞随平台变（Windows 与 POSIX 不同），
-			// 我们不去编一句「not a directory」冒充它。
-			_, dirErr := os.ReadDir(a.Path)
-			return fmt.Errorf("下载模式：-p 参数指定的本地路径不是目录：%s\n原因：%s\n提示：这个目录要在本机上先建好，工具不会替你建", a.Path, systemReason(dirErr))
+			// 不借系统原文：`os.ReadDir` 对普通文件在 Windows 上回的是「找不到路径」，
+			// 借来会写成「不存在」+「请先建好」，让使用者去建一个已经存在的目录。
+			return fmt.Errorf("下载模式：-p 参数指定的本地路径不是目录：%s\n提示：这个目录要在本机上先建好，工具不会替你建", a.Path)
 		}
 	}
 
@@ -307,47 +310,29 @@ func dirHasRealFile(root string) bool {
 	return found
 }
 
-// checkRemotePath 远端路径的形态检查：**不是本机解析**，远端那条路径本机解析不了。
+// checkRemotePath 远端路径的形态检查：**不是本机解析**。这条路径本机解析不了，
+// 也不该由本机判——它是一串交给远端的字符串，由远端的 shell 解释。
 //
-// 它只回答一件事——交上来的这条路径，像不像「使用者本来就想写的那条完整路径」。
-// 四种不像的情形都拦下来，让错误停在参数阶段，而不是等远端回一句看不懂的失败：
+// 只判两件，加一条兜底：
+//   - 两端空白：**过滤掉，不拦**。多半是复制粘贴带进来的，不是路径的一部分。
+//   - 不以 `/` 开头：远端拿它当相对路径解释，落点全凭登录目录。
+//   - 含 `\r` / `\n`：参数被换行打断的现场，不能放行。
 //
-//   - 不以 `/` 开头：不是绝对路径，远端拿它当相对路径解释，落点全凭登录目录；
-//   - 含空白：漏引号的唯一信号（被空格切开的半截路径也长这样）；
-//   - 含 `//`：多半是拼接时多写了一段分隔符；
-//   - 含 `.` / `..` 段：路径没写干净，远端要不要压平各家不同，不猜。
+// 中间的空格、`//`、`.`/`..` 段**一律不判**：Linux 的文件名允许空格与点，那些形态
+// 可能是使用者真要写的，也可能是本地 shell 展开出来的（`$DIR` 为空就留下 `//`、
+// Git Bash 会把 `/opt` 改写成 `C:/Program Files/Git/opt`），本机分辨不了来源。
+// 猜只会挡住合法写法，而远端本来会用自己的话报错——要错就全错。
 //
-// 这是工具自己的规矩，不是替远端解析路径——值本身一个字节都不改。
-func checkRemotePath(flag, what, p string) error {
-	reason := ""
-	hint := fmt.Sprintf("%s 收的是服务器上的%s，请检查是否漏写引号或参数拼写有误", flag, what)
-	// 空白先判：` /var/log ` 这种形态两头都有问题，先报「有空白」才指得准。
-	switch {
-	case strings.ContainsAny(p, " \t"):
-		reason = "不能含空格或制表符，当前值："
-	case !strings.HasPrefix(p, "/"):
-		reason = "必须是绝对路径，当前值："
-	case strings.Contains(p[1:], "//"):
-		reason = "不能含连续的 //，当前值："
-	case hasDotSegment(p):
-		reason = "不能含 . 或 .. 这种段，当前值："
-	default:
-		return nil
+// 返回过滤后的值，调用方**必须写回原字段**：命令行走到底用的是它。
+func checkRemotePath(flag, what, p string) (string, error) {
+	trimmed := strings.TrimSpace(p)
+	if !strings.HasPrefix(trimmed, "/") {
+		return trimmed, fmt.Errorf("%s 参数指定的%s必须是绝对路径，当前值：%s\n提示：服务器上的路径要从 / 写起，例如 /opt/app/", flag, what, trimmed)
 	}
-	if reason == "必须是绝对路径，当前值：" {
-		return fmt.Errorf("%s 参数指定的%s必须是绝对路径，当前值：%s\n提示：服务器上的路径要从 / 写起，例如 /opt/app/", flag, what, p)
+	if strings.ContainsAny(trimmed, "\r\n") {
+		return trimmed, fmt.Errorf("%s 参数指定的%s里有回车或换行：%s\n提示：一条命令只写一个路径，检查复制时是不是把换行带进来了", flag, what, trimmed)
 	}
-	return fmt.Errorf("%s 参数指定的%s不干净：%s%s\n提示：%s", flag, what, reason, p, hint)
-}
-
-// hasDotSegment 路径里是否含 `.` 或 `..` 段（按 POSIX 的 / 切分）。
-func hasDotSegment(p string) bool {
-	for _, seg := range strings.Split(p, "/") {
-		if seg == "." || seg == ".." {
-			return true
-		}
-	}
-	return false
+	return trimmed, nil
 }
 
 // utf8ValidExceptBOM 判断内容为合法 UTF-8（允许带 BOM，对位旧 check_script_file）。

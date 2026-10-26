@@ -1263,6 +1263,32 @@ func TestReadPrecheckKeyPassphraseMissingIsNotAnError(t *testing.T) {
 
 // 第 4/6 列不展开 `~`：它是字面字符，与第 5 列同口径（ADR-0025 决定 9）。
 // 报了「找不到」就说明它按字面拼过去了——真展开的话会去找主目录下的那个文件。
+// 加密刚打开、清单第 4 列还是明文密码：那个值会被当相对名去拼 secret_dir，
+// 报错于是把密码裹在路径里念出来。终端与工具日志都会留这一行，日志又常常外发，
+// 所以回显要脱敏——只留够辨认的几位（工单 08）。
+func TestReadPrecheckSecretColumnMasksRawValue(t *testing.T) {
+	key := testKey()
+	t.Setenv("SSHFLEET_KEY", key)
+	args, cfg, in, _ := testRead(t, true, "-f", "10.0.0.1,22,root,hunter2secret", "-c", "echo hi")
+	cfg.Credential.Encrypt = true
+	cfg.Credential.SecretDir = t.TempDir()
+
+	_, err := Read(args, cfg, in)
+	if err == nil {
+		t.Fatal("这一格指向的文件不存在，应报错")
+	}
+	msg := err.Error()
+	if strings.Contains(msg, "hunter2secret") {
+		t.Fatalf("报错里不该出现完整原值：%s", msg)
+	}
+	if !strings.Contains(msg, "hu****et") {
+		t.Fatalf("应留脱敏形态（前 2 位 + **** + 后 2 位），实际：%s", msg)
+	}
+	if !strings.Contains(msg, "行 1") || !strings.Contains(msg, "密码") {
+		t.Fatalf("行号与列名仍要点出来，实际：%s", msg)
+	}
+}
+
 func TestReadPrecheckSecretColumnKeepsTildeLiteral(t *testing.T) {
 	key := testKey()
 	t.Setenv("SSHFLEET_KEY", key)

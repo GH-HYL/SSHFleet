@@ -619,53 +619,91 @@ func TestParsePasswdModeDefaultsTimeout(t *testing.T) {
 	}
 }
 
-// 远端路径带空格：文案必须点名**当前这个选项**。
-// 此前 pathWithoutSpace 被多个选项共用，文案里没有选项名、举例写死 -u，
-// 于是别的选项出问题也提示 -u，使用者对着提示改不动自己的命令行（2026-10-15 审计实测）。
-//
-// 2026-10-15 口径收窄后，本检查只作用于两个远端参数（-u 的 -p、-d）——
-// 本地四个能验存在性，不走这条。2026-10-26 起它连同「绝对 / 干净」一起收进
-// checkRemotePath，跑在合规检查阶段（解析阶段只装值，不做远端检查）。
-func TestParsePathSpaceErrorNamesCurrentFlag(t *testing.T) {
-	cfg := helpTestCfg()
+// 远端路径里的空格**不再拦**：Linux 的文件名允许空格与括号，拦它等于替使用者
+// 判他的目标路径（ADR-0025 更新记录 2026-10-26）。值原样交给远端，远端不认它自己会报。
+func TestRemotePathSpaceIsPassedThrough(t *testing.T) {
+	dir := t.TempDir()
+	local := filepath.Join(dir, "f.txt")
+	if err := os.WriteFile(local, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
 	cases := []struct {
-		flag string
-		args []string
+		name  string
+		args  []string
+		field func(*Args) string
+		want  string
 	}{
-		{"-d", []string{"-f", "172.28.118.49,22,root,pw", "-d", "/var/my log", "-p", "./logs/"}},
-		{"-p", []string{"-f", "172.28.118.49,22,root,pw", "-u", "afile.txt", "-p", "/opt/my dir/"}},
+		{"-d 中间带空格", []string{"-d", "/var/my log", "-p", dir}, func(a *Args) string { return a.Download }, "/var/my log"},
+		{"上传 -p 中间带空格", []string{"-u", local, "-p", "/opt/my dir/"}, func(a *Args) string { return a.Path }, "/opt/my dir/"},
 	}
 	for _, c := range cases {
-		a, perr := Parse(cfg, "test", c.args)
-		if perr != nil {
-			t.Fatalf("Parse 不该在这里报错：%v", perr)
-		}
-		err := CheckArguments(a)
-		if err == nil {
-			t.Fatalf("%s 带空格应报错，实际通过", c.flag)
-		}
-		if !strings.Contains(err.Error(), c.flag) {
-			t.Fatalf("%s 带空格的报错应点名 %s，实际：%v", c.flag, c.flag, err)
-		}
+		t.Run(c.name, func(t *testing.T) {
+			args := append([]string{"-f", "172.28.118.49,22,root,pw"}, c.args...)
+			a, err := Parse(helpTestCfg(), "test", args)
+			if err != nil {
+				t.Fatalf("Parse 不该报错：%v", err)
+			}
+			if err := CheckArguments(a); err != nil {
+				t.Fatalf("空格不该被拦：%v", err)
+			}
+			if got := c.field(a); got != c.want {
+				t.Fatalf("值应逐字保留：期望 %q，实际 %q", c.want, got)
+			}
+		})
 	}
 }
 
-// 远端路径带空格的提示里不能出现**别的**选项。
-func TestParsePathSpaceErrorHasNoWrongFlag(t *testing.T) {
-	cfg := helpTestCfg()
-	a, perr := Parse(cfg, "test", []string{"-f", "172.28.118.49,22,root,pw", "-d", "/var/my log", "-p", "./logs/"})
+// 两端空白过滤掉：那是复制粘贴带进来的，不是路径的一部分，也不该成为一条错误。
+func TestRemotePathOuterSpaceIsTrimmed(t *testing.T) {
+	dir := t.TempDir()
+	a, perr := Parse(helpTestCfg(), "test", []string{"-f", "172.28.118.49,22,root,pw", "-d", " /var/log ", "-p", dir})
 	if perr != nil {
-		t.Fatalf("Parse 不该在这里报错：%v", perr)
+		t.Fatalf("Parse 不该报错：%v", perr)
 	}
-	err := CheckArguments(a)
-	if err == nil {
-		t.Fatal("-d 带空格应报错，实际通过")
+	if err := CheckArguments(a); err != nil {
+		t.Fatalf("两端空白应被过滤掉、不该报错：%v", err)
 	}
-	msg := err.Error()
-	for _, other := range []string{"-s", "-u", "-f"} {
-		if strings.Contains(msg, other) {
-			t.Fatalf("-d 的报错不该出现别的选项 %s，实际：%v", other, err)
-		}
+	if a.Download != "/var/log" {
+		t.Fatalf("两端空白应去掉，实际 %q", a.Download)
+	}
+}
+
+// 值被 shell 按空格切开时，报错要点出是**哪个选项**的值断在这里（工单 09）。
+// 这一句必须早于任何 `os` 调用：`os` 只拿到前半段，它只会说「不存在」。
+func TestExtraArgsAttributesSplitValue(t *testing.T) {
+	dir := t.TempDir()
+	cases := []struct {
+		name  string
+		args  []string
+		owner string
+	}{
+		{"-p 的值被空格切开", []string{"-u", "afile.txt", "-p", "/opt/my", "dir/"}, "-p"},
+		{"-d 的值被空格切开", []string{"-d", "/var/my", "log", "-p", dir}, "-d"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			args := append([]string{"-f", "172.28.118.49,22,root,pw"}, c.args...)
+			_, err := Parse(helpTestCfg(), "test", args)
+			if err == nil {
+				t.Fatal("多出参数应报错")
+			}
+			msg := err.Error()
+			if !strings.Contains(msg, c.owner) || !strings.Contains(msg, "没法识别") {
+				t.Fatalf("应点出 %s 且说明多出一段，实际：%v", c.owner, err)
+			}
+			if !strings.Contains(msg, "双引号") {
+				t.Fatalf("应给双引号写法，实际：%v", err)
+			}
+		})
+	}
+}
+
+// 回溯不出归属时照样报，只是不点名选项——不能因为说不清就放过。
+func TestExtraArgsWithoutOwnerStillReports(t *testing.T) {
+	_, err := Parse(helpTestCfg(), "test", []string{"stray"})
+	if err == nil || !strings.Contains(err.Error(), "出现多余的参数") {
+		t.Fatalf("应报多余参数，实际：%v", err)
 	}
 }
 
@@ -755,59 +793,28 @@ func TestUploadPathErrorEchoesRawValue(t *testing.T) {
 	}
 }
 
-// 空格检查只该管**远端**参数——远端验不了存在性，只能靠匹配拦。
-// 本地四个（-s / -u / -f / -d 的 -p）能验存在性，报「不存在」比报「有空格」准得多，
-// 且空格检查会把更准的报错截胡（2026-10-15 审计实测：七条真错被截）。
-func TestPathSpaceCheckSkipsLocalPaths(t *testing.T) {
-	cfg := helpTestCfg()
-	local := []struct {
+// 远端值里的回车换行仍要拦：那不是「路径里的一个字符」，是参数被换行打断的现场。
+// 交出去远端只会回一句看不懂的失败，本机这一句还指得准。
+func TestRemotePathRejectsControlChars(t *testing.T) {
+	dir := t.TempDir()
+	cases := []struct {
 		name string
 		args []string
+		want string
 	}{
-		{"-s 带空格的命令", []string{"-f", "172.28.118.49,22,root,pw", "-s", "cat /etc/os-release"}},
-		{"-u 带空格的值", []string{"-f", "172.28.118.49,22,root,pw", "-u", "my file.txt", "-p", "/opt/"}},
-		{"-f 带空格的路径", []string{"-f", "my list.csv", "-c", "uptime"}},
-		{"-d 的本地 -p 带空格", []string{"-f", "172.28.118.49,22,root,pw", "-d", "/var/log", "-p", "./my dir/"}},
+		{"-d 中间有换行", []string{"-d", "/var/log\napp", "-p", dir}, "回车或换行"},
+		{"上传 -p 中间有回车", []string{"-u", "x.txt", "-p", "/opt/app/\r/"}, "回车或换行"},
 	}
-	for _, c := range local {
+	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			a, err := Parse(cfg, "test", c.args)
-			if err != nil {
-				// 解析阶段就不该拿空格拦本地路径
-				if strings.Contains(err.Error(), "不能有空格") {
-					t.Fatalf("本地路径不该被空格检查拦下：%v", err)
-				}
-				return // 别的原因报错不管——本条只测空格检查
+			args := append([]string{"-f", "172.28.118.49,22,root,pw"}, c.args...)
+			a, perr := Parse(helpTestCfg(), "test", args)
+			if perr != nil {
+				t.Fatalf("Parse 不该报错：%v", perr)
 			}
-			if err := CheckArguments(a); err != nil && strings.Contains(err.Error(), "不能有空格") {
-				t.Fatalf("本地路径不该被空格检查拦下：%v", err)
-			}
-		})
-	}
-}
-
-// 远端两个参数必须保留空格检查：它们验不了存在性，「路径带空格」是唯一能拦的信号。
-func TestPathSpaceCheckKeepsRemotePaths(t *testing.T) {
-	cfg := helpTestCfg()
-
-	remote := []struct {
-		name string
-		args []string
-	}{
-		{"-u 的远端 -p 带空格", []string{"-f", "172.28.118.49,22,root,pw", "-u", "afile.txt", "-p", "/opt/my dir/"}},
-		{"-d 的远端值带空格", []string{"-f", "172.28.118.49,22,root,pw", "-d", "/var/my log", "-p", "./logs/"}},
-	}
-	for _, c := range remote {
-		t.Run(c.name, func(t *testing.T) {
-			a, err := Parse(cfg, "test", c.args)
-			if err == nil {
-				err = CheckArguments(a)
-			}
-			if err == nil {
-				t.Fatal("远端路径带空格应报错，实际通过")
-			}
-			if !strings.Contains(err.Error(), "不能含空格或制表符") {
-				t.Fatalf("远端路径带空格应报空格，实际：%v", err)
+			cerr := CheckArguments(a)
+			if cerr == nil || !strings.Contains(cerr.Error(), c.want) {
+				t.Fatalf("应报 %s，实际：%v", c.want, cerr)
 			}
 		})
 	}
@@ -852,9 +859,9 @@ func TestSummaryPasswdFieldBeforeDecode(t *testing.T) {
 	}
 }
 
-// 远端路径必须「绝对、干净」：本机解析不了它，只能按 POSIX 语义看形态。
-// 四类不像话的写法都要在参数阶段拦下，别等远端回一句看不懂的失败。
-func TestRemotePathMustBeAbsoluteAndClean(t *testing.T) {
+// 远端路径必须是绝对路径：远端拿相对路径当「登录目录下的那个」，落点全凭运气。
+// 这是本机对远端值唯一还判的一条（另加「没有回车换行」），其余形态一概不判。
+func TestRemotePathMustBeAbsolute(t *testing.T) {
 	dir := t.TempDir()
 	local := filepath.Join(dir, "f.txt")
 	if err := os.WriteFile(local, []byte("x"), 0o644); err != nil {
@@ -867,11 +874,7 @@ func TestRemotePathMustBeAbsoluteAndClean(t *testing.T) {
 		want string
 	}{
 		{"-d 相对路径", []string{"-d", "var/log", "-p", dir}, "必须是绝对路径"},
-		{"-d 连续斜杠", []string{"-d", "/var//log", "-p", dir}, "连续的 //"},
-		{"-d 含 ..", []string{"-d", "/var/log/../log", "-p", dir}, ".. 这种段"},
-		{"-d 两端空白", []string{"-d", " /var/log ", "-p", dir}, "空格"},
 		{"上传 -p 相对路径", []string{"-u", local, "-p", "opt/app/"}, "必须是绝对路径"},
-		{"上传 -p 连续斜杠", []string{"-u", local, "-p", "/opt//app/"}, "连续的 //"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

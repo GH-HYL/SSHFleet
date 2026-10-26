@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"sshfleet/internal/cli"
+	"sshfleet/internal/common"
 	"sshfleet/internal/config"
 	"sshfleet/internal/credential"
 )
@@ -65,7 +66,7 @@ func precheckCredentials(rows [][]string, args *cli.Args, cfg *config.Config) (*
 				pre.rows[idx] = rc
 				continue
 			}
-			plain, problems, fatalErr := cache.password(spec, encrypted, true)
+			plain, problems, fatalErr := cache.password(spec, encrypted, true, shownCredential(passwordRaw))
 			if fatalErr != nil {
 				return nil, fatalErr
 			}
@@ -116,7 +117,7 @@ func precheckCredentials(rows [][]string, args *cli.Args, cfg *config.Config) (*
 						pre.rows[idx] = rc
 						continue
 					}
-					plain, _, fatalErr := cache.password(spec, encrypted, false)
+					plain, _, fatalErr := cache.password(spec, encrypted, false, shownCredential(passRaw))
 					if fatalErr != nil {
 						return nil, fatalErr
 					}
@@ -132,7 +133,7 @@ func precheckCredentials(rows [][]string, args *cli.Args, cfg *config.Config) (*
 		if cfg.Account.Password == "" {
 			errs = append(errs, "密码列有空值，但 config 未配置默认密码(account.password)")
 		} else {
-			plain, problems, fatalErr := cache.password(cfg.Account.Password, encrypted, true)
+			plain, problems, fatalErr := cache.password(cfg.Account.Password, encrypted, true, cfg.Account.Password)
 			if fatalErr != nil {
 				return nil, fatalErr
 			}
@@ -145,7 +146,7 @@ func precheckCredentials(rows [][]string, args *cli.Args, cfg *config.Config) (*
 
 	// 配置私钥口令：只配给「私钥取自配置」的节点；无此类节点则不取值
 	if pre.anyNodeUsesConfigKey && cfg.Credential.KeyPassword != "" {
-		plain, problems, fatalErr := cache.password(cfg.Credential.KeyPassword, encrypted, true)
+		plain, problems, fatalErr := cache.password(cfg.Credential.KeyPassword, encrypted, true, cfg.Credential.KeyPassword)
 		if fatalErr != nil {
 			return nil, fatalErr
 		}
@@ -226,7 +227,16 @@ func credentialValueSpec(raw string, encrypted bool, secretDir string) (string, 
 // 行号与列名由 rowPrefix 给出；这里把 secret_dir、配置文件段落与两条去路一次说清。
 func relativeColumnError(idx int, ip, kind, raw string) string {
 	return fmt.Sprintf("%s写的是相对路径，但配置里没配 credential.secret_dir：%s（提示：在 %s 的 [credential] 段配上 secret_dir，或这一格改写本机绝对路径）",
-		rowPrefix(idx, ip, kind), raw, cli.ConfigShown)
+		rowPrefix(idx, ip, kind), shownCredential(raw), config.ShownPath)
+}
+
+// shownCredential 逐行报错里回显什么：像路径的原样出来（排查时要看的就是它），
+// 不像路径的脱敏——加密刚打开时第 4/6 列常还是明文密码，而这段文字要进终端与工具日志。
+func shownCredential(raw string) string {
+	if strings.ContainsAny(raw, `/\`) {
+		return raw
+	}
+	return common.MaskSecret(raw)
 }
 
 // ---- 一次运行内的凭据读取去重 ----
@@ -251,12 +261,12 @@ func newCredCache() *credCache {
 }
 
 // password 密码 / 口令类凭据（取值 + 校验，带缓存）。
-func (c *credCache) password(value string, encrypted bool, requireNonempty bool) (string, []string, error) {
+func (c *credCache) password(value string, encrypted bool, requireNonempty bool, shown string) (string, []string, error) {
 	key := fmt.Sprintf("pass|%t|%t|%s", encrypted, requireNonempty, value)
 	if e, ok := c.entries[key]; ok {
 		return e.plain, e.problems, nil
 	}
-	plain, problems, fatalErr := credential.ReadCredential(value, encrypted, requireNonempty)
+	plain, problems, fatalErr := credential.ReadCredentialRow(value, encrypted, requireNonempty, shown)
 	if fatalErr != nil {
 		return "", nil, fatalErr // 致命错误来自主密钥而非这个值，原样上抛、不入表
 	}

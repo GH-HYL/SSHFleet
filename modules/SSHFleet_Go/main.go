@@ -85,8 +85,8 @@ func versionWithBuildID() string {
 
 // 配置文件位置：基准为当前工作目录。
 const (
-	configPath      = "./config/SSHFleet.conf" // 实际读取用
-	configPathShown = "config/SSHFleet.conf"   // 文案里显示的形态：不带 ./，它不是路径的一部分
+	configPath = "./config/SSHFleet.conf" // 实际读取用
+	// 展示形态（不带 ./）取 config.ShownPath：那个文件是唯一出处，别再写一份字面量
 )
 
 // 危险命令确认提示与 [ERROR] 前缀的配色（对位旧 constants.py / error_handler.py）。
@@ -205,7 +205,7 @@ func main() {
 	// ---- 步骤 1：加载配置 --------------------------------------------
 	cfg, err := config.Load(configPath)
 	if err != nil {
-		fatal("config", wrapFatal(fmt.Sprintf("加载配置文件失败（%s）", configPathShown), err))
+		fatal("config", wrapFatal(fmt.Sprintf("加载配置文件失败（%s）", config.ShownPath), err))
 	}
 
 	// ---- 步骤 2：初始化日志 ------------------------------------------
@@ -368,14 +368,12 @@ func main() {
 	// 不再出现「确认屏看着正常、点 y 之后才失败」。
 	var upload *batch.CollectResult
 	if args.Upload != "" {
-		src, aerr := filepath.Abs(args.Upload)
+		// 原值直接采集：相对路径由系统按当前目录解析，不经 filepath.Abs（ADR-0025 第零节）
+		res, aerr := batch.CollectLocalFiles(args.Upload)
 		if aerr != nil {
 			fatal("upload", aerr)
 		}
-		upload, aerr = batch.CollectLocalFiles(src)
-		if aerr != nil {
-			fatal("upload", aerr)
-		}
+		upload = res
 	}
 
 	// ---- 步骤 7：参数确认（交互） --------------------------------------

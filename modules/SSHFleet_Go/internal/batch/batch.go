@@ -202,13 +202,10 @@ func buildTasks(a *cli.Args, nodes *nodelist.Nodes, prompts *ssh.PasswdPrompts, 
 			tasks = append(tasks, &task{seq: i, node: node, files: upload.Files, skipped: upload.Skipped, remote: a.Path, useSudo: a.Sudo})
 		}
 	case a.Download != "":
-		// 本地落地目录转绝对路径（对位旧 Python builder）
-		local, err := filepath.Abs(a.Path)
-		if err != nil {
-			return nil, nil, err
-		}
+		// 本地落地目录原样用：相对路径由系统按当前目录解析（ADR-0025 第零节）。
+		// 以前这里 filepath.Abs 过一次，屏幕上显示原值、落盘用改写后的，同一份值两个形态。
 		for i, node := range nodes.Items {
-			tasks = append(tasks, &task{seq: i, node: node, remote: a.Download, local: local, useSudo: a.Sudo})
+			tasks = append(tasks, &task{seq: i, node: node, remote: a.Download, local: a.Path, useSudo: a.Sudo})
 		}
 	default: // 命令 / 脚本
 		var material cli.ScriptMaterial

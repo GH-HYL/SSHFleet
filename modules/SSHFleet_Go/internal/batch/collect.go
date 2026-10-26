@@ -25,10 +25,8 @@ type CollectResult struct {
 //
 // 只有过滤后**一个可传文件都不剩**时才报错——这是「过滤」语义的必然结果。
 func CollectLocalFiles(root string) (*CollectResult, error) {
-	if !filepath.IsAbs(root) {
-		return nil, fmt.Errorf("file_path 必须是绝对路径: %s", root)
-	}
-
+	// root 原样用：相对路径由系统按当前目录解析（ADR-0025 第零节）。以前这里要求绝对路径，
+	// 逼得调用方先 filepath.Abs 一次——那一步等于替使用者拼前缀。
 	fi, err := os.Lstat(root)
 	if err != nil {
 		return nil, fmt.Errorf("file_path 不存在或无法访问: %w", err)
