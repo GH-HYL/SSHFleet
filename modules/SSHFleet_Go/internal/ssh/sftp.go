@@ -136,7 +136,7 @@ func (c *Client) UploadFiles(ctx context.Context, files []LocalFile, skipped []s
 	var costTotal float64
 	pacer := &progressPacer{}
 
-	for _, f := range files {
+	for idx, f := range files {
 		select {
 		case <-ctx.Done():
 			// 被中断同样算「这次没传完」（ADR-0022 第 1 条：要么全传上去、要么一个都不留）：
@@ -214,6 +214,16 @@ func (c *Client) UploadFiles(ctx context.Context, files []LocalFile, skipped []s
 			if onProgress != nil {
 				onProgress(Progress{Seq: seq, IP: c.cfg.IP, SuccessFiles: success, FailedFiles: failed})
 			}
+			// 失败后再查一次（工单 02）：满不是唯一的原因，只有探出来确实不够才改口。
+			//
+			// **必须在回滚之前问**：回滚会把本次写进去的删掉、把空间还回去，那时候再探就
+			// 永远是「够」——满这件事被自己抹平了。
+			//
+			// 需要量用「还没传的」：目标侧按剩余总量（已写成功的那些不再需要空间），
+			// 暂存侧按剩下这些文件里最大的那一个。
+			result.Error = appendMessage(result.Error,
+				spaceShortAfterFailure(sftpClient, remotePath, effectiveSudo,
+					totalBytes-uploadedBytes, maxFileSize(files[idx:])))
 			// 失败即回滚（ADR-0022）：目标机恢复成本次执行前的样子。
 			// 失败文件自己的半成品由上传函数删掉，这里只清前面写成功的那些。
 			result.Error = appendMessage(result.Error, c.rollbackUpload(sftpClient, writtenPaths, useSudo))
