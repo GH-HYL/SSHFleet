@@ -305,3 +305,21 @@ SKIP 用例（上面这条命令不带 `-v`，看不出 SKIP；另跑一次 `go 
 
 - 2026-10-26：建立。工单 02 的五条验收依赖 Windows，Ubuntu 侧只能验到「Linux 上两种切法结果一样」，故把验证环节外派到 Windows 环境，结果落本文件。同日实跑过一次 Linux 侧全量测试：11 包 ok，唯一红是 `TestParseDoesNotRewriteWindowsStylePath`（`source_test.go:217`），该条归工单 06 清理，01–04 只承诺「不新增红」。
 - 2026-10-26（Windows 侧）：改前基线已填，见第五节。全量测试 12 包 ok、2 条 SKIP、无红；D1–D5 与 E1–E2 全部实跑，目标机为 WSL2 Ubuntu 26.04（`127.0.0.1:22`），登录用自建非 root 账号 `wbverify`。三处与正文预判不符的地方记在 5.5 第 6–8 条，其中第 6 条（`Blocked by: 01` 的方向）建议在工单 02 里更正。第六节按要求留空，等代码改完再跑。
+- 2026-10-26 复审后复测（第二轮改后）。判据变了：ADR-0025 的更新记录把远端形态检查收窄到「必须绝对 + 不能带回车换行」，两端空白改为过滤；第七节那四条（`//`、`.`/`..`、中间空白、结尾空白）不再拦。以下为 Windows 本机 + WSL2 Ubuntu 26.04（`wbverify`、`--yes`）实跑：
+
+  | 用例 | 实测 | 与 5.3 基线比 |
+  | --- | --- | --- |
+  | D1 `-s ...\b.sh` | `s='D:\…\b.sh'` 原样、`r='b.sh'` | 同 |
+  | D2 `-u ... -p /opt/` | `u=` 原样、`p='/opt/'`、`r='b.txt'` | 同（远端已有同名文件，按设计不覆盖） |
+  | D3 无后缀脚本 | `r='deploy'`、`s=` 原样 | 同 |
+  | D4 `-d /tmp/app.log` | `d=` 原值、成功 1、落盘 `dl\127.0.0.1\app.log` | 同 |
+  | D5 `-d "/tmp/a\b.log"` | `d=` 原值、失败 1「本机写入失败」、明细原样 | 同 |
+  | E1 `-p '\opt\app\'` | 被拦，回显原值 `\opt\app\` | 同 |
+  | N1 `-p /opt//app/` | **放行**，远端报「远程路径不存在」 | 变了（以前参数阶段就拦） |
+  | N2 `-d /tmp/../tmp/app.log` | **成功**，`..` 交远端解析 | 变了 |
+  | N3 `-d " /tmp/app.log "` | 两端空白过滤后成功 | 变了 |
+  | N4 `-d "/tmp/my log"` | 放行，远端报「远程路径不存在」 | 变了 |
+  | N5 目录下载含坏名字 | `total_files=2, success_files=0, failed_files=2` | 变了（以前 2/0/1，差额不陈述） |
+
+- 2026-10-26（第二轮，linux 侧）：WSL 内 `go1.27.0`，`go test ./... -count=1` **11 包 ok、无 SKIP、无 FAIL**——`TestParseDoesNotRewriteWindowsStylePath` 与 `TestConvertSecretEncryptsPlainFile` 这两条在 Windows 上 SKIP，在 linux 上是真跑过的。Windows 本机同样 11 包 ok。
+- 2026-10-26（第二轮，N3 的意外收获）：`-d " /tmp/app.log "` 首次跑出 `d='/tmp/app.log'` 而 `r='app.log '`——备注在解析阶段按原值取名，trim 却发生在合规检查，同一个值出现两个形态。改成解析阶段就过滤（本地 `-p` 不在其列），补 `TestRemotePathOuterSpaceIsTrimmedBeforeRemark`，复测 `r='app.log'` 干净。
