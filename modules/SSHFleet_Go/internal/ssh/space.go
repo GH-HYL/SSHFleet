@@ -80,26 +80,38 @@ func sftpAvail(client *sftp.Client, p string, asRoot bool) (int64, bool) {
 	return availBytes(st, asRoot), true
 }
 
-// spaceShortAfterFailure 写失败之后再看一眼两侧：确实是哪一处不够，就说那一处；
-// 够就什么都不说。
+// probeFunc 问一条路径所在分区的可用字节；探不出来返回 false。
 //
-// 两种结果都只影响呈现——删是必做的，探测不该改变上传结果。所以任何一侧探不出来都只是
-// 少一个解释，不是多一条失败。
-func spaceShortAfterFailure(client *sftp.Client, remotePath string, sudo bool, targetNeed, tmpNeed int64) string {
-	if avail, ok := sftpAvail(client, remotePath, sudo); ok {
-		if msg, short := judgeSpace(sideTarget, remotePath, avail, targetNeed, false); short {
+// 抽成一个函数值，是为了让「某一侧探不到」「两侧都探不到」这两条降级分支能被测到——
+// 真机上没法稳定造出「探测失败」，而这恰恰是最不能出错的一条：探不到不许挡住上传。
+type probeFunc func(path string, asRoot bool) (int64, bool)
+
+// spaceShort 两侧各探一次：哪一处不够就说那一处，够就一个字都不说。
+//
+// 预检与失败后再查共用它，区别只在需要量与措辞（beforeWrite）：前者是一个文件都没写，
+// 后者已经写过并回滚，只说还差多少。
+func spaceShort(probe probeFunc, remotePath string, sudo bool, targetNeed, tmpNeed int64, beforeWrite bool) string {
+	if avail, ok := probe(remotePath, sudo); ok {
+		if msg, short := judgeSpace(sideTarget, remotePath, avail, targetNeed, beforeWrite); short {
 			return msg
 		}
 	}
-	if sudo {
-		probe := tmpProbePath()
-		if avail, ok := sftpAvail(client, probe, false); ok {
-			if msg, short := judgeSpace(sideTmp, probe, avail, tmpNeed, false); short {
-				return msg
-			}
+	if !sudo {
+		return ""
+	}
+	// 暂存侧只在 sudo 路径上存在：非 sudo 直接写目标，没有暂存这一步。
+	probePath := tmpProbePath()
+	if avail, ok := probe(probePath, false); ok {
+		if msg, short := judgeSpace(sideTmp, probePath, avail, tmpNeed, beforeWrite); short {
+			return msg
 		}
 	}
 	return ""
+}
+
+// sftpProbe 把这条连接的探测包成 probeFunc。
+func sftpProbe(client *sftp.Client) probeFunc {
+	return func(p string, asRoot bool) (int64, bool) { return sftpAvail(client, p, asRoot) }
 }
 
 // tmpProbePath 暂存目录所在的分区路径。

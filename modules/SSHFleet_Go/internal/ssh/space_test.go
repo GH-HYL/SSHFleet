@@ -1,6 +1,7 @@
 package ssh
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/pkg/sftp"
@@ -111,5 +112,87 @@ func TestHumanBytes(t *testing.T) {
 		if got := humanBytes(in); got != want {
 			t.Fatalf("humanBytes(%d) = %q，期望 %q", in, got, want)
 		}
+	}
+}
+
+// 降级是按侧算的：某一侧探不到，只少那一侧的判断；两侧都探不到，等于没有预检。
+//
+// 真机上造不出「探测失败」，而这条恰恰最不能出错——探不到不许挡住上传。
+func TestSpaceShortDegrade(t *testing.T) {
+	const (
+		gb   = int64(1) << 30
+		tmpP = "/tmp"
+		tgtP = "/data/app"
+	)
+	cases := []struct {
+		name    string
+		probe   probeFunc
+		sudo    bool
+		wantMsg string // 期望命中的报文名，空即「什么都不说」
+	}{
+		{
+			name: "非 sudo：目标不够就说目标，不碰 /tmp",
+			probe: func(p string, _ bool) (int64, bool) {
+				return map[string]int64{tgtP: gb}[p], p == tgtP
+			},
+			sudo:    false,
+			wantMsg: "sshfleet.transfer.target_space_short",
+		},
+		{
+			name: "非 sudo：目标探不到就什么都不说（不阻断）",
+			probe: func(string, bool) (int64, bool) {
+				return 0, false
+			},
+			sudo:    false,
+			wantMsg: "",
+		},
+		{
+			name: "sudo：目标够、/tmp 不够，说 /tmp",
+			probe: func(p string, _ bool) (int64, bool) {
+				if p == tgtP {
+					return 10 * gb, true
+				}
+				if p == tmpP {
+					return 1 << 20, true
+				}
+				return 0, false
+			},
+			sudo:    true,
+			wantMsg: "sshfleet.transfer.tmp_space_short",
+		},
+		{
+			name: "sudo：目标探不到，仍按 /tmp 判",
+			probe: func(p string, _ bool) (int64, bool) {
+				if p == tmpP {
+					return 1 << 20, true
+				}
+				return 0, false
+			},
+			sudo:    true,
+			wantMsg: "sshfleet.transfer.tmp_space_short",
+		},
+		{
+			name: "sudo：两侧都探不到，什么都不说",
+			probe: func(string, bool) (int64, bool) {
+				return 0, false
+			},
+			sudo:    true,
+			wantMsg: "",
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := spaceShort(c.probe, tgtP, c.sudo, 2*gb, 64<<20, true)
+			if c.wantMsg == "" {
+				if got != "" {
+					t.Fatalf("不该说话，实为 %q", got)
+				}
+				return
+			}
+			if !strings.Contains(got, c.wantMsg) {
+				t.Fatalf("报文 = %q，期望命中 %s", got, c.wantMsg)
+			}
+		})
 	}
 }
