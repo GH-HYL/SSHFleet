@@ -220,35 +220,32 @@ func CredErrorLabel(code CredCode, path string, detail string) string {
 // ErrRelativeNoSecretDir 相对路径但 secret_dir 未配置（调用方按各自场景组织文案）。
 var ErrRelativeNoSecretDir = errors.New("相对路径但 secret_dir 未配置")
 
-// ResolveSecretPath 「写在清单文件里」的凭据路径解析（spec D31）：去首尾空白 → ~ 展开 →
-// 绝对则原样 → 相对则拼 secret_dir。**服务对象只有内联清单与 csv 的第 4、6 列**，而且只在
-// 打开加密时——那时那两格写的是「装了密文的文件」。清单第 5 列（私钥）、配置里的凭据字段、
-// 命令行给的路径都不经过这里：它们原值交给系统，本程序不碰（见 convert.go 的 ConvertSecret）。
+// ResolveSecretPath 「写在清单文件里」的凭据路径解析：**OS 库站在核心**（ADR-0025 决定 9）。
+//
+// 三层，各归各的：
+//   - 简单处理（去首尾空白）程序自己做，不交给 OS——那不是路径解析；
+//   - 识别（是不是绝对路径）交 `filepath.IsAbs`，拼接（目录 + 文件名）交 `filepath.Join`；
+//   - **拼出来的完整路径再交回 OS 库解析一次**（`filepath.Clean`），此后只交给
+//     `os.Stat` / `os.ReadFile` 消费，不再被任何字符串加工碰。
+//
+// **`~` 不展开**：它不属于「简单处理」，也没有 OS 库对应物，在这里就是一个普通字符
+// （与清单第 5 列同口径）。以前展开过，那是本程序自己的规则，已取消。
+//
+// 服务对象只有内联清单与 csv 的第 4、6 列，且只在打开加密时——那时那两格写的是
+// 「装了密文的文件」。清单第 5 列（私钥）、配置里的凭据字段、命令行给的路径都不经过这里。
 // 存在性校验由调用方负责（清单场景经 ReadCredential 的 missing 分流）。
 func ResolveSecretPath(raw, secretDir string) (string, error) {
-	p := expandHomeTilde(strings.TrimSpace(raw))
+	// 简单处理：去首尾空白
+	p := strings.TrimSpace(raw)
+	// 识别：交给 OS 库
 	if filepath.IsAbs(p) {
-		return p, nil
+		return filepath.Clean(p), nil
 	}
 	if secretDir == "" {
 		return "", ErrRelativeNoSecretDir
 	}
-	return filepath.Join(secretDir, p), nil
-}
-
-// expandHomeTilde 把前导 ~ 展开为用户主目录。
-func expandHomeTilde(p string) string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return p
-	}
-	if p == "~" {
-		return home
-	}
-	if strings.HasPrefix(p, "~/") || strings.HasPrefix(p, `~\`) {
-		return filepath.Join(home, p[2:])
-	}
-	return p
+	// 拼接交给 OS 库；拼完再交回它解析一次，得出一条完整、规范的路径
+	return filepath.Clean(filepath.Join(secretDir, p)), nil
 }
 
 // ReadCredFileContent 凭据文件内容读取（--convert-secret 转换场景）：
