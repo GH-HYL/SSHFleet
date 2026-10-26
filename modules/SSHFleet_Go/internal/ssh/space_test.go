@@ -83,6 +83,13 @@ func TestJudgeSpace(t *testing.T) {
 			wantMsg:   "sshfleet.transfer.target_space_short: /data/app: 512 MB available, 1.17 GB left to send",
 		},
 		{
+			name: "目标目录写成 /data/app/ 时，报文里不留尾斜杠",
+			side: sideTarget, path: "/data/app/",
+			avail: 1 << 30, need: 3 << 30, beforeWrite: true,
+			wantShort: true,
+			wantMsg:   "sshfleet.transfer.target_space_short: /data/app: 1 GB available, 3 GB needed; no file written",
+		},
+		{
 			name: "暂存侧：路径固定是 /tmp",
 			side: sideTmp, path: "/tmp",
 			avail: 48 << 20, need: 320 << 20, beforeWrite: true,
