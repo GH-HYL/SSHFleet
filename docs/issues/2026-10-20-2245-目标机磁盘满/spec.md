@@ -131,3 +131,4 @@ mkdir -p /mnt/small64/w && chmod 777 /mnt/small64/w   # 非 sudo 用例要一个
 
 - 2026-10-26：建立。作者定：传前必检、失败后再检一次、分类按两侧分开、判据硬比不留余量、目标侧按总量、暂存侧按最大单文件。工单尚未拆。
 - 2026-10-26：接缝已确认（作者：可自建临时账号在 WSL2 上测）。同日用 `pkg/sftp v1.13.11` 对 WSL2 的 OpenSSH 10.2p1 实跑，确认扩展可用、`Bfree`/`Bavail` 在满盘时差到 4.5MB vs 16KB，并把造卷配方写进 Testing Decisions。
+- 2026-10-26：拆成两条工单——`issues/02-preflight-full-check.md`（传前判满）、`issues/03-post-failure-recheck.md`（失败后再查，被 02 阻塞）。编号从 02 起，因为 01 被作废的摸底工单占着。
