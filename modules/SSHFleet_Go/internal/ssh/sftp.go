@@ -91,28 +91,6 @@ func (c *Client) UploadFiles(ctx context.Context, files []LocalFile, skipped []s
 		return result
 	}
 
-	// 空间预检（ADR-0026）：装不下就停在写第一个文件之前，目标机上不会有任何本次的东西。
-	//
-	// 两侧各按自己的峰值判：目标侧按本次总量（文件在目标目录里累加），暂存侧按最大单文件
-	// （sudo 路径传一个就移一个，暂存区任何时刻只压着一个）。
-	//
-	// 探测失败按侧降级：拿不到数就少那一侧的判断，另一侧照常，绝不因为探测不出来挡住上传。
-	if avail, ok := sftpAvail(sftpClient, remotePath, effectiveSudo); ok {
-		if msg, short := judgeSpace(sideTarget, remotePath, avail, totalBytes, true); short {
-			result.Error = strPtr(msg)
-			return result
-		}
-	}
-	if effectiveSudo {
-		probe := tmpProbePath()
-		if avail, ok := sftpAvail(sftpClient, probe, false); ok {
-			if msg, short := judgeSpace(sideTmp, probe, avail, maxFileSize(files), true); short {
-				result.Error = strPtr(msg)
-				return result
-			}
-		}
-	}
-
 	// 本地文件预检
 	for _, f := range files {
 		if _, err := os.Stat(f.Path); err != nil {
@@ -120,6 +98,20 @@ func (c *Client) UploadFiles(ctx context.Context, files []LocalFile, skipped []s
 			result.Error = strPtr(Message(EnvTransfer, transferLocalUnreadable, fmt.Sprintf("%s: %v", f.Rel, err)))
 			return result
 		}
+	}
+
+	// 空间预检（ADR-0026）：装不下就停在写第一个文件之前，目标机上不会有任何本次的东西。
+	//
+	// 位置在本地文件预检**之后**：本地文件读不了是更近、更确定的原因，不该被「磁盘满」
+	// 抢先报出来。
+	//
+	// 两侧各按自己的峰值判：目标侧按本次总量（文件在目标目录里累加），暂存侧按最大单文件
+	// （sudo 路径传一个就移一个，暂存区任何时刻只压着一个）。
+	//
+	// 探测失败按侧降级：拿不到数就少那一侧的判断，两侧都拿不到等于没有预检，绝不挡住上传。
+	if msg := spaceShort(sftpProbe(sftpClient), remotePath, effectiveSudo, totalBytes, maxFileSize(files), true); msg != "" {
+		result.Error = strPtr(msg)
+		return result
 	}
 
 	success, failed := 0, 0
@@ -222,8 +214,8 @@ func (c *Client) UploadFiles(ctx context.Context, files []LocalFile, skipped []s
 			// 需要量用「还没传的」：目标侧按剩余总量（已写成功的那些不再需要空间），
 			// 暂存侧按剩下这些文件里最大的那一个。
 			result.Error = appendMessage(result.Error,
-				spaceShortAfterFailure(sftpClient, remotePath, effectiveSudo,
-					totalBytes-uploadedBytes, maxFileSize(files[idx:])))
+				spaceShort(sftpProbe(sftpClient), remotePath, effectiveSudo,
+					totalBytes-uploadedBytes, maxFileSize(files[idx:]), false))
 			// 失败即回滚（ADR-0022）：目标机恢复成本次执行前的样子。
 			// 失败文件自己的半成品由上传函数删掉，这里只清前面写成功的那些。
 			result.Error = appendMessage(result.Error, c.rollbackUpload(sftpClient, writtenPaths, useSudo))

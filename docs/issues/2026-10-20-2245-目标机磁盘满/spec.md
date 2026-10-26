@@ -52,6 +52,7 @@ SFTP 协议本身帮不上忙：写失败时服务端只回一个通用码 `SSH_
 - **不给命令通道 `df` 留兜底**：它要 exec 权限（sftp-only / scponly 账号直接不可用）、要解析文本与单位、要自己匹配挂载点，多一条会自己出错的路径。服务端不支持时静默跳过。
 - 探测点：目标目录本身；`--sudo` 时再加暂存目录的父目录（即 `/tmp`——暂存目录要到第一个文件才建，预检时它还不存在）。
 - 一次上传只在同一时刻探（`--sudo` 时是两处：目标目录与 `/tmp`），进循环之后不再重复探。
+- 预检的位置在**本地文件预检之后**：本地文件读不了是更近、更确定的原因，不该被「磁盘满」抢先报出来。
 - **探测失败是按侧算的**：某一侧探不出来，就少那一侧的判断，另一侧照常判、照常传；两侧都探不出来，等于没有预检。任何一侧探不出来都不阻断上传。
 
 **判据**
@@ -68,7 +69,7 @@ SFTP 协议本身帮不上忙：写失败时服务端只回一个通用码 `SSH_
 - 分类拆两条：**目标磁盘已满**、**/tmp 空间不足**。后者只在 `--sudo` 且登录账号不是 root 时可能出现（非 sudo 直接写目标，没有暂存这一步）。
 - 分类名**不区分「有没有开始传」**：预检就拦下、还是传到一半才失败，目标机最后都是干净的（回滚兜底），使用者要区分的是「哪一侧满了」。
 - 报文（执行侧只陈述事实，名字两种场景共用）：
-  - 预检判满：`sshfleet.transfer.target_space_short: /data/app: 1.09 GB available, 3.20 GB needed; no file written`
+  - 预检判满：`sshfleet.transfer.target_space_short: /data/app: 1.09 GB available, 3.2 GB needed; no file written`
   - 失败后再查：`sshfleet.transfer.target_space_short: /data/app: 3.41 GB available, 1.20 GB left to send`——不带「没写文件」那句，那时已经写过并回滚了
   - 目标侧给「本次总量 / 可用」，暂存侧给「最大单个文件 / 可用」。
 - **接线（这一步不能漏）**：分类名来自 `config/keywords_error.conf` 的 `[[categories]]` 块，`keywords` 必须写报文全前缀（`sshfleet.transfer.target_space_short` / `….tmp_space_short`）——不写就永远匹配不上，统计块会直接显示那串英文原文。块内自上而下取第一个命中，这两块放在「上传回滚未清干净」「上传失败已回滚」之后、「网络不可达」之前。
@@ -105,6 +106,10 @@ mkfs.ext4 -q -F /var/tmp/small64.img
 losetup /dev/loop0 /var/tmp/small64.img   # 用固定设备名，别用 -f --show 再回填变量
 mount /dev/loop0 /mnt/small64
 mkdir -p /mnt/small64/w && chmod 777 /mnt/small64/w   # 非 sudo 用例要一个可写子目录
+
+# 暂存侧那条用例还要两样：测试账号免密 sudo，且 /tmp 被限小
+echo "probe1 ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/probe1 && chmod 440 /etc/sudoers.d/probe1
+mount -o remount,size=8M /tmp                        # 跑完记得 remount 回去
 ```
 
 两条踩过的坑写在这里，省下一个人再撞一次：

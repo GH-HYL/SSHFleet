@@ -44,18 +44,6 @@ func localFileSized(t *testing.T, dir, rel string, size int64) LocalFile {
 	return LocalFile{Path: full, Rel: rel, Size: size}
 }
 
-// localFileDeclared 造一个实际大小与声明大小不一致的本地文件。
-//
-// 用例需要它：预检按清单里声明的大小判，真写的时候按实际字节流走。两者对上时，
-// 「预检通过、写到一半才满」只可能来自别人同时在占这块盘——那种竞态没法稳定复现；
-// 让声明值偏小，就把「预检过了、写的时候还是满了」这条路径变成确定的。
-func localFileDeclared(t *testing.T, dir, rel string, realSize, declared int64) LocalFile {
-	t.Helper()
-	f := localFileSized(t, dir, rel, realSize)
-	f.Size = declared
-	return f
-}
-
 func TestUploadPrecheckSpaceShort(t *testing.T) {
 	fullDir := strings.TrimSuffix(os.Getenv("SSHFLEET_TEST_FULLDIR"), "/")
 	if fullDir == "" {
@@ -149,7 +137,7 @@ func TestSpaceShortAfterFailure(t *testing.T) {
 	defer func() { _ = sc.Close() }()
 
 	// 这块卷装不下 1GB：应给出目标侧那条、且是「还差多少」的说法。
-	msg := spaceShortAfterFailure(sc, dir, false, 1<<30, 0)
+	msg := spaceShort(sftpProbe(sc), dir, false, 1<<30, 0, false)
 	if !strings.Contains(msg, "sshfleet.transfer.target_space_short") {
 		t.Fatalf("应给出目标侧空间报文，实为 %q", msg)
 	}
@@ -158,7 +146,7 @@ func TestSpaceShortAfterFailure(t *testing.T) {
 	}
 
 	// 只要 1KB：够了就一个字都不说。
-	if msg := spaceShortAfterFailure(sc, dir, false, 1024, 0); msg != "" {
+	if msg := spaceShort(sftpProbe(sc), dir, false, 1024, 0, false); msg != "" {
 		t.Fatalf("空间够时不该说话，实为 %q", msg)
 	}
 }
@@ -285,5 +273,72 @@ func TestUploadPrecheckTmpSideShort(t *testing.T) {
 	}
 	if left := remoteList(t, connected(t), dir); len(left) != 0 {
 		t.Fatalf("判满时目标目录不该有东西，实为 %v", left)
+	}
+}
+
+// 刚好装得下（工单 01 的边界那条）：按这块卷**实测**的可用量造文件，少留 4MB。
+//
+// 判据是硬比，边界两侧都得有证据：判满那边由 TestUploadPrecheckSpaceShort 给（200MB），
+// 这边给「贴着边也能传成」。
+func TestUploadPrecheckSpaceJustEnough(t *testing.T) {
+	dir := fullDir(t)
+	setup := connected(t)
+	avail, ok := freeBytes(t, setup, dir)
+	if !ok {
+		t.Fatalf("这块卷探不出可用量，本用例没有意义")
+	}
+	size := avail - 4<<20
+	if size <= 0 {
+		t.Fatalf("这块卷可用 %d 字节，太小，造不出「刚好装得下」的文件", avail)
+	}
+	for _, n := range remoteList(t, setup, dir) {
+		_ = setup.runCommand(fmt.Sprintf("rm -f '%s'", escapeShellArg(path.Join(dir, n))))
+	}
+	local := t.TempDir()
+	files := []LocalFile{localFileSized(t, local, "tight.bin", size)}
+
+	res := connected(t).UploadFiles(context.Background(), files, nil, dir+"/", false, 0, nil)
+	t.Cleanup(func() {
+		_ = connected(t).runCommand(fmt.Sprintf("rm -f '%s'", escapeShellArg(path.Join(dir, "tight.bin"))))
+	})
+
+	if res.Error != nil {
+		t.Fatalf("贴着边也该传得成（可用 %d，需要 %d），实为报错：%q", avail, size, *res.Error)
+	}
+	if res.SuccessFiles != 1 {
+		t.Fatalf("应传成 1 个，实为 %d", res.SuccessFiles)
+	}
+}
+
+// 目标目录是 700 的 root 目录时，探测仍给得出判断（工单 01 那条）。
+//
+// 要 root 才能造出这种目录，所以跟暂存侧那条一样用 SSHFLEET_TEST_SUDO 打开。
+func TestUploadPrecheckRootOnlyDir(t *testing.T) {
+	if os.Getenv("SSHFLEET_TEST_SUDO") != "1" {
+		t.Skip("需要免密 sudo 才能造 700 的 root 目录（设 SSHFLEET_TEST_SUDO=1 才跑）")
+	}
+	setup := connected(t)
+	dir := fmt.Sprintf("/var/tmp/sshfleet-rootonly-%d", os.Getpid())
+	if err := setup.runCommand(fmt.Sprintf("sudo rm -rf '%s' && sudo mkdir -p '%s' && sudo chmod 700 '%s'",
+		escapeShellArg(dir), escapeShellArg(dir), escapeShellArg(dir))); err != nil {
+		t.Fatalf("造 700 目录失败：%v", err)
+	}
+	t.Cleanup(func() { _ = connected(t).runCommand(fmt.Sprintf("sudo rm -rf '%s'", escapeShellArg(dir))) })
+
+	// 探得到，且给的是一个真数（不是 0）——「不需要写权限」这件事的证据。
+	avail, ok := freeBytes(t, setup, dir)
+	if !ok || avail <= 0 {
+		t.Fatalf("700 的 root 目录应能探出可用量，实为 %d（成功=%v）", avail, ok)
+	}
+
+	// 同一目录非 sudo 真去写，是权限问题、不是空间问题：报错里不该出现空间报文。
+	local := t.TempDir()
+	files := []LocalFile{localFileSized(t, local, "deny.bin", 1024)}
+	res := connected(t).UploadFiles(context.Background(), files, nil, dir+"/", false, 0, nil)
+	if res.Error == nil {
+		t.Fatalf("往 700 的 root 目录写应失败，实际没有报错")
+	}
+	if strings.Contains(*res.Error, "space_short") {
+		t.Fatalf("空间够，不该报空间不足：%q", *res.Error)
 	}
 }
