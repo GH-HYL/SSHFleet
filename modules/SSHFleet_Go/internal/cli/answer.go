@@ -85,7 +85,7 @@ func answerText(src source) (string, error) {
 	}
 	data, err := os.ReadFile(src.Path)
 	if err != nil {
-		return "", fmt.Errorf("-a 参数指定的文件读不到：%s\n原因：%s\n提示：请检查文件是否存在、当前用户有没有读权限", src.Path, systemReason(err))
+		return "", fmt.Errorf("-a 参数指定的文件读不到：%s\n原因：%s\n提示：请检查文件是否存在、当前用户有没有读权限", src.Path, common.SystemReason(err))
 	}
 	if common.IsBinaryContent(data) {
 		return "", fmt.Errorf("-a 参数指定的代填文件是二进制文件：%s\n提示：代填要写成文本（CSV）", src.Path)

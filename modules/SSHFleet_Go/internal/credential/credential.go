@@ -11,6 +11,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"sshfleet/internal/common"
 )
 
 // CredCode 凭据错误码（自定义字符串类型 + 常量：拼错编译不过）。
@@ -110,11 +112,11 @@ func readCredentialCore(value string, encrypted bool, requireNonempty bool) (str
 	if _, err := os.Stat(text); err != nil {
 		// 把系统说的那一句带上（`no such file or directory` / `permission denied`）：
 		// 单说「不存在」会把权限问题也说成不存在，清单行里也读不出真因（ADR-0025 决定 6）。
-		return "", []CredError{{CodePathMissing, systemReasonOf(err)}}, nil
+		return "", []CredError{{CodePathMissing, common.SystemReason(err)}}, nil
 	}
 	content, err := os.ReadFile(text)
 	if err != nil {
-		return "", []CredError{{CodeReadError, systemReasonOf(err)}}, nil
+		return "", []CredError{{CodeReadError, common.SystemReason(err)}}, nil
 	}
 	plain, code, detail, fatalErr := decodeCredential(strings.TrimSpace(string(content)), true)
 	if fatalErr != nil {
@@ -129,13 +131,6 @@ func readCredentialCore(value string, encrypted bool, requireNonempty bool) (str
 	return plain, nil, nil
 }
 
-// ReadCredentialPEM 私钥 PEM 读取校验：读盘 → 判空 → -----BEGIN 前缀检查（不参与 fmt×level 矩阵）。
-// 返回 (内容, 问题文案列表)，语义同 ReadCredential。
-func ReadCredentialPEM(path string) (string, []string) {
-	content, credErrs := readCredentialPEMCore(path)
-	return content, credProblems(credErrs, path)
-}
-
 // ReadCredentialPEMProblems 与 ReadCredentialPEM 同源，只是把**错误码**交出去。
 //
 // 调用方要按错因分支时（例如「文件根本不在」才补一句去路），别去比对文案——
@@ -148,11 +143,11 @@ func ReadCredentialPEMProblems(path string) (string, []CredError) {
 func readCredentialPEMCore(path string) (string, []CredError) {
 	if _, err := os.Stat(path); err != nil {
 		// 系统那一句要带上：私钥位置同样可能不是「不存在」而是权限问题（ADR-0025 决定 6）
-		return "", []CredError{{CodeMissing, systemReasonOf(err)}}
+		return "", []CredError{{CodeMissing, common.SystemReason(err)}}
 	}
 	content, err := os.ReadFile(path)
 	if err != nil {
-		return "", []CredError{{CodeReadError, systemReasonOf(err)}}
+		return "", []CredError{{CodeReadError, common.SystemReason(err)}}
 	}
 	text := strings.TrimSpace(string(content))
 	if text == "" {
@@ -162,19 +157,6 @@ func readCredentialPEMCore(path string) (string, []CredError) {
 		return "", []CredError{{CodeBadPEM, ""}}
 	}
 	return text, nil
-}
-
-// systemReasonOf 只留系统给的那一句错因，去掉前面的路径（文案里已经点过路径了）。
-func systemReasonOf(err error) string {
-	var pe *os.PathError
-	if errors.As(err, &pe) {
-		return pe.Err.Error()
-	}
-	var le *os.LinkError
-	if errors.As(err, &le) {
-		return le.Err.Error()
-	}
-	return err.Error()
 }
 
 // ---- 错误码 → 用户文案（单一事实来源，校验汇总 / 退出指引两条路径共用） ----

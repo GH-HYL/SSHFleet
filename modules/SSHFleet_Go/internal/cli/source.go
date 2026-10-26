@@ -99,7 +99,7 @@ func checkInlineValue(raw string, form valueForm, statErr error) error {
 		return fmt.Errorf("%s 的内联值里不能有换行：内联只写一条\n提示：%s", form.flag, form.newlineHint)
 	}
 	if !form.isRecord(raw) {
-		return fmt.Errorf("%s 参数指定的文件读不到：%s\n原因：%s\n提示：%s", form.flag, raw, systemReason(statErr), form.goneHint)
+		return fmt.Errorf("%s 参数指定的文件读不到：%s\n原因：%s\n提示：%s", form.flag, raw, common.SystemReason(statErr), form.goneHint)
 	}
 	return nil
 }
