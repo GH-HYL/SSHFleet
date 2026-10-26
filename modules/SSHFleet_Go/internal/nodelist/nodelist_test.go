@@ -1260,3 +1260,25 @@ func TestReadPrecheckKeyPassphraseMissingIsNotAnError(t *testing.T) {
 		t.Fatalf("口令取不到就该留空，实际 %q", nodes.Items[0].KeyPassphrase)
 	}
 }
+
+// 第 4/6 列不展开 `~`：它是字面字符，与第 5 列同口径（ADR-0025 决定 9）。
+// 报了「找不到」就说明它按字面拼过去了——真展开的话会去找主目录下的那个文件。
+func TestReadPrecheckSecretColumnKeepsTildeLiteral(t *testing.T) {
+	key := testKey()
+	t.Setenv("SSHFLEET_KEY", key)
+	args, cfg, in, _ := testRead(t, true, "-f", "10.0.0.1,22,root,~/db_pass.sec", "-c", "echo hi")
+	cfg.Credential.Encrypt = true
+	cfg.Credential.SecretDir = t.TempDir()
+
+	_, err := Read(args, cfg, in)
+	if err == nil {
+		t.Fatal("~ 不展开，这个文件不存在，应报错")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "~") {
+		t.Fatalf("报错里应保留字面的 ~，实际：%s", msg)
+	}
+	if home, herr := os.UserHomeDir(); herr == nil && home != "" && strings.Contains(msg, home) {
+		t.Fatalf("不该把 ~ 展开成主目录，报错里却出现了 %q：%s", home, msg)
+	}
+}
