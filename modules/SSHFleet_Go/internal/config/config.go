@@ -32,7 +32,10 @@ type Credential struct {
 	Encrypt     bool   `toml:"encrypt"`
 	Key         string `toml:"key"`
 	KeyPassword string `toml:"key_password"`
-	SecretDir   string `toml:"secret_dir"`
+	// SecretDir 凭据目录，只服务内联清单与 csv 的第 4、6 列：那两列写相对名时拼到这里。
+	// 清单第 5 列（私钥）、命令行参数、配置里其余的路径都不使用它；加密关着时它没有用途，
+	// 既不参与补齐，也不该被校验。第 5 列现在仍会拼一次，随「命令行路径规范化」工单 03 改正。
+	SecretDir string `toml:"secret_dir"`
 }
 
 // Execution 执行身份与三个超时。
