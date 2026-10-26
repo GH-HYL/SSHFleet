@@ -793,6 +793,22 @@ func TestUploadPathErrorEchoesRawValue(t *testing.T) {
 	}
 }
 
+// 两端空白过滤发生在解析阶段，**早于取备注**：否则会出现 `d` 已去空白、
+// `r` 还带着多打那个空格的两种形态（真机跑 ` -d " /tmp/app.log " ` 撞到过）。
+func TestRemotePathOuterSpaceIsTrimmedBeforeRemark(t *testing.T) {
+	dir := t.TempDir()
+	a, perr := Parse(helpTestCfg(), "test", []string{"-f", "172.28.118.49,22,root,pw", "-d", " /tmp/app.log ", "-p", dir})
+	if perr != nil {
+		t.Fatalf("Parse 不该报错：%v", perr)
+	}
+	if a.Download != "/tmp/app.log" {
+		t.Fatalf("d 应去两端空白，实际 %q", a.Download)
+	}
+	if a.Remark != "app.log" {
+		t.Fatalf("备注应按去空白后的值取名，实际 %q", a.Remark)
+	}
+}
+
 // 远端值里的回车换行仍要拦：那不是「路径里的一个字符」，是参数被换行打断的现场。
 // 交出去远端只会回一句看不懂的失败，本机这一句还指得准。
 func TestRemotePathRejectsControlChars(t *testing.T) {
