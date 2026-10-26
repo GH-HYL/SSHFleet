@@ -435,6 +435,16 @@ func Parse(cfg *config.Config, version string, raw []string) (*Args, error) {
 	// 两端空白顺手过滤掉，其余形态一概不判——它们是交给远端的字符串，不归本机判
 	// （见 check.go 的 checkRemotePath）。
 
+	// 远端两个值的两端空白在这里就过滤掉：紧接着的 defaultRemark 要按值取名字，
+	// 留到合规检查再 trim，屏幕上就会出现 `d` 已去空白、`r` 还带着多打那个空格的两种形态。
+	// 本地的 -p（下载模式）不在此列——本地路径一个字节都不动。
+	if a.Upload != "" {
+		a.Path = strings.TrimSpace(a.Path)
+	}
+	if a.Download != "" {
+		a.Download = strings.TrimSpace(a.Download)
+	}
+
 	a.Remark = defaultRemark(&a)
 	return &a, nil
 }

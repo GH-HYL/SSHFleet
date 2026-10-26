@@ -325,6 +325,7 @@ func dirHasRealFile(root string) bool {
 //
 // 返回过滤后的值，调用方**必须写回原字段**：命令行走到底用的是它。
 func checkRemotePath(flag, what, p string) (string, error) {
+	// 解析阶段已经过滤过一次；这里再 trim 是给直接构造 Args 调过来的调用方兜底。
 	trimmed := strings.TrimSpace(p)
 	if !strings.HasPrefix(trimmed, "/") {
 		return trimmed, fmt.Errorf("%s 参数指定的%s必须是绝对路径，当前值：%s\n提示：服务器上的路径要从 / 写起，例如 /opt/app/", flag, what, trimmed)
