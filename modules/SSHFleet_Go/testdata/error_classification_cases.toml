@@ -539,3 +539,15 @@ mode = "upload"
 success_files = 0
 failed_files = 0
 expected = "/tmp 空间不足"
+
+[[cases]]
+name = "传一半才失败：同一条分类，报文换成「还差多少」"
+# 失败后再查与预检共用一个报文名，区别只在细节（这条带 left to send、不带 no file written）；
+# 回滚报文同屏出现时，分类仍由判据表的顺序决定——回滚那两条排前面。
+error = '''sshfleet.transfer.target_space_short: /data/app: 3.41 GB available, 1.2 GB left to send
+sshfleet.transfer.rolled_back: 1 of 1 written files removed'''
+output = ""
+mode = "upload"
+success_files = 0
+failed_files = 1
+expected = "上传失败已回滚"

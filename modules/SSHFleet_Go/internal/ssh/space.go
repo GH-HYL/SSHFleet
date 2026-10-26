@@ -10,11 +10,15 @@ import (
 	"github.com/pkg/sftp"
 )
 
-// 上传前的空间判据（ADR-0026、工单 01）。
+// 上传前的空间判据（ADR-0026、工单 01、02）。
 //
-// 这一摊只做两件事：把 StatVFS 的块数换算成「谁能用多少字节」，以及拿可用量与需要量
-// 硬比出结论并拼出那句报文。探测本身（要不要探、探哪条路径、失败怎么降级）留在 sftp.go
-// 的接线里——纯函数好测，接线靠真机用例。
+// 这一摊管三件事：把 StatVFS 的块数换算成「谁能用多少字节」（availBytes）、拿可用量与
+// 需要量硬比出结论并拼出那句报文（judgeSpace / spaceShortDetail）、决定探哪几条路径与
+// 探不到怎么办（spaceShort / tmpProbePath / sftpAvail）。
+//
+// sftp.go 那边只剩接线：什么时候调（预检一次、写失败时一次，都在回滚之前）、结论怎么用
+// （预检直接返回失败，失败后再查只是往报错原文里添一句）。纯函数与探测分离，是为了让
+// 「探不到」这类真机上造不出的分支有地方被测到；接线本身由真机用例管。
 
 // spaceSide 判的是哪一侧。两侧的报文名与路径都不同，判据本身完全一样。
 type spaceSide int
@@ -27,7 +31,8 @@ const (
 // judgeSpace 硬比可用量与需要量，不够就给出该发哪条报文。
 //
 // beforeWrite 区分两种场景：预检（一个文件都没写，报文里要声明这一点）与
-// 失败后再查（已经写过并回滚，只说还差多少）。判据两处同源，只有细节不同。
+// 失败后再查（已经写过——探测发生在回滚之前，那时文件还在，只说还差多少）。
+// 判据两处同源，只有细节不同。
 func judgeSpace(side spaceSide, path string, avail, need int64, beforeWrite bool) (string, bool) {
 	if avail >= need {
 		return "", false
@@ -41,6 +46,10 @@ func judgeSpace(side spaceSide, path string, avail, need int64, beforeWrite bool
 
 // spaceShortDetail 报文正文：路径 + 两个数（ADR-0021 决定第 8 条：执行侧只陈述事实）。
 func spaceShortDetail(path string, avail, need int64, beforeWrite bool) string {
+	// 目标目录常以 "/" 结尾（-p /opt/ 那种写法），报文里别写成 "/opt/: 51 MB"。
+	if trimmed := strings.TrimRight(path, "/"); trimmed != "" {
+		path = trimmed
+	}
 	if beforeWrite {
 		return fmt.Sprintf("%s: %s available, %s needed; no file written",
 			path, humanBytes(avail), humanBytes(need))
