@@ -237,3 +237,34 @@ func TestCheckArgumentsRejectsCiphertextPastedAsValue(t *testing.T) {
 		})
 	}
 }
+
+// 加密模式下密文文件读不出新密码：两行（问题 + 原因），原因取系统给的那段。
+// 走公开入口 Parse + CheckArguments。
+func TestCheckArgumentsReportsUnreadableCipherFile(t *testing.T) {
+	t.Setenv("SSHFLEET_KEY", "")
+	cipherText, err := credential.EncryptV2("NewPass123", "master-key-for-test")
+	if err != nil {
+		t.Fatalf("造密文失败：%v", err)
+	}
+	path := filepath.Join(t.TempDir(), "pw.enc")
+	if err := os.WriteFile(path, []byte(cipherText), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := helpTestCfg()
+	cfg.Credential.Encrypt = true
+	a, err := Parse(cfg, "test", []string{"-f", "1.1.1.1,22,root,pw", "--change-password", path})
+	if err != nil {
+		t.Fatalf("Parse 不该在这里报错：%v", err)
+	}
+	err = CheckArguments(a)
+	if err == nil {
+		t.Fatal("没有主密钥时应报错")
+	}
+	if !strings.Contains(err.Error(), "--change-password 的值读不出新密码") {
+		t.Fatalf("文案应点明读不出新密码，实际：%q", err.Error())
+	}
+	if !strings.Contains(err.Error(), "\n原因：") {
+		t.Fatalf("应带原因行，实际：%q", err.Error())
+	}
+}

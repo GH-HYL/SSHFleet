@@ -5,10 +5,10 @@
 Status: done
 Blocked by: 01
 
-- [ ] 两包内门无命中：`grep -rnE --include='*.go' '\\n原因：|"[[:space:]]*原因：' internal/dangercheck/ internal/verdict/ | grep -v _test` 输出为空
-- [ ] 报错文本逐字节不变（既有断言一条未改、全绿）
-- [ ] 「出处：/出路：」那套标签与文案一字未动（这批不是三行套，属另一套口径）
-- [ ] `go test ./internal/dangercheck ./internal/verdict` 全绿
+- [x] 两包内门无命中：`grep -rnE --include='*.go' '\\n原因：|"原因：' internal/dangercheck/ internal/verdict/ | grep -v _test` 输出为空
+- [x] 报错文本逐字节不变（既有断言一条未改、全绿）
+- [x] 「出处：/出路：」那套标签与文案一字未动（这批不是三行套，属另一套口径）
+- [x] `go test ./internal/dangercheck ./internal/verdict` 全绿
 
 ## Comments
 

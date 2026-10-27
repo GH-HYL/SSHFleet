@@ -5,11 +5,11 @@
 Status: done
 Blocked by: 01
 
-- [ ] 两包内门无命中：`grep -rnE --include='*.go' '\\n原因：|"[[:space:]]*原因：' internal/config/ internal/credential/ | grep -v _test` 输出为空
-- [ ] 报错文本逐字节不变（既有断言一条未改、全绿）
-- [ ] `credential` 里 `--key-status` 那段状态输出**不动**——它不是报错，只是恰好也有一行「原因：」
-- [ ] 配置里那条路径检查是一个闭包产出多条报错，迁移时保持一处闭包、不拆成多条各拼一遍
-- [ ] `go test ./internal/config ./internal/credential` 全绿
+- [x] 两包内门无命中：`grep -rnE --include='*.go' '\\n原因：|"原因：' internal/config/ internal/credential/ | grep -v _test` 输出为空
+- [x] 报错文本逐字节不变（既有断言一条未改、全绿）
+- [x] `credential` 里 `--key-status` 那段状态输出**不动**——它不是报错，只是恰好也有一行「原因：」
+- [x] 配置里那条路径检查是一个闭包产出多条报错，迁移时保持一处闭包、不拆成多条各拼一遍
+- [x] `go test ./internal/config ./internal/credential` 全绿
 
 ## Comments
 

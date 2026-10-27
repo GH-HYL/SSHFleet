@@ -409,10 +409,7 @@ func normalizeConfigPath(name, raw string) (string, error) {
 
 	// ~：与相对路径无关的一类（它既不是相对也不是绝对），单独成句
 	if strings.HasPrefix(p, "~") {
-		return "", common.ErrUser(
-			fmt.Sprintf("%s 不支持 ~，当前值：%s", name, raw),
-			"~ 不会被展开，写什么就按什么找",
-			fmt.Sprintf("%s，例如 %s", absHint, example))
+		return "", pathErr("不支持 ~", "~ 不会被展开，写什么就按什么找")
 	}
 
 	if isWindows() {
