@@ -31,7 +31,7 @@ func checkPasswdChange(a *Args) error {
 	// 密文只能装进文件、由路径指过来。有人会把密文那串本身贴进这一格：
 	// 按路径去 Stat 会报「读不到：AgAA…」，看的人以为是文件名写错；开了加密又贴内容，
 	// 则连该写路径这件事都说不清。两支各给一句能照做的话。
-	if credential.ContentFormat(a.ChangePasswordRaw) == "encrypted" {
+	if credential.IsEncrypted(a.ChangePasswordRaw) {
 		if a.credentialEncrypted {
 			return common.ErrUser(
 				"--change-password 写的是密文内容，不是文件路径",
