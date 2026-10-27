@@ -847,11 +847,11 @@ func TestSummaryPasswdFieldShowsRealNewPassword(t *testing.T) {
 	}{
 		{
 			name: "加密模式：旗标值是密文文件路径",
-			a:    &Args{ChangePassword: "/home/hyl/secret/new_pw.txt", NewPassword: "NewPass#2026"},
+			a:    &Args{ChangePasswordRaw: "/home/hyl/secret/new_pw.txt", NewPassword: "NewPass#2026"},
 		},
 		{
 			name: "明文模式：旗标值就是新密码",
-			a:    &Args{ChangePassword: "NewPass#2026", NewPassword: "NewPass#2026"},
+			a:    &Args{ChangePasswordRaw: "NewPass#2026", NewPassword: "NewPass#2026"},
 		},
 	}
 	for _, c := range cases {
@@ -869,7 +869,7 @@ func TestSummaryPasswdFieldShowsRealNewPassword(t *testing.T) {
 // 生产路径走不到（Summary 的唯一调用点在合规检查之后）。这条测试只钉住「万一走到时
 // 不拿 **** 顶替」——**** 与「4 位以内的密码」同形，看日志的人分不出来。
 func TestSummaryPasswdFieldBeforeDecode(t *testing.T) {
-	a := &Args{ChangePassword: "/home/hyl/secret/new_pw.txt"} // 未经 CheckArguments
+	a := &Args{ChangePasswordRaw: "/home/hyl/secret/new_pw.txt"} // 未经 CheckArguments
 	if got := a.Summary(); !strings.Contains(got, "change_password='（未解析）'") {
 		t.Fatalf("未解析时应写明，实际：%s", got)
 	}

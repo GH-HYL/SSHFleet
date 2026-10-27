@@ -42,7 +42,7 @@ func CheckArguments(a *Args) error {
 	// 执行模式互斥（手写校验）。零个与多个分开说——"互斥、只能指定一个"
 	// 对一个都没给是误导：他要做的是"选一个"，不是"删掉多余的"。
 	modeCount := 0
-	for _, v := range []string{a.Command, a.Script, a.Upload, a.Download, a.ChangePassword} {
+	for _, v := range []string{a.Command, a.Script, a.Upload, a.Download, a.ChangePasswordRaw} {
 		if v != "" {
 			modeCount++
 		}
@@ -223,7 +223,7 @@ func keyTools(a *Args) []string {
 // `--yes` 不算：它对密钥管理命令也有意义（跳过覆盖确认），且不指向任何节点。
 func batchParamsGiven(a *Args) []string {
 	var given []string
-	for _, m := range [][2]string{{"-c", a.Command}, {"-s", a.Script}, {"-u", a.Upload}, {"-d", a.Download}, {"--change-password", a.ChangePassword}} {
+	for _, m := range [][2]string{{"-c", a.Command}, {"-s", a.Script}, {"-u", a.Upload}, {"-d", a.Download}, {"--change-password", a.ChangePasswordRaw}} {
 		if m[1] != "" {
 			given = append(given, m[0])
 		}

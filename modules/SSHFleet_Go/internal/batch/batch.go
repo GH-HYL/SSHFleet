@@ -174,7 +174,7 @@ func buildTasks(a *cli.Args, nodes *nodelist.Nodes, prompts *ssh.PasswdPrompts, 
 	expiredKeywords := kw.PasswordExpired()
 
 	switch {
-	case a.ChangePassword != "":
+	case a.ChangePasswordRaw != "":
 		// 改密：全场一份入场值——新密码全局同一个，提示词表与匹配口径也全场同一套。
 		// 当前密码不在这里传：它就是每台机器自己的登录密码，客户端配置里已经有了。
 		// 过期信号在这里是入场信号，不是中止词（改密会话不带中止词）。
