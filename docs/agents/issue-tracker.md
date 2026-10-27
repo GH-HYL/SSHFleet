@@ -9,7 +9,7 @@
 - 实现工单**一条一个文件**：`docs/issues/<feature-slug>/issues/<NN>-<slug>.md`，从 `01` 起编号，**绝不合并成单个工单文件**
 - 分诊状态记录在文件顶部附近的 `Status:` 行（角色字符串见 `triage-labels.md`）
 - 评论与讨论历史追加到文件底部的 `## Comments` 标题下
-- **文件名只承载 slug，不承载状态**——`spec-已闭环.md` 这类写法已废弃，改用 `spec.md` 并在 `Status:` 行写明状态
+- **文件名只承载 slug，不承载状态**：一律写 `spec.md`，状态写在 `Status:` 行
 
 ## 议题内的其他文件（本仓库扩充）
 
