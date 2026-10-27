@@ -2,7 +2,7 @@
 
 > **为什么有这一份**：格式的源头是技能（`/domain-modeling`、`/to-spec`、`/to-tickets`），但那几个技能多数设了 `disable-model-invocation`，**执行者调不到**。本文件把技能里的模板与判据抄成可读的规范，让执行者不靠调用也能照办。
 >
-> **上游不是本文件**：技能原文在 `~/.workbuddy/skills/engineering/` 下（`domain-modeling/ADR-FORMAT.md`、`to-spec/SKILL.md`、`to-tickets/SKILL.md`）。技能更新后本文件可能落后——**有出入时以技能原文为准**。
+> **上游不是本文件**：技能原文在 `/domain-modeling`、`/to-spec`、`/to-tickets` 三个技能自带的模板文件里（`ADR-FORMAT.md`、`SKILL.md`）。技能更新后本文件可能落后——**有出入时以技能原文为准**。
 >
 > **本仓库的载体约定另有其文**：落点、编号、状态取值、允许出现哪些文件，见 `issue-tracker.md` 与 `triage-labels.md`；本文件只管**内容形态**。
 
