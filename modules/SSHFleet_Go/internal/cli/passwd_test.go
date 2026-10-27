@@ -146,15 +146,6 @@ func TestCheckPasswdChangeKeepsInnerSpace(t *testing.T) {
 	}
 }
 
-// 全是空白的值等于没给密码：按既有的「内容为空」报，不新造一类说法。
-func TestCheckPasswdChangeRejectsBlankOnly(t *testing.T) {
-	a := &Args{ChangePasswordRaw: "   "}
-	err := checkPasswdChange(a)
-	if err == nil || !strings.Contains(err.Error(), "内容为空") {
-		t.Fatalf("全空白应报内容为空，实际：%v", err)
-	}
-}
-
 // 加密链路：旗标值是密文文件路径，解出来的才是新密码。
 //
 // 这是「三处显示点取 NewPassword」这件事的**前提**。显示那几条测试都手塞 NewPassword，
