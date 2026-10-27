@@ -2,7 +2,7 @@
 
 **要做的**：配置加载（含环境变量段、路径形态、改密提示词表）6 处与凭据读取/转换 4 处改走构造点。做完之后：这两处报错全部走构造点，输出与今天逐字节一致——它们现在多是「问题+原因」两行，**不补提示**，形态保持原样。
 
-Status: ready-for-agent
+Status: done
 Blocked by: 01
 
 - [ ] 两包内门无命中：`grep -rnE --include='*.go' '\\n原因：|"[[:space:]]*原因：' internal/config/ internal/credential/ | grep -v _test` 输出为空
