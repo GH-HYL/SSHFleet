@@ -54,14 +54,18 @@ docs/越界记录/
 !.dsh/skills/**/
 
 # 工具脚本：tools/ 整体默认不跟踪（辅助脚本、离线依赖包一律除外），
-# 只有开发者点名要留的才单独放行——目前是 skill-manager（技能软链接与上游更新脚本）。
-# 父目录被 * 排除时子文件无法重新纳入，故逐层放行；将来再点名别的子目录，照这三行加。
+# 只有开发者点名要留的才单独放行——目前是 skill-manager（技能软链接与上游更新脚本）
+# 与 release（打包发布脚本）。父目录被 * 排除时子文件无法重新纳入，故逐层放行；
+# 将来再点名别的子目录，照这三行加。
 !tools/
 !tools/skill-manager/
 !tools/skill-manager/**
+!tools/release/
+!tools/release/**
 
 # 跑脚本生成的字节码缓存属产物：上一行的通配会把它一并放行，这里显式排除（写在放行之后才生效）
 tools/skill-manager/__pycache__/
+tools/release/__pycache__/
 
 # 个人技能：工作区 skills/person 是技能实体（~/.workbuddy/skills/person 链过来），随仓库跟踪。
 # engineering / productivity 不在其内——它们是 mattpocock/skills 的上游副本，update_skills.py
