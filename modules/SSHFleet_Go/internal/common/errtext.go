@@ -20,7 +20,10 @@ const (
 	internalHint = "这是内部错误，请把本次命令反馈给作者"
 )
 
-// ErrUser 拼「问题 / 原因 / 提示」三行：有系统原文可引、也有「怎么改」可写的报错用这个。
+// ErrUser 拼「问题 / 原因 / 提示」三行：说得出「为什么」、也有「怎么改」可写的报错用这个。
+//
+// 第二行能引系统原文就引（`os` 报错那类）；引不到时写一句判定理由也算数（「当前没开加密」
+// 这种），但它得回答「为什么」，不是「该怎么办」——后者属于提示。
 func ErrUser(problem, reason, hint string) error {
 	return errors.New(problem + reasonLabel + reason + hintLabel + hint)
 }
