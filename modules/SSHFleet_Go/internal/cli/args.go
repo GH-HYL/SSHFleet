@@ -41,14 +41,16 @@ type Args struct {
 	Key            bool   // -k：写了就用密钥登录（私钥取清单第 5 列，其次配置 key）
 	NoShell        bool   // --no-shell
 	Disinteractive bool   // --yes
-	// --change-password 与它的解析结果：值随 encrypt 开关是明文密码或密文文件路径，
-	// 解析出的明文由 CheckArguments 填进 NewPassword（执行侧只用后者）。
-	ChangePassword string
-	NewPassword    string
-	GenKey         bool   // --gen-key
-	KeyStatus      bool   // --key-status
-	ConvertSecret  string // --convert-secret
-	FIsInline      bool   // -f 为内联的一条记录（不是文件路径）：由合规检查判定后回填，装载与归档读它
+	// --change-password 的命令行原值，一个字节都不改写（ADR-0027）。加密开关打开时它是
+	// 一份密文文件的路径，关闭时才是密码本身——名字带 Raw 就是提醒别把它当密码用。
+	ChangePasswordRaw string
+	// NewPassword 是解析后的新密码：明文模式即原值，加密模式是读文件解出来的明文。
+	// 执行侧与参数屏、报告、日志只取它（显示前按 MaskSecret 脱敏）。
+	NewPassword   string
+	GenKey        bool   // --gen-key
+	KeyStatus     bool   // --key-status
+	ConvertSecret string // --convert-secret
+	FIsInline     bool   // -f 为内联的一条记录（不是文件路径）：由合规检查判定后回填，装载与归档读它
 
 	// -a 与 [interactive]：原始值在 Parse 里装好，解析结果由 CheckArguments 填——
 	// 来源判定与门控只做一次，执行侧直接用。
@@ -100,7 +102,7 @@ const (
 // 全工具单一判据点：归档目录名、报告、日志文案此前各自重判一遍同一组字段。
 func (a *Args) ModeName() Mode {
 	switch {
-	case a.ChangePassword != "":
+	case a.ChangePasswordRaw != "":
 		return ModePasswd
 	case a.Command != "":
 		return ModeCommand
@@ -267,7 +269,7 @@ func (a *Args) Summary() string {
 	switch {
 	case a.NewPassword != "":
 		changePassword = "'" + common.MaskSecret(a.NewPassword) + "'"
-	case a.ChangePassword != "":
+	case a.ChangePasswordRaw != "":
 		// 防御性分支，生产路径上走不到：Summary 的唯一调用点在合规检查之后，那时
 		// NewPassword 一定已经解出来了。留着是防将来有人在合规检查之前加一行日志——
 		// 那会让这一格静默变成 ****，而 **** 与 4 位以内的密码同形，看日志的人
@@ -341,7 +343,7 @@ func Parse(cfg *config.Config, version string, raw []string) (*Args, error) {
 	fs.StringVarP(&a.Remark, "remark", "r", "", "备注，用作历史记录文件夹名（不填自动生成）")
 	fs.BoolVar(&a.NoShell, "no-shell", false, "不套工具的外壳、不设环境：命令/脚本原样下发")
 	fs.BoolVar(&a.Disinteractive, "yes", false, "跳过所有确认提示直接执行")
-	fs.StringVar(&a.ChangePassword, "change-password", "", "批量改密：把清单里密码过期的账号改成同一个新密码")
+	fs.StringVar(&a.ChangePasswordRaw, "change-password", "", "批量改密：把清单里密码过期的账号改成同一个新密码")
 	fs.StringVarP(&a.Answer, "answer", "a", "", "代填：看到触发词就自动填内容")
 	fs.BoolVarP(&a.Key, "key", "k", false, "用密钥登录：私钥取清单第 5 列，其次配置 account.key")
 	fs.BoolVar(&a.GenKey, "gen-key", false, "生成随机主密钥并持久化到 SSHFLEET_KEY")
@@ -385,7 +387,7 @@ func Parse(cfg *config.Config, version string, raw []string) (*Args, error) {
 		if a.timeoutRaw == "" {
 			a.Timeout = cfg.Execution.TimeoutTransfer
 		}
-	case a.ChangePassword != "":
+	case a.ChangePasswordRaw != "":
 		// 改密不传 -t 时按 timeout_execute 收场：超时是改密唯一的兜底（spec 第五节），
 		// 缺了它 ExecTimeout 为 0，会话刚建立就被本地计时掐断（2026-09-29 实测）。
 		if a.timeoutRaw == "" {

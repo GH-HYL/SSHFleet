@@ -13,7 +13,7 @@ import (
 // **不做**"文件还是文本"的自动判定（明文密码可能恰好等于一个存在的文件名）。
 
 func TestCheckPasswdChangePlainText(t *testing.T) {
-	a := &Args{ChangePassword: "NewPass123"}
+	a := &Args{ChangePasswordRaw: "NewPass123"}
 	if err := checkPasswdChange(a); err != nil {
 		t.Fatalf("明文新密码应通过：%v", err)
 	}
@@ -28,7 +28,7 @@ func TestCheckPasswdChangeValueIsNeverAutoDetected(t *testing.T) {
 	if err := os.WriteFile(path, []byte("1.1.1.1,22,root,pw\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	a := &Args{ChangePassword: path} // credentialEncrypted = false
+	a := &Args{ChangePasswordRaw: path} // credentialEncrypted = false
 	if err := checkPasswdChange(a); err != nil {
 		t.Fatalf("不开加密时它就是一个密码，不该去读文件：%v", err)
 	}
@@ -39,7 +39,7 @@ func TestCheckPasswdChangeValueIsNeverAutoDetected(t *testing.T) {
 
 // 开了加密时值是凭据文件路径：文件不在就报错，不静默当成明文。
 func TestCheckPasswdChangeEncryptedMissingFile(t *testing.T) {
-	a := &Args{ChangePassword: filepath.Join(t.TempDir(), "pw.bin"), credentialEncrypted: true}
+	a := &Args{ChangePasswordRaw: filepath.Join(t.TempDir(), "pw.bin"), credentialEncrypted: true}
 	if err := checkPasswdChange(a); err == nil {
 		t.Fatal("加密开关打开而文件不存在时应报错")
 	}
@@ -47,12 +47,12 @@ func TestCheckPasswdChangeEncryptedMissingFile(t *testing.T) {
 
 func TestCheckPasswdChangeExclusive(t *testing.T) {
 	cases := map[string]*Args{
-		"-a":         {ChangePassword: "pw", Answer: "1,架构"},
-		"-p":         {ChangePassword: "pw", Path: "/x/"},
-		"-k":         {ChangePassword: "pw", Key: true},
-		"--no-shell": {ChangePassword: "pw", NoShell: true},
-		"--sudo":     {ChangePassword: "pw", sudoFlag: true},
-		"--no-sudo":  {ChangePassword: "pw", noSudoFlag: true},
+		"-a":         {ChangePasswordRaw: "pw", Answer: "1,架构"},
+		"-p":         {ChangePasswordRaw: "pw", Path: "/x/"},
+		"-k":         {ChangePasswordRaw: "pw", Key: true},
+		"--no-shell": {ChangePasswordRaw: "pw", NoShell: true},
+		"--sudo":     {ChangePasswordRaw: "pw", sudoFlag: true},
+		"--no-sudo":  {ChangePasswordRaw: "pw", noSudoFlag: true},
 	}
 	for name, a := range cases {
 		if err := checkPasswdChange(a); err == nil || !strings.Contains(err.Error(), "--change-password 不能和") {
@@ -71,11 +71,11 @@ func TestCheckPasswdChangeQuietWhenAbsent(t *testing.T) {
 
 // 改密是执行模式之一：五选一。
 func TestCheckArgumentsModeIsFiveWay(t *testing.T) {
-	both := &Args{ChangePassword: "pw", Command: "uptime"}
+	both := &Args{ChangePasswordRaw: "pw", Command: "uptime"}
 	if err := CheckArguments(both); err == nil || !strings.Contains(err.Error(), "互斥") {
 		t.Fatalf("改密与命令模式同给应报互斥，实际：%v", err)
 	}
-	if err := CheckArguments(&Args{ChangePassword: "pw"}); err != nil {
+	if err := CheckArguments(&Args{ChangePasswordRaw: "pw"}); err != nil {
 		t.Fatalf("只给改密应通过到后面的清单检查：%v", err)
 	}
 	none := &Args{}
@@ -90,7 +90,7 @@ func TestCheckArgumentsModeIsFiveWay(t *testing.T) {
 // 日志报的是**解析后**的新密码（加密模式下旗标原值是一份文件路径，报它等于什么都没报），
 // 所以夹具走一遍真实的解析，而不是只塞一个旗标值。
 func TestPasswdModeNameAndMaskedSummary(t *testing.T) {
-	a := &Args{ChangePassword: "NewPass123"}
+	a := &Args{ChangePasswordRaw: "NewPass123"}
 	if err := checkPasswdChange(a); err != nil {
 		t.Fatalf("明文新密码应通过：%v", err)
 	}
@@ -106,19 +106,43 @@ func TestPasswdModeNameAndMaskedSummary(t *testing.T) {
 	}
 }
 
-// 首尾空白在解析阶段就被去掉：喂给远端的是去掉之后的值。
+// 首尾空白不修值，直接拦：程序不替使用者去空白（ADR-0027）。
 //
-// 确认屏与报告显示的是 NewPassword 的形态（见 confirm / output 的测试），所以「屏上看到的
-// 就是实际设进去的那个值」这件事，前提正是这里——不在这里钉住，那个断言只是拿夹具自证。
-// 明文新密码原样保留：它不是路径，也没有第二个事实来源，程序不该替他去首尾空白
-// （ADR-0025 第零节）。去空白会把他设的密码悄悄改掉，而屏幕上看到的还是带空格那串。
-func TestCheckPasswdChangeKeepsOuterSpace(t *testing.T) {
-	a := &Args{ChangePassword: " NewPass123 "}
-	if err := checkPasswdChange(a); err != nil {
-		t.Fatalf("明文新密码应通过：%v", err)
+// 去空白会把他设的密码悄悄改掉，而屏幕上看到的还是带空格那串；拦下来由他自己换一个，
+// 屏幕与实际设置值才不会对不上。
+func TestCheckPasswdChangeRejectsOuterSpace(t *testing.T) {
+	for _, value := range []string{" NewPass123", "NewPass123 ", " NewPass123 ", "\tNewPass123"} {
+		a := &Args{ChangePasswordRaw: value}
+		err := checkPasswdChange(a)
+		if err == nil || !strings.Contains(err.Error(), "开头或结尾有空白") {
+			t.Fatalf("%q 应报首尾空白，实际：%v", value, err)
+		}
+		if a.NewPassword != "" {
+			t.Fatalf("被拦下时不该有解析结果，实际：%q", a.NewPassword)
+		}
 	}
-	if a.NewPassword != " NewPass123 " {
-		t.Fatalf("首尾空白应原样保留，实际：%q", a.NewPassword)
+}
+
+// 换行与回车任意位置都拦：改密是把字节喂进远端终端，换行等于回车，
+// 提交上去的是半截密码，远端重问或失败，报错指不到原因。
+func TestCheckPasswdChangeRejectsNewline(t *testing.T) {
+	for _, value := range []string{"New\nPass123", "New\rPass123", "NewPass123\n"} {
+		a := &Args{ChangePasswordRaw: value}
+		err := checkPasswdChange(a)
+		if err == nil || !strings.Contains(err.Error(), "换行符或回车") {
+			t.Fatalf("%q 应报换行，实际：%v", value, err)
+		}
+	}
+}
+
+// 中间的空格是正常写法，放行，且原样当密码用。
+func TestCheckPasswdChangeKeepsInnerSpace(t *testing.T) {
+	a := &Args{ChangePasswordRaw: "New Pass 2026"}
+	if err := checkPasswdChange(a); err != nil {
+		t.Fatalf("中间空格应放行：%v", err)
+	}
+	if a.NewPassword != "New Pass 2026" {
+		t.Fatalf("应原样取出，实际：%q", a.NewPassword)
 	}
 }
 
@@ -140,11 +164,37 @@ func TestCheckPasswdChangeDecryptsCipherFile(t *testing.T) {
 	}
 	t.Setenv("SSHFLEET_KEY", key)
 
-	a := &Args{ChangePassword: path, credentialEncrypted: true}
+	a := &Args{ChangePasswordRaw: path, credentialEncrypted: true}
 	if err := checkPasswdChange(a); err != nil {
 		t.Fatalf("加密模式下应解出新密码：%v", err)
 	}
 	if a.NewPassword != "NewPass#2026" {
 		t.Fatalf("应解出明文，实际：%q", a.NewPassword)
+	}
+}
+
+// 加密模式解出来的明文同口径拦：密文文件里存着带首尾空格的密码，一样不许设上去。
+//
+// 这条钉的是「两种给法一套规矩」——只拦明文的话，把带空格的密码写进密文文件还能绕过。
+func TestCheckPasswdChangeRejectsOuterSpaceFromCipherFile(t *testing.T) {
+	const key = "test-master-key-2026"
+	path := filepath.Join(t.TempDir(), "new_pw.cred")
+
+	token, err := credential.EncryptV2(" NewPass#2026 ", key)
+	if err != nil {
+		t.Fatalf("造密文失败：%v", err)
+	}
+	if err := os.WriteFile(path, []byte(token), 0o600); err != nil {
+		t.Fatalf("写凭据文件失败：%v", err)
+	}
+	t.Setenv("SSHFLEET_KEY", key)
+
+	a := &Args{ChangePasswordRaw: path, credentialEncrypted: true}
+	err = checkPasswdChange(a)
+	if err == nil || !strings.Contains(err.Error(), "开头或结尾有空白") {
+		t.Fatalf("解出的明文带首尾空白时应拦下，实际：%v", err)
+	}
+	if a.NewPassword != "" {
+		t.Fatalf("被拦下时不该有解析结果，实际：%q", a.NewPassword)
 	}
 }
