@@ -17,7 +17,7 @@
 
 **`resolved` 不是普通工单的状态值**：它是 `/wayfinder` 探路工单专用的（与 `claimed` 配对，见 `issue-tracker.md`「Wayfinding 操作」），普通工单 **MUST NOT** 用它。
 
-**一份文件只有一个 `Status:`**。状态不写进文件名——`spec-已闭环.md` 这类写法已废弃，文件名只承载 slug。
+**一份文件只有一个 `Status:`**。状态不写进文件名，文件名只承载 slug。
 
 当某个技能提到某个角色时（例如「打上 AFK-ready 分诊标签」），使用本表中对应的标签字符串。
 

@@ -16,11 +16,13 @@
 
 ### 什么时候去读它
 
-**开篇读——会话涉及代码时。** 会话开头 **MUST** 读全文；「涉及」指读、改、评价代码，或核对任何依赖代码行为的事实。
+**开篇读——会话涉及代码或文档产出时。** 会话开头 **MUST** 读全文；「涉及」指读、改、评价代码，核对任何依赖代码行为的事实，以及写手册、改 CHANGELOG、调文档口径这类产出。
+
+**改东西之前**，照 `tools/约束文档检查经验/约束文档检查经验.txt` 过一遍。
 
 **按需复读——其余时间只读对应段落。** 按手上在做什么分五路：
 
-- **提到触发词**（ADR、spec、工单、规范、复查、检查）→「附：触发词对照表」，照它调技能
+- **提到触发词**（授权开工、拷问、spec、工单、ADR、复查、tdd、缺陷）→「附：触发词对照表」，照它调技能
 - **碰条款**（授权、复现、越界、改约束类文件）→「一、约束」
 - **落规格、拆工单、交付** →「二、流程」
 - **动结构或落点**（目录、产物位置、模块与测试、验证环境）→「三、结构」
@@ -48,11 +50,11 @@
 
 ### Issue tracker
 
-Issues、spec 和 ticket 以仓库内 `docs/issues/<feature-slug>/` 下的 markdown 文件存放。详见 `docs/agents/issue-tracker.md`。
+**议题**一个功能一个目录，`docs/issues/<yyyy-MM-dd-HHmm-主题>/`，内放 `spec.md` 与 `issues/NN-*.md`；详见 `docs/agents/issue-tracker.md`。
 
 ### Triage labels
 
-五个标准分诊角色，标签名与角色名一致（`needs-triage`、`needs-info`、`ready-for-agent`、`ready-for-human`、`wontfix`）。详见 `docs/agents/triage-labels.md`。
+六个分诊角色，标签名与角色名一致（`needs-triage`、`needs-info`、`ready-for-agent`、`ready-for-human`、`wontfix`、`done`）。详见 `docs/agents/triage-labels.md`。
 
 ### Skills index
 
