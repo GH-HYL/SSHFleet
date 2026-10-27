@@ -473,12 +473,12 @@ func extraArgsError(raw []string, extra []string) error {
 	if owner := splitOwner(raw, extra[0]); owner != "" {
 		head = fmt.Sprintf("%s 的值后面还有一段没法识别：%s", owner, joined)
 	}
-	return fmt.Errorf("%s\n常见原因：\n"+
-		"  ① 值里有空格但没加引号——shell 按空格把参数切成了两段\n"+
-		"  ② 通配符被终端展开（`-u /x/abc/*` 会变成多个路径；上传目录不需要通配符）\n"+
-		"  ③ 参数打多了或打错了\n"+
-		"提示：本来想写成一个值的，把整条用双引号包起来，例如 -p \"/opt/my dir/\"（bash、Git Bash、cmd、PowerShell 都认双引号）",
-		head)
+	return common.ErrUserShort(
+		fmt.Sprintf("%s\n常见原因：\n"+
+			"  ① 值里有空格但没加引号——shell 按空格把参数切成了两段\n"+
+			"  ② 通配符被终端展开（`-u /x/abc/*` 会变成多个路径；上传目录不需要通配符）\n"+
+			"  ③ 参数打多了或打错了", head),
+		"本来想写成一个值的，把整条用双引号包起来，例如 -p \"/opt/my dir/\"（bash、Git Bash、cmd、PowerShell 都认双引号）")
 }
 
 // splitOwner 回溯第一个多余段，看它是不是紧跟在「某个选项的值」后面，返回那个选项名。

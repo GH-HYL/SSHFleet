@@ -28,6 +28,21 @@ func checkPasswdChange(a *Args) error {
 	if err := checkPasswdChangeExclusive(a); err != nil {
 		return err
 	}
+	// 密文只能装进文件、由路径指过来。有人会把密文那串本身贴进这一格：
+	// 按路径去 Stat 会报「读不到：AgAA…」，看的人以为是文件名写错；开了加密又贴内容，
+	// 则连该写路径这件事都说不清。两支各给一句能照做的话。
+	if credential.ContentFormat(a.ChangePasswordRaw) == "encrypted" {
+		if a.credentialEncrypted {
+			return common.ErrUser(
+				"--change-password 写的是密文内容，不是文件路径",
+				"开了加密时，这一格要写密文文件的本机绝对路径",
+				"把这段密文存成文件，这里改写成该文件的绝对路径（用 --convert-secret 转出来的那个文件）")
+		}
+		return common.ErrUser(
+			"--change-password 写的是密文内容，不是新密码",
+			"当前没开加密，这一格要写新密码本身；密文只能装进文件、由路径指过来",
+			"写成新密码本身；要用密文，先把配置的 encrypt 改成 true，再把密文存成文件、这里写该文件的绝对路径")
+	}
 	// 打开加密时这个值是密文文件的路径：读不到就先给三行套（问题 / 原因 / 提示），
 	// 原因取系统原文——只说「值有问题」，看的人得自己猜是路径写错还是文件被挪了。
 	if a.credentialEncrypted {
@@ -43,7 +58,9 @@ func checkPasswdChange(a *Args) error {
 		return common.ErrUserReason("--change-password 的值读不出新密码", err.Error())
 	}
 	if len(problems) > 0 {
-		return fmt.Errorf("--change-password 的值有问题：%s", strings.Join(problems, "；"))
+		return common.ErrUserShort(
+			fmt.Sprintf("--change-password 的值有问题：%s", strings.Join(problems, "；")),
+			"也可以把配置的 encrypt 改成 false，直接在这一格写新密码")
 	}
 	// 明文模式的原值与加密模式解出来的明文都走到这里，形态检查只此一处（ADR-0027）。
 	if err := checkNewPasswordShape(plain); err != nil {
