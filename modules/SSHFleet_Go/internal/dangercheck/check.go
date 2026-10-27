@@ -9,6 +9,8 @@ package dangercheck
 import (
 	"fmt"
 	"os"
+
+	"sshfleet/internal/common"
 )
 
 // Check 读取待检内容（命令模式取 -c，脚本模式取脚本文件）并分析。
@@ -23,7 +25,7 @@ func Check(command, scriptPath string, rules *Rules) (*Report, error) {
 	if scriptPath != "" {
 		data, err := os.ReadFile(scriptPath)
 		if err != nil {
-			return nil, fmt.Errorf("读取脚本内容失败：%s\n原因：%v", scriptPath, err)
+			return nil, common.ErrUserReason(fmt.Sprintf("读取脚本内容失败：%s", scriptPath), err.Error())
 		}
 		report.ScriptPath = scriptPath
 		src = string(data)
