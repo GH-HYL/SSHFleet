@@ -90,7 +90,7 @@ func TestStatisticsSuccessCategoryByMode(t *testing.T) {
 		{"脚本模式", &cli.Args{Script: "/tmp/x.sh"}, "执行成功"},
 		{"上传模式", &cli.Args{Upload: "/tmp/x"}, "传输成功"},
 		{"下载模式", &cli.Args{Download: "/tmp/x"}, "传输成功"},
-		{"改密模式", &cli.Args{ChangePassword: "root:newpass"}, "改密成功"},
+		{"改密模式", &cli.Args{ChangePasswordRaw: "root:newpass"}, "改密成功"},
 	}
 
 	for _, c := range cases {
