@@ -274,6 +274,9 @@ def check_size(*paths: Path) -> None:
 
 
 def package(go: str, version: str, ts: str) -> list[Path]:
+    # 先编译再清 release：编译失败时上一次的产物还在，不必从零重来
+    build_bins(go)
+
     if REL.exists():
         # 清空前确认 release 在工作区内：rm 一旦作用到工作区外就是不可逆的
         try:
@@ -282,8 +285,6 @@ def package(go: str, version: str, ts: str) -> list[Path]:
             die(f"release 目录不在工作区内，拒绝清空：{REL}")
         shutil.rmtree(REL)
     REL.mkdir(parents=True)
-
-    build_bins(go)
 
     made: list[Path] = []
     for plat in PLATFORMS:
