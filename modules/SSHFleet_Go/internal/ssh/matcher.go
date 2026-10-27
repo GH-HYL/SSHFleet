@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+
+	"sshfleet/internal/common"
 )
 
 // MatchOptions 触发词与中止词的匹配口径（配置 [interactive] 的两个开关）。
@@ -22,7 +24,7 @@ func ValidateKeywords(keywords []string, opts MatchOptions) error {
 	}
 	for _, kw := range keywords {
 		if _, err := regexp.Compile(patternOf(kw, opts.CaseSensitive)); err != nil {
-			return fmt.Errorf("触发词不是合法正则：%s\n原因：%v", kw, err)
+			return common.ErrUserReason(fmt.Sprintf("触发词不是合法正则：%s", kw), err.Error())
 		}
 	}
 	return nil

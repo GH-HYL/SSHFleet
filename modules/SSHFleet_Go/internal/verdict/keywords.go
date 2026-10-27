@@ -13,6 +13,8 @@ import (
 	"strings"
 
 	"github.com/BurntSushi/toml"
+
+	"sshfleet/internal/common"
 )
 
 // Category 一个分类及其关键词（顺序即匹配优先级）。
@@ -45,12 +47,12 @@ type keywordsFile struct {
 func LoadKeywords(path string) (*Keywords, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("读取错误分类关键词失败：%s\n原因：%v", path, err)
+		return nil, common.ErrUserReason(fmt.Sprintf("读取错误分类关键词失败：%s", path), err.Error())
 	}
 	var file keywordsFile
 	md, err := toml.Decode(string(data), &file)
 	if err != nil {
-		return nil, fmt.Errorf("错误分类关键词解析失败：%s\n原因：%v", path, err)
+		return nil, common.ErrUserReason(fmt.Sprintf("错误分类关键词解析失败：%s", path), err.Error())
 	}
 	if undecoded := md.Undecoded(); len(undecoded) > 0 {
 		keys := make([]string, 0, len(undecoded))

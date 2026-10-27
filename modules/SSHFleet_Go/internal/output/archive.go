@@ -35,7 +35,7 @@ func CreateArchive(a *cli.Args) (*Archive, error) {
 		return nil, err
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return nil, fmt.Errorf("创建归档目录失败：%s\n原因：%v", dir, err)
+		return nil, common.ErrUserReason(fmt.Sprintf("创建归档目录失败：%s", dir), err.Error())
 	}
 	return &Archive{Dir: dir}, nil
 }
@@ -142,7 +142,7 @@ func joinCSVLine(fields []string) string {
 func CreateLatestHistoryLink() error {
 	entries, err := os.ReadDir(config.BuiltinPaths.Historys)
 	if err != nil {
-		return fmt.Errorf("读取历史记录目录失败：%s\n原因：%v", config.BuiltinPaths.Historys, err)
+		return common.ErrUserReason(fmt.Sprintf("读取历史记录目录失败：%s", config.BuiltinPaths.Historys), err.Error())
 	}
 	var dirs []string
 	for _, e := range entries {

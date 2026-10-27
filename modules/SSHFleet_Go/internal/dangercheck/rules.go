@@ -55,13 +55,14 @@ func LoadRules(path string) (*Rules, error) {
 func readRulesFile(path string) (rulesFile, []map[string]any, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return rulesFile{}, nil, fmt.Errorf("读取危险命令检测规则失败：%s\n原因：%v", path, err)
+		return rulesFile{}, nil, common.ErrUserReason(fmt.Sprintf("读取危险命令检测规则失败：%s", path), err.Error())
 	}
 	var file rulesFile
 	md, err := toml.Decode(string(data), &file)
 	if err != nil {
-		return rulesFile{}, nil, fmt.Errorf(
-			"危险命令检测规则解析失败：%s\n原因：%v\n%s", path, err, decodeHint(err))
+		return rulesFile{}, nil, fmt.Errorf("%s\n%s",
+			common.ErrUserReason(fmt.Sprintf("危险命令检测规则解析失败：%s", path), err.Error()),
+			decodeHint(err))
 	}
 	if undecoded := md.Undecoded(); len(undecoded) > 0 {
 		keys := make([]string, 0, len(undecoded))
@@ -76,7 +77,7 @@ func readRulesFile(path string) (rulesFile, []map[string]any, error) {
 		Rules []map[string]any `toml:"rules"`
 	}
 	if _, err := toml.Decode(string(data), &raw); err != nil {
-		return rulesFile{}, nil, fmt.Errorf("危险命令检测规则解析失败：%s\n原因：%v", path, err)
+		return rulesFile{}, nil, common.ErrUserReason(fmt.Sprintf("危险命令检测规则解析失败：%s", path), err.Error())
 	}
 	return file, raw.Rules, nil
 }

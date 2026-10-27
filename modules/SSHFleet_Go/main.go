@@ -426,9 +426,10 @@ func main() {
 	// 改密的入场信号为空 = 整场不喂、每台机器都干等到超时：这种配置要在开工前拦住。
 	// 取的判据与执行侧同一处（Keywords.PasswordExpired），守卫与被守的东西不会各说各话。
 	if args.ChangePasswordRaw != "" && len(errorKeywords.PasswordExpired()) == 0 {
-		fatal("ssh", fmt.Errorf("改密缺少入场信号\n"+
-			"原因：判据文件里「密码过期」分类没有关键词，工具认不出哪台机器要改密\n"+
-			"提示：该分类在 config/keywords_error.conf，别删它"))
+		fatal("ssh", common.ErrUser(
+			"改密缺少入场信号",
+			"判据文件里「密码过期」分类没有关键词，工具认不出哪台机器要改密",
+			"该分类在 config/keywords_error.conf，别删它"))
 	}
 	execResults, err := batch.Run(execCtx, args, cfg, nodes, execLog, prompts, errorKeywords, upload, batch.Hooks{
 		OnNotice:   reporter.Notice,

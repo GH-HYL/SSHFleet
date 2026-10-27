@@ -148,9 +148,16 @@ func isProbablyBase64Text(text string) bool {
 	return base64.StdEncoding.EncodeToString(raw) == compact
 }
 
+// IsEncrypted 这段文本是不是本工具的密文格式（结构判断，不解密、不看内容）。
+//
+// 调用点用它分辨「用户把密文贴进来了」与「这是一串普通值/路径」——两者要给的提示不一样。
+func IsEncrypted(text string) bool {
+	return looksEncryptedV2(text)
+}
+
 // ContentFormat 凭据内容预分类：encrypted / base64 / plain（base64 档已退役，保留同上）。
 func ContentFormat(text string) string {
-	if looksEncryptedV2(text) {
+	if IsEncrypted(text) {
 		return "encrypted"
 	}
 	if isProbablyBase64Text(text) {
