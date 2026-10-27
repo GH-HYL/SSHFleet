@@ -53,15 +53,12 @@ func checkPasswdChange(a *Args) error {
 
 // checkNewPasswordShape 判新密码的形态，命中就报错退出——**不改值**（ADR-0027）。
 //
-// 三条：全空白当没给密码；任意位置有换行或回车（改密逐行喂进远端终端，换行等于回车，
-// 提交上去是半截密码）；开头或结尾有空白（远端看不见，设上去以后自己也敲不出来）。
-// 中间的空格是正常写法，放行。
+// 两条：任意位置有换行或回车（改密逐行喂进远端终端，换行等于回车，提交上去是半截密码）；
+// 开头或结尾有空白（远端看不见，设上去以后自己也敲不出来）。中间的空格是正常写法，放行。
+// 全是空白的值按第二条拦——它开头就是空白。
 func checkNewPasswordShape(plain string) error {
-	if strings.TrimSpace(plain) == "" {
-		return fmt.Errorf("--change-password 的值有问题：内容为空\n提示：改成一个非空的密码后重跑")
-	}
 	if strings.ContainsAny(plain, "\r\n") {
-		return fmt.Errorf("--change-password 的新密码里有换行符或回车\n原因：参数被换行截断，或复制粘贴时带进了换行\n提示：把整串写成一行后重跑")
+		return fmt.Errorf("--change-password 的新密码里有换行符或回车\n原因：参数被换行截断，或复制粘贴时带进了换行\n提示：把整串写成一行（或换一个密码）后重跑")
 	}
 	if strings.TrimSpace(plain) != plain {
 		return fmt.Errorf("--change-password 的新密码开头或结尾有空白\n原因：多半是多打或复制粘贴时带进来的空格、制表符\n提示：换一个不带首尾空白的密码后重跑；远端看不见这些字符，设上去以后你自己也敲不出来")

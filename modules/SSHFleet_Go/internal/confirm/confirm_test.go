@@ -119,14 +119,6 @@ func TestParamScreenPasswdRowShowsRealNewPassword(t *testing.T) {
 			},
 			want: "Ne****26",
 		},
-		{
-			name: "新密码带首尾空白：屏上形态与实际喂进去的那个值一致",
-			args: &cli.Args{
-				ChangePasswordRaw: " NewPass#2026 ",
-				NewPassword:       "NewPass#2026", // 解析侧已去掉首尾空白
-			},
-			want: "Ne****26",
-		},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
