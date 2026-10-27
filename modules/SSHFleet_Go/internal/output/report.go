@@ -64,7 +64,7 @@ func WriteReport(archiveDir string, stats *result.Stats, a *cli.Args, cfg *confi
 		fmt.Fprintf(&b, "  本地路径： %s\n", a.Path)
 	case cli.ModePasswd:
 		// 新密码是明确知道身份的凭据：报告属归档产物，只留脱敏形态。
-		// 取 NewPassword（解析后的明文）而不是 ChangePassword（旗标原值）：加密模式下
+		// 取 NewPassword（解析后的明文）而不是 ChangePasswordRaw（旗标原值）：加密模式下
 		// 旗标原值是一份密文文件的路径，脱敏落盘的是一串路径，事后核对不到改成了什么。
 		fmt.Fprintf(&b, "  新密码： %s\n", common.MaskSecret(a.NewPassword))
 	}

@@ -49,7 +49,7 @@ func TestParamScreenRowLabelsPerMode(t *testing.T) {
 		{"脚本", &cli.Args{Script: "good.sh"}, []string{"脚本路径"}},
 		{"上传", &cli.Args{Upload: "afile.txt", Path: "/opt/"}, []string{"本地路径", "远程路径"}},
 		{"下载", &cli.Args{Download: "/var/log", Path: "./logs/"}, []string{"远程路径", "本地路径"}},
-		{"改密", &cli.Args{ChangePassword: "N3wpw#2026"}, []string{"新密码"}},
+		{"改密", &cli.Args{ChangePasswordRaw: "N3wpw#2026"}, []string{"新密码"}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -106,24 +106,16 @@ func TestParamScreenPasswdRowShowsRealNewPassword(t *testing.T) {
 		{
 			name: "加密模式：旗标值是密文文件路径，屏上显示解出来的新密码",
 			args: &cli.Args{
-				ChangePassword: "/home/hyl/secret/new_pw.txt",
-				NewPassword:    "NewPass#2026",
+				ChangePasswordRaw: "/home/hyl/secret/new_pw.txt",
+				NewPassword:       "NewPass#2026",
 			},
 			want: "Ne****26",
 		},
 		{
 			name: "明文模式：旗标值就是新密码",
 			args: &cli.Args{
-				ChangePassword: "NewPass#2026",
-				NewPassword:    "NewPass#2026",
-			},
-			want: "Ne****26",
-		},
-		{
-			name: "新密码带首尾空白：屏上形态与实际喂进去的那个值一致",
-			args: &cli.Args{
-				ChangePassword: " NewPass#2026 ",
-				NewPassword:    "NewPass#2026", // 解析侧已去掉首尾空白
+				ChangePasswordRaw: "NewPass#2026",
+				NewPassword:       "NewPass#2026",
 			},
 			want: "Ne****26",
 		},

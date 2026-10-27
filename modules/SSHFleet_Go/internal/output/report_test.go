@@ -296,15 +296,15 @@ func TestWriteReportPasswdRowShowsRealNewPassword(t *testing.T) {
 		{
 			name: "加密模式：旗标值是密文文件路径",
 			args: &cli.Args{
-				ChangePassword: "/home/hyl/secret/new_pw.txt",
-				NewPassword:    "NewPass#2026",
+				ChangePasswordRaw: "/home/hyl/secret/new_pw.txt",
+				NewPassword:       "NewPass#2026",
 			},
 		},
 		{
 			name: "明文模式：旗标值就是新密码",
 			args: &cli.Args{
-				ChangePassword: "NewPass#2026",
-				NewPassword:    "NewPass#2026",
+				ChangePasswordRaw: "NewPass#2026",
+				NewPassword:       "NewPass#2026",
 			},
 		},
 	}
@@ -313,7 +313,7 @@ func TestWriteReportPasswdRowShowsRealNewPassword(t *testing.T) {
 			dir := t.TempDir()
 			stats := &result.Stats{NodesTotal: 1, ResultsTotal: 1, Verify: "通过", FailCounts: 1}
 			if err := WriteReport(dir, stats, c.args, &config.Config{},
-				[]string{"sshfleet", "-f", "nodes.csv", "--change-password", c.args.ChangePassword},
+				[]string{"sshfleet", "-f", "nodes.csv", "--change-password", c.args.ChangePasswordRaw},
 				loadReportKeywords(t)); err != nil {
 				t.Fatalf("写报告失败：%v", err)
 			}
