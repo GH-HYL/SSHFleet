@@ -393,9 +393,7 @@ def main() -> None:
     print(f"\n全部完成，发布产物（{REL}）：")
     for p in made:
         print(f"  {p.name}  {p.stat().st_size / 1024 / 1024:.1f} MB")
-    print(f"\n包在 {REL}。tag v{version} 已打在本地，还没推送。要推就：")
-    print(f"  git push GitHub v{version}")
-    print(f"  git push Gitee  v{version}")
+    print(f"[完成] 已打 tag v{version}（仅本地，未推送）")
 
 
 if __name__ == "__main__":
