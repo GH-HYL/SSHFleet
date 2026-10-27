@@ -16,6 +16,8 @@ import (
 	"strings"
 
 	"github.com/BurntSushi/toml"
+
+	"sshfleet/internal/common"
 )
 
 // ShownPath 面向用户展示的配置文件路径：不带 `./`，它不是路径的一部分。
@@ -268,14 +270,16 @@ func validateEnv(env map[string]string) error {
 			continue
 		}
 		if !envNameRe.MatchString(name) {
-			return fmt.Errorf("env 里的 %q 不是合法的环境变量名\n"+
-				"原因：shell 的 export 只认「字母或下划线开头，后接字母、数字、下划线」的名字，写别的到远端会报 not a valid identifier、变量不生效\n"+
-				"提示：改成一个合法名字，例如 MY_VAR", name)
+			return common.ErrUser(
+				fmt.Sprintf("env 里的 %q 不是合法的环境变量名", name),
+				"shell 的 export 只认「字母或下划线开头，后接字母、数字、下划线」的名字，写别的到远端会报 not a valid identifier、变量不生效",
+				"改成一个合法名字，例如 MY_VAR")
 		}
 		if trailingBackslashes(value)%2 == 1 {
-			return fmt.Errorf("env 里的 %q 取值不能以反斜杠结尾，当前值：%q\n"+
-				"原因：值会被包进双引号下发，结尾的反斜杠会吃掉那个收尾引号，远端整条命令变成语法错\n"+
-				"提示：要一个反斜杠就写两个", name, value)
+			return common.ErrUser(
+				fmt.Sprintf("env 里的 %q 取值不能以反斜杠结尾，当前值：%q", name, value),
+				"值会被包进双引号下发，结尾的反斜杠会吃掉那个收尾引号，远端整条命令变成语法错",
+				"要一个反斜杠就写两个")
 		}
 	}
 	return nil
@@ -397,16 +401,15 @@ func normalizeConfigPath(name, raw string) (string, error) {
 		example, absHint = "D:/Keys", "写成带盘符的本机路径"
 	}
 	pathErr := func(head, reason string) error {
-		return fmt.Errorf("%s %s，当前值：%s\n原因：%s\n提示：%s，例如 %s",
-			name, head, raw, reason, absHint, example)
+		return common.ErrUser(
+			fmt.Sprintf("%s %s，当前值：%s", name, head, raw),
+			reason,
+			fmt.Sprintf("%s，例如 %s", absHint, example))
 	}
 
 	// ~：与相对路径无关的一类（它既不是相对也不是绝对），单独成句
 	if strings.HasPrefix(p, "~") {
-		return "", fmt.Errorf(
-			"%s 不支持 ~，当前值：%s\n"+
-				"原因：~ 不会被展开，写什么就按什么找\n"+
-				"提示：%s，例如 %s", name, raw, absHint, example)
+		return "", pathErr("不支持 ~", "~ 不会被展开，写什么就按什么找")
 	}
 
 	if isWindows() {

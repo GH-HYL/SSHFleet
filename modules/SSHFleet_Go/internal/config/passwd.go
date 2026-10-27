@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/BurntSushi/toml"
+
+	"sshfleet/internal/common"
 )
 
 // 批量改密（--change-password）专用配置：一个文件装两类文字——提示词表与失败分类。
@@ -50,12 +52,12 @@ type PasswdConfig struct {
 func LoadPasswdConfig(path string) (*PasswdConfig, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("读取改密配置失败：%s\n原因：%v", path, err)
+		return nil, common.ErrUserReason(fmt.Sprintf("读取改密配置失败：%s", path), err.Error())
 	}
 	var file PasswdConfig
 	md, err := toml.Decode(string(data), &file)
 	if err != nil {
-		return nil, fmt.Errorf("改密配置解析失败：%s\n原因：%v", path, err)
+		return nil, common.ErrUserReason(fmt.Sprintf("改密配置解析失败：%s", path), err.Error())
 	}
 	if undecoded := md.Undecoded(); len(undecoded) > 0 {
 		keys := make([]string, 0, len(undecoded))

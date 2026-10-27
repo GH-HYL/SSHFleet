@@ -92,7 +92,7 @@ func CheckArguments(a *Args) error {
 		}
 		a.Download = trimmed // 两端空白已过滤掉
 		if info, err := os.Stat(a.Path); err != nil {
-			return fmt.Errorf("下载模式：-p 参数指定的本地目录读不到：%s\n原因：%s\n提示：这个目录要在本机上先建好，工具不会替你建", a.Path, common.SystemReason(err))
+			return common.ErrUser(fmt.Sprintf("下载模式：-p 参数指定的本地目录读不到：%s", a.Path), common.SystemReason(err), "这个目录要在本机上先建好，工具不会替你建")
 		} else if !info.IsDir() {
 			// 不借系统原文：`os.ReadDir` 对普通文件在 Windows 上回的是「找不到路径」，
 			// 借来会写成「不存在」+「请先建好」，让使用者去建一个已经存在的目录。
@@ -107,7 +107,7 @@ func CheckArguments(a *Args) error {
 		}
 		info, err := os.Lstat(a.Upload)
 		if err != nil {
-			return fmt.Errorf("-u 参数指定的上传文件或目录读不到：%s\n原因：%s\n提示：-u 后面要写本机上真实存在的文件或目录", a.Upload, common.SystemReason(err))
+			return common.ErrUser(fmt.Sprintf("-u 参数指定的上传文件或目录读不到：%s", a.Upload), common.SystemReason(err), "-u 后面要写本机上真实存在的文件或目录")
 		}
 		if info.Mode()&os.ModeSymlink != 0 {
 			return fmt.Errorf("-u 参数指定的上传文件或目录是符号链接，不能上传：%s\n提示：请直接写它指向的真实文件或目录", a.Upload)
@@ -137,7 +137,7 @@ func CheckArguments(a *Args) error {
 		}
 		data, err := os.ReadFile(a.Script)
 		if err != nil {
-			return fmt.Errorf("-s 参数指定的脚本文件读不到：%s\n原因：%s\n提示：请检查文件是否存在、当前用户有没有读权限", a.Script, common.SystemReason(err))
+			return common.ErrUser(fmt.Sprintf("-s 参数指定的脚本文件读不到：%s", a.Script), common.SystemReason(err), "请检查文件是否存在、当前用户有没有读权限")
 		}
 		if len(data) == 0 {
 			return fmt.Errorf("-s 参数指定的脚本文件为空：%s\n提示：请先写入内容再执行", a.Script)
@@ -173,7 +173,7 @@ func CheckArguments(a *Args) error {
 		if src.IsFile {
 			data, err := os.ReadFile(src.Path)
 			if err != nil {
-				return fmt.Errorf("-f 参数指定的 CSV 文件读不到：%s\n原因：%s\n提示：请检查文件是否存在、当前用户有没有读权限", src.Path, common.SystemReason(err))
+				return common.ErrUser(fmt.Sprintf("-f 参数指定的 CSV 文件读不到：%s", src.Path), common.SystemReason(err), "请检查文件是否存在、当前用户有没有读权限")
 			}
 			if len(data) == 0 {
 				return fmt.Errorf("-f 参数指定的 CSV 文件为空：%s\n提示：一行写一台机器，只写 IP 就能跑（端口、用户名、密码走配置）", src.Path)
