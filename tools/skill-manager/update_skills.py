@@ -1,11 +1,11 @@
-"""从 GitHub 取 mattpocock/skills 的最新「工程」「生产」两组技能，替换工作区里的旧版。
+"""从 GitHub 取 mattpocock/skills 的最新 engineering、productivity 两组技能，替换工作区里的旧版。
 
 用法::
 
     python tools/skill-manager/update_skills.py [--repo URL] [--branch main] [--keep]
 
-流程：问一次 API 拿到分支当前提交 → 下载该提交的归档包到 ``build/skill-manager/`` →
-两个来源目录都在才动手 → 删掉工作区里的旧目录 → 把新的铺进去 → 清掉临时文件。
+流程：问一次 API 拿到分支当前提交 → 下载该提交的归档包到 ``build/skill-manager/`` → 两组都在才动手 →
+把新的铺到临时位置 → 全部铺好后逐组换入 → 清掉临时文件。
 
 替换是整目录换掉，不合并：本地对这两组做过的改动会被覆盖。要的是跟上游一致，
 留着旧文件只会让「这版到底是不是最新的」变得说不清。
@@ -27,15 +27,9 @@ import common
 
 DEFAULT_REPO = "https://github.com/mattpocock/skills"
 
-# (工作区侧目录名, 上游仓库里的目录名)
-UPSTREAM: tuple[tuple[str, str], ...] = (
-    ("工程", "engineering"),
-    ("生产", "productivity"),
-)
-
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="拉取 mattpocock/skills 的最新「工程」「生产」两组技能并替换本地旧版。")
+    parser = argparse.ArgumentParser(description="拉取 mattpocock/skills 最新的 engineering、productivity 两组技能并替换本地旧版。")
     parser.add_argument("--repo", default=DEFAULT_REPO, help=f"上游仓库地址（默认 {DEFAULT_REPO}）")
     parser.add_argument("--branch", default="main", help="上游分支（默认 main）")
     parser.add_argument("--keep", action="store_true", help="跑完不删 build/ 下的下载物，留着看")
@@ -82,7 +76,7 @@ def download_tarball(slug: str, ref: str, dest: Path) -> Path:
         with urllib.request.urlopen(req, timeout=120) as resp, dest.open("wb") as fh:
             shutil.copyfileobj(resp, fh)
     except urllib.error.URLError as exc:
-        raise RuntimeError(f"下载失败，工作区里的技能目录未改动：{exc}") from exc
+        raise RuntimeError(f"下载失败，工作区未改动：{exc}；检查网络或代理后重跑") from exc
     return dest
 
 
@@ -98,7 +92,7 @@ def extract(tarball: Path, dest: Path) -> Path:
             tar.extractall(dest)
     tops = [p for p in dest.iterdir() if p.is_dir()]
     if len(tops) != 1:
-        raise RuntimeError(f"归档结构不对，解出来有 {len(tops)} 个顶层目录：{[p.name for p in tops]}")
+        raise RuntimeError(f"归档结构不对，解出来有 {len(tops)} 个顶层目录；删掉 build/skill-manager/ 后重跑")
     return tops[0]
 
 
@@ -129,21 +123,30 @@ def main() -> int:
         print(f"  失败：{exc}")
         return 1
 
-    # 先验齐再删：任何一组缺了就整体退出，不能删了一半才发现上游没这个目录
-    missing = [f"skills/{name}" for _, name in UPSTREAM if not (root / "skills" / name).is_dir()]
+    # 先验齐再动手：上游少一组就整体退出，不留半套
+    missing = [f"skills/{name}" for name in common.UPSTREAM_GROUPS if not (root / "skills" / name).is_dir()]
     if missing:
-        print("  失败：上游缺目录 " + "、".join(missing) + "，工作区未改动。")
+        print("  失败：上游缺目录 " + "、".join(missing) + "；工作区未改动，先确认仓库结构再重跑。")
+        return 1
+
+    # 先铺到临时位置，全铺好了才换入——中途失败不至于新旧各半
+    staged = staging / "staged"
+    if staged.exists():  # 上次跑到一半留下的残渣会挡住 copytree，先清掉
+        shutil.rmtree(staged)
+    try:
+        for name in common.UPSTREAM_GROUPS:
+            shutil.copytree(root / "skills" / name, staged / name)
+    except OSError as exc:
+        print(f"  失败：铺临时目录出错（{exc}）；工作区未改动，重跑即可。")
         return 1
 
     skills.mkdir(parents=True, exist_ok=True)
-    for local_name, upstream_name in UPSTREAM:
-        src = root / "skills" / upstream_name
-        dst = skills / local_name
+    for name in common.UPSTREAM_GROUPS:
+        dst = skills / name
         old = count_files(dst) if dst.is_dir() else 0
-        if dst.exists() or dst.is_symlink():
-            shutil.rmtree(dst)
-        shutil.copytree(src, dst)
-        print(f"  {local_name}：{old} 个文件 → {count_files(dst)} 个文件（源 skills/{upstream_name}）")
+        common.drop_path(dst)
+        shutil.move(str(staged / name), str(dst))
+        print(f"  {name}：{old} 个文件 → {count_files(dst)} 个文件")
 
     if args.keep:
         print(f"\n  下载物留在 {staging}")
@@ -152,9 +155,9 @@ def main() -> int:
 
     # 链接断了两边就对不上，提醒一句；这里不替开发者去建链
     wb = common.workbuddy_skills_dir()
-    broken = [n for n, _ in common.MAPPINGS if not (wb / n).is_dir()]
+    broken = [n for n in common.GROUPS if not (wb / n).is_dir()]
     if broken:
-        print(f"\n  注意：workbuddy 侧看不到 {', '.join(broken)}，先跑 link_skills.py 建链接。")
+        print(f"\n  注意：workbuddy 侧看不到 {', '.join(broken)}；先跑 link_skills.py 建链接。")
 
     print(f"\n  完成，工作区技能已更新到 {described}")
     return 0

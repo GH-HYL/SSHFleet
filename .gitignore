@@ -63,6 +63,13 @@ docs/越界记录/
 # 跑脚本生成的字节码缓存属产物：上一行的通配会把它一并放行，这里显式排除（写在放行之后才生效）
 tools/skill-manager/__pycache__/
 
+# 个人技能：工作区 skills/person 是技能实体（~/.workbuddy/skills/person 链过来），随仓库跟踪。
+# engineering / productivity 不在其内——它们是 mattpocock/skills 的上游副本，update_skills.py
+# 每次整目录换掉，进版本库只会天天冲突；要复现就重跑更新脚本。逐层放行，理由同上一条。
+!skills/
+!skills/person/
+!skills/person/**
+
 # 代码
 !modules/
 !modules/**

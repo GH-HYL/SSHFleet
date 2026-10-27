@@ -5,10 +5,10 @@
     python tools/skill-manager/link_skills.py
 
 做完之后 ``%USERPROFILE%\\.workbuddy\\skills\\{person,engineering,productivity}`` 都是指向
-``<工作区>\\skills\\{个人,工程,生产}`` 的链接，改哪边都同时生效。
+``<工作区>\\skills\\`` 下同名目录的链接，改哪边都同时生效。
 
-可重复运行：已经链对的组直接跳过；workbuddy 侧还是实体目录、而工作区那边还空着，
-先把内容搬过去再建链（技能不会丢）；两侧都有内容则停下报冲突，不替开发者择一。
+可重复运行：已经链对的组直接跳过；workbuddy 侧还是实体目录时先把内容并进工作区再建链
+（技能不会丢，上次搬到一半的副本按内容去重后接着搬）；真正内容冲突则停下点名报出，不替开发者择一。
 """
 
 from __future__ import annotations
