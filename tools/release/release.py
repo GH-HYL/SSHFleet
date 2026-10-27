@@ -351,6 +351,9 @@ def main() -> None:
     base, undone, days = read_state()
     items = len(RE_ITEM.findall(undone))
     if items == 0 and not args.dry_run:
+        if undone.strip():
+            die("`## 未发布` 区里有内容，但没有一条以 `- ` 开头的条目。\n"
+                "      写法：`### yyyy-MM-dd` 单独一行写日期，条目一律以 `- ` 开头。")
         die("`## 未发布` 区里没有条目，没东西可发")
 
     precheck()
