@@ -13,4 +13,4 @@ description: 按当前议题开分支，本轮提交均落在其上。
 
 **此后**：提交只落此分支，message 带议题名。
 
-**不主动做**：合并、推送、删分支（合并后提醒删）。合并用 `git merge --no-ff` 留合并点；不 rebase、不 squash。
+**不主动做**：合并、推送。合并用 `git merge --no-ff` 留合并点；不 rebase、不 squash。合并后直接删该分支。
