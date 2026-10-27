@@ -7,6 +7,7 @@ import (
 
 	"sshfleet/internal/batch"
 	"sshfleet/internal/cli"
+	"sshfleet/internal/common"
 	"sshfleet/internal/config"
 	"sshfleet/internal/log"
 	"sshfleet/internal/result"
@@ -29,12 +30,12 @@ func Render(
 	mode := a.ModeName()
 
 	if err := WriteReport(archive.Dir, stats, a, cfg, argv, kw); err != nil {
-		return fmt.Errorf("格式化统计结果信息输出到报告文件失败\n原因：%v", err)
+		return common.ErrUserReason("格式化统计结果信息输出到报告文件失败", err.Error())
 	}
 	logger.Success("格式化统计结果信息输出到报告文件成功")
 
 	if err := archive.BackupAssets(a); err != nil {
-		return fmt.Errorf("保存执行资源文件失败\n原因：%v", err)
+		return common.ErrUserReason("保存执行资源文件失败", err.Error())
 	}
 	logger.Success("保存执行资源文件成功")
 
