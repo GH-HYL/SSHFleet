@@ -2,7 +2,7 @@
 
 **要做的**：危险命令规则文件与错误分类关键词文件的加载报错 6 处改走构造点。做完之后：这两个文件出问题时报错走构造点，输出逐字节不变。规则文件里另一套「出处：/出路：」标签**不在此列**，原样保留。
 
-Status: ready-for-agent
+Status: done
 Blocked by: 01
 
 - [ ] 两包内门无命中：`grep -rnE --include='*.go' '\\n原因：|"[[:space:]]*原因：' internal/dangercheck/ internal/verdict/ | grep -v _test` 输出为空
