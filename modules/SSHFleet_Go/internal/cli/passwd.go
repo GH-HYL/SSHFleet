@@ -32,13 +32,15 @@ func checkPasswdChange(a *Args) error {
 	// 原因取系统原文——只说「值有问题」，看的人得自己猜是路径写错还是文件被挪了。
 	if a.credentialEncrypted {
 		if _, err := os.Stat(a.ChangePasswordRaw); err != nil {
-			return fmt.Errorf("--change-password 的值读不到：%s\n原因：%s\n提示：打开加密时这里写密文文件的本机绝对路径（用 --convert-secret 转出来的那个文件）",
-				a.ChangePasswordRaw, common.SystemReason(err))
+			return common.ErrUser(
+				fmt.Sprintf("--change-password 的值读不到：%s", a.ChangePasswordRaw),
+				common.SystemReason(err),
+				"打开加密时这里写密文文件的本机绝对路径（用 --convert-secret 转出来的那个文件）")
 		}
 	}
 	plain, problems, err := credential.ReadCredential(a.ChangePasswordRaw, a.credentialEncrypted, true)
 	if err != nil {
-		return fmt.Errorf("--change-password 的值读不出新密码\n原因：%v", err)
+		return common.ErrUserReason("--change-password 的值读不出新密码", err.Error())
 	}
 	if len(problems) > 0 {
 		return fmt.Errorf("--change-password 的值有问题：%s", strings.Join(problems, "；"))
@@ -58,10 +60,10 @@ func checkPasswdChange(a *Args) error {
 // 全是空白的值按第二条拦——它开头就是空白。
 func checkNewPasswordShape(plain string) error {
 	if strings.ContainsAny(plain, "\r\n") {
-		return fmt.Errorf("--change-password 的新密码里有换行符或回车\n原因：参数被换行截断，或复制粘贴时带进了换行\n提示：把整串写成一行（或换一个密码）后重跑")
+		return common.ErrUser("--change-password 的新密码里有换行符或回车", "参数被换行截断，或复制粘贴时带进了换行", "把整串写成一行（或换一个密码）后重跑")
 	}
 	if strings.TrimSpace(plain) != plain {
-		return fmt.Errorf("--change-password 的新密码开头或结尾有空白\n原因：多半是多打或复制粘贴时带进来的空格、制表符\n提示：换一个不带首尾空白的密码后重跑；远端看不见这些字符，设上去以后你自己也敲不出来")
+		return common.ErrUser("--change-password 的新密码开头或结尾有空白", "多半是多打或复制粘贴时带进来的空格、制表符", "换一个不带首尾空白的密码后重跑；远端看不见这些字符，设上去以后你自己也敲不出来")
 	}
 	return nil
 }
