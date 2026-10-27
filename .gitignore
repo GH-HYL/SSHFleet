@@ -4,7 +4,7 @@
 # 文档 = docs/ 下的 ADR、agent 约定（agents）、规格与工单（issues）、仓库级说明与词表、
 # 面向使用者的六册手册、个人开发规范。
 # 工作区会不断产生过程文件（草稿、临时数据、中间产物），用黑名单要反复维护；
-# 因此改为白名单：默认全部忽略，只明确列出需要跟踪的几处。
+# 因此采用白名单：默认全部忽略，只明确列出需要跟踪的几处。
 # 需要新增追踪时，在下面补一行即可。
 #
 # 代价是「没列到的会静默掉队」——新增目录时记得回来看看要不要加。
@@ -78,11 +78,6 @@ tools/release/__pycache__/
 !modules/
 !modules/**
 
-# 构建脚本：两个平台各一个，都随仓库跟踪——他人 clone 后照它就能出包。
-# build-linux.sh 读的两份出厂配置模板（modules/SSHFleet_Go/config/SSHFleet-for-*.conf）也随仓库走
-!build-linux.sh
-!build-windows.bat
-
 # 以下几类在 modules/ 里天然存在、但都不进版本控制。
 # 注意：放在 !modules/** 之后才能生效——白名单里后写的规则覆盖先写的。
 
@@ -92,8 +87,7 @@ modules/*_bak*/
 # 运行期日志落点（工具自己生成的历史记录，属产物）
 history/
 
-# 构建产物兜底排除：!modules/** 会连带放行它，而历史上 build-linux.sh 相对路径写错时
-# 产物曾落到这里并被误入库（2026-09-14 修脚本 + 补本条）
+# 编译产物兜底排除：!modules/** 会连带放行它
 modules/build/
 
 # ---- 以下为个人使用内容，刻意不纳入追踪（白名单已天然排除，此处仅作说明）----
@@ -102,6 +96,5 @@ modules/build/
 #   skills/                       本地 Agent 技能（tools/audit 并入此处）
 #   test/                         本地测试语料与样本
 #   build/  release/              构建中间产物与发布产物
-#   根目录临时脚本（.bat / .sh）   按需补白名单
 #
 # 另：modules/ 下按上述规则排除 history/ 与 *_bak*/，其余一律追踪。
