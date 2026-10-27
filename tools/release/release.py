@@ -80,6 +80,23 @@ def step(msg: str) -> None:
     print(msg)
 
 
+# 读写一律走这两支，保留文件原有行尾。Path.read_text / write_text 会做通用换行转换：
+# 在 Linux 上跑一次就把 CHANGELOG 的 CRLF 整份改成 LF，下次在 Windows 上提交时
+# 整个文件都是改动。
+def read_text(p: Path) -> str:
+    with open(p, encoding="utf-8", newline="") as f:
+        return f.read()
+
+
+def write_text(p: Path, s: str) -> None:
+    with open(p, "w", encoding="utf-8", newline="") as f:
+        f.write(s)
+
+
+def eol_of(s: str) -> str:
+    return "\r\n" if "\r\n" in s else "\n"
+
+
 def run(cmd: list[str], cwd: Path | None = None, env: dict | None = None) -> str:
     r = subprocess.run(
         cmd, cwd=str(cwd or ROOT), env=env,
@@ -95,7 +112,7 @@ def run(cmd: list[str], cwd: Path | None = None, env: dict | None = None) -> str
 
 def read_state() -> tuple[tuple[int, int, int], str, list[str]]:
     """返回 (最近发布号, 未发布区正文, 未发布区里的日期小节列表)"""
-    text = CHANGELOG.read_text(encoding="utf-8")
+    text = read_text(CHANGELOG).replace("\r\n", "\n")
 
     m = RE_HEAD.search(text)
     base = (int(m.group(1)), int(m.group(2)), int(m.group(3))) if m else (
@@ -156,24 +173,23 @@ def precheck() -> None:
 
 def seal_changelog(version: str, today: str) -> None:
     """## 未发布 → ## [x.y.z] - 日期，并在其上插入新的 ## 未发布"""
-    text = CHANGELOG.read_text(encoding="utf-8")
+    raw = read_text(CHANGELOG)
+    eol = eol_of(raw)
+    text = raw.replace("\r\n", "\n")
     u = RE_UNDONE.search(text)
     if not u:
         die("CHANGELOG 顶部没有 `## 未发布` 区")
     head = text[: u.start()]
     tail = text[u.end():]
     new = f"## [{version}] - {today}\n"
-    CHANGELOG.write_text(head + "## 未发布\n\n" + new + tail, encoding="utf-8")
+    write_text(CHANGELOG, (head + "## 未发布\n\n" + new + tail).replace("\n", eol))
 
 
 def set_app_version(version: str) -> None:
-    src = MAIN_GO.read_text(encoding="utf-8")
+    src = read_text(MAIN_GO)
     if not RE_APPVER.search(src):
         die("main.go 里找不到 appVersion 常量")
-    MAIN_GO.write_text(
-        RE_APPVER.sub(f'const appVersion = "{version}"', src, count=1),
-        encoding="utf-8",
-    )
+    write_text(MAIN_GO, RE_APPVER.sub(f'const appVersion = "{version}"', src, count=1))
 
 
 def commit_and_tag(version: str) -> None:
