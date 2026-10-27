@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"sshfleet/internal/common"
 )
 
 // ConvertSecret 处理 --convert-secret。
@@ -56,7 +58,7 @@ func convertToPlain(path, content string) error {
 	}
 	plaintext, err := DecryptV2(content, masterKey)
 	if err != nil {
-		return fmt.Errorf("解密失败：主密钥与加密该文件时使用的密钥不一致，或文件已损坏/被修改：%s\n原因：%v", path, err)
+		return common.ErrUserReason(fmt.Sprintf("解密失败：主密钥与加密该文件时使用的密钥不一致，或文件已损坏/被修改：%s", path), err.Error())
 	}
 	if plaintext == "" {
 		return fmt.Errorf("解密结果是空的，拒绝写回：%s", path)
@@ -68,11 +70,11 @@ func convertToPlain(path, content string) error {
 // 只输出转换摘要与内容长度，不回显文件内容本体。
 func writeAndEcho(path, newContent, sourceFormat, targetFormat string) error {
 	if err := os.WriteFile(path, []byte(newContent), 0o644); err != nil {
-		return fmt.Errorf("转换内容写入失败：%s\n原因：%v", path, err)
+		return common.ErrUserReason(fmt.Sprintf("转换内容写入失败：%s", path), err.Error())
 	}
 	onDisk, err := os.ReadFile(path)
 	if err != nil {
-		return fmt.Errorf("写入后校验失败，无法读取转换结果：%s\n原因：%v", path, err)
+		return common.ErrUserReason(fmt.Sprintf("写入后校验失败，无法读取转换结果：%s", path), err.Error())
 	}
 	fmt.Printf("转换成功：%s → %s：%s\n", sourceFormat, targetFormat, path)
 	fmt.Printf("内容长度：%d 字符，请用编辑器打开该文件确认结果\n", len(strings.TrimSpace(string(onDisk))))

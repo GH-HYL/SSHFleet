@@ -246,7 +246,7 @@ func ResolveSecretPath(raw, secretDir string) (string, error) {
 func ReadCredFileContent(path string) (string, error) {
 	content, err := os.ReadFile(path)
 	if err != nil {
-		return "", fmt.Errorf("读取凭据文件失败：%s\n原因：%v", path, err)
+		return "", common.ErrUserReason(fmt.Sprintf("读取凭据文件失败：%s", path), err.Error())
 	}
 	text := strings.TrimSpace(string(content))
 	if text == "" {
