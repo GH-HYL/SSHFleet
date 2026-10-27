@@ -330,7 +330,8 @@ def main() -> None:
     precheck()
     go = pick_go() if not args.dry_run else "go"
 
-    print(f"\n未发布区：{items} 条，覆盖 {len(days) or 1} 天")
+    span = f"，覆盖 {len(days)} 天" if days else ""
+    print(f"\n未发布区：{items} 条{span}")
     tier = choose_tier(base)
 
     a, b, c = bump(base, tier)
