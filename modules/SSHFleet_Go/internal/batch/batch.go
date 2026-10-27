@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"sshfleet/internal/cli"
+	"sshfleet/internal/common"
 	"sshfleet/internal/config"
 	"sshfleet/internal/log"
 	"sshfleet/internal/nodelist"
@@ -191,7 +192,7 @@ func buildTasks(a *cli.Args, nodes *nodelist.Nodes, prompts *ssh.PasswdPrompts, 
 		// 清单在确认之前就采集好了（main 传进来的唯一一份），这里只用结果：重复遍历会让
 		// 「确认屏看到的」与「实际要传的」各算各的，采集期的错误也会拖到按下确认之后才报。
 		if upload == nil {
-			return nil, nil, fmt.Errorf("上传清单缺失\n原因：主干未在上传模式下采集清单\n提示：这是内部错误，请把本次命令反馈给作者")
+			return nil, nil, common.ErrInternal("上传清单缺失", "主干未在上传模式下采集清单")
 		}
 		// 软链接等被过滤的条目不阻断执行，但要让用户知道（-u 走终端提示）
 		if len(upload.Skipped) > 0 {
@@ -212,7 +213,7 @@ func buildTasks(a *cli.Args, nodes *nodelist.Nodes, prompts *ssh.PasswdPrompts, 
 		if a.Script != "" {
 			data, err := os.ReadFile(a.Script)
 			if err != nil {
-				return nil, nil, fmt.Errorf("读取脚本文件失败：%s\n原因：%v", a.Script, err)
+				return nil, nil, common.ErrUserReason(fmt.Sprintf("读取脚本文件失败：%s", a.Script), err.Error())
 			}
 			material = cli.ScriptMaterialOf(a, data)
 		}
@@ -229,9 +230,7 @@ func buildTasks(a *cli.Args, nodes *nodelist.Nodes, prompts *ssh.PasswdPrompts, 
 			// 下发行由选项/参数合规阶段拼好存进 Args.Downlink（那里要拿它做长度检查），
 			// 这里直接取用——量的串、日志里那条、实际发出去那条是同一个值，不再重拼。
 			if a.Downlink == "" {
-				return nil, nil, fmt.Errorf("没有为这次交互执行拼出下发行\n" +
-					"原因：选项/参数合规检查阶段未产出 Args.Downlink\n" +
-					"提示：这是内部错误，请把本次命令反馈给作者")
+				return nil, nil, common.ErrInternal("没有为这次交互执行拼出下发行", "选项/参数合规检查阶段未产出 Args.Downlink")
 			}
 			// 执行期入场值只剩三样：代填表、匹配口径、中止词。
 			in := ssh.InteractiveInput{
