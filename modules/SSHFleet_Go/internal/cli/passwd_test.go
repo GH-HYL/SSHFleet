@@ -198,3 +198,42 @@ func TestCheckPasswdChangeRejectsOuterSpaceFromCipherFile(t *testing.T) {
 		t.Fatalf("被拦下时不该有解析结果，实际：%q", a.NewPassword)
 	}
 }
+
+// 密文内容被当成字符串贴进这一格：先告诉它该写什么，而不是拿这串去 Stat。
+// 走公开入口 Parse + CheckArguments，不碰包内私有函数。
+func TestCheckArgumentsRejectsCiphertextPastedAsValue(t *testing.T) {
+	cipherText, err := credential.EncryptV2("NewPass123", "master-key-for-test")
+	if err != nil {
+		t.Fatalf("造密文失败：%v", err)
+	}
+
+	cases := map[string]struct {
+		encrypted bool
+		want      string
+	}{
+		"没开加密": {encrypted: false, want: "写的是密文内容，不是新密码"},
+		"开了加密": {encrypted: true, want: "写的是密文内容，不是文件路径"},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			cfg := helpTestCfg()
+			cfg.Credential.Encrypt = c.encrypted
+			a, err := Parse(cfg, "test", []string{
+				"-f", "1.1.1.1,22,root,pw", "--change-password", cipherText,
+			})
+			if err != nil {
+				t.Fatalf("Parse 不该在这里报错：%v", err)
+			}
+			err = CheckArguments(a)
+			if err == nil {
+				t.Fatal("把密文内容当值用，应被拒绝")
+			}
+			if !strings.Contains(err.Error(), c.want) {
+				t.Fatalf("文案应含 %q，实际：%q", c.want, err.Error())
+			}
+			if !strings.Contains(err.Error(), "\n提示：") {
+				t.Fatalf("应带提示行，实际：%q", err.Error())
+			}
+		})
+	}
+}
