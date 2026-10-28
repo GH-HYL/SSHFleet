@@ -909,3 +909,19 @@ func TestRemotePathMustBeAbsolute(t *testing.T) {
 		})
 	}
 }
+
+// [locale] english 从配置进 Args 的这一跳。全仓只有 args.go 一处把配置写进这个字段，
+// 它错了开关在任何形态下都不生效，而下发行照样是合法串——不会有别的东西报警。
+func TestParseCarriesLocaleEnglish(t *testing.T) {
+	for _, want := range []bool{false, true} {
+		cfg := helpTestCfg()
+		cfg.Locale.English = want
+		a, err := Parse(cfg, "test", []string{"-c", "who -b"})
+		if err != nil {
+			t.Fatalf("Parse 报错：%v", err)
+		}
+		if a.English != want {
+			t.Fatalf("配置 english=%v 应原样进 Args，实际 %v", want, a.English)
+		}
+	}
+}

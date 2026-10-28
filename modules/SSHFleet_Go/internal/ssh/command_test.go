@@ -34,9 +34,11 @@ func TestBuildCommandCommandMode(t *testing.T) {
 
 // wantEncodingFragment 编码判断片段，逐字手写——期望值不从实现取。
 //
-// 形态：UTF-8 就不动手；否则在 C.UTF-8 / en_US.UTF-8 两个中性名里挑一个确实存在的
-// （大小写、连字符不计），只 export LC_CTYPE，挑不到就一个都不设。
-const wantEncodingFragment = `if [ "$(locale charmap 2>/dev/null)" != UTF-8 ]; then n=$(locale -a 2>/dev/null | grep -Eixm1 "c\.utf-?8|en_us\.utf-?8"); [ -n "$n" ] && export LC_CTYPE="$n"; fi;`
+// 形态：白名单。只有目标机当前 charmap 是 C / POSIX / ANSI_X3.4-1968 / US-ASCII 之一
+// （确知按单字节在跑），且 locale -a 里确实有 C.UTF-8 / en_US.UTF-8 可选时，才 export
+// LC_CTYPE；其余一律不动。候选名经 set -- 落在 $1，不写具名变量（不碰用户 [env] 里的
+// 同名变量）。白名单之外（GB18030 / GBK / Big5 等多字节 locale）不动，因为换掉会退化。
+const wantEncodingFragment = `case "$(locale charmap 2>/dev/null)" in C|POSIX|ANSI_X3.4-1968|US-ASCII) set -- $(locale -a 2>/dev/null | grep -Eixm1 "c\.utf-?8|en_us\.utf-?8" 2>/dev/null); [ -n "$1" ] && export LC_CTYPE="$1";; esac;`
 
 // 四种下发形态各一条整串断言：片段必须原样出现在 sh -c 里、紧挨解释器、不加任何转义
 // （片段里没有单引号，所以外层不会再套一层 '\”）。

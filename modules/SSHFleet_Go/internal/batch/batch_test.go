@@ -76,3 +76,25 @@ func TestRunReportsInternalStateErrors(t *testing.T) {
 		}
 	})
 }
+
+// 开关从 Args 进到下发行的那一跳：`commandSpec` 是唯一填充点，漏了这条整串里就没有
+// `export LC_MESSAGES=C`，而日志与下发还会「一致地错」——所以只能靠断言拦。
+func TestCommandSpecCarriesLocaleEnglish(t *testing.T) {
+	a := &cli.Args{Command: "who -b", Interpreter: "bash", English: true}
+	cmd, stdin := ssh.BuildCommand(commandSpec(a, ""))
+	if stdin != "who -b" {
+		t.Fatalf("命令应经 stdin 直喂，实际 %q", stdin)
+	}
+	if !strings.Contains(cmd, "export LC_MESSAGES=C;") {
+		t.Fatalf("english 开着，下发行里应有一句 export LC_MESSAGES=C：%s", cmd)
+	}
+	if desc := ssh.DescribeCommand(commandSpec(a, "")); !strings.Contains(desc, cmd) {
+		t.Fatalf("日志里的命令行应与真下发同源\n下发：%s\n日志：%s", cmd, desc)
+	}
+
+	a.English = false
+	cmd, _ = ssh.BuildCommand(commandSpec(a, ""))
+	if strings.Contains(cmd, "LC_MESSAGES") {
+		t.Fatalf("english 关着，下发行里不该有语言那一句：%s", cmd)
+	}
+}
