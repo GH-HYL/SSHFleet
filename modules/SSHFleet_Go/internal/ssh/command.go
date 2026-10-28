@@ -137,33 +137,27 @@ const (
 //     决定环境与身份。命令模式原样给出命令；脚本模式只剩解释器自己那条调用
 //     （见 scriptInvocation），正文照旧走 stdin。
 //
-// 参数：
-//   - command:     命令模式下的命令原文（脚本模式传空）
-//   - scriptBody:  脚本模式下的脚本内容（命令模式传空）
-//   - scriptName:  脚本模式下的脚本文件名（下发行把它交回去当 $0；命令模式传空）
-//   - interpreter: 解释器（命令模式传命令解释器，脚本模式传脚本解释器）
-//   - envPrefix:   下发行开头的环境段（ExportPrefix 的产物）；空 = 不导入环境变量
-//   - opt:         三个开关，见 Options
+// 入参是 CommandSpec：执行与日志读同一份，免得两边各填一遍字段。
 //
 // 返回 (下发命令, stdin 内容)：stdin 为空表示不喂输入（命令模式的 --no-shell）。
-func BuildCommand(command, scriptBody, scriptName, interpreter, envPrefix string, opt Options) (string, string) {
+func BuildCommand(spec CommandSpec) (string, string) {
 	// --no-shell：不套外壳、不设环境（sudo 也不加——工具不附加任何东西）。
 	// 命令模式原样下发、不喂 stdin；脚本模式只剩解释器自己那条调用，正文照旧走 stdin。
-	if opt.NoShell {
-		if command != "" {
-			return command, ""
+	if spec.NoShell {
+		if spec.Command != "" {
+			return spec.Command, ""
 		}
-		if scriptBody != "" {
-			return scriptInvocation(interpreter, scriptName), scriptBody
+		if spec.ScriptBody != "" {
+			return scriptInvocation(spec.Interpreter, spec.ScriptName), spec.ScriptBody
 		}
 	}
 
 	// 命令模式与脚本模式共用同一个外壳（唯一差别是内层解释器与要不要补脚本名）。
 	// 内层串与 DescribeCommand 打印的「下发行」同源。
-	if scriptBody != "" {
-		return "sh -c " + shellQuote(scriptStdinInner(envPrefix, interpreter, scriptName, opt)), scriptBody
+	if spec.ScriptBody != "" {
+		return "sh -c " + shellQuote(scriptStdinInner(spec.EnvPrefix, spec.Interpreter, spec.ScriptName, spec.Options)), spec.ScriptBody
 	}
-	return "sh -c " + shellQuote(innerCommand(envPrefix, interpreter, opt)), command
+	return "sh -c " + shellQuote(innerCommand(spec.EnvPrefix, spec.Interpreter, spec.Options)), spec.Command
 }
 
 // escapeSingleQuotes 把一段文本里的单引号转义成 '\”。
@@ -246,42 +240,42 @@ func needsQuoting(s string) bool {
 //
 // 下发行由本包自己拼（与 BuildCommand 同源），调用方只给业务侧的几项——
 // `sh -c` 的形态是本包的格式，散到调用方就会两处各写一份、各自漂移。
-func DescribeCommand(a DescribeInput) string {
+func DescribeCommand(spec CommandSpec) string {
 	// --no-shell：不套外壳、不设环境。命令模式内容就是命令行；脚本模式只剩解释器调用，正文走 stdin。
-	if a.NoShell {
-		if a.Command != "" {
+	if spec.NoShell {
+		if spec.Command != "" {
 			return "交给 SSH 执行：\n" +
-				"  命令行： " + a.Command + "\n" +
+				"  命令行： " + spec.Command + "\n" +
 				"  说明：   --no-shell 原样执行，不套外壳、不经 stdin"
 		}
-		if a.ScriptBody != "" {
+		if spec.ScriptBody != "" {
 			return "交给 SSH 执行：\n" +
-				"  命令行： " + scriptInvocation(a.Interpreter, a.ScriptName) + "\n" +
-				"  stdin：  脚本 " + a.ScriptPath + " 的内容（" + a.Interpreter + " 解释）\n" +
-				"  说明：   --no-shell：不套外壳、不设环境，直接把 stdin 送来的脚本交给 " + a.Interpreter + " 解释"
+				"  命令行： " + scriptInvocation(spec.Interpreter, spec.ScriptName) + "\n" +
+				"  stdin：  脚本 " + spec.ScriptPath + " 的内容（" + spec.Interpreter + " 解释）\n" +
+				"  说明：   --no-shell：不套外壳、不设环境，直接把 stdin 送来的脚本交给 " + spec.Interpreter + " 解释"
 		}
 	}
 
-	opt := Options{AsRoot: a.AsRoot, English: a.English}
-	inner := innerCommand(a.EnvPrefix, a.Interpreter, opt)
-	if a.ScriptBody != "" {
-		inner = scriptStdinInner(a.EnvPrefix, a.Interpreter, a.ScriptName, opt)
+	opt := Options{AsRoot: spec.AsRoot, English: spec.English}
+	inner := innerCommand(spec.EnvPrefix, spec.Interpreter, opt)
+	if spec.ScriptBody != "" {
+		inner = scriptStdinInner(spec.EnvPrefix, spec.Interpreter, spec.ScriptName, opt)
 	}
 	downLine := "sh -c " + shellQuote(inner)
-	hasEnv := a.EnvPrefix != ""
+	hasEnv := spec.EnvPrefix != ""
 
-	if a.ScriptBody != "" {
+	if spec.ScriptBody != "" {
 		return "交给 SSH 执行：\n" +
 			"  命令行： " + downLine + "\n" +
-			"  stdin：  脚本 " + a.ScriptPath + " 的内容（" + a.Interpreter + " 解释）\n" +
-			"  说明：   " + envNote(hasEnv) + scriptWho(a.AsRoot) + " stdin 送来的脚本"
+			"  stdin：  脚本 " + spec.ScriptPath + " 的内容（" + spec.Interpreter + " 解释）\n" +
+			"  说明：   " + envNote(hasEnv) + scriptWho(spec.AsRoot) + " stdin 送来的脚本"
 	}
 
-	if a.Command != "" {
+	if spec.Command != "" {
 		return "交给 SSH 执行：\n" +
 			"  命令行： " + downLine + "\n" +
-			"  stdin：  " + a.Command + "\n" +
-			"  说明：   " + envNote(hasEnv) + "把 stdin 送来的命令" + commandWho(a.Interpreter, a.AsRoot)
+			"  stdin：  " + spec.Command + "\n" +
+			"  说明：   " + envNote(hasEnv) + "把 stdin 送来的命令" + commandWho(spec.Interpreter, spec.AsRoot)
 	}
 	return ""
 }
@@ -495,15 +489,15 @@ func sourceStdinBody(interpreter string) string {
 	return body
 }
 
-// DescribeInput DescribeCommand 的入参：只收打印真正需要的几项。
-type DescribeInput struct {
+// CommandSpec 一次下发要拼的全部输入。执行（BuildCommand）与日志（DescribeCommand）
+// 读同一份——分两份填，加一个字段就会有一处漏改，而这个包的全部约束就是「量的串 =
+// 发的串 = 日志的串」。
+type CommandSpec struct {
 	Command     string // 命令模式：命令原文
-	ScriptPath  string // 脚本模式：脚本文件路径
 	ScriptBody  string // 脚本模式：脚本正文（非空即判定为脚本模式）
 	ScriptName  string // 脚本模式：脚本文件名（下发行把它交回去当 $0）
+	ScriptPath  string // 脚本模式的本地路径：只有日志用，不参与拼装
 	Interpreter string // 解释器：命令模式是命令解释器，脚本模式是脚本解释器
 	EnvPrefix   string // 下发行开头的环境段（ExportPrefix 的产物）；空 = 没配环境变量
-	English     bool   // [locale] english：提示语统一英文
-	NoShell     bool   // --no-shell：不套外壳、不设环境
-	AsRoot      bool   // -m sudo（拼下发行用）
+	Options            // 三个开关：--no-shell / sudo / 提示语英文
 }
