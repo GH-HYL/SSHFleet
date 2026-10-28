@@ -403,7 +403,7 @@ CentOS 7.9（GNU coreutils 8.22）在 PTY 下 `ls` 列 emoji 文件名，`emoji�
 - 议题与排查底本：`docs/issues/2026-10-21-1843-sudo边界语言丢失/spec.md`、同目录 `findings-2026-10-21.md`。
 - 本轮实测环境：WSL2 的 Ubuntu-26.04（glibc 2.43、sudo 1.9.17p2、uutils coreutils 0.8.0）与 CentOS-7.9（glibc 2.17、sudo 1.8.23、GNU coreutils 8.22），用非 root 账号 `sdut_u` / `sdut_c`。
 - 沙盒产物（`build/` 下，按天清理）：i18n 取证、`-a` 探针、locale 对比脚本、结论汇总。
-- 回顾审计（2026-10-22）：`docs/issues/2026-10-21-1843-sudo边界语言丢失/audit-run-2026-10-22/report.md`（六轴回执与 `raw/`，本文件当日修订的依据）。
+- 2026-10-22 的回顾审计（`audit-run-2026-10-22/`、`audit.md`）已随议题清理（2026-10-28）：结论已并入本文件与 spec，原始回执不再保留。
 - 2026-10-28 复测：本机 podman 起 `localhost/ubuntuforpod:26.04-sshd`，容器内 `sudo --version` 为 **1.9.17p2**（包 `sudo`，`/usr/bin/sudo.ws`，**不是 sudo-rs**），命令与输出见 3.1 末段。同轮在容器里复现了旧值的告警：`LC_ALL=en_US.UTF-8 bash -c 'echo hi'` 多一行 `setlocale: cannot change locale`，改 `C` 后干净。
 
 ## 十二、复审
