@@ -115,9 +115,11 @@ func Confirm(args *cli.Args, nodes *nodelist.Nodes, cfg *config.Config, logger *
 }
 
 // gateChineseAnswerValues english = true 时代填值（第 1 列）不得为中文的拦截门。
-// 默认 n：回车即退出，让他回命令行改代填值、或把 english 改成 false——不替他偷改参数。
-// 触发词（第 2 列起）不查：服务端报文（密码过期、sshd 提示）不受 english 影响，仍可能是中文。
-// 交互下先打一段说明再问一句；非交互（--yes）下由 Confirm 留痕 + 上屏一行（框架语义：跳过确认即视为继续）。
+// 交互下先打一段说明再问一句，默认 n——回车即退出，让他回命令行改代填值、或把 english
+// 改成 false，不替他偷改参数。触发词（第 2 列起）不查：服务端报文（密码过期、sshd 提示）
+// 不受 english 影响，仍可能是中文。
+// 非交互（--yes）没有「他」可提醒，而这是一定失配的逻辑错误，放行就是整批白跑——所以
+// 非交互直接取消并留痕，不给「跳过确认就继续」的口子（2026-10-28 作者口径：提醒然后退出）。
 func gateChineseAnswerValues(args *cli.Args, in *common.Interactor, logger *log.Logger) error {
 	// english = false：提示语跟目标机走，中文代填值是合法配置，这段检查整个不存在。
 	if !args.English {
@@ -142,17 +144,22 @@ func gateChineseAnswerValues(args *cli.Args, in *common.Interactor, logger *log.
 		fmt.Fprintln(in.Out, "  触发词不受此限——服务端报文（如密码过期）不受 english 影响，仍可能是中文。")
 		fmt.Fprintln(in.Out, "  要跑中文代填值，请把配置里 [locale] 的 english 改成 false。")
 	}
+	if in.Disinteractive {
+		fmt.Fprintln(in.Out, colorYellow+"⚠ [locale] english = true 但代填值含中文：已取消执行（回命令行改代填值，或把 english 改成 false）"+colorReset)
+		if logger != nil { // 测试可不带日志口；生产路径恒有
+			logger.Warn("执行已取消（english = true 与中文代填值同时给出）")
+		}
+		return common.ErrCancelled
+	}
 	ok, err := in.Confirm(common.ConfirmReq{
 		Prompt:     "\n" + colorYellow + "仍要继续执行？" + colorReset,
 		DefaultYes: false,
-		Trace:      "english = true 但代填值含中文，非交互模式按默认 n 取消执行",
-		SkipLine:   fmt.Sprintf("%s⚠ [locale] english = true 但代填值含中文：回命令行改代填值，或把 english 改成 false%s\n", colorYellow, colorReset),
 	})
 	if err != nil {
 		return err
 	}
 	if !ok {
-		fmt.Println(colorYellow + "操作已取消" + colorReset)
+		fmt.Fprintln(in.Out, colorYellow+"操作已取消"+colorReset)
 		if logger != nil { // 测试可不带日志口；生产路径恒有
 			logger.Warn("执行已取消（english = true 与中文代填值同时给出）")
 		}
