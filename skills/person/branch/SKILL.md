@@ -1,6 +1,7 @@
 ---
 name: branch
 description: 按当前议题开分支，本轮提交均落在其上。
+disable-model-invocation: true
 ---
 
 # 议题分支

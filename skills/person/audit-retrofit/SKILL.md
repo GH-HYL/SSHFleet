@@ -1,6 +1,7 @@
 ---
 name: audit-retrofit
 description: 【回顾审计】一个议题从问题、决策、规格到实现全流程走完之后，回头审代码实现与实现效果。文档齐、实施验收过了、要独立复核时用；小修小改不配使用本技能。
+disable-model-invocation: true
 ---
 # 回顾审计
 
