@@ -47,12 +47,35 @@ func ExportPrefix(vars map[string]string) string {
 	return b.String()
 }
 
-// envHead 下发行开头的环境段（含尾随空格）；空配置返回空串，免得拼出多余空格。
+// encodingFragment 下发行里那段「让目标机按字符算」的判断，POSIX sh，不含单引号。
+//
+// 四步：问机器 `locale charmap` 是不是 UTF-8 → 是就什么都不做 → 不是就在 `C.UTF-8` /
+// `en_US.UTF-8` 两个中性名里挑一个**确实存在**的（大小写不计、连字符可省，`C.utf8` /
+// `en_US.utf8` 同样认）→ 挑到只 export `LC_CTYPE`；挑不到、`locale` 不存在、输出为空，
+// 一个变量都不设。
+//
+// 三条不变式：
+//   - 只动 `LC_CTYPE`：不碰 `LANG` / `LC_ALL` / `LC_MESSAGES` / 排序——字符语义与提示语
+//     语言是两个正交的轴，这段只管前者；
+//   - 永不降级：只在「现在不是 UTF-8、且机器上确有 UTF-8 可选」时才动手；
+//   - 永不告警：候选只在确实存在的名字里挑，不设 `LC_ALL`（设错会每次调用刷一行 setlocale）。
+//
+// 为什么不设 `LC_ALL`：它一旦有值就盖掉 `LC_CTYPE`，等于把这段做废。用户在 `[env]` 里
+// 自己设 `LC_ALL` 同样盖掉——那是他配的内容，工具不判冲突，只保证自己不设。
+//
+// 位置：拼在 `[env]` 的 export 段之后、解释器之前——判断的是最终生效的 locale，用户显式
+// 配了有效的 UTF-8 就不动手。`--no-shell` 不套外壳，这段不出现。
+//
+// 已实测的取舍：`LC_ALL=C` 下 `cut -c1-2` 切出半个汉字（3 字节），只设 `LC_CTYPE` 才按字符。
+const encodingFragment = `if [ "$(locale charmap 2>/dev/null)" != UTF-8 ]; then n=$(locale -a 2>/dev/null | grep -Eixm1 "c\.utf-?8|en_us\.utf-?8"); [ -n "$n" ] && export LC_CTYPE="$n"; fi;`
+
+// envHead 下发行开头的环境段（含尾随空格）：`[env]` 的 export 在前，编码判断在后。
+// 两者都缺时返回空串，免得拼出多余空格。
 func envHead(envPrefix string) string {
 	if envPrefix == "" {
-		return ""
+		return encodingFragment + " "
 	}
-	return envPrefix + " "
+	return envPrefix + " " + encodingFragment + " "
 }
 
 // 执行模式（只用到这三种取值；由调用方从命令行参数解读后传入）。
