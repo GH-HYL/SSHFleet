@@ -46,7 +46,7 @@ Status: ready-for-human
 
 1. **两类机器没有交集**。CentOS 7.9 有 `en_US.UTF-8`、没有 `C.UTF-8`；Ubuntu 26.04 只有 `C` / `C.utf8` / `POSIX`，没有 `en_US`。
 2. **`LC_ALL` 设错会告警，类别变量设错是静默的**。`LC_ALL=<不存在>` 每次调用一行 `setlocale` 并落到 `C`；`LC_CTYPE=<不存在>` 静默回落、不告警。
-3. **非交互会话通常拿不到 `LANG`**（CentOS 无 `pam_env`、`/etc/environment` 空；Ubuntu 的 `/etc/default/locale` 只有注释），`charmap` 多半是 `ANSI_X3.4-1968`。
+3. **非交互会话拿不到 `LANG`**（CentOS 的 sshd 没配 `pam_env`、`/etc/environment` 是空的；Ubuntu 的 `/etc/default/locale` 只有一行注释），两台测试机上 `charmap` 都是 `ANSI_X3.4-1968`。
 4. **只设 `LC_CTYPE` 不动语言与排序**：实测两台机器 `cut -c1-2` 都出完整「中文」、提示语都是英文、`sort` 仍是字节序。
 5. **`LC_MESSAGES=C` 压得住 `LANGUAGE`**（apt 中文包对照：`LC_MESSAGES=C LANGUAGE=zh_CN` 仍出英文）。
 6. **`TERM=dumb` 能压彩色，只在有 PTY 时有意义**。`-a` 的 PTY 下 `ls --color=auto` 由 25 行转义变 0 行；无 PTY 时本来就 0 行。
@@ -65,7 +65,7 @@ Status: ready-for-human
 
 工单里的自动化测试落在这两个口子上，端到端留手工：
 
-- **前置片段的生成**：给定「编码开关固定开、语言开关开/关」，产物是一段**逐字固定**的文本，断言整串，并断言片段里**不含单引号**（否则外层 `sh -c` 的引号要套娃）。
+- **前置片段的生成**：编码逻辑固定存在（没有开关），语言开关开 / 关两种产出一边一条，**逐字断言整串**；另断言片段里**不含单引号**（否则外层 `sh -c` 的引号要套娃）。
 - **`ssh.BuildCommand` 的整串断言**：命令模式与 sudo 模式各一条，断言 `sh -c '<片段>; sudo bash'` 的完整形态；反例禁用词：`sudo env`、`sudo -E`、`bash -c 'export`。
 - **现状为什么不够**：`internal/ssh/command_test.go:14` 只断言「包含 env 前缀」，`:77` 的 sudo 用例传空 env、只断言「包含 `sudo bash`」。
 - **不进自动化的**：容器里跑中文 `cut` 断言 4/8 字节（Ubuntu + CentOS 两台）、包内配置检查（要跑 `release.py`，属发布动作）。
