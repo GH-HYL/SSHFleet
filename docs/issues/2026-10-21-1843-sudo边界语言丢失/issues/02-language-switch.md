@@ -12,7 +12,7 @@ Status: done
 - [x] 不设 `LC_ALL`，不碰 `LANG`：开关打开后的下发行里两者零命中
 - [x] 日志「命令行」与实发串仍是同一串
 - [x] 手工一条：开关打开，非交互下发一条会说话的命令，输出是英文原话
-- [x] 两平台 `go test ./...` 全绿（2026-10-28：Windows go1.26.4 与 WSL2 Ubuntu 26.04 go1.26.8 各一次）
+- [x] 两平台 `go test ./...` 全绿（2026-10-28：Windows go1.26.4、WSL2 Ubuntu 26.04 与 CentOS 7.9 的 go1.26.8，各一次）
 
 ## Comments
 
