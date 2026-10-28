@@ -12,7 +12,7 @@ Status: done
 - [x] 反例禁用词：任何下发行里都不出现 `sudo env`、`sudo -E`、`bash -c 'export`
 - [x] 日志里的「命令行」与实发串逐字相同（既有单点性质不破）
 - [x] 手工一条：非 UTF-8 机器上 `cut -c1-2` 出完整汉字；`--no-shell` 下发行与改前一致
-- [ ] 两平台 `go test ./...` 全绿
+- [x] 两平台 `go test ./...` 全绿（2026-10-28：Windows go1.26.4 与 WSL2 Ubuntu 26.04 go1.26.8 各一次）
 
 ## Comments
 
