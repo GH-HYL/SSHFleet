@@ -1,13 +1,16 @@
 package confirm
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"sshfleet/internal/cli"
+	"sshfleet/internal/common"
 	"sshfleet/internal/nodelist"
+	"sshfleet/internal/ssh"
 )
 
 // 确认屏渲染：屏上每一行都必须让人对得上自己敲的选项。
@@ -131,5 +134,77 @@ func TestParamScreenPasswdRowShowsRealNewPassword(t *testing.T) {
 				t.Fatalf("屏上不该出现密文文件路径的脱敏形态，实际渲染：\n%s", text)
 			}
 		})
+	}
+}
+
+// 参数屏的「执行身份」行：-c / -s 不再显示（生效时多半与登录用户一致，--no-shell 下
+// 又整个不生效——不生效的身份摆一行没有信息量，⚠ 提醒与日志里都有）；-u / -d / 改密保留。
+func TestParamScreenIdentityRowPerMode(t *testing.T) {
+	hide := []struct {
+		name string
+		args *cli.Args
+	}{
+		{"命令", &cli.Args{Command: "uptime"}},
+		{"脚本", &cli.Args{Script: "good.sh"}},
+	}
+	for _, c := range hide {
+		t.Run(c.name, func(t *testing.T) {
+			if text := paramScreenText(c.args, testNodes(), "", ""); strings.Contains(text, "执行身份") {
+				t.Fatalf("%s 模式不该再显示「执行身份」行，实际渲染：\n%s", c.name, text)
+			}
+		})
+	}
+	keep := []struct {
+		name string
+		args *cli.Args
+	}{
+		{"上传", &cli.Args{Upload: "afile.txt", Path: "/opt/", Sudo: true}},
+		{"下载", &cli.Args{Download: "/var/log", Path: "./logs/", Sudo: true}},
+		{"改密", &cli.Args{ChangePasswordRaw: "N3wpw#2026", Sudo: true}},
+	}
+	for _, c := range keep {
+		t.Run(c.name, func(t *testing.T) {
+			if text := paramScreenText(c.args, testNodes(), "", ""); !strings.Contains(text, "执行身份") {
+				t.Fatalf("%s 模式应保留「执行身份」行，实际渲染：\n%s", c.name, text)
+			}
+		})
+	}
+}
+
+// english = true 时代填值（第 1 列）含中文的拦截门：默认回车（n）取消执行；
+// 触发词里的中文不拦（服务端报文不受 english 影响）；english = false 不进这段检查。
+func TestGateChineseAnswerValues(t *testing.T) {
+	a := &cli.Args{English: true, Answers: []ssh.Answer{
+		{Value: "yes", Triggers: []string{"password:"}},
+		{Value: "是", Triggers: []string{"选择架构"}},
+	}}
+	in := &common.Interactor{In: strings.NewReader("\n"), Out: &strings.Builder{}}
+	err := gateChineseAnswerValues(a, in, nil)
+	if !errors.Is(err, common.ErrCancelled) {
+		t.Fatalf("默认回车（n）应取消执行，实际 err=%v", err)
+	}
+	out := in.Out.(*strings.Builder).String()
+	for _, want := range []string{"english = true", "第 2 条代填值是「是」", "触发词不受此限"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("提醒里应交代 %q，实际输出：\n%s", want, out)
+		}
+	}
+
+	// 触发词是中文、代填值是英文：不拦，答 y 继续
+	a = &cli.Args{English: true, Answers: []ssh.Answer{{Value: "yes", Triggers: []string{"选择架构"}}}}
+	in = &common.Interactor{In: strings.NewReader("y\n"), Out: &strings.Builder{}}
+	if err := gateChineseAnswerValues(a, in, nil); err != nil {
+		t.Fatalf("触发词里的中文不该拦，实际 err=%v", err)
+	}
+
+	// english = false：根本不进检查，即便代填值是中文
+	a = &cli.Args{English: false, Answers: []ssh.Answer{{Value: "是", Triggers: []string{"选择架构"}}}}
+	in = &common.Interactor{In: strings.NewReader("\n"), Out: &strings.Builder{}}
+	if err := gateChineseAnswerValues(a, in, nil); err != nil {
+		t.Fatalf("english = false 时不该进检查，实际 err=%v", err)
+	}
+	out = in.Out.(*strings.Builder).String()
+	if strings.Contains(out, "english") {
+		t.Fatalf("english = false 时不应有任何提醒输出，实际：\n%s", out)
 	}
 }

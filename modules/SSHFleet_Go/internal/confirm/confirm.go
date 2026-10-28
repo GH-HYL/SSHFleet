@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode"
 
 	"sshfleet/internal/cli"
 	"sshfleet/internal/common"
@@ -44,6 +45,13 @@ func Confirm(args *cli.Args, nodes *nodelist.Nodes, cfg *config.Config, logger *
 		if err := warnNoShellDropsSudo(in, logger); err != nil {
 			return err
 		}
+	}
+
+	// [locale] english = true 时提示语统一英文，代填值（第 1 列）再写中文就是必失配的
+	// 逻辑错误——提醒后让用户回命令行改掉。触发词不管：服务端报文（密码过期等）不受
+	// english 影响，仍是中文，那一半照写。english = false 时不进这段检查（作者口径）。
+	if err := gateChineseAnswerValues(args, in, logger); err != nil {
+		return err
 	}
 
 	// 参数确认的入参：Prompt 给交互用，Trace / SkipLine 给非交互（--yes）跳过用。
@@ -106,6 +114,64 @@ func Confirm(args *cli.Args, nodes *nodelist.Nodes, cfg *config.Config, logger *
 	return nil
 }
 
+// gateChineseAnswerValues english = true 时代填值（第 1 列）不得为中文的拦截门。
+// 默认 n：回车即退出，让他回命令行改代填值、或把 english 改成 false——不替他偷改参数。
+// 触发词（第 2 列起）不查：服务端报文（密码过期、sshd 提示）不受 english 影响，仍可能是中文。
+// 交互下先打一段说明再问一句；非交互（--yes）下由 Confirm 留痕 + 上屏一行（框架语义：跳过确认即视为继续）。
+func gateChineseAnswerValues(args *cli.Args, in *common.Interactor, logger *log.Logger) error {
+	// english = false：提示语跟目标机走，中文代填值是合法配置，这段检查整个不存在。
+	if !args.English {
+		return nil
+	}
+	var named []string
+	for i, ans := range args.Answers {
+		if hasHan(ans.Value) {
+			named = append(named, fmt.Sprintf("第 %d 条代填值是「%s」", i+1, ans.Value))
+		}
+	}
+	if len(named) == 0 {
+		return nil
+	}
+	// 提醒走 in.Out（与 Notice 同一个出口）：提示不直接写 stdout，测试才捕得到。
+	if !in.Disinteractive {
+		fmt.Fprintf(in.Out, "%s⚠ [locale] english = true，但代填值里有中文%s\n", colorYellow, colorReset)
+		fmt.Fprintln(in.Out, "  english = true 时目标机的提示语一律英文，代填值（第 1 列）按英文准备才对：")
+		for _, line := range named {
+			fmt.Fprintln(in.Out, "    "+line)
+		}
+		fmt.Fprintln(in.Out, "  触发词不受此限——服务端报文（如密码过期）不受 english 影响，仍可能是中文。")
+		fmt.Fprintln(in.Out, "  要跑中文代填值，请把配置里 [locale] 的 english 改成 false。")
+	}
+	ok, err := in.Confirm(common.ConfirmReq{
+		Prompt:     "\n" + colorYellow + "仍要继续执行？" + colorReset,
+		DefaultYes: false,
+		Trace:      "english = true 但代填值含中文，非交互模式按默认 n 取消执行",
+		SkipLine:   fmt.Sprintf("%s⚠ [locale] english = true 但代填值含中文：回命令行改代填值，或把 english 改成 false%s\n", colorYellow, colorReset),
+	})
+	if err != nil {
+		return err
+	}
+	if !ok {
+		fmt.Println(colorYellow + "操作已取消" + colorReset)
+		if logger != nil { // 测试可不带日志口；生产路径恒有
+			logger.Warn("执行已取消（english = true 与中文代填值同时给出）")
+		}
+		return common.ErrCancelled
+	}
+	return nil
+}
+
+// hasHan 字符串里有没有汉字（含扩展 A 区）。全角字母数字与全角标点不算——
+// 代填值里出现全角冒号、全角空格不算「填了中文」，拦它们就过了。
+func hasHan(s string) bool {
+	for _, r := range s {
+		if unicode.Is(unicode.Han, r) {
+			return true
+		}
+	}
+	return false
+}
+
 // warnNoShellDropsSudo --no-shell 与 sudo 同时生效时的提醒门（默认 y，回车即继续；
 // 答 n 中止本次，让用户回命令行去掉 --no-shell 或 --sudo 重跑，不替他偷改参数）。
 // 交互下先打一段说明再问一句；非交互（--yes）下由 Confirm 留痕 + 上屏一行。
@@ -156,7 +222,14 @@ func paramScreenText(args *cli.Args, nodes *nodelist.Nodes, highlight, note stri
 func buildInfoTable(args *cli.Args, nodes *nodelist.Nodes, note string) [][2]string {
 	// 身份取 a.Identity().ScreenLabel()（判定与叫法都只此一份），不再在本函数里重判一次开关
 	// ——2026-10-14 前这里与 batch 的日志各判各的，`--sudo --no-shell` 下两者说反话。
-	t := [][2]string{{"执行身份", args.Identity().ScreenLabel(args.NoShell)}}
+	// -c / -s 不出这一行（2026-10-28 作者定）：命令与脚本的身份要么与登录用户一致、
+	// 要么被 --no-shell 剥掉——不生效的身份摆一行没有信息量，⚠ 提醒与日志里都有。
+	var t [][2]string
+	switch args.ModeName() {
+	case cli.ModeCommand, cli.ModeScript:
+	default:
+		t = append(t, [2]string{"执行身份", args.Identity().ScreenLabel(args.NoShell)})
+	}
 	// 解释器行：只在命令 / 脚本模式出现，且只在配置的解释器不是 bash（归一判断）时才占一行
 	// ——默认值不必提醒（2026-10-07 定）。--no-shell 时解释器配置不参与执行，
 	// 这一行改放提示（2026-10-08 作者定：提个醒就放行，不该硬拦）。
