@@ -938,10 +938,8 @@ func TestNoShellExclusiveWithTransferModes(t *testing.T) {
 			t.Fatalf("上传/下载 + --no-shell 应报互斥，实际 err=%v", err)
 		}
 	}
-	// -c / -s 搭配 --no-shell 是合法用法，不该被这条拦
+	// -c / -s 搭配 --no-shell 是合法用法，不该被这条拦（且整个校验应通过）
 	if err := CheckArguments(&Args{Command: "df -h", NoShell: true}); err != nil {
-		if strings.Contains(err.Error(), "--no-shell 不能搭配") {
-			t.Fatalf("命令模式 + --no-shell 是合法用法，不该报互斥：%v", err)
-		}
+		t.Fatalf("命令模式 + --no-shell 是合法用法，不该报错：%v", err)
 	}
 }

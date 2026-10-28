@@ -197,6 +197,17 @@ func TestGateChineseAnswerValues(t *testing.T) {
 		t.Fatalf("触发词里的中文不该拦，实际 err=%v", err)
 	}
 
+	// 非交互（--yes）：没有「他」可提醒，直接取消，不上屏详细说明
+	a = &cli.Args{English: true, Answers: []ssh.Answer{{Value: "是", Triggers: []string{"选择架构"}}}}
+	in = &common.Interactor{In: strings.NewReader(""), Out: &strings.Builder{}, Disinteractive: true}
+	if err := gateChineseAnswerValues(a, in, nil); !errors.Is(err, common.ErrCancelled) {
+		t.Fatalf("非交互模式应直接取消，实际 err=%v", err)
+	}
+	out = in.Out.(*strings.Builder).String()
+	if !strings.Contains(out, "已取消执行") {
+		t.Fatalf("非交互模式应上屏一行取消说明，实际：\n%s", out)
+	}
+
 	// english = false：根本不进检查，即便代填值是中文
 	a = &cli.Args{English: false, Answers: []ssh.Answer{{Value: "是", Triggers: []string{"选择架构"}}}}
 	in = &common.Interactor{In: strings.NewReader("\n"), Out: &strings.Builder{}}
