@@ -2,7 +2,7 @@
 
 用法::
 
-    python tools/skill-manager/update_skills.py [--repo URL] [--branch main] [--keep]
+    python tools/skill-manager/update_skills_拉上游更新.py [--repo URL] [--branch main] [--keep]
 
 流程：问一次 API 拿到分支当前提交 → 下载该提交的归档包到 ``build/skill-manager/`` → 两组都在才动手 →
 把新的铺到临时位置 → 全部铺好后逐组换入 → 清掉临时文件。
@@ -157,7 +157,7 @@ def main() -> int:
     wb = common.workbuddy_skills_dir()
     broken = [n for n in common.GROUPS if not (wb / n).is_dir()]
     if broken:
-        print(f"\n  注意：workbuddy 侧看不到 {', '.join(broken)}；先跑 link_skills.py 建链接。")
+        print(f"\n  注意：workbuddy 侧看不到 {', '.join(broken)}；先跑建链脚本（link_skills_建链_windows.py / link_skills_linux_建链.py）。")
 
     print(f"\n  完成，工作区技能已更新到 {described}")
     return 0
