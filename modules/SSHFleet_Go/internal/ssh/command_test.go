@@ -510,3 +510,24 @@ func TestInteractiveCommandUsesProgramArg(t *testing.T) {
 		t.Fatalf("perl 应用 -e 启动程序文本，实际：%s", got)
 	}
 }
+
+// 反例禁用词：这几种形态一条都不许出现——`sudo env` / `sudo -E` 改外壳形态，
+// `bash -c 'export` 把环境塞进正文。两条都在 ADR-0030 里被否掉，出现即回退。
+func TestDownlinkForbiddenForms(t *testing.T) {
+	const env = `export PATH="/bin";`
+	forms := map[string]string{
+		"命令模式": mustCommand(t, "ls", "", "", "bash", env, false, false),
+		"sudo":  mustCommand(t, "ls", "", "", "bash", env, false, true),
+		"脚本模式": mustCommand(t, "", "echo hi", "t.sh", "bash", env, false, false),
+		"代填": InteractiveCommand(DownlinkSpec{
+			Command: "ls", Interpreter: "bash", EnvPrefix: env, AsRoot: true,
+		}),
+	}
+	for what, got := range forms {
+		for _, bad := range []string{"sudo env", "sudo -E", "bash -c 'export"} {
+			if strings.Contains(got, bad) {
+				t.Fatalf("%s 出现了禁用形态 %q：%s", what, bad, got)
+			}
+		}
+	}
+}
