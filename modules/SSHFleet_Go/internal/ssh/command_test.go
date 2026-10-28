@@ -32,13 +32,61 @@ func TestBuildCommandCommandMode(t *testing.T) {
 	}
 }
 
-// 环境前缀空 = 不套 export 段，内层直接就是解释器，且不多出空格。
-func TestBuildCommandEmptyEnvPrefix(t *testing.T) {
-	if cmd, _ := BuildCommand("ls", "", "", "bash", "", false, false); cmd != "sh -c 'bash'" {
-		t.Fatalf("空前缀应只剩 sh -c 'bash'，实际 %q", cmd)
+// wantEncodingFragment 编码判断片段，逐字手写——期望值不从实现取。
+//
+// 形态：UTF-8 就不动手；否则在 C.UTF-8 / en_US.UTF-8 两个中性名里挑一个确实存在的
+// （大小写、连字符不计），只 export LC_CTYPE，挑不到就一个都不设。
+const wantEncodingFragment = `if [ "$(locale charmap 2>/dev/null)" != UTF-8 ]; then n=$(locale -a 2>/dev/null | grep -Eixm1 "c\.utf-?8|en_us\.utf-?8"); [ -n "$n" ] && export LC_CTYPE="$n"; fi;`
+
+// 四种下发形态各一条整串断言：片段必须原样出现在 sh -c 里、紧挨解释器、不加任何转义
+// （片段里没有单引号，所以外层不会再套一层 '\''）。
+func TestBuildCommandEncodingFragmentInAllForms(t *testing.T) {
+	const env = `export PATH="/bin";`
+	cases := []struct {
+		what string
+		got  string
+		want string
+	}{
+		{"命令模式（无环境段）",
+			mustCommand(t, "ls -l", "", "", "bash", "", false, false),
+			"sh -c '" + wantEncodingFragment + " bash'"},
+		{"命令模式（有环境段）",
+			mustCommand(t, "ls -l", "", "", "bash", env, false, false),
+			"sh -c '" + env + " " + wantEncodingFragment + " bash'"},
+		{"sudo 模式",
+			mustCommand(t, "id -u", "", "", "bash", env, false, true),
+			"sh -c '" + env + " " + wantEncodingFragment + " sudo bash'"},
+		{"脚本模式（补回脚本名）",
+			mustCommand(t, "", "echo hi", "t.sh", "bash", env, false, false),
+			"sh -c '" + env + " " + wantEncodingFragment + " bash -c " +
+				"'\\''. /dev/stdin'\\'' '\\''t.sh'\\'''"},
 	}
-	if cmd, _ := BuildCommand("ls", "", "", "bash", "", false, true); cmd != "sh -c 'sudo bash'" {
-		t.Fatalf("空前缀 + sudo 应为 sh -c 'sudo bash'，实际 %q", cmd)
+	for _, c := range cases {
+		if c.got != c.want {
+			t.Fatalf("%s\n want %q\n got  %q", c.what, c.want, c.got)
+		}
+	}
+}
+
+func mustCommand(t *testing.T, command, body, name, interpreter, env string, noShell, asRoot bool) string {
+	t.Helper()
+	cmd, _ := BuildCommand(command, body, name, interpreter, env, noShell, asRoot)
+	return cmd
+}
+
+// 环境前缀空也不等于「什么都不加」：编码判断照样在，内层直接接解释器，且不多出空格。
+func TestBuildCommandEmptyEnvPrefix(t *testing.T) {
+	want := "sh -c '" + wantEncodingFragment + " bash'"
+	if cmd, _ := BuildCommand("ls", "", "", "bash", "", false, false); cmd != want {
+		t.Fatalf("空前缀应只剩片段 + 解释器，实际 %q", cmd)
+	}
+	wantSudo := "sh -c '" + wantEncodingFragment + " sudo bash'"
+	if cmd, _ := BuildCommand("ls", "", "", "bash", "", false, true); cmd != wantSudo {
+		t.Fatalf("空前缀 + sudo 应为片段 + sudo + 解释器，实际 %q", cmd)
+	}
+	// --no-shell 不套外壳，片段不出现
+	if cmd, _ := BuildCommand("ls", "", "", "bash", "", true, false); cmd != "ls" {
+		t.Fatalf("--no-shell 应原样下发，实际 %q", cmd)
 	}
 }
 
@@ -301,7 +349,7 @@ func TestDescribeCommandCommandMode(t *testing.T) {
 
 	for _, want := range []string{
 		"交给 SSH 执行",
-		"命令行： sh -c '" + env + " bash'",
+		"命令行： sh -c '" + env + " " + wantEncodingFragment + " bash'",
 		"stdin：  who -b",
 		"配置文件里的环境变量",
 		"交给登录用户的 bash 执行", // 中文之间不留空格，西文两侧留
@@ -362,7 +410,7 @@ func TestDescribeCommandScriptMode(t *testing.T) {
 
 	for _, want := range []string{
 		"交给 SSH 执行",
-		"sh -c '" + env + " sudo bash'",
+		"sh -c '" + env + " " + wantEncodingFragment + " sudo bash'",
 		"stdin：  脚本 /x/t.sh 的内容（bash 解释）",
 		"以 root 身份执行", // 中文之间不留空格
 	} {

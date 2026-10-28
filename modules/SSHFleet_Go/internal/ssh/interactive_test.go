@@ -83,7 +83,7 @@ func TestInteractiveCommandForm(t *testing.T) {
 	const env = "export LC_ALL=C;"
 	enc := base64.StdEncoding.EncodeToString([]byte("who -b"))
 	got := InteractiveCommand(DownlinkSpec{Command: "who -b", Interpreter: "bash", EnvPrefix: env})
-	want := "sh -c '" + env + " bash -c \"$(printf %s " + enc + " | base64 -d)\"'"
+	want := "sh -c '" + env + " " + wantEncodingFragment + " bash -c \"$(printf %s " + enc + " | base64 -d)\"'"
 	if got != want {
 		t.Fatalf("下发行形态不对\n实际：%s\n应为：%s", got, want)
 	}
