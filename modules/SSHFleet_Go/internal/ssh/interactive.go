@@ -95,7 +95,7 @@ func InteractiveCommand(spec DownlinkSpec) string {
 	if !ok {
 		programArg = "-c" // 合规检查已拦下表外的解释器，这里兜底，不该发生
 	}
-	inner := innerCommand(spec.EnvPrefix, spec.Interpreter, spec.AsRoot, spec.English) + " " + programArg +
+	inner := innerCommand(spec.EnvPrefix, spec.Interpreter, Options{AsRoot: spec.AsRoot, English: spec.English}) + " " + programArg +
 		` "$(printf %s ` + encoded + ` | base64 -d)"`
 	if spec.ScriptBody != "" { // 命令模式没有脚本文件，不补名字
 		inner += scriptNameArg(spec.Interpreter, spec.ScriptName)
