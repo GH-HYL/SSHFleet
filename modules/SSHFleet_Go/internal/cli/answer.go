@@ -210,6 +210,7 @@ func downlinkSpecOf(a *Args, scriptText []byte) ssh.DownlinkSpec {
 		Interpreter: a.Interpreter,
 		EnvPrefix:   a.EnvPrefix,
 		AsRoot:      a.Sudo,
+		English:     a.English,
 	}
 	if a.Script != "" {
 		spec.ScriptBody = ScriptMaterialOf(a, scriptText).Body
