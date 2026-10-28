@@ -7,6 +7,12 @@
 
 - **状态**：ADR 已接受（accepted）；spec 待按 ADR 重写（旧 spec 仍 `needs-triage`，且结论已被取代）；工单未拆；代码未动。
 
+> **2026-10-28 复核：本文件三处事实已过时，以 `spec.md` 与 ADR-0024 为准。**
+> ① 第六节表格把镜像的 sudo 记成 sudo-rs，实测是 **classic sudo 1.9.17p2**（容器内 `dpkg -S /usr/bin/sudo.ws` → 包 `sudo`；sudo-rs 只在宿主 26.10 上）；
+> ② 第七节第 1 条与 ADR 第七节指引的 `build-linux.sh` / `build-windows.bat` 已在 `015219c` 删除，打包走 `tools/release/release.py:235`；
+> ③ 第五节第 1、2、3 条均已了结——sudo 路径已补到 root 调用（非 root 见 ADR 12.2）、3.8 的三个百分数已撤回、存量按「不处理」定。
+> 另外本文件名不在 `docs/agents/issue-tracker.md:34` 的载体白名单里，**结论回写 spec/ADR 后应当删除**。
+
 ---
 
 ## 一、这是什么
