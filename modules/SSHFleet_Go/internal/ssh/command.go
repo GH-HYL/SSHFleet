@@ -8,16 +8,17 @@ import (
 
 // ExportPrefix 把 [env] 里的环境变量拼成下发行开头那段 `export …;`（空配置返回空串）。
 //
-// 出厂配置给的是「统一 locale + 一组标准 PATH + 哑终端」几条。为什么是它们：
-//   - locale（LC_ALL / LANG）：SSH 非交互会话拿到的是目标机默认的 locale，各机器不一样
-//     （有的 C、有的 POSIX、有的跟随发行版），于是同一条命令在不同机器上输出的字符编码
-//     与排序规则都不同，中文与 UTF-8 内容会变成乱码或按字节处理；同一批机器跑同一条命令，
-//     输出形态就没法逐字比对、分类也可能失准。强制成同一个 UTF-8 才可比、可归类。
+// 出厂配置只给「一组标准 PATH + 哑终端」两条。为什么是它们：
 //   - PATH：非交互拉起命令时 PATH 常只剩 /usr/bin:/bin，sudo（/usr/sbin、/usr/local/bin）
 //     与 python3（/usr/local/bin、/opt/…）会 command not found。靠登录 shell 读
 //     /etc/profile 又要求目标机装了 bash、shell 认 -l、profile 语法可解析，三样都不保证，
 //     所以直接给一组标准目录。列了不存在的目录不会报错（查找时静默跳过）。
 //   - TERM=dumb：统一成哑终端，抑制彩色与转义序列。
+//
+// **字符编码与提示语语言都不在这里**：`[env]` 只承载「用户要传下去的变量」这一件事。
+// 编码由 `LocaleFragment` 那段内建判断处理（用户看不见，也没有开关）；语言由 `[locale]`
+// 的 `english` 决定要不要多一句。两者都不做成 `[env]` 里的一个键——那会被读成「可以传下去
+// 的一个变量」，而它们其实是「要不要动手」的开关。
 //
 // 具体是哪几条、还能加什么，见 config/SSHFleet.conf 与《进阶配置手册》——本包只负责把配置拼成形。
 // 值怎么落地见 quoteEnvValue：一律双引号包裹，交目标节点在导入时展开。
@@ -57,31 +58,46 @@ type Options struct {
 
 // encodingFragment 下发行里那段「让目标机按字符算」的判断，POSIX sh，不含单引号。
 //
-// 四步：问机器 `locale charmap` 是不是 UTF-8 → 是就什么都不做 → 不是就在 `C.UTF-8` /
-// `en_US.UTF-8` 两个中性名里挑一个**确实存在**的（大小写不计、连字符可省，`C.utf8` /
-// `en_US.utf8` 同样认）→ 挑到只 export `LC_CTYPE`；挑不到、`locale` 不存在、输出为空，
-// 一个变量都不设。
+// 判据是**白名单**，不是「不等于 UTF-8」：只有当目标机当前 `locale charmap` 是 `C` /
+// `POSIX` / `ANSI_X3.4-1968` / `US-ASCII` 之一（确知按单字节在跑），且机器上确实有
+// `C.UTF-8` / `en_US.UTF-8` 可选时，才 `export LC_CTYPE`。其余一律不动。
+//
+// **为什么不用「不是 UTF-8 就换」**：`zh_CN.GB18030` / `GBK` / `Big5` 都是多字节 locale，
+// 本来按字符算；把它们换掉反而退化——GB18030 的字节流在 `C.utf8` 下不是合法 UTF-8，
+// 程序退回逐字节，`cut -c` 从「切完整字」变成「切半个字」。那是把好的改坏。
+//
+// **红线**（2026-10-28 定）：配置可以动，但动了不能让截取变形。实测（GNU cut、mawk）：
+// 纯 ASCII 输入下 `cut -c` / `cut -f` / `awk substr` 在 `C` 与 `C.utf8` 下逐字节相同；
+// 只有中文输入会从「半个字」变成「完整字」——那是修，不是变。批量操作里切错字等于改错
+// 数据，所以判据宁可窄：不在白名单里的机器，一个字节都不碰。
 //
 // 三条不变式：
 //   - 只动 `LC_CTYPE`：不碰 `LANG` / `LC_ALL` / `LC_MESSAGES` / 排序——字符语义与提示语
 //     语言是两个正交的轴，这段只管前者；
-//   - 永不降级：只在「现在不是 UTF-8、且机器上确有 UTF-8 可选」时才动手；
-//   - 永不告警：候选只在确实存在的名字里挑，不设 `LC_ALL`（设错会每次调用刷一行 setlocale）。
+//   - 永不降级：白名单外不动，候选不存在不动（宁可保持原状，也不换成一个更差的）；
+//   - 永不告警：三条外部命令全部 `2>/dev/null`，不设 `LC_ALL`（设错会每次调用刷一行
+//     setlocale）；候选只在确实存在的名字里挑。
 //
-// 为什么不设 `LC_ALL`：它一旦有值就盖掉 `LC_CTYPE`，等于把这段做废。用户在 `[env]` 里
-// 自己设 `LC_ALL` 同样盖掉——那是他配的内容，工具不判冲突，只保证自己不设。
+// 不留临时变量：候选名经 `set --` 落在位置参数上（`$1`），不写任何具名变量——`sh` 没有
+// `local`，一旦用户 `[env]` 里正好有同名变量，赋值会连带改掉它导出的值，那就越出了
+// 「只动 `LC_CTYPE`」。
 //
-// 位置：拼在 `[env]` 的 export 段之后、解释器之前——判断的是最终生效的 locale，用户显式
-// 配了有效的 UTF-8 就不动手。`--no-shell` 不套外壳，这段不出现。
+// 为什么不设 `LC_ALL`：它一旦有值就盖掉 `LC_CTYPE`，等于把这段做废。目标机自己带着
+// `LC_ALL`（`/etc/environment`、PAM、包装脚本）时同样如此——那种机器上本段无效，
+// 属已知边界，工具不告警也不改它。
 //
-// 已实测的取舍：`LC_ALL=C` 下 `cut -c1-2` 切出半个汉字（3 字节），只设 `LC_CTYPE` 才按字符。
-const encodingFragment = `if [ "$(locale charmap 2>/dev/null)" != UTF-8 ]; then n=$(locale -a 2>/dev/null | grep -Eixm1 "c\.utf-?8|en_us\.utf-?8"); [ -n "$n" ] && export LC_CTYPE="$n"; fi;`
+// 位置：拼在 `[env]` 的 export 段之后、解释器之前——判断的是最终生效的 locale。
+// `--no-shell` 不套外壳，这段不出现。
+const encodingFragment = `case "$(locale charmap 2>/dev/null)" in C|POSIX|ANSI_X3.4-1968|US-ASCII) set -- $(locale -a 2>/dev/null | grep -Eixm1 "c\.utf-?8|en_us\.utf-?8" 2>/dev/null); [ -n "$1" ] && export LC_CTYPE="$1";; esac;`
 
 // LocaleFragment 下发行开头的固定片段：编码判断恒在，语言开关开了才多一句。
 //
 // 编码部分没有开关（用户看不见，也不该让他关掉）。语言只留 `english` 这一个开关：真则
-// 加一句 `export LC_MESSAGES=C`，目标机上所有程序的提示语统一说英文——失败分类的关键词
-// 是英文原话，语言一变就整批落「未归类」。不清 `LANGUAGE`：`C` 下 gettext 忽略它（实测）。
+// 加一句 `export LC_MESSAGES=C`，目标机上**命令自己**的提示语统一说英文。
+//
+// 边界要写清（2026-10-28 审）：`LC_MESSAGES` 只管得到本地程序的 gettext，改不到远端
+// `sshd` / `pam` 那种**服务端**报文——分类表里那两条中文关键词（「您的帐户已过期」）
+// 就是服务端吐的，开关开了它们仍旧是中文，所以中英两套都得留在表里。
 func LocaleFragment(english bool) string {
 	if english {
 		return encodingFragment + " export LC_MESSAGES=C;"
@@ -268,25 +284,33 @@ func DescribeCommand(spec CommandSpec) string {
 		return "交给 SSH 执行：\n" +
 			"  命令行： " + downLine + "\n" +
 			"  stdin：  脚本 " + spec.ScriptPath + " 的内容（" + spec.Interpreter + " 解释）\n" +
-			"  说明：   " + envNote(hasEnv) + scriptWho(spec.AsRoot) + " stdin 送来的脚本"
+			"  说明：   " + envNote(hasEnv, spec.English) + scriptWho(spec.AsRoot) + " stdin 送来的脚本"
 	}
 
 	if spec.Command != "" {
 		return "交给 SSH 执行：\n" +
 			"  命令行： " + downLine + "\n" +
 			"  stdin：  " + spec.Command + "\n" +
-			"  说明：   " + envNote(hasEnv) + "把 stdin 送来的命令" + commandWho(spec.Interpreter, spec.AsRoot)
+			"  说明：   " + envNote(hasEnv, spec.English) + "把 stdin 送来的命令" + commandWho(spec.Interpreter, spec.AsRoot)
 	}
 	return ""
 }
 
-// envNote 「说明」里交代环境那半句：配了给通用说法，没配就说清没配（具体是哪几个变量，
-// 「命令行」那一行已逐字给出，这里不重复）。
-func envNote(hasEnv bool) string {
-	if hasEnv {
-		return "先导入配置文件里的环境变量，再"
+// envNote 「说明」里交代开头那半句：先说 `[env]`（配了才提），再说编码判断（恒在），
+// 最后说语言开关（开了才提）。三段都只讲做了什么，具体命令原文「命令行」那一行已逐字给出。
+//
+// 为什么不再按「有没有配置环境变量」二选一：编码判断是恒在的，`[env]` 留空时下发行里
+// 仍有那一段，说「未配置环境变量，直接…」就把日志与事实说反了。语言那一句来自 `[locale]`，
+// 也不该说成「配置文件里的环境变量」——那是 `[env]` 的说法。
+func envNote(hasEnv, english bool) string {
+	what := "判断目标机编码"
+	if english {
+		what = "判断目标机编码、把提示语钉成英文"
 	}
-	return "未配置环境变量，直接"
+	if hasEnv {
+		return "先导入配置文件里的环境变量，再" + what + "，然后"
+	}
+	return "先" + what + "，然后"
 }
 
 // commandWho 命令模式「说明」行的谓语：`…命令交给 <身份的解释器>执行`。

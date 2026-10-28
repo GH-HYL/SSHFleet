@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/BurntSushi/toml"
 )
 
 // validateEnv：键名必须是合法 shell 变量名（挡 123 / A-B）；空键与空值一律丢弃；
@@ -112,8 +114,8 @@ func TestLoadAllowsRelativeSecretDirWhenEncryptOff(t *testing.T) {
 	}
 }
 
-// [locale] english：出厂模板读出来是 false；改成 true 能读到；类型写错或整段缺了都走
-// 既有那两条口径（解码报错 / 必填字段缺失），不额外加校验。
+// [locale] english：出厂是 true（必填）；改成 false 能读到；类型写错报解码错；
+// 整段删掉报必填字段缺失。三种都走既有的那两条口径，不额外加校验。
 func TestLoadLocaleEnglish(t *testing.T) {
 	raw, err := os.ReadFile(filepath.Join("..", "..", "config", "SSHFleet-for-linux.conf"))
 	if err != nil {
@@ -134,24 +136,76 @@ func TestLoadLocaleEnglish(t *testing.T) {
 	if err != nil {
 		t.Fatalf("出厂模板应能加载：%v", err)
 	}
-	if cfg.Locale.English {
-		t.Fatalf("出厂应是 false（跟随目标节点），实际 %v", cfg.Locale.English)
-	}
-
-	cfg, err = load(t, strings.Replace(template, "english = false", "english = true", 1))
-	if err != nil {
-		t.Fatalf("改成 true 应能加载：%v", err)
-	}
 	if !cfg.Locale.English {
-		t.Fatalf("english = true 应读成 true，实际 %v", cfg.Locale.English)
+		t.Fatalf("出厂应是 true（提示语统一英文），实际 %v", cfg.Locale.English)
 	}
 
-	if _, err := load(t, strings.Replace(template, "english = false", `english = "yes"`, 1)); err == nil {
+	cfg, err = load(t, strings.Replace(template, "english = true", "english = false", 1))
+	if err != nil {
+		t.Fatalf("改成 false 应能加载：%v", err)
+	}
+	if cfg.Locale.English {
+		t.Fatalf("english = false 应读成 false，实际 %v", cfg.Locale.English)
+	}
+
+	if _, err := load(t, strings.Replace(template, "english = true", `english = "yes"`, 1)); err == nil {
 		t.Fatalf("english 写字符串应报错")
 	}
 
-	if _, err := load(t, strings.Replace(template, "english = false", "", 1)); err == nil ||
+	if _, err := load(t, dropSection(template, "locale")); err == nil ||
 		!strings.Contains(err.Error(), "locale.english") {
-		t.Fatalf("整行删掉应报缺少必填字段 locale.english，实际 %v", err)
+		t.Fatalf("整段 [locale] 删掉应报缺少必填字段 locale.english，实际 %v", err)
+	}
+}
+
+// dropSection 删掉配置里的整段（段头连同段内各行），用来验证「整段缺失」这一类口径。
+func dropSection(conf, name string) string {
+	lines := strings.Split(conf, "\n")
+	out := make([]string, 0, len(lines))
+	skipping := false
+	for _, ln := range lines {
+		trimmed := strings.TrimSpace(ln)
+		if strings.HasPrefix(trimmed, "[") && strings.HasSuffix(trimmed, "]") {
+			skipping = trimmed == "["+name+"]"
+			if skipping {
+				continue
+			}
+		}
+		if skipping {
+			continue
+		}
+		out = append(out, ln)
+	}
+	return strings.Join(out, "\n")
+}
+
+// 三份出厂模板是同一条约定的三份副本，打包按平台取其中一份改名成包内 config/SSHFleet.conf
+// （tools/release/release.py）。所以内容约束要三份一起钉，只钉 linux 那份等于漏掉 windows 包。
+//
+// 钉的是三条：`[env]` 只有 PATH 与 TERM（编码与语言都不许再塞回来）、`[locale] english` 为 true。
+func TestFactoryTemplatesContent(t *testing.T) {
+	for _, name := range []string{"SSHFleet.conf", "SSHFleet-for-linux.conf", "SSHFleet-for-windows.conf"} {
+		t.Run(name, func(t *testing.T) {
+			var tpl struct {
+				Env    map[string]string `toml:"env"`
+				Locale struct {
+					English bool `toml:"english"`
+				} `toml:"locale"`
+			}
+			if _, err := toml.DecodeFile(filepath.Join("..", "..", "config", name), &tpl); err != nil {
+				t.Fatalf("模板解不开：%v", err)
+			}
+			if len(tpl.Env) != 2 || tpl.Env["PATH"] == "" || tpl.Env["TERM"] != "dumb" {
+				t.Fatalf("出厂 [env] 应正好是 PATH 与 TERM=dumb，实际 %v", tpl.Env)
+			}
+			for _, banned := range []string{"LANG", "LC_ALL", "LC_CTYPE", "LC_MESSAGES"} {
+				if _, ok := tpl.Env[banned]; ok {
+					t.Fatalf("出厂 [env] 不该再有 %s（编码与语言都不走 [env]）", banned)
+				}
+			}
+			if !tpl.Locale.English {
+				t.Fatalf("出厂 english 应为 true")
+			}
+		})
 	}
 }

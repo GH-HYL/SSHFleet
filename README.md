@@ -360,7 +360,7 @@ SSHFleet -f nodes.csv -c "df -h"
 目标机上实际跑的是下面这条——`df -h` 本身经 stdin 喂给内层解释器，不出现在命令行里：
 
 ```text
-sh -c 'export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" TERM="dumb"; if [ "$(locale charmap 2>/dev/null)" != UTF-8 ]; then n=$(locale -a 2>/dev/null | grep -Eixm1 "c\.utf-?8|en_us\.utf-?8"); [ -n "$n" ] && export LC_CTYPE="$n"; fi; sudo bash'
+sh -c 'export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" TERM="dumb"; case "$(locale charmap 2>/dev/null)" in C|POSIX|ANSI_X3.4-1968|US-ASCII) set -- $(locale -a 2>/dev/null | grep -Eixm1 "c\.utf-?8|en_us\.utf-?8" 2>/dev/null); [ -n "$1" ] && export LC_CTYPE="$1";; esac; export LC_MESSAGES=C; sudo bash'
 ```
 
 加了 `--no-shell`，这一整层外壳就不要了，命令原样下发。
