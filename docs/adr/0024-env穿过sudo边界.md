@@ -2,7 +2,7 @@
 
 - **状态**：已接受（accepted）
 - **日期**：2026-10-21
-- **最后核对**：2026-10-22（回顾审计后按审计结果修订）
+- **最后核对**：2026-10-28（容器复测后修订：3.1 补实测、3.8 撤数字、7 改打包落点）
 - **决策人**：以下按**授权来源**分列，请勿把助手推导项读成作者的决策
   - **作者明示**：
     - 不惜代价、不兼容无所谓、可重构（U9、U16）
@@ -18,7 +18,7 @@
     - `PATH` / `TERM` 保持出厂值（决定 4）
     - 乱码不作为本 ADR 的处置对象（决定 5）
     - 不碰 ADR-0015 / 0016 的正文，只各加一行更新记录（决定 3）
-- **实施载体**：尚未立 spec / 工单（本 ADR 先行，落地载体待排期）
+- **实施载体**：spec 已按本文改口径（2026-10-28），工单未拆
 
 > **授权说明**：作者对本轮的委托是「选型交你综合判断」（U27）与「只写 ADR」（U52）。因此**取值与形态是助手推导的结果**，不是作者逐条拍板的结论。凡本 ADR 与作者原话直接冲突处，以作者原话为准；凡属助手推导处，复核时应重新评估而不是默认沿用。
 
@@ -94,6 +94,19 @@ id -un → root                                    ← 已穿过 sudo
 ```
 
 `-a`（代填）模式下同样完整：`LANG` / `LC_ALL` / `TERM` 与无 PTY 时一致，中文触发词（「请选择架构」）匹配成功。
+
+**2026-10-28 在容器里补了一次**（`localhost/ubuntuforpod:26.04-sshd`，容器内 `sudo --version` 是 **classic sudo 1.9.17p2**，不是 sudo-rs；`/etc/sudoers` 只有 `env_reset`、`secure_path` 与三条授权，**没有 `env_keep`**）：
+
+```text
+$ MYVAR=keepme LANG=C LC_ALL=C sudo -n env
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin
+LANG=C
+LC_ALL=C
+```
+
+`MYVAR` 不见了、`PATH` 换成 `secure_path`——说明 `env_reset` 确实执行了；而 `LANG` / `LC_ALL` 活着。**在一条 `env_keep` 都没有的 sudoers 上，locale 靠 `env_check` 就能过去**，3.2 记的机制在 26.04 上仍然成立。
+
+**这一格的边界**：调用身份是 root。非 root 用户经 setuid 起 `sudo` 那条路本会话跑不了——沙盒给所有进程设了 `NoNewPrivs`，安全策略又拦 `su` + `sudo` 的组合，所以「非 root 调用」仍是空的，记进 12.2。
 
 ### 3.2 两个发行版，两种保留机制
 
@@ -216,15 +229,13 @@ top - 23:42:39 up  1:28,  0 users,  load average: 0.27, 0.36, 0.23
 
 结论方向不变：`C` 下按字节，中文会被切坏。但「哪几条会变」取决于用户脚本调的是哪个实现——手册里写这条、工单里做验收，都必须带上实现名，否则换了发行版就翻案。
 
-### 3.8 排序差异的量化
+### 3.8 排序差异
 
-不发 `-n` 的 `sort`，以及 `ls` 本身（`ls` 就按 locale 排序，不需要 `sort`）：
+不发 `-n` 的 `sort`，以及 `ls` 本身（`ls` 就按 locale 排序，不需要 `sort`），结果会随 locale 变：`C` 下按字节序，`en_US.UTF-8` 与 uutils 按码点序，大小写混排的清单上两者通常给出不同顺序。
 
-| 数据形态 | 结果不同的比例 |
-| --- | --- |
-| 纯小写字母 + 数字 | **0%**（200 组抽样） |
-| 大小写混合 + 下划线 + `IP` | **85%**（170/200） |
-| 典型主机名清单（16 行） | 12 行位置不同 |
+**幅度不给数。** 此前这里记过 0% / 85%（170/200）/ 12 行三个百分数，抽样规则没有写下来，换一组参数就能得到另一组数——2026-10-28 撤回，不再作为论据。
+
+取舍不依赖幅度：6.1 立足的是**失效形态**（`C` 不存在「未生成」这种失效），不是「差多少」。要的只有一件事——同一批机器上跑同一条命令，顺序应当一致；`C` 给的就是这个一致性。
 
 ### 3.9 解释器侧的例外：python 的 UTF-8 模式
 
@@ -291,6 +302,8 @@ exit=1
 
 2000 台机器里有多少台没生成 `en_US.UTF-8` 是不可知的，而一旦落到这种机器上，**每次 bash 调用多 1 行、每次 perl 多 7～19 行警告灌进输出**（3.5）。对一个要求「同批机器结果可逐字比对」的场景，这是不可接受的不确定性。
 
+**另一条证据在失败分类这一侧**：`config/keywords_error.conf` 里挂的远端关键词全是英文原话（中文只出现在分类名 `name` 与提示 `tip`）。目标机一旦把提示语翻成中文，这些关键词一条都命中不了，整批落进「未归类」；固定成 `C` 才让「分类可判」这件事跨机器成立。这条与 3.8 的幅度无关，也不依赖目标机装没装翻译包。
+
 `C` 在 locale 层**永远成功、永远安静、永远是英文、永远按字节**；它不保证解释器运行期一定正常——python 在没有 UTF-8 模式时会因为 stdout 是 ascii 而直接失败（3.9）。**可预测性比最优性重要。**
 
 ### 6.2 为什么用户的实际用法不受影响，以及如何回应「我更想保住编码」
@@ -341,7 +354,7 @@ ADR-0015 的「影响」一节原文写着：
 
 ## 七、影响
 
-- **配置**：出厂值写在**三份**文件里，三份都要改——`config/SSHFleet.conf`（作者本机在用，**不随包发布**）、`config/SSHFleet-for-linux.conf`、`config/SSHFleet-for-windows.conf`。两个打包脚本把后两份**改名成包内的 `config/SSHFleet.conf`**（`build-linux.sh:101/103`、`build-windows.bat:104/143`），所以只改第一份会做出「工作区变了、发出去的包没变」。改的是 `[env]` 段里 `LANG` 与 `LC_ALL` 两行（`"en_US.UTF-8"` → `"C"`）及其行内注释（现在的「统一字符集与排序」不再准确，因为 `C` 不提供 UTF-8 字符语义）。验收要同时看仓库与包内：`grep -rn 'en_US.UTF-8' modules/SSHFleet_Go/config/` 应 0 命中；`tar -xzOf <linux包> <顶层>/config/SSHFleet.conf | grep -A4 '^\[env\]'` 与 `unzip -p <win包> <顶层>/config/SSHFleet.conf` 同样应是 `C`。
+- **配置**：出厂值写在**三份**文件里，三份都要改——`config/SSHFleet.conf`（作者本机在用，**不随包发布**）、`config/SSHFleet-for-linux.conf`、`config/SSHFleet-for-windows.conf`。发布脚本 `tools/release/release.py:235` 按平台把后两份**改名成包内的 `config/SSHFleet.conf`**（原来那两个手动打包脚本 `build-linux.sh` / `build-windows.bat` 已在 `015219c` 删掉），所以只改第一份会做出「工作区变了、发出去的包没变」。改的是 `[env]` 段里 `LANG` 与 `LC_ALL` 两行（`"en_US.UTF-8"` → `"C"`）及其行内注释（现在的「统一字符集与排序」不再准确，因为 `C` 不提供 UTF-8 字符语义）。验收要同时看仓库与包内：`grep -rn 'en_US.UTF-8' modules/SSHFleet_Go/config/` 应 0 命中；`tar -xzOf <linux包> <顶层>/config/SSHFleet.conf | grep -A4 '^\[env\]'` 与 `unzip -p <win包> <顶层>/config/SSHFleet.conf` 同样应是 `C`。**包内那一步要跑 `release.py`，那是发布动作，由作者执行**（规范四·2：版本号与发布不归执行者）。
 - **老配置**：使用者的既有配置里若仍写着 `en_US.UTF-8`，本 ADR 不影响其行为——取值由配置决定，不是代码写死。是否改随使用者。**不提供自动迁移**。
 - **下发形态**：**不变**。日志与报告里的「命令行」一行形态不变，`DescribeCommand` 不用改。
 - **字符语义**：`awk` / `cut -c` / `${#s}` / `sort` 在处理中文时按字节（3.7、3.8），须写进配置手册，否则下一个写 `cut -c1-4` 切中文的人会踩到。
@@ -391,6 +404,7 @@ CentOS 7.9（GNU coreutils 8.22）在 PTY 下 `ls` 列 emoji 文件名，`emoji�
 - 本轮实测环境：WSL2 的 Ubuntu-26.04（glibc 2.43、sudo 1.9.17p2、uutils coreutils 0.8.0）与 CentOS-7.9（glibc 2.17、sudo 1.8.23、GNU coreutils 8.22），用非 root 账号 `sdut_u` / `sdut_c`。
 - 沙盒产物（`build/` 下，按天清理）：i18n 取证、`-a` 探针、locale 对比脚本、结论汇总。
 - 回顾审计（2026-10-22）：`docs/issues/2026-10-21-1843-sudo边界语言丢失/audit-run-2026-10-22/report.md`（六轴回执与 `raw/`，本文件当日修订的依据）。
+- 2026-10-28 复测：本机 podman 起 `localhost/ubuntuforpod:26.04-sshd`，容器内 `sudo --version` 为 **1.9.17p2**（包 `sudo`，`/usr/bin/sudo.ws`，**不是 sudo-rs**），命令与输出见 3.1 末段。同轮在容器里复现了旧值的告警：`LC_ALL=en_US.UTF-8 bash -c 'echo hi'` 多一行 `setlocale: cannot change locale`，改 `C` 后干净。
 
 ## 十二、复审
 
@@ -428,6 +442,7 @@ CentOS 7.9（GNU coreutils 8.22）在 PTY 下 `ls` 列 emoji 文件名，`emoji�
 | --- | --- | --- |
 | SLES 10/11/12 | 完全未验证。SUSE 文档称 sudo 默认给最小环境，且 SLES 12 起默认配成类似 `su` 的行为（可能要求 root 密码） | 在一台真机上跑 `sudo -V`，能回答两问即可判死：`env_keep` / `env_check` 两段里有没有 `LANG` / `LC_*`；`targetpw` 是否为默认 |
 | 信创系统（麒麟 / UOS / Deepin） | 未验证。其中 Debian 系应同 Ubuntu、RHEL 系应同 CentOS，但 libc 是否为 glibc 未确认 | 同上；另能回答 `locale -a` 里有没有 `en_US` |
+| Ubuntu 26.04 的**非 root 调用** | 只测到 root 调用（沙盒给所有进程设了 `NoNewPrivs`，`su` + `sudo` 被安全策略拦）；同一轮已确认 `env_reset` 生效、`LANG` / `LC_ALL` 存活 | 在真机上用普通账号跑 `sh -c 'export LANG=C; sudo -n env'`，看输出里有没有 `LANG=C` |
 
 **（二）不补、但已知——已无可部署环境，不再投入**
 
@@ -451,4 +466,5 @@ CentOS 7.9（GNU coreutils 8.22）在 PTY 下 `ls` 列 emoji 文件名，`emoji�
   - **补 6.5「不惜代价」基调**：作者 U9/U16 反复申明代价无所谓，初版第十节却用「不可维护」「维护灾难」否掉候选。已把否掉理由全部改为可靠性口径，并说明本 ADR 不采用该立场的原因。
   - **补第八节的「不探测环境」**：作者 U12 明令「别去检测当前是什么环境……别干这种活」，初版只写了「不按发行版分档」，漏了这条更广的禁令。
   - **重写第十二节**：初版是「分层 + 六条触发条件 + 待办清单」，形态上是工单而不是 ADR，且六条触发条件里五条不可观测、其中一条引用了第四节并不存在的「三条」。已收敛为「方法纪律 + 未证实清单」两小节。
+- 2026-10-28：**按容器复测修订**，四件事：① 3.1 补一次 26.04 容器实测（classic sudo 1.9.17p2、sudoers 无 `env_keep`，`env_reset` 生效而 `LANG` / `LC_ALL` 存活），并标明调用身份是 root、非 root 那条没跑成（12.2）；② 3.8 撤回三个百分数，只留方向；③ 第七节的打包落点从已删除的 `build-linux.sh` / `build-windows.bat` 改为 `tools/release/release.py:235`；④ 6.1 补一条「失败分类关键词全英文」的证据。**决定 1–5 未变。**
 
