@@ -57,6 +57,13 @@ func CheckArguments(a *Args) error {
 		return fmt.Errorf("执行模式选项：-c、-s、-u、-d、--change-password 互斥，只能指定一个\n提示：一次只能做一件事，请只保留一个模式")
 	}
 
+	// --no-shell 只服务 -c / -s：它剥的是「下发命令」的外壳与环境，上传下载根本不拼下发命令，
+	// 那一层不存在，给了也落不到任何地方。与「-p 不能搭配 -c / -s」同一条口径——
+	// 静默忽略参数比报错更难查（2026-10-28 作者定：改成互斥）。
+	if a.NoShell && (a.Upload != "" || a.Download != "") {
+		return fmt.Errorf("--no-shell 不能搭配 -u 或 -d 使用\n提示：--no-shell 只对 -c / -s 有意义——它剥掉的是下发命令的外壳与环境；上传、下载不拼下发命令，没有这一层可剥")
+	}
+
 	// --change-password：互斥与取值（放这里，早于下面那些"只为某个模式服务"的校验）
 	if err := checkPasswdChange(a); err != nil {
 		return err

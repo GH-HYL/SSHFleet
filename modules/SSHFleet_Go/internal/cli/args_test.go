@@ -925,3 +925,23 @@ func TestParseCarriesLocaleEnglish(t *testing.T) {
 		}
 	}
 }
+
+// --no-shell 只服务 -c / -s：上传下载不拼下发命令，给它没有可作用的那一层。
+// 此前是静默忽略（参数屏还显示「--no-shell 忽略 sudo」），2026-10-28 改成互斥（作者定）。
+func TestNoShellExclusiveWithTransferModes(t *testing.T) {
+	for _, a := range []*Args{
+		{Upload: "afile.txt", Path: "/opt/", NoShell: true},
+		{Download: "/var/log", Path: "./logs/", NoShell: true},
+	} {
+		err := CheckArguments(a)
+		if err == nil || !strings.Contains(err.Error(), "--no-shell 不能搭配") {
+			t.Fatalf("上传/下载 + --no-shell 应报互斥，实际 err=%v", err)
+		}
+	}
+	// -c / -s 搭配 --no-shell 是合法用法，不该被这条拦
+	if err := CheckArguments(&Args{Command: "df -h", NoShell: true}); err != nil {
+		if strings.Contains(err.Error(), "--no-shell 不能搭配") {
+			t.Fatalf("命令模式 + --no-shell 是合法用法，不该报互斥：%v", err)
+		}
+	}
+}
