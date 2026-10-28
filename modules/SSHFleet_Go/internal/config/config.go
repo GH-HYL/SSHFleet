@@ -120,9 +120,9 @@ type Config struct {
 	// 出厂只给 PATH 与 TERM 两条；拼装见 ssh.ExportPrefix。
 	Env map[string]string `toml:"env"`
 	// Locale 提示语语言开关；编码不在这里，见 ssh.LocaleFragment。
-	Locale      Locale            `toml:"locale"`
-	Interpreter Interpreter       `toml:"interpreter"`
-	Upload      Upload            `toml:"upload"`
+	Locale      Locale      `toml:"locale"`
+	Interpreter Interpreter `toml:"interpreter"`
+	Upload      Upload      `toml:"upload"`
 }
 
 // BuiltinPaths 产物路径与文件名的内置取值（用户不可配）。

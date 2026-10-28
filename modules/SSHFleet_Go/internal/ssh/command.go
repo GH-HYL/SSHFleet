@@ -47,6 +47,14 @@ func ExportPrefix(vars map[string]string) string {
 	return b.String()
 }
 
+// Options 拼装下发行时的几个开关。收成一个结构，而不是一串相邻的 bool：
+// 调用点上 `Options{AsRoot: true}` 自解释，位置写反也编不过。
+type Options struct {
+	NoShell bool // --no-shell：不套外壳、不设环境（sudo 也不加）
+	AsRoot  bool // -m sudo：以 root 身份执行
+	English bool // [locale] english：提示语统一英文
+}
+
 // encodingFragment 下发行里那段「让目标机按字符算」的判断，POSIX sh，不含单引号。
 //
 // 四步：问机器 `locale charmap` 是不是 UTF-8 → 是就什么都不做 → 不是就在 `C.UTF-8` /
@@ -135,15 +143,13 @@ const (
 //   - scriptName:  脚本模式下的脚本文件名（下发行把它交回去当 $0；命令模式传空）
 //   - interpreter: 解释器（命令模式传命令解释器，脚本模式传脚本解释器）
 //   - envPrefix:   下发行开头的环境段（ExportPrefix 的产物）；空 = 不导入环境变量
-//   - noShell:      --no-shell：不套外壳、不设环境（sudo 也不加）
-//   - asRoot:      -m sudo：以 root 身份执行（--no-shell 时不生效）
-//   - english:      [locale] english：提示语统一英文（编码判断不受它影响）
+//   - opt:         三个开关，见 Options
 //
 // 返回 (下发命令, stdin 内容)：stdin 为空表示不喂输入（命令模式的 --no-shell）。
-func BuildCommand(command, scriptBody, scriptName, interpreter, envPrefix string, noShell, asRoot, english bool) (string, string) {
+func BuildCommand(command, scriptBody, scriptName, interpreter, envPrefix string, opt Options) (string, string) {
 	// --no-shell：不套外壳、不设环境（sudo 也不加——工具不附加任何东西）。
 	// 命令模式原样下发、不喂 stdin；脚本模式只剩解释器自己那条调用，正文照旧走 stdin。
-	if noShell {
+	if opt.NoShell {
 		if command != "" {
 			return command, ""
 		}
@@ -155,9 +161,9 @@ func BuildCommand(command, scriptBody, scriptName, interpreter, envPrefix string
 	// 命令模式与脚本模式共用同一个外壳（唯一差别是内层解释器与要不要补脚本名）。
 	// 内层串与 DescribeCommand 打印的「下发行」同源。
 	if scriptBody != "" {
-		return "sh -c " + shellQuote(scriptStdinInner(envPrefix, interpreter, scriptName, asRoot, english)), scriptBody
+		return "sh -c " + shellQuote(scriptStdinInner(envPrefix, interpreter, scriptName, opt)), scriptBody
 	}
-	return "sh -c " + shellQuote(innerCommand(envPrefix, interpreter, asRoot, english)), command
+	return "sh -c " + shellQuote(innerCommand(envPrefix, interpreter, opt)), command
 }
 
 // escapeSingleQuotes 把一段文本里的单引号转义成 '\”。
@@ -256,9 +262,10 @@ func DescribeCommand(a DescribeInput) string {
 		}
 	}
 
-	inner := innerCommand(a.EnvPrefix, a.Interpreter, a.AsRoot, a.English)
+	opt := Options{AsRoot: a.AsRoot, English: a.English}
+	inner := innerCommand(a.EnvPrefix, a.Interpreter, opt)
 	if a.ScriptBody != "" {
-		inner = scriptStdinInner(a.EnvPrefix, a.Interpreter, a.ScriptName, a.AsRoot, a.English)
+		inner = scriptStdinInner(a.EnvPrefix, a.Interpreter, a.ScriptName, opt)
 	}
 	downLine := "sh -c " + shellQuote(inner)
 	hasEnv := a.EnvPrefix != ""
@@ -311,12 +318,12 @@ func scriptWho(asRoot bool) string {
 // innerCommand 拼外壳的内层命令（env 前缀 + [sudo ]解释器）。
 // 命令模式与脚本模式都走它：命令模式传命令解释器，脚本模式传脚本解释器；正文走 stdin
 // 的脚本模式另走 scriptStdinInner（多一步把脚本名补成 $0）。下发行由本包单点拼，调用方不重复。
-func innerCommand(envPrefix, interpreter string, asRoot, english bool) string {
+func innerCommand(envPrefix, interpreter string, opt Options) string {
 	sudo := ""
-	if asRoot {
+	if opt.AsRoot {
 		sudo = modeSudo + " "
 	}
-	return envHead(envPrefix, english) + sudo + interpreter
+	return envHead(envPrefix, opt.English) + sudo + interpreter
 }
 
 // scriptNameArg 脚本模式补「脚本名」的那一段参数：`<解释器> -c <正文或引导> '<脚本名>'`
@@ -454,12 +461,12 @@ func InterpreterBaseName(interpreter string) string {
 // zsh 要单独适配：zsh 的 source 会把 $0 重置成被 source 的文件名（FUNCTION_ARGZERO
 // 默认开），补回的名字会被 /dev/stdin 盖掉（2026-10-08 实测）。bash / dash 的 source
 // 不动 $0，无此行为。见 sourceStdinBody。
-func scriptStdinInner(envPrefix, interpreter, scriptName string, asRoot, english bool) string {
+func scriptStdinInner(envPrefix, interpreter, scriptName string, opt Options) string {
 	sudo := ""
-	if asRoot {
+	if opt.AsRoot {
 		sudo = modeSudo + " "
 	}
-	return envHead(envPrefix, english) + sudo + scriptInvocation(interpreter, scriptName)
+	return envHead(envPrefix, opt.English) + sudo + scriptInvocation(interpreter, scriptName)
 }
 
 // scriptInvocation 脚本模式下解释器自己那条调用串——不含环境前缀、不含 sudo：
