@@ -10,7 +10,7 @@ Status: done
 - [x] 用出厂配置实跑一次，下发行里没有 `LANG` / `LC_ALL`，有 `PATH` 与 `TERM`
 - [x] 用户自己加回 `LANG = "zh_CN.UTF-8"`，下发行里照常导出——工具不判它与编码片段、语言开关是否冲突；格式错（变量名非法、TOML 写坏）仍按既有校验报错
 - [x] 配置文件与代码里关于 `[env]` 的注释都不再说「统一字符集与排序」、不再写出厂给 locale，改成语言开关在 `[locale]`、编码不用配
-- [x] 两平台 `go test ./...` 全绿（2026-10-28：Windows go1.26.4 与 WSL2 Ubuntu 26.04 go1.26.8 各一次）
+- [x] 两平台 `go test ./...` 全绿（2026-10-28：Windows go1.26.4、WSL2 Ubuntu 26.04 与 CentOS 7.9 的 go1.26.8，各一次）
 
 ## Comments
 
