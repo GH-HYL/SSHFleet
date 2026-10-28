@@ -5,7 +5,7 @@
     python tools/skill-manager/update_skills_拉上游更新.py [--repo URL] [--branch main] [--keep]
 
 流程：问一次 API 拿到分支当前提交 → 下载该提交的归档包到 ``build/skill-manager/`` → 两组都在才动手 →
-把新的铺到临时位置 → 全部铺好后逐组换入 → 按本仓需要改回几个技能的调用开关 → 清掉临时文件。
+把新的铺到临时位置（按文件开头的 ``EXCLUDED`` 去掉不装的）→ 全部铺好后逐组换入 → 按本仓需要改回几个技能的调用开关 → 清掉临时文件。
 
 替换是整目录换掉，不合并：本地对这两组做过的改动会被覆盖。要的是跟上游一致，
 留着旧文件只会让「这版到底是不是最新的」变得说不清。**唯一例外是末尾那步个性化配置**——
@@ -40,6 +40,15 @@ MODEL_MAY_INVOKE: tuple[str, ...] = (
 
 FLAG_KEY = "disable-model-invocation"
 FLAG_VALUE = "false"
+
+# 不想装的技能：键是相对 skills/ 的路径，值是「为什么不装」。铺临时目录时按这份清单跳过，
+# 换入的是本来就没有它们的整组，本地旧的那份随整目录替换一并消失，不用另删。
+# 值要写出来：跑的时候会打，过半年看见技能少了能立刻分清是故意的还是拉挂了。
+# 上游改名、下架导致匹配不上不算失败，只是清单这一行白写。
+EXCLUDED: dict[str, str] = {
+    "engineering/pr": "只用来写 PR 正文，本仓提交信息够用",
+    "engineering/wayfinder": "把大活拆成决策票找路那套，本仓不走",
+}
 
 
 def parse_args() -> argparse.Namespace:
@@ -112,6 +121,29 @@ def extract(tarball: Path, dest: Path) -> Path:
 
 def count_files(root: Path) -> int:
     return sum(1 for p in root.rglob("*") if p.is_file())
+
+
+def excluded_names(group: str) -> list[str]:
+    """EXCLUDED 里落在 group 这一层的技能目录名。"""
+    names: list[str] = []
+    for rel in EXCLUDED:
+        owner, _, skill = rel.partition("/")
+        if owner == group and skill:
+            names.append(skill)
+    return sorted(names)
+
+
+def make_ignore(top: Path, skip: set[str]):
+    """给 copytree 用的 ignore：只在 top 这一层跳过 skip 里的目录。
+
+    copytree 对每一层目录都调它，所以要比对路径——否则组里更深处的同名目录会被一起跳过。
+    """
+    def ignore(src: str, names: list[str]) -> set[str]:
+        if not skip or Path(src) != top:
+            return set()
+        return {name for name in names if name in skip}
+
+    return ignore
 
 
 def set_frontmatter_flag(text: str, key: str, value: str) -> tuple[str, str]:
@@ -198,13 +230,20 @@ def main() -> int:
         print("  失败：上游缺目录 " + "、".join(missing) + "；工作区未改动，先确认仓库结构再重跑。")
         return 1
 
+    if EXCLUDED:
+        print("  按 EXCLUDED 不装：")
+        for rel, why in EXCLUDED.items():
+            print(f"    {rel}：{why}")
+        print()
+
     # 先铺到临时位置，全铺好了才换入——中途失败不至于新旧各半
     staged = staging / "staged"
     if staged.exists():  # 上次跑到一半留下的残渣会挡住 copytree，先清掉
         shutil.rmtree(staged)
     try:
         for name in common.UPSTREAM_GROUPS:
-            shutil.copytree(root / "skills" / name, staged / name)
+            top = root / "skills" / name
+            shutil.copytree(top, staged / name, ignore=make_ignore(top, set(excluded_names(name))))
     except OSError as exc:
         print(f"  失败：铺临时目录出错（{exc}）；工作区未改动，重跑即可。")
         return 1
