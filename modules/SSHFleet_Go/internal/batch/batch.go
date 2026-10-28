@@ -220,11 +220,9 @@ func buildTasks(a *cli.Args, nodes *nodelist.Nodes, prompts *ssh.PasswdPrompts, 
 		body := material.Body
 		// 解释器在选项/参数解析阶段就算好了（命令模式 = 命令解释器；脚本模式 = 后缀映射或回退），
 		// 这里只取用。空值说明解析链路有漏——拼接前拦下，不让一条没有解释器的命令发出去。
-		interpreter := a.Interpreter
-		if interpreter == "" {
+		if a.Interpreter == "" {
 			return nil, nil, fmt.Errorf("没有为这次执行解析出解释器\n提示：检查配置文件里的 [interpreter] 段")
 		}
-		name := scriptName(a)
 		if len(a.Answers) > 0 {
 			// 交互分支：正文改经命令行承载，会话 stdin 整条让给代填（ADR-0010）。
 			// 下发行由选项/参数合规阶段拼好存进 Args.Downlink（那里要拿它做长度检查），
@@ -243,7 +241,7 @@ func buildTasks(a *cli.Args, nodes *nodelist.Nodes, prompts *ssh.PasswdPrompts, 
 			}
 			break
 		}
-		command, stdin := ssh.BuildCommand(a.Command, body, name, interpreter, a.EnvPrefix, a.NoShell, a.Sudo)
+		command, stdin := ssh.BuildCommand(commandSpec(a, body))
 		for i, node := range nodes.Items {
 			tasks = append(tasks, &task{seq: i, node: node, command: command, stdin: stdin})
 		}
@@ -269,24 +267,31 @@ func commandDescription(a *cli.Args, tasks []*task) []string {
 		}))
 	}
 
-	interpreter := a.Interpreter
-
 	// 脚本模式下正文非空即判定为脚本模式（DescribeCommand 的唯一依据）
 	body := tasks[0].stdin
 	if a.Command != "" {
 		body = ""
 	}
 
-	return indentLines(ssh.DescribeCommand(ssh.DescribeInput{
+	return indentLines(ssh.DescribeCommand(commandSpec(a, body)))
+}
+
+// commandSpec 拼装一次下发要的全部输入——执行（BuildCommand）与日志（DescribeCommand）
+// 共用这一份。此前两处各填一遍字段，2026-10-28 加 english 时要改两处才对齐；现在只此一份。
+func commandSpec(a *cli.Args, body string) ssh.CommandSpec {
+	return ssh.CommandSpec{
 		Command:     a.Command,
-		ScriptPath:  a.Script,
 		ScriptBody:  body,
 		ScriptName:  scriptName(a),
-		Interpreter: interpreter,
+		ScriptPath:  a.Script,
+		Interpreter: a.Interpreter,
 		EnvPrefix:   a.EnvPrefix,
-		NoShell:     a.NoShell,
-		AsRoot:      a.Sudo,
-	}))
+		Options: ssh.Options{
+			NoShell: a.NoShell,
+			AsRoot:  a.Sudo,
+			English: a.English,
+		},
+	}
 }
 
 // scriptName 脚本文件名（basename）。下发行要把它交回去当 $0——这类脚本常从自己的

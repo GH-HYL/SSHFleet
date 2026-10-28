@@ -13,7 +13,7 @@ import (
 // 命令模式：命令文本经 stdin 直喂，命令行只剩 sh -c '<前缀; [sudo ]解释器>'。
 func TestBuildCommandCommandMode(t *testing.T) {
 	const env = "export LC_ALL=C;"
-	cmd, stdin := BuildCommand("ls -l", "", "", "bash", env, false, false)
+	cmd, stdin := downlink("ls -l", "", "", "bash", env, Options{})
 
 	if stdin != "ls -l" {
 		t.Fatalf("命令应经 stdin 直喂，实际 %q", stdin)
@@ -32,13 +32,104 @@ func TestBuildCommandCommandMode(t *testing.T) {
 	}
 }
 
-// 环境前缀空 = 不套 export 段，内层直接就是解释器，且不多出空格。
-func TestBuildCommandEmptyEnvPrefix(t *testing.T) {
-	if cmd, _ := BuildCommand("ls", "", "", "bash", "", false, false); cmd != "sh -c 'bash'" {
-		t.Fatalf("空前缀应只剩 sh -c 'bash'，实际 %q", cmd)
+// wantEncodingFragment 编码判断片段，逐字手写——期望值不从实现取。
+//
+// 形态：UTF-8 就不动手；否则在 C.UTF-8 / en_US.UTF-8 两个中性名里挑一个确实存在的
+// （大小写、连字符不计），只 export LC_CTYPE，挑不到就一个都不设。
+const wantEncodingFragment = `if [ "$(locale charmap 2>/dev/null)" != UTF-8 ]; then n=$(locale -a 2>/dev/null | grep -Eixm1 "c\.utf-?8|en_us\.utf-?8"); [ -n "$n" ] && export LC_CTYPE="$n"; fi;`
+
+// 四种下发形态各一条整串断言：片段必须原样出现在 sh -c 里、紧挨解释器、不加任何转义
+// （片段里没有单引号，所以外层不会再套一层 '\”）。
+func TestBuildCommandEncodingFragmentInAllForms(t *testing.T) {
+	const env = `export PATH="/bin";`
+	cases := []struct {
+		what string
+		got  string
+		want string
+	}{
+		{"命令模式（无环境段）",
+			mustCommand(t, "ls -l", "", "", "bash", "", Options{}),
+			"sh -c '" + wantEncodingFragment + " bash'"},
+		{"命令模式（有环境段）",
+			mustCommand(t, "ls -l", "", "", "bash", env, Options{}),
+			"sh -c '" + env + " " + wantEncodingFragment + " bash'"},
+		{"sudo 模式",
+			mustCommand(t, "id -u", "", "", "bash", env, Options{AsRoot: true}),
+			"sh -c '" + env + " " + wantEncodingFragment + " sudo bash'"},
+		{"脚本模式（补回脚本名）",
+			mustCommand(t, "", "echo hi", "t.sh", "bash", env, Options{}),
+			"sh -c '" + env + " " + wantEncodingFragment + " bash -c " +
+				"'\\''. /dev/stdin'\\'' '\\''t.sh'\\'''"},
 	}
-	if cmd, _ := BuildCommand("ls", "", "", "bash", "", false, true); cmd != "sh -c 'sudo bash'" {
-		t.Fatalf("空前缀 + sudo 应为 sh -c 'sudo bash'，实际 %q", cmd)
+	for _, c := range cases {
+		if c.got != c.want {
+			t.Fatalf("%s\n want %q\n got  %q", c.what, c.want, c.got)
+		}
+	}
+}
+
+// wantEnglishFragment 开关打开时的片段：编码判断之后多一句把提示语钉成英文。
+const wantEnglishFragment = wantEncodingFragment + " export LC_MESSAGES=C;"
+
+// 语言开关：开、关两种产出一边一条逐字断言，差别只在那一句——编码部分不随它变。
+func TestLocaleFragmentSwitch(t *testing.T) {
+	if got := LocaleFragment(false); got != wantEncodingFragment {
+		t.Fatalf("关：\n want %q\n got  %q", wantEncodingFragment, got)
+	}
+	if got := LocaleFragment(true); got != wantEnglishFragment {
+		t.Fatalf("开：\n want %q\n got  %q", wantEnglishFragment, got)
+	}
+}
+
+// 开关打开时下发行整串：那一句夹在片段之后、解释器之前。
+func TestBuildCommandEnglishSwitch(t *testing.T) {
+	const env = `export PATH="/bin";`
+	want := "sh -c '" + env + " " + wantEnglishFragment + " bash'"
+	if got, _ := downlink("ls", "", "", "bash", env, Options{English: true}); got != want {
+		t.Fatalf("\n want %q\n got  %q", want, got)
+	}
+	// 关着时不该出现那一句
+	if got, _ := downlink("ls", "", "", "bash", env, Options{}); strings.Contains(got, "LC_MESSAGES") {
+		t.Fatalf("关着时不该有语言开关那一句：%q", got)
+	}
+	// 片段里只要有一个单引号，外层 shellQuote 就会把它转义成 '\''；整串里不该出现这种痕迹
+	if got, _ := downlink("ls", "", "", "bash", env, Options{English: true}); strings.Contains(got, `'\''`) {
+		t.Fatalf("片段里混进了单引号，外层引号套娃了：%q", got)
+	}
+}
+
+// downlink 测试简写：按位置填进 CommandSpec（生产侧对应的是 cli 里的 commandSpec）。
+func downlink(command, body, name, interpreter, env string, opt Options) (string, string) {
+	return BuildCommand(CommandSpec{
+		Command:     command,
+		ScriptBody:  body,
+		ScriptName:  name,
+		Interpreter: interpreter,
+		EnvPrefix:   env,
+		Options:     opt,
+	})
+}
+
+// mustCommand 只要下发行、不关心 stdin 的场合。
+func mustCommand(t *testing.T, command, body, name, interpreter, env string, opt Options) string {
+	t.Helper()
+	got, _ := downlink(command, body, name, interpreter, env, opt)
+	return got
+}
+
+// 环境前缀空也不等于「什么都不加」：编码判断照样在，内层直接接解释器，且不多出空格。
+func TestBuildCommandEmptyEnvPrefix(t *testing.T) {
+	want := "sh -c '" + wantEncodingFragment + " bash'"
+	if cmd, _ := downlink("ls", "", "", "bash", "", Options{}); cmd != want {
+		t.Fatalf("空前缀应只剩片段 + 解释器，实际 %q", cmd)
+	}
+	wantSudo := "sh -c '" + wantEncodingFragment + " sudo bash'"
+	if cmd, _ := downlink("ls", "", "", "bash", "", Options{AsRoot: true}); cmd != wantSudo {
+		t.Fatalf("空前缀 + sudo 应为片段 + sudo + 解释器，实际 %q", cmd)
+	}
+	// --no-shell 不套外壳，片段不出现
+	if cmd, _ := downlink("ls", "", "", "bash", "", Options{NoShell: true}); cmd != "ls" {
+		t.Fatalf("--no-shell 应原样下发，实际 %q", cmd)
 	}
 }
 
@@ -75,7 +166,7 @@ func TestExportPrefix(t *testing.T) {
 
 // sudo 身份：内层命令前加 sudo。
 func TestBuildCommandSudo(t *testing.T) {
-	cmd, _ := BuildCommand("whoami", "", "", "bash", "", false, true)
+	cmd, _ := downlink("whoami", "", "", "bash", "", Options{AsRoot: true})
 	if !strings.Contains(cmd, "sudo bash") {
 		t.Fatalf("sudo 身份应加 sudo，实际 %q", cmd)
 	}
@@ -83,7 +174,7 @@ func TestBuildCommandSudo(t *testing.T) {
 
 // --no-shell：命令模式原样下发，不套 shell、不喂 stdin。
 func TestBuildCommandNoShell(t *testing.T) {
-	cmd, stdin := BuildCommand("raw-cmd --flag", "", "", "", "", true, false)
+	cmd, stdin := downlink("raw-cmd --flag", "", "", "", "", Options{NoShell: true})
 	if cmd != "raw-cmd --flag" || stdin != "" {
 		t.Fatalf("--no-shell 应原样下发且不喂 stdin，实际 cmd=%q stdin=%q", cmd, stdin)
 	}
@@ -92,7 +183,7 @@ func TestBuildCommandNoShell(t *testing.T) {
 // --no-shell 对脚本模式同样成立（2026-10-09）：剥掉外壳与环境，只剩解释器自己那条调用
 // （`<解释器> -c ". /dev/stdin" "<脚本名>"`），正文仍走 stdin、$0 仍补回。
 func TestBuildCommandNoShellWithScript(t *testing.T) {
-	cmd, stdin := BuildCommand("", "echo script", "hello.sh", "bash", "", true, false)
+	cmd, stdin := downlink("", "echo script", "hello.sh", "bash", "", Options{NoShell: true})
 	if strings.HasPrefix(cmd, "sh -c ") {
 		t.Fatalf("--no-shell 脚本模式不该再套外壳，实际 %q", cmd)
 	}
@@ -107,7 +198,7 @@ func TestBuildCommandNoShellWithScript(t *testing.T) {
 	}
 
 	// 非 shell 解释器：只剩裸解释器名，正文走 stdin
-	cmd, stdin = BuildCommand("", "print(1)", "t.py", "python3", "", true, false)
+	cmd, stdin = downlink("", "print(1)", "t.py", "python3", "", Options{NoShell: true})
 	if cmd != "python3" || stdin != "print(1)" {
 		t.Fatalf("非 shell 解释器应只剩裸名字，实际 cmd=%q stdin=%q", cmd, stdin)
 	}
@@ -120,7 +211,7 @@ func TestBuildCommandScriptMode(t *testing.T) {
 		{"python3", "python3"},
 	}
 	for _, c := range cases {
-		cmd, stdin := BuildCommand("", "print('hi')", "", c.interpreter, "", false, false)
+		cmd, stdin := downlink("", "print('hi')", "", c.interpreter, "", Options{})
 		if stdin != "print('hi')" {
 			t.Fatalf("脚本内容应经 stdin 直喂，实际 %q", stdin)
 		}
@@ -133,7 +224,7 @@ func TestBuildCommandScriptMode(t *testing.T) {
 // 脚本模式补回脚本名（$0）：正文仍走 stdin，但名字要交回去——脚本常从自己的文件名里
 // 取信息（文件名带目标 IP 的安装包），经工具跑时 $0 成了 "bash"，那些值就取空。
 func TestBuildCommandScriptKeepsScriptName(t *testing.T) {
-	cmd, stdin := BuildCommand("", "echo hi", "(1.2.3.4).sh", "bash", "", false, false)
+	cmd, stdin := downlink("", "echo hi", "(1.2.3.4).sh", "bash", "", Options{})
 
 	if stdin != "echo hi" {
 		t.Fatalf("正文仍应走 stdin，实际 %q", stdin)
@@ -152,7 +243,7 @@ func TestBuildCommandScriptKeepsScriptName(t *testing.T) {
 // python3 不补名字：`-c` 之后第一个参数落在 sys.argv[1] 而不是 argv[0]，补了只是多塞
 // 一个脚本不认的参数。
 func TestBuildCommandPythonKeepsNoScriptName(t *testing.T) {
-	cmd, _ := BuildCommand("", "print(1)", "t.py", "python3", "", false, false)
+	cmd, _ := downlink("", "print(1)", "t.py", "python3", "", Options{})
 	if strings.Contains(cmd, "t.py") {
 		t.Fatalf("python3 不该补脚本名，实际 %q", cmd)
 	}
@@ -162,7 +253,7 @@ func TestBuildCommandPythonKeepsNoScriptName(t *testing.T) {
 // 家族判定与 -a 支持范围、--no-shell 互斥认同一个名字（此前整名查表，zsh5 静默不补）。
 func TestBuildCommandVersionedShellKeepsScriptName(t *testing.T) {
 	for _, name := range []string{"zsh5", "ksh93", "/bin/bash5"} {
-		cmd, _ := BuildCommand("", "echo hi", "t.sh", name, "", false, false)
+		cmd, _ := downlink("", "echo hi", "t.sh", name, "", Options{})
 		if !strings.Contains(cmd, ". /dev/stdin") || !strings.Contains(cmd, "t.sh") {
 			t.Fatalf("%s 应补回脚本名（名字作 $0），实际 %q", name, cmd)
 		}
@@ -172,7 +263,7 @@ func TestBuildCommandVersionedShellKeepsScriptName(t *testing.T) {
 // zsh 的 source 会把 $0 重置成被 source 的文件名，内层串要先关 FUNCTION_ARGZERO
 // 再 source，名字才保持 -c 参数给的值；bash / dash 无此行为，串里不出现 setopt。
 func TestBuildCommandZshSourceKeepsArgZero(t *testing.T) {
-	cmd, _ := BuildCommand("", "echo hi", "t.sh", "zsh5", "", false, false)
+	cmd, _ := downlink("", "echo hi", "t.sh", "zsh5", "", Options{})
 	if !strings.Contains(cmd, "setopt no_function_argzero; . /dev/stdin") {
 		t.Fatalf("zsh 的内层串应先关 FUNCTION_ARGZERO 再 source，实际 %q", cmd)
 	}
@@ -180,7 +271,7 @@ func TestBuildCommandZshSourceKeepsArgZero(t *testing.T) {
 		t.Fatalf("zsh 也应补回脚本名，实际 %q", cmd)
 	}
 	for _, name := range []string{"bash", "dash", "ksh93"} {
-		cmd, _ := BuildCommand("", "echo hi", "t.sh", name, "", false, false)
+		cmd, _ := downlink("", "echo hi", "t.sh", name, "", Options{})
 		if strings.Contains(cmd, "setopt") {
 			t.Fatalf("%s 不该带 zsh 的 setopt，实际 %q", name, cmd)
 		}
@@ -227,7 +318,7 @@ func TestShellQuote(t *testing.T) {
 // `sh -c '前缀; bash'`，故命令里的引号无需转义、也不会逃出参数边界。
 // （早期实现走 base64 命令行通道，才有转义套娃；改用 stdin 后这条约束消失。）
 func TestBuildCommandCommandTextNotOnCommandLine(t *testing.T) {
-	cmd, stdin := BuildCommand(`echo 'hi'`, "", "", "bash", "", false, false)
+	cmd, stdin := downlink(`echo 'hi'`, "", "", "bash", "", Options{})
 
 	if strings.Contains(cmd, "hi") {
 		t.Fatalf("命令原文不该出现在命令行里（已改走 stdin）：%q", cmd)
@@ -297,11 +388,11 @@ func TestQuoteForShellRestoresBrokenArgv(t *testing.T) {
 // 所以只需把「实际交给 SSH 执行的事实」讲清：命令行、stdin、导入的环境变量。
 func TestDescribeCommandCommandMode(t *testing.T) {
 	const env = "export LC_ALL=C;"
-	text := DescribeCommand(DescribeInput{Command: "who -b", Interpreter: "bash", EnvPrefix: env})
+	text := DescribeCommand(CommandSpec{Command: "who -b", Interpreter: "bash", EnvPrefix: env})
 
 	for _, want := range []string{
 		"交给 SSH 执行",
-		"命令行： sh -c '" + env + " bash'",
+		"命令行： sh -c '" + env + " " + wantEncodingFragment + " bash'",
 		"stdin：  who -b",
 		"配置文件里的环境变量",
 		"交给登录用户的 bash 执行", // 中文之间不留空格，西文两侧留
@@ -311,7 +402,7 @@ func TestDescribeCommandCommandMode(t *testing.T) {
 		}
 	}
 	// 命令行必须与真下发的命令同源
-	login, _ := BuildCommand("who -b", "", "", "bash", env, false, false)
+	login, _ := downlink("who -b", "", "", "bash", env, Options{})
 	if !strings.Contains(text, login) {
 		t.Fatalf("交代的命令行应与 BuildCommand 同源\n期望含：%s\n实际：\n%s", login, text)
 	}
@@ -319,9 +410,9 @@ func TestDescribeCommandCommandMode(t *testing.T) {
 
 // sudo 身份：命令行里带 sudo，说明里点明是 root 身份的解释器。
 func TestDescribeCommandSudo(t *testing.T) {
-	text := DescribeCommand(DescribeInput{Command: "id -u", AsRoot: true, Interpreter: "bash"})
+	text := DescribeCommand(CommandSpec{Command: "id -u", Interpreter: "bash", Options: Options{AsRoot: true}})
 
-	login, _ := BuildCommand("id -u", "", "", "bash", "", false, true)
+	login, _ := downlink("id -u", "", "", "bash", "", Options{AsRoot: true})
 	if !strings.Contains(text, login) {
 		t.Fatalf("sudo 时命令行应与 BuildCommand 同源\n期望含：%s\n实际：\n%s", login, text)
 	}
@@ -336,7 +427,7 @@ func TestDescribeCommandSudo(t *testing.T) {
 
 // --no-shell：命令行就是命令原文，不出现外壳包装。
 func TestDescribeCommandNoShell(t *testing.T) {
-	text := DescribeCommand(DescribeInput{Command: "raw-cmd --flag", NoShell: true})
+	text := DescribeCommand(CommandSpec{Command: "raw-cmd --flag", Options: Options{NoShell: true}})
 
 	if !strings.Contains(text, "命令行： raw-cmd --flag") {
 		t.Fatalf("应把命令原文作为命令行交代，实际：\n%s", text)
@@ -352,17 +443,17 @@ func TestDescribeCommandNoShell(t *testing.T) {
 // 脚本模式：命令行里换成解释器，stdin 报脚本路径（不打印正文）。
 func TestDescribeCommandScriptMode(t *testing.T) {
 	const env = "export LC_ALL=C;"
-	text := DescribeCommand(DescribeInput{
+	text := DescribeCommand(CommandSpec{
 		ScriptPath:  "/x/t.sh",
 		ScriptBody:  "echo 1\necho 2",
 		Interpreter: "bash",
 		EnvPrefix:   env,
-		AsRoot:      true,
+		Options:     Options{AsRoot: true},
 	})
 
 	for _, want := range []string{
 		"交给 SSH 执行",
-		"sh -c '" + env + " sudo bash'",
+		"sh -c '" + env + " " + wantEncodingFragment + " sudo bash'",
 		"stdin：  脚本 /x/t.sh 的内容（bash 解释）",
 		"以 root 身份执行", // 中文之间不留空格
 	} {
@@ -379,7 +470,7 @@ func TestDescribeCommandScriptMode(t *testing.T) {
 // py 脚本用 python3 解释（命令行与说明两处都要跟着变）。
 func TestDescribeCommandPythonScript(t *testing.T) {
 	const env = "export LC_ALL=C;"
-	text := DescribeCommand(DescribeInput{
+	text := DescribeCommand(CommandSpec{
 		ScriptPath:  "/x/t.py",
 		ScriptBody:  "print('hi')",
 		Interpreter: "python3",
@@ -395,7 +486,7 @@ func TestDescribeCommandPythonScript(t *testing.T) {
 
 // 上传 / 下载模式没有命令可交代。
 func TestDescribeCommandNoCommand(t *testing.T) {
-	if text := DescribeCommand(DescribeInput{}); text != "" {
+	if text := DescribeCommand(CommandSpec{}); text != "" {
 		t.Fatalf("无命令时应给空串，实际 %q", text)
 	}
 }
@@ -430,5 +521,26 @@ func TestInteractiveCommandUsesProgramArg(t *testing.T) {
 	got := InteractiveCommand(DownlinkSpec{Command: "print 1", Interpreter: "perl"})
 	if !strings.Contains(got, "perl -e ") {
 		t.Fatalf("perl 应用 -e 启动程序文本，实际：%s", got)
+	}
+}
+
+// 反例禁用词：这几种形态一条都不许出现——`sudo env` / `sudo -E` 改外壳形态，
+// `bash -c 'export` 把环境塞进正文。两条都在 ADR-0030 里被否掉，出现即回退。
+func TestDownlinkForbiddenForms(t *testing.T) {
+	const env = `export PATH="/bin";`
+	forms := map[string]string{
+		"命令模式": mustCommand(t, "ls", "", "", "bash", env, Options{}),
+		"sudo": mustCommand(t, "ls", "", "", "bash", env, Options{AsRoot: true}),
+		"脚本模式": mustCommand(t, "", "echo hi", "t.sh", "bash", env, Options{}),
+		"代填": InteractiveCommand(DownlinkSpec{
+			Command: "ls", Interpreter: "bash", EnvPrefix: env, AsRoot: true,
+		}),
+	}
+	for what, got := range forms {
+		for _, bad := range []string{"sudo env", "sudo -E", "bash -c 'export"} {
+			if strings.Contains(got, bad) {
+				t.Fatalf("%s 出现了禁用形态 %q：%s", what, bad, got)
+			}
+		}
 	}
 }

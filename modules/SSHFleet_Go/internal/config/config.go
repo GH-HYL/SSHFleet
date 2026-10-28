@@ -91,6 +91,14 @@ type Upload struct {
 	MediumParallel int `toml:"medium_parallel"`
 }
 
+// Locale 提示语语言。字符编码不在这里——编码由工具按目标机情况自己处理，没有开关。
+//
+// English 为真时，下发前把提示语语言钉成英文（`export LC_MESSAGES=C`）；假则跟随目标节点。
+// 放在独立一段而不是 [env]：它不是「一个要传下去的环境变量」，而是「要不要加那一句」。
+type Locale struct {
+	English bool `toml:"english"`
+}
+
 // Interpreter 解释器配置，只对命令模式（-c）与脚本模式（-s）生效。
 //   - Command：命令模式使用的解释器；脚本模式后缀没配到时也回退到它
 //   - Script： 脚本模式的「后缀 → 解释器」映射，键带点（如 ".sh"）
@@ -109,10 +117,12 @@ type Config struct {
 	Enable      Enable      `toml:"enable"`
 	Interactive Interactive `toml:"interactive"`
 	// Env 是命令行下发前要在远端导入的环境变量（名字 → 值），空表 = 不导入。
-	// 出厂配置给的是统一 locale / PATH / TERM 几条；拼装见 ssh.ExportPrefix。
-	Env         map[string]string `toml:"env"`
-	Interpreter Interpreter       `toml:"interpreter"`
-	Upload      Upload            `toml:"upload"`
+	// 出厂只给 PATH 与 TERM 两条；拼装见 ssh.ExportPrefix。
+	Env map[string]string `toml:"env"`
+	// Locale 提示语语言开关；编码不在这里，见 ssh.LocaleFragment。
+	Locale      Locale      `toml:"locale"`
+	Interpreter Interpreter `toml:"interpreter"`
+	Upload      Upload      `toml:"upload"`
 }
 
 // BuiltinPaths 产物路径与文件名的内置取值（用户不可配）。
@@ -206,6 +216,7 @@ func validate(cfg *Config, md toml.MetaData) error {
 		{"interactive.regex", definedStr(md, "interactive", "regex")},
 		{"interactive.case_sensitive", definedStr(md, "interactive", "case_sensitive")},
 		{"env", definedStr(md, "env")},
+		{"locale.english", definedStr(md, "locale", "english")},
 		{"upload.small_file", definedStr(md, "upload", "small_file")},
 		{"upload.large_file", definedStr(md, "upload", "large_file")},
 		{"upload.medium_parallel", definedStr(md, "upload", "medium_parallel")},

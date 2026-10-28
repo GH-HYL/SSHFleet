@@ -347,7 +347,7 @@ SSHFleet -f nodes.csv -s install.py
 SSHFleet -f nodes.csv -s deploy.pl
 ```
 
-每种后缀怎么配、目标机报「找不到某某命令」怎么办 → [3 进阶配置手册](docs/3-进阶配置手册.md) 的「7 解释器」。
+每种后缀怎么配、目标机报「找不到某某命令」怎么办 → [3 进阶配置手册](docs/3-进阶配置手册.md) 的「8 解释器」。
 
 ### 6.7 命令在远端是怎么执行的
 
@@ -360,7 +360,7 @@ SSHFleet -f nodes.csv -c "df -h"
 目标机上实际跑的是下面这条——`df -h` 本身经 stdin 喂给内层解释器，不出现在命令行里：
 
 ```text
-sh -c 'export LANG="en_US.UTF-8" LC_ALL="en_US.UTF-8" PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" TERM="dumb"; sudo bash'
+sh -c 'export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" TERM="dumb"; if [ "$(locale charmap 2>/dev/null)" != UTF-8 ]; then n=$(locale -a 2>/dev/null | grep -Eixm1 "c\.utf-?8|en_us\.utf-?8"); [ -n "$n" ] && export LC_CTYPE="$n"; fi; sudo bash'
 ```
 
 加了 `--no-shell`，这一整层外壳就不要了，命令原样下发。
