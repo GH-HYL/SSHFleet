@@ -5,10 +5,11 @@
     python tools/skill-manager/update_skills_拉上游更新.py [--repo URL] [--branch main] [--keep]
 
 流程：问一次 API 拿到分支当前提交 → 下载该提交的归档包到 ``build/skill-manager/`` → 两组都在才动手 →
-把新的铺到临时位置 → 全部铺好后逐组换入 → 清掉临时文件。
+把新的铺到临时位置 → 全部铺好后逐组换入 → 按本仓需要改回几个技能的调用开关 → 清掉临时文件。
 
 替换是整目录换掉，不合并：本地对这两组做过的改动会被覆盖。要的是跟上游一致，
-留着旧文件只会让「这版到底是不是最新的」变得说不清。
+留着旧文件只会让「这版到底是不是最新的」变得说不清。**唯一例外是末尾那步个性化配置**——
+它每次都重做，所以被覆盖也不丢。
 
 只用标准库，不需要装 git——归档走 codeload，比 git 协议在代理后面更容易通。
 """
@@ -17,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import shutil
 import tarfile
 import urllib.error
@@ -26,6 +28,18 @@ from pathlib import Path
 import common
 
 DEFAULT_REPO = "https://github.com/mattpocock/skills"
+
+# 上游给这几个技能写了 disable-model-invocation: true——只能手动敲斜杠调。
+# 本仓要模型自己按流程调，所以每次拉完统一改回 false；整目录换掉会把这条带回来，
+# 故这步必须留在更新流程里，不能只改工作区那三份文件。
+MODEL_MAY_INVOKE: tuple[str, ...] = (
+    "engineering/to-tickets",
+    "engineering/implement",
+    "engineering/to-spec",
+)
+
+FLAG_KEY = "disable-model-invocation"
+FLAG_VALUE = "false"
 
 
 def parse_args() -> argparse.Namespace:
@@ -100,6 +114,61 @@ def count_files(root: Path) -> int:
     return sum(1 for p in root.rglob("*") if p.is_file())
 
 
+def set_frontmatter_flag(text: str, key: str, value: str) -> tuple[str, str]:
+    """把 SKILL.md 头部 frontmatter 里 ``key`` 的值改成 ``value``，返回 (新文本, 做了什么)。
+
+    只动这一行：没有就补在收尾 ``---`` 之前，已经是这个值就原样返回。文件头不是
+    frontmatter（首行不是 ``---``、或没有收尾）时不动，交回状态说明。
+    """
+    lines = text.splitlines(keepends=True)
+    if not lines or lines[0].strip() != "---":
+        return text, "没有 frontmatter，未动"
+    end = next((i for i in range(1, len(lines)) if lines[i].strip() == "---"), None)
+    if end is None:
+        return text, "frontmatter 没收尾，未动"
+
+    pattern = re.compile(rf"^(\s*{re.escape(key)}\s*:\s*)([\"']?)([A-Za-z]+)(\2)$")
+    for i in range(1, end):
+        raw = lines[i]
+        body = raw.rstrip("\r\n")
+        ending = raw[len(body):]  # 换行符单独拎出来，改写时原样接回去
+        m = pattern.match(body)
+        if not m:
+            continue
+        if m.group(3) == value:
+            return text, f"已是 {value}"
+        lines[i] = f"{m.group(1)}{m.group(2)}{value}{m.group(4)}{ending}"
+        return "".join(lines), f"true → {value}"
+
+    eol = "\r\n" if lines[end - 1].endswith("\r\n") else "\n"
+    lines.insert(end, f"{key}: {value}{eol}")
+    return "".join(lines), f"补上 {key}: {value}"
+
+
+def allow_model_invocation(skills: Path) -> list[str]:
+    """把 MODEL_MAY_INVOKE 里各技能的调用开关打开；返回逐条结果，供打印。"""
+    results: list[str] = []
+    for rel in MODEL_MAY_INVOKE:
+        path = skills / rel / "SKILL.md"
+        if not path.is_file():
+            results.append(f"{rel}：上游没有这个技能，跳过")
+            continue
+        try:
+            # newline="" 关掉换行翻译：读到什么字节就写回什么字节，
+            # 否则 Windows 上会把整份 LF 文件改写成 CRLF
+            with path.open("r", encoding="utf-8", newline="") as fh:
+                text = fh.read()
+            new, state = set_frontmatter_flag(text, FLAG_KEY, FLAG_VALUE)
+            if new != text:
+                with path.open("w", encoding="utf-8", newline="") as fh:
+                    fh.write(new)
+        except (OSError, UnicodeError) as exc:
+            results.append(f"{rel}：改写失败（{exc}），这次的技能内容来自上游，未打开调用")
+            continue
+        results.append(f"{rel}：{state}")
+    return results
+
+
 def main() -> int:
     args = parse_args()
     skills = common.skills_root()
@@ -147,6 +216,12 @@ def main() -> int:
         common.drop_path(dst)
         shutil.move(str(staged / name), str(dst))
         print(f"  {name}：{old} 个文件 → {count_files(dst)} 个文件")
+
+    # 个性化配置：整目录换过之后，把本仓要「模型自己调」的几个技能打开。
+    # 上游没给这几个技能不算失败——只提示，技能本身照旧可用（手动敲斜杠）。
+    print("\n  个性化配置：")
+    for line in allow_model_invocation(skills):
+        print(f"    {line}")
 
     if args.keep:
         print(f"\n  下载物留在 {staging}")
