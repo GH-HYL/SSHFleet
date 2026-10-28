@@ -47,12 +47,56 @@ func ExportPrefix(vars map[string]string) string {
 	return b.String()
 }
 
-// envHead 下发行开头的环境段（含尾随空格）；空配置返回空串，免得拼出多余空格。
-func envHead(envPrefix string) string {
-	if envPrefix == "" {
-		return ""
+// Options 拼装下发行时的几个开关。收成一个结构，而不是一串相邻的 bool：
+// 调用点上 `Options{AsRoot: true}` 自解释，位置写反也编不过。
+type Options struct {
+	NoShell bool // --no-shell：不套外壳、不设环境（sudo 也不加）
+	AsRoot  bool // -m sudo：以 root 身份执行
+	English bool // [locale] english：提示语统一英文
+}
+
+// encodingFragment 下发行里那段「让目标机按字符算」的判断，POSIX sh，不含单引号。
+//
+// 四步：问机器 `locale charmap` 是不是 UTF-8 → 是就什么都不做 → 不是就在 `C.UTF-8` /
+// `en_US.UTF-8` 两个中性名里挑一个**确实存在**的（大小写不计、连字符可省，`C.utf8` /
+// `en_US.utf8` 同样认）→ 挑到只 export `LC_CTYPE`；挑不到、`locale` 不存在、输出为空，
+// 一个变量都不设。
+//
+// 三条不变式：
+//   - 只动 `LC_CTYPE`：不碰 `LANG` / `LC_ALL` / `LC_MESSAGES` / 排序——字符语义与提示语
+//     语言是两个正交的轴，这段只管前者；
+//   - 永不降级：只在「现在不是 UTF-8、且机器上确有 UTF-8 可选」时才动手；
+//   - 永不告警：候选只在确实存在的名字里挑，不设 `LC_ALL`（设错会每次调用刷一行 setlocale）。
+//
+// 为什么不设 `LC_ALL`：它一旦有值就盖掉 `LC_CTYPE`，等于把这段做废。用户在 `[env]` 里
+// 自己设 `LC_ALL` 同样盖掉——那是他配的内容，工具不判冲突，只保证自己不设。
+//
+// 位置：拼在 `[env]` 的 export 段之后、解释器之前——判断的是最终生效的 locale，用户显式
+// 配了有效的 UTF-8 就不动手。`--no-shell` 不套外壳，这段不出现。
+//
+// 已实测的取舍：`LC_ALL=C` 下 `cut -c1-2` 切出半个汉字（3 字节），只设 `LC_CTYPE` 才按字符。
+const encodingFragment = `if [ "$(locale charmap 2>/dev/null)" != UTF-8 ]; then n=$(locale -a 2>/dev/null | grep -Eixm1 "c\.utf-?8|en_us\.utf-?8"); [ -n "$n" ] && export LC_CTYPE="$n"; fi;`
+
+// LocaleFragment 下发行开头的固定片段：编码判断恒在，语言开关开了才多一句。
+//
+// 编码部分没有开关（用户看不见，也不该让他关掉）。语言只留 `english` 这一个开关：真则
+// 加一句 `export LC_MESSAGES=C`，目标机上所有程序的提示语统一说英文——失败分类的关键词
+// 是英文原话，语言一变就整批落「未归类」。不清 `LANGUAGE`：`C` 下 gettext 忽略它（实测）。
+func LocaleFragment(english bool) string {
+	if english {
+		return encodingFragment + " export LC_MESSAGES=C;"
 	}
-	return envPrefix + " "
+	return encodingFragment
+}
+
+// envHead 下发行开头的环境段（含尾随空格）：`[env]` 的 export 在前，locale 片段在后。
+// export 段为空时只剩片段，免得拼出多余空格。
+func envHead(envPrefix string, english bool) string {
+	frag := LocaleFragment(english)
+	if envPrefix == "" {
+		return frag + " "
+	}
+	return envPrefix + " " + frag + " "
 }
 
 // 执行模式（只用到这三种取值；由调用方从命令行参数解读后传入）。
@@ -93,34 +137,27 @@ const (
 //     决定环境与身份。命令模式原样给出命令；脚本模式只剩解释器自己那条调用
 //     （见 scriptInvocation），正文照旧走 stdin。
 //
-// 参数：
-//   - command:     命令模式下的命令原文（脚本模式传空）
-//   - scriptBody:  脚本模式下的脚本内容（命令模式传空）
-//   - scriptName:  脚本模式下的脚本文件名（下发行把它交回去当 $0；命令模式传空）
-//   - interpreter: 解释器（命令模式传命令解释器，脚本模式传脚本解释器）
-//   - envPrefix:   下发行开头的环境段（ExportPrefix 的产物）；空 = 不导入环境变量
-//   - noShell:      --no-shell：不套外壳、不设环境（sudo 也不加）
-//   - asRoot:      -m sudo：以 root 身份执行（--no-shell 时不生效）
+// 入参是 CommandSpec：执行与日志读同一份，免得两边各填一遍字段。
 //
 // 返回 (下发命令, stdin 内容)：stdin 为空表示不喂输入（命令模式的 --no-shell）。
-func BuildCommand(command, scriptBody, scriptName, interpreter, envPrefix string, noShell, asRoot bool) (string, string) {
+func BuildCommand(spec CommandSpec) (string, string) {
 	// --no-shell：不套外壳、不设环境（sudo 也不加——工具不附加任何东西）。
 	// 命令模式原样下发、不喂 stdin；脚本模式只剩解释器自己那条调用，正文照旧走 stdin。
-	if noShell {
-		if command != "" {
-			return command, ""
+	if spec.NoShell {
+		if spec.Command != "" {
+			return spec.Command, ""
 		}
-		if scriptBody != "" {
-			return scriptInvocation(interpreter, scriptName), scriptBody
+		if spec.ScriptBody != "" {
+			return scriptInvocation(spec.Interpreter, spec.ScriptName), spec.ScriptBody
 		}
 	}
 
 	// 命令模式与脚本模式共用同一个外壳（唯一差别是内层解释器与要不要补脚本名）。
 	// 内层串与 DescribeCommand 打印的「下发行」同源。
-	if scriptBody != "" {
-		return "sh -c " + shellQuote(scriptStdinInner(envPrefix, interpreter, scriptName, asRoot)), scriptBody
+	if spec.ScriptBody != "" {
+		return "sh -c " + shellQuote(scriptStdinInner(spec.EnvPrefix, spec.Interpreter, spec.ScriptName, spec.Options)), spec.ScriptBody
 	}
-	return "sh -c " + shellQuote(innerCommand(envPrefix, interpreter, asRoot)), command
+	return "sh -c " + shellQuote(innerCommand(spec.EnvPrefix, spec.Interpreter, spec.Options)), spec.Command
 }
 
 // escapeSingleQuotes 把一段文本里的单引号转义成 '\”。
@@ -203,41 +240,42 @@ func needsQuoting(s string) bool {
 //
 // 下发行由本包自己拼（与 BuildCommand 同源），调用方只给业务侧的几项——
 // `sh -c` 的形态是本包的格式，散到调用方就会两处各写一份、各自漂移。
-func DescribeCommand(a DescribeInput) string {
+func DescribeCommand(spec CommandSpec) string {
 	// --no-shell：不套外壳、不设环境。命令模式内容就是命令行；脚本模式只剩解释器调用，正文走 stdin。
-	if a.NoShell {
-		if a.Command != "" {
+	if spec.NoShell {
+		if spec.Command != "" {
 			return "交给 SSH 执行：\n" +
-				"  命令行： " + a.Command + "\n" +
+				"  命令行： " + spec.Command + "\n" +
 				"  说明：   --no-shell 原样执行，不套外壳、不经 stdin"
 		}
-		if a.ScriptBody != "" {
+		if spec.ScriptBody != "" {
 			return "交给 SSH 执行：\n" +
-				"  命令行： " + scriptInvocation(a.Interpreter, a.ScriptName) + "\n" +
-				"  stdin：  脚本 " + a.ScriptPath + " 的内容（" + a.Interpreter + " 解释）\n" +
-				"  说明：   --no-shell：不套外壳、不设环境，直接把 stdin 送来的脚本交给 " + a.Interpreter + " 解释"
+				"  命令行： " + scriptInvocation(spec.Interpreter, spec.ScriptName) + "\n" +
+				"  stdin：  脚本 " + spec.ScriptPath + " 的内容（" + spec.Interpreter + " 解释）\n" +
+				"  说明：   --no-shell：不套外壳、不设环境，直接把 stdin 送来的脚本交给 " + spec.Interpreter + " 解释"
 		}
 	}
 
-	inner := innerCommand(a.EnvPrefix, a.Interpreter, a.AsRoot)
-	if a.ScriptBody != "" {
-		inner = scriptStdinInner(a.EnvPrefix, a.Interpreter, a.ScriptName, a.AsRoot)
+	opt := Options{AsRoot: spec.AsRoot, English: spec.English}
+	inner := innerCommand(spec.EnvPrefix, spec.Interpreter, opt)
+	if spec.ScriptBody != "" {
+		inner = scriptStdinInner(spec.EnvPrefix, spec.Interpreter, spec.ScriptName, opt)
 	}
 	downLine := "sh -c " + shellQuote(inner)
-	hasEnv := a.EnvPrefix != ""
+	hasEnv := spec.EnvPrefix != ""
 
-	if a.ScriptBody != "" {
+	if spec.ScriptBody != "" {
 		return "交给 SSH 执行：\n" +
 			"  命令行： " + downLine + "\n" +
-			"  stdin：  脚本 " + a.ScriptPath + " 的内容（" + a.Interpreter + " 解释）\n" +
-			"  说明：   " + envNote(hasEnv) + scriptWho(a.AsRoot) + " stdin 送来的脚本"
+			"  stdin：  脚本 " + spec.ScriptPath + " 的内容（" + spec.Interpreter + " 解释）\n" +
+			"  说明：   " + envNote(hasEnv) + scriptWho(spec.AsRoot) + " stdin 送来的脚本"
 	}
 
-	if a.Command != "" {
+	if spec.Command != "" {
 		return "交给 SSH 执行：\n" +
 			"  命令行： " + downLine + "\n" +
-			"  stdin：  " + a.Command + "\n" +
-			"  说明：   " + envNote(hasEnv) + "把 stdin 送来的命令" + commandWho(a.Interpreter, a.AsRoot)
+			"  stdin：  " + spec.Command + "\n" +
+			"  说明：   " + envNote(hasEnv) + "把 stdin 送来的命令" + commandWho(spec.Interpreter, spec.AsRoot)
 	}
 	return ""
 }
@@ -274,12 +312,12 @@ func scriptWho(asRoot bool) string {
 // innerCommand 拼外壳的内层命令（env 前缀 + [sudo ]解释器）。
 // 命令模式与脚本模式都走它：命令模式传命令解释器，脚本模式传脚本解释器；正文走 stdin
 // 的脚本模式另走 scriptStdinInner（多一步把脚本名补成 $0）。下发行由本包单点拼，调用方不重复。
-func innerCommand(envPrefix, interpreter string, asRoot bool) string {
+func innerCommand(envPrefix, interpreter string, opt Options) string {
 	sudo := ""
-	if asRoot {
+	if opt.AsRoot {
 		sudo = modeSudo + " "
 	}
-	return envHead(envPrefix) + sudo + interpreter
+	return envHead(envPrefix, opt.English) + sudo + interpreter
 }
 
 // scriptNameArg 脚本模式补「脚本名」的那一段参数：`<解释器> -c <正文或引导> '<脚本名>'`
@@ -417,12 +455,12 @@ func InterpreterBaseName(interpreter string) string {
 // zsh 要单独适配：zsh 的 source 会把 $0 重置成被 source 的文件名（FUNCTION_ARGZERO
 // 默认开），补回的名字会被 /dev/stdin 盖掉（2026-10-08 实测）。bash / dash 的 source
 // 不动 $0，无此行为。见 sourceStdinBody。
-func scriptStdinInner(envPrefix, interpreter, scriptName string, asRoot bool) string {
+func scriptStdinInner(envPrefix, interpreter, scriptName string, opt Options) string {
 	sudo := ""
-	if asRoot {
+	if opt.AsRoot {
 		sudo = modeSudo + " "
 	}
-	return envHead(envPrefix) + sudo + scriptInvocation(interpreter, scriptName)
+	return envHead(envPrefix, opt.English) + sudo + scriptInvocation(interpreter, scriptName)
 }
 
 // scriptInvocation 脚本模式下解释器自己那条调用串——不含环境前缀、不含 sudo：
@@ -451,14 +489,15 @@ func sourceStdinBody(interpreter string) string {
 	return body
 }
 
-// DescribeInput DescribeCommand 的入参：只收打印真正需要的几项。
-type DescribeInput struct {
+// CommandSpec 一次下发要拼的全部输入。执行（BuildCommand）与日志（DescribeCommand）
+// 读同一份——分两份填，加一个字段就会有一处漏改，而这个包的全部约束就是「量的串 =
+// 发的串 = 日志的串」。
+type CommandSpec struct {
 	Command     string // 命令模式：命令原文
-	ScriptPath  string // 脚本模式：脚本文件路径
 	ScriptBody  string // 脚本模式：脚本正文（非空即判定为脚本模式）
 	ScriptName  string // 脚本模式：脚本文件名（下发行把它交回去当 $0）
+	ScriptPath  string // 脚本模式的本地路径：只有日志用，不参与拼装
 	Interpreter string // 解释器：命令模式是命令解释器，脚本模式是脚本解释器
 	EnvPrefix   string // 下发行开头的环境段（ExportPrefix 的产物）；空 = 没配环境变量
-	NoShell     bool   // --no-shell：不套外壳、不设环境
-	AsRoot      bool   // -m sudo（拼下发行用）
+	Options            // 三个开关：--no-shell / sudo / 提示语英文
 }

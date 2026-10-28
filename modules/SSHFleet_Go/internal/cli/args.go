@@ -63,6 +63,8 @@ type Args struct {
 	// EnvPrefix 是本次下发命令开头那段 `export …;`（由 [env] 拼成，见 ssh.ExportPrefix）。
 	// 与 Interpreter 同一口径：解析时算好一次，执行侧直接取用；空串 = 配置里没给环境变量。
 	EnvPrefix string
+	// English 是 [locale] english：真则下发行里多一句把提示语钉成英文。与 EnvPrefix 同口径。
+	English bool
 	// Downlink 是 -a 交互分支的下发行（正文经 base64 编入命令行的那条）。与 Interpreter
 	// 同一口径：选项/参数合规检查阶段算好一次，执行侧直接取用，不再自己拼——长度检查量的串
 	// 与实际发出去的串因此是同一个值（ADR-0010）。非 -a 运行为空串。
@@ -419,6 +421,7 @@ func Parse(cfg *config.Config, version string, raw []string) (*Args, error) {
 	a.Interpreter = interpreterOf(&a, cfg)
 	// 下发前缀同样在这里拼一次：键名排序保证每次一样，执行侧只取用（与 Interpreter 同口径）。
 	a.EnvPrefix = ssh.ExportPrefix(cfg.Env)
+	a.English = cfg.Locale.English
 	// 凭据加密开关：--change-password 的取值按它解释（明文 / 密文文件路径）
 	a.credentialEncrypted = cfg.Credential.Encrypt
 
