@@ -91,7 +91,7 @@ func TestInteractiveCommandForm(t *testing.T) {
 
 // sudo 时提权的是解释器本身；脚本模式按解释器换 python3；正文不进命令行原文。
 func TestInteractiveCommandInterpreterAndRoot(t *testing.T) {
-	if root := InteractiveCommand(DownlinkSpec{Command: "id", AsRoot: true, Interpreter: "bash"}); !strings.Contains(root, "sudo bash -c") {
+	if root := InteractiveCommand(DownlinkSpec{Command: "id", Options: Options{AsRoot: true}, Interpreter: "bash"}); !strings.Contains(root, "sudo bash -c") {
 		t.Fatalf("sudo 应提权内层解释器：%s", root)
 	}
 	py := InteractiveCommand(DownlinkSpec{ScriptBody: "print(1)", Interpreter: "python3"})

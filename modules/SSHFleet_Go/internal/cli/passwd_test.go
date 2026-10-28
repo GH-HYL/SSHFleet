@@ -46,13 +46,18 @@ func TestCheckPasswdChangeEncryptedMissingFile(t *testing.T) {
 }
 
 func TestCheckPasswdChangeExclusive(t *testing.T) {
+	// --no-shell 与改密的互斥走全工具统一的那句口径（只和 -c 一起用），单独断言。
+	if err := checkPasswdChange(&Args{ChangePasswordRaw: "pw", NoShell: true}); err == nil ||
+		!strings.Contains(err.Error(), "--no-shell 只能和 -c") {
+		t.Fatalf("--no-shell 时应明确报错，实际：%v", err)
+	}
+
 	cases := map[string]*Args{
-		"-a":         {ChangePasswordRaw: "pw", Answer: "1,架构"},
-		"-p":         {ChangePasswordRaw: "pw", Path: "/x/"},
-		"-k":         {ChangePasswordRaw: "pw", Key: true},
-		"--no-shell": {ChangePasswordRaw: "pw", NoShell: true},
-		"--sudo":     {ChangePasswordRaw: "pw", sudoFlag: true},
-		"--no-sudo":  {ChangePasswordRaw: "pw", noSudoFlag: true},
+		"-a":        {ChangePasswordRaw: "pw", Answer: "1,架构"},
+		"-p":        {ChangePasswordRaw: "pw", Path: "/x/"},
+		"-k":        {ChangePasswordRaw: "pw", Key: true},
+		"--sudo":    {ChangePasswordRaw: "pw", sudoFlag: true},
+		"--no-sudo": {ChangePasswordRaw: "pw", noSudoFlag: true},
 	}
 	for name, a := range cases {
 		if err := checkPasswdChange(a); err == nil || !strings.Contains(err.Error(), "--change-password 不能和") {

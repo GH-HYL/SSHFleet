@@ -363,7 +363,7 @@ SSHFleet -f nodes.csv -c "df -h"
 sh -c 'export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" TERM="dumb"; case "$(locale charmap 2>/dev/null)" in C|POSIX|ANSI_X3.4-1968|US-ASCII) set -- $(locale -a 2>/dev/null | grep -Eixm1 "c\.utf-?8|en_us\.utf-?8" 2>/dev/null); [ -n "$1" ] && export LC_CTYPE="$1";; esac; export LC_MESSAGES=C; sudo bash'
 ```
 
-加了 `--no-shell`，这一整层外壳就不要了，命令原样下发。
+加了 `--no-shell`，这一整层外壳就不要了，命令原样下发（它只和 `-c` 一起用）。
 
 为什么要套这层外壳、正文从哪条路送下去 → [4 进阶知识手册](docs/4-进阶知识手册.md) 的「1 命令在远端是怎么执行的」。
 
