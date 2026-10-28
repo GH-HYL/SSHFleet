@@ -1,6 +1,7 @@
 ---
 name: audit-conversation
 description: 【对话忠实度审计】文档写的，是不是对话最后真正定下的那个。长对话末尾写总结，结论容易被写成中间某个已废的版本，而文档内部读着完全自洽，只有对着会话才看得出来。核对文档有没有跟对话走偏时用。
+disable-model-invocation: true
 ---
 # 对话忠实度审计
 
