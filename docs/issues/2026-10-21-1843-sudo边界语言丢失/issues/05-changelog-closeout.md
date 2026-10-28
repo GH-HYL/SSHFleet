@@ -4,7 +4,7 @@
 
 **Blocked by**：03, 04
 
-Status: ready-for-agent
+Status: done
 
 - [ ] `CHANGELOG.md` 的 `## 未发布` 下当天小节，按 Changed / Added 分：`[env]` 出厂只剩两条、新增 `[locale]` 段、非 UTF-8 目标机自动按字符处理
 - [ ] 条目只写使用者能体验到的，不写函数名、模块名、内部步骤
@@ -14,3 +14,4 @@ Status: ready-for-agent
 ## Comments
 
 - 2026-10-28：按 ADR-0030 建立。CHANGELOG 由这条统一写，不在前几条各写一遍。
+- 2026-10-28：实施。`## 未发布` 下新增 `### 2026-10-28`，按 Added / Changed / Removed 三类写；五条工单与规格状态已回写。

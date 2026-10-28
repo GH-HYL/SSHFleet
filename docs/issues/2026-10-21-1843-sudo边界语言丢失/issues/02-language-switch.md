@@ -4,7 +4,7 @@
 
 **Blocked by**：01
 
-Status: ready-for-agent
+Status: done
 
 - [ ] `[locale]` 段被解析，`english` 缺省 `false`；类型写错由既有解析报错，不额外加校验
 - [ ] 片段生成接缝：开、关两种产出各一条逐字断言——开比关多一句 `export LC_MESSAGES=C`，其余逐字相同
@@ -17,3 +17,5 @@ Status: ready-for-agent
 ## Comments
 
 - 2026-10-28：按 ADR-0030 建立。开关开在 `[locale]` 而不是 `[env]`，理由见 ADR，不在工单重复。
+- 2026-10-28：实施。开关进 `[locale]` 段并列入必填表；`english` 从 `Args` 一路传到 `BuildCommand` / `DownlinkSpec` / `DescribeInput`，四种下发形态共用。
+- 2026-10-28：与 03 同一批落。配置解析对未知键零容忍、且字段必填，解析先加而模板没加会让程序起不来，所以 02 与 03 不能分开交付。

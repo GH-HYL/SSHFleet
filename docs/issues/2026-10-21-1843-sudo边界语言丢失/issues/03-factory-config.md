@@ -4,7 +4,7 @@
 
 **Blocked by**：02
 
-Status: ready-for-agent
+Status: done
 
 - [ ] 三份出厂配置一致：`[env]` 恰好 `PATH` 与 `TERM` 两条，另有 `[locale]` 段与 `english = false`；`LANG` / `LC_ALL` 零命中
 - [ ] 用出厂配置实跑一次，下发行里没有 `LANG` / `LC_ALL`，有 `PATH` 与 `TERM`
@@ -15,3 +15,6 @@ Status: ready-for-agent
 ## Comments
 
 - 2026-10-28：按 ADR-0030 建立。被 02 阻塞的原因：配置解析对未知键是报错的，段先加会起不来。
+- 2026-10-28：实施。三份出厂配置同步：`[env]` 只剩 `PATH` 与 `TERM`，新增 `[locale]` 段；配置注释与代码里关于 `[env]` 的注释一并改口径。
+- 2026-10-28：沙盒实跑取到真实下发行（`build/atest_2026-10-28_13-45-00/run`）：`export PATH="…" TERM="dumb"; if [ "$(locale charmap …)" != UTF-8 ]; then … fi; sudo bash`，无 `LANG` / `LC_ALL`。
+- 2026-10-28：用户自加 `LANG = "zh_CN.UTF-8"` 实跑确认照常导出，与编码片段并存不冲突。

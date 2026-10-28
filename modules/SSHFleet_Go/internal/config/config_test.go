@@ -111,3 +111,47 @@ func TestLoadAllowsRelativeSecretDirWhenEncryptOff(t *testing.T) {
 		t.Fatalf("关着加密时不该加工这个值，实际 %q", cfg.Credential.SecretDir)
 	}
 }
+
+// [locale] english：出厂模板读出来是 false；改成 true 能读到；类型写错或整段缺了都走
+// 既有那两条口径（解码报错 / 必填字段缺失），不额外加校验。
+func TestLoadLocaleEnglish(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "config", "SSHFleet-for-linux.conf"))
+	if err != nil {
+		t.Fatalf("读模板失败：%v", err)
+	}
+	template := string(raw)
+
+	load := func(t *testing.T, conf string) (*Config, error) {
+		t.Helper()
+		path := filepath.Join(t.TempDir(), "SSHFleet.conf")
+		if err := os.WriteFile(path, []byte(conf), 0o644); err != nil {
+			t.Fatalf("写临时配置失败：%v", err)
+		}
+		return Load(path)
+	}
+
+	cfg, err := load(t, template)
+	if err != nil {
+		t.Fatalf("出厂模板应能加载：%v", err)
+	}
+	if cfg.Locale.English {
+		t.Fatalf("出厂应是 false（跟随目标节点），实际 %v", cfg.Locale.English)
+	}
+
+	cfg, err = load(t, strings.Replace(template, "english = false", "english = true", 1))
+	if err != nil {
+		t.Fatalf("改成 true 应能加载：%v", err)
+	}
+	if !cfg.Locale.English {
+		t.Fatalf("english = true 应读成 true，实际 %v", cfg.Locale.English)
+	}
+
+	if _, err := load(t, strings.Replace(template, "english = false", `english = "yes"`, 1)); err == nil {
+		t.Fatalf("english 写字符串应报错")
+	}
+
+	if _, err := load(t, strings.Replace(template, "english = false", "", 1)); err == nil ||
+		!strings.Contains(err.Error(), "locale.english") {
+		t.Fatalf("整行删掉应报缺少必填字段 locale.english，实际 %v", err)
+	}
+}
