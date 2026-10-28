@@ -182,30 +182,6 @@ func TestBuildCommandNoShell(t *testing.T) {
 	}
 }
 
-// --no-shell 对脚本模式同样成立（2026-10-09）：剥掉外壳与环境，只剩解释器自己那条调用
-// （`<解释器> -c ". /dev/stdin" "<脚本名>"`），正文仍走 stdin、$0 仍补回。
-func TestBuildCommandNoShellWithScript(t *testing.T) {
-	cmd, stdin := downlink("", "echo script", "hello.sh", "bash", "", Options{NoShell: true})
-	if strings.HasPrefix(cmd, "sh -c ") {
-		t.Fatalf("--no-shell 脚本模式不该再套外壳，实际 %q", cmd)
-	}
-	if strings.Contains(cmd, "export ") {
-		t.Fatalf("--no-shell 不该导入环境，实际 %q", cmd)
-	}
-	if !strings.Contains(cmd, ". /dev/stdin") || !strings.Contains(cmd, "hello.sh") {
-		t.Fatalf("应保留 source stdin 引导与脚本名，实际 %q", cmd)
-	}
-	if stdin != "echo script" {
-		t.Fatalf("正文仍应经 stdin 直喂，实际 %q", stdin)
-	}
-
-	// 非 shell 解释器：只剩裸解释器名，正文走 stdin
-	cmd, stdin = downlink("", "print(1)", "t.py", "python3", "", Options{NoShell: true})
-	if cmd != "python3" || stdin != "print(1)" {
-		t.Fatalf("非 shell 解释器应只剩裸名字，实际 cmd=%q stdin=%q", cmd, stdin)
-	}
-}
-
 // 脚本模式：用给定解释器，脚本内容经 stdin 直喂。
 func TestBuildCommandScriptMode(t *testing.T) {
 	cases := []struct{ interpreter, wantInner string }{
@@ -535,7 +511,7 @@ func TestDownlinkForbiddenForms(t *testing.T) {
 		"sudo": mustCommand(t, "ls", "", "", "bash", env, Options{AsRoot: true}),
 		"脚本模式": mustCommand(t, "", "echo hi", "t.sh", "bash", env, Options{}),
 		"代填": InteractiveCommand(DownlinkSpec{
-			Command: "ls", Interpreter: "bash", EnvPrefix: env, AsRoot: true,
+			Command: "ls", Interpreter: "bash", EnvPrefix: env, Options: Options{AsRoot: true},
 		}),
 	}
 	for what, got := range forms {

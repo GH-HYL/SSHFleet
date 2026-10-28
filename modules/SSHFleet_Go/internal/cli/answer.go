@@ -24,8 +24,10 @@ import (
 // answerLimit 最终下发行的字节上限（写死，不开放配置）。
 //
 // 依据：整条远端命令行由 sshd 以 `$SHELL -c "<整条>"` 交给内核 execve，是**单个 argv 串**，
-// 受 Linux MAX_ARG_STRLEN（PAGE_SIZE × 32 = 131072）约束。这里取 120KB 留出余量。
-const answerLimit = 122880
+// 受 Linux MAX_ARG_STRLEN（PAGE_SIZE × 32 = 131072）约束。取 96KB 而不是贴着它：
+// 正文经 base64 涨到 4/3，外壳还要占几百字节，解释器名与 `[env]` 也都可能更长——
+// 留 25% 余量，不把线算死。真超了，省下那几 KB 也救不回来。
+const answerLimit = 98304
 
 // checkAnswer 校验 -a 的值并解析成代填表（写进 a.Answers）。
 // scriptText 是 -s 已读到的脚本文件内容（命令模式传 nil）；长度检查要用它算下发行。
@@ -135,8 +137,8 @@ func answerEmptyError(src source) error {
 func checkAnswerExclusive(a *Args) error {
 	switch {
 	case a.NoShell:
-		return fmt.Errorf("-a 不能和 --no-shell 一起用\n" +
-			"--no-shell 要求命令原样下发，代填要接管会话，同一个会话满足不了两种要求")
+		return fmt.Errorf("--no-shell 不能和 -a 一起使用\n" +
+			"提示：请去掉其中一个")
 	case a.Upload != "":
 		return fmt.Errorf("-a 不能和 -u 一起用\n提示：代填是给命令、脚本的交互用的，上传时没有命令在跑")
 	case a.Download != "":
@@ -197,7 +199,7 @@ func checkAnswerLength(a *Args, scriptText []byte) error {
 		body = len(scriptText)
 	}
 	return fmt.Errorf("-a 参数下发的命令太长：正文 %d 字节，下发 %d 字节，上限 %d 字节\n"+
-		"提示：长度受工具限制，请核减脚本内容", body, len(line), answerLimit)
+		"提示：请把正文控制在 7 万字节以内（代填要把正文编进命令行，长度受它限制）", body, len(line), answerLimit)
 }
 
 // downlinkSpecOf 装配下发行的输入（脚本模式的正文取自脚本文件内容）——**全场唯一一装配点**。
@@ -209,8 +211,7 @@ func downlinkSpecOf(a *Args, scriptText []byte) ssh.DownlinkSpec {
 		Command:     a.Command,
 		Interpreter: a.Interpreter,
 		EnvPrefix:   a.EnvPrefix,
-		AsRoot:      a.Sudo,
-		English:     a.English,
+		Options:     ssh.Options{AsRoot: a.Sudo, English: a.English},
 	}
 	if a.Script != "" {
 		spec.ScriptBody = ScriptMaterialOf(a, scriptText).Body

@@ -98,7 +98,7 @@ func checkPasswdChangeExclusive(a *Args) error {
 	case a.Key:
 		return fmt.Errorf("--change-password 不能和 -k 一起用\n提示：改密要用账号自己的登录密码登进去，密钥登录派不上用场")
 	case a.NoShell:
-		return fmt.Errorf("--change-password 不能和 --no-shell 一起用\n改密不执行任何命令，没有可施加的对象")
+		return fmt.Errorf("--no-shell 只能和 -c 一起使用\n提示：请去掉 --no-shell，或改用 -c 执行")
 	case a.sudoFlag || a.noSudoFlag:
 		return fmt.Errorf("--change-password 不能和 --sudo / --no-sudo 一起用\n改的是登录账号自己的密码，与执行身份无关")
 	}

@@ -343,7 +343,7 @@ func Parse(cfg *config.Config, version string, raw []string) (*Args, error) {
 	fs.StringVarP(&a.connectTimeoutRaw, "connect-timeout", "T", "", "连上服务器的最长等待（秒）")
 	fs.StringVarP(&a.numberRaw, "number", "n", "", "并发数：同时操作几台服务器")
 	fs.StringVarP(&a.Remark, "remark", "r", "", "备注，用作历史记录文件夹名（不填自动生成）")
-	fs.BoolVar(&a.NoShell, "no-shell", false, "不套工具的外壳、不设环境：命令/脚本原样下发")
+	fs.BoolVar(&a.NoShell, "no-shell", false, "不套工具的外壳、不设环境：命令原样下发（只能和 -c 一起用）")
 	fs.BoolVar(&a.Disinteractive, "yes", false, "跳过所有确认提示直接执行")
 	fs.StringVar(&a.ChangePasswordRaw, "change-password", "", "批量改密：把清单里密码过期的账号改成同一个新密码")
 	fs.StringVarP(&a.Answer, "answer", "a", "", "代填：看到触发词就自动填内容")
@@ -607,7 +607,7 @@ func helpEntries(cfg *config.Config) []helpEntry {
 		opt("", "--no-sudo", "", noSudoDesc),
 		opt("", "--yes", "", "跳过所有确认直接执行（自动化用，用它之前先手动跑通一次）"),
 		opt("-a", "--answer", "", "代填：看到触发词就自动填内容（一条写成「代填内容,触发词,触发词」），多条写进 CSV 文件再指向它"),
-		opt("", "--no-shell", "", "不套工具的外壳、不设环境：命令原样下发；脚本直接交给解释器跑"),
+		opt("", "--no-shell", "", "不套工具的外壳、不设环境：命令原样下发；只能和 -c 一起用"),
 		opt("-t", "--timeout", fmt.Sprintf("[默认: %d/%d]", cfg.Execution.TimeoutExecute, cfg.Execution.TimeoutTransfer), "命令跑完、文件传完的最长等待（秒）"),
 		opt("-T", "--connect-timeout", fmt.Sprintf("[默认: %d]", cfg.Execution.TimeoutConnect), "连上服务器的最长等待（秒）"),
 

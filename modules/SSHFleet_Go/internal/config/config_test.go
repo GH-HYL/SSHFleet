@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -114,6 +115,13 @@ func TestLoadAllowsRelativeSecretDirWhenEncryptOff(t *testing.T) {
 	}
 }
 
+// 模板里本机绝对路径那两行（值任意）。测试要改这些值时用它们替换，
+// 不照抄模板原文——模板一改空格或注释，照抄的替换会静默失配。
+var (
+	secretDirLine = regexp.MustCompile(`(?m)^secret_dir\s*=\s*"[^"]*"`)
+	passwordLine  = regexp.MustCompile(`(?m)^password\s*=\s*"[^"]*"`)
+)
+
 // [locale] english：出厂是 true（必填）；改成 false 能读到；类型写错报解码错；
 // 整段删掉报必填字段缺失。三种都走既有的那两条口径，不额外加校验。
 func TestLoadLocaleEnglish(t *testing.T) {
@@ -121,7 +129,11 @@ func TestLoadLocaleEnglish(t *testing.T) {
 	if err != nil {
 		t.Fatalf("读模板失败：%v", err)
 	}
-	template := string(raw)
+	// 模板里的凭据目录与密码文件都是 Linux 写法（/opt/SSHFleet/keys…），Windows 上不算
+	// 本机绝对路径。这条用例关心的是 [locale]，就地换成本机临时目录，别让平台的路径形态挡在这里。
+	tmp := filepath.ToSlash(t.TempDir())
+	template := secretDirLine.ReplaceAllLiteralString(string(raw), `secret_dir   = "`+tmp+`"`)
+	template = passwordLine.ReplaceAllLiteralString(template, `password = "`+tmp+`/password.enc"`)
 
 	load := func(t *testing.T, conf string) (*Config, error) {
 		t.Helper()

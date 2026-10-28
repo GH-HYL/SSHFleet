@@ -150,22 +150,16 @@ const (
 //   - 脚本模式补回脚本名（$0）：正文不落盘，但「我叫什么」这件事要交回去——
 //     见 scriptNameArg 的说明。
 //   - `--no-shell` 时绕开外壳与环境：用户在明确要求「原样下发」，不该由工具代他
-//     决定环境与身份。命令模式原样给出命令；脚本模式只剩解释器自己那条调用
-//     （见 scriptInvocation），正文照旧走 stdin。
+//     决定环境与身份。它只服务命令模式——脚本正文在 stdin 上，必须有解释器去读，
+//     那层剥不掉（选项/参数合规检查阶段已把 `-s` / `-u` / `-d` 挡在外面）。
 //
 // 入参是 CommandSpec：执行与日志读同一份，免得两边各填一遍字段。
 //
 // 返回 (下发命令, stdin 内容)：stdin 为空表示不喂输入（命令模式的 --no-shell）。
 func BuildCommand(spec CommandSpec) (string, string) {
-	// --no-shell：不套外壳、不设环境（sudo 也不加——工具不附加任何东西）。
-	// 命令模式原样下发、不喂 stdin；脚本模式只剩解释器自己那条调用，正文照旧走 stdin。
+	// --no-shell：原样下发命令，不套外壳、不设环境，也不加 sudo。
 	if spec.NoShell {
-		if spec.Command != "" {
-			return spec.Command, ""
-		}
-		if spec.ScriptBody != "" {
-			return scriptInvocation(spec.Interpreter, spec.ScriptName), spec.ScriptBody
-		}
+		return spec.Command, ""
 	}
 
 	// 命令模式与脚本模式共用同一个外壳（唯一差别是内层解释器与要不要补脚本名）。
@@ -257,22 +251,14 @@ func needsQuoting(s string) bool {
 // 下发行由本包自己拼（与 BuildCommand 同源），调用方只给业务侧的几项——
 // `sh -c` 的形态是本包的格式，散到调用方就会两处各写一份、各自漂移。
 func DescribeCommand(spec CommandSpec) string {
-	// --no-shell：不套外壳、不设环境。命令模式内容就是命令行；脚本模式只剩解释器调用，正文走 stdin。
+	// --no-shell：不套外壳、不设环境，命令原文就是命令行。只服务命令模式（见 BuildCommand）。
 	if spec.NoShell {
-		if spec.Command != "" {
-			return "交给 SSH 执行：\n" +
-				"  命令行： " + spec.Command + "\n" +
-				"  说明：   --no-shell 原样执行，不套外壳、不经 stdin"
-		}
-		if spec.ScriptBody != "" {
-			return "交给 SSH 执行：\n" +
-				"  命令行： " + scriptInvocation(spec.Interpreter, spec.ScriptName) + "\n" +
-				"  stdin：  脚本 " + spec.ScriptPath + " 的内容（" + spec.Interpreter + " 解释）\n" +
-				"  说明：   --no-shell：不套外壳、不设环境，直接把 stdin 送来的脚本交给 " + spec.Interpreter + " 解释"
-		}
+		return "交给 SSH 执行：\n" +
+			"  命令行： " + spec.Command + "\n" +
+			"  说明：   --no-shell 原样执行，不套外壳、不经 stdin"
 	}
 
-	opt := Options{AsRoot: spec.AsRoot, English: spec.English}
+	opt := spec.Options
 	inner := innerCommand(spec.EnvPrefix, spec.Interpreter, opt)
 	if spec.ScriptBody != "" {
 		inner = scriptStdinInner(spec.EnvPrefix, spec.Interpreter, spec.ScriptName, opt)

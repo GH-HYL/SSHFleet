@@ -390,7 +390,7 @@ func TestCheckAnswerCSVEmpty(t *testing.T) {
 // 它们与 -a 的互斥因此改由配置层直接调这一条专用校验来钉，不靠制造一个真目录。
 func TestCheckAnswerExclusive(t *testing.T) {
 	_, err := answerArgs(t, "-c", "sh x.sh", "--no-shell", "-a", "1,架构")
-	if err == nil || !strings.Contains(err.Error(), "-a 不能和 --no-shell") {
+	if err == nil || !strings.Contains(err.Error(), "不能和 -a") {
 		t.Fatalf("--no-shell 时应明确报错，实际：%v", err)
 	}
 
@@ -407,10 +407,16 @@ func TestCheckAnswerExclusive(t *testing.T) {
 // 长度检查：量的是最终下发行，仅 -a 运行执行；超限在本地拦下。
 //
 // 下发行里编进去的是命令 / 脚本正文（代填内容与触发词不进这一行），所以撑爆它的
-// 得是正文。期望值取自字面量：正文 130000 字节 > 上限 122880 字节。
+// 得是正文。期望值取自字面量：130000 字节超过上限 98304；70000 字节是提示里对使用者
+// 承诺的「正文 7 万字节以内」，必须过得去。
 func TestCheckAnswerLength(t *testing.T) {
 	if err := answerErr(t, "1,架构"); err != nil {
 		t.Fatalf("短命令不该触发长度检查：%v", err)
+	}
+
+	// 承诺过的范围就得真能跑，否则这句提示是骗人的。
+	if _, err := answerArgs(t, "-f", "172.28.118.49,22,root,pw", "-c", strings.Repeat("a", 70000), "-a", "1,架构"); err != nil {
+		t.Fatalf("正文 7 万字节在承诺范围内，不该被拦：%v", err)
 	}
 
 	_, err := answerArgs(t, "-f", "172.28.118.49,22,root,pw", "-c", strings.Repeat("a", 130000), "-a", "1,架构")

@@ -239,7 +239,8 @@ func buildInfoTable(args *cli.Args, nodes *nodelist.Nodes, note string) [][2]str
 	}
 	// 解释器行：只在命令 / 脚本模式出现，且只在配置的解释器不是 bash（归一判断）时才占一行
 	// ——默认值不必提醒（2026-10-07 定）。--no-shell 时解释器配置不参与执行，
-	// 这一行改放提示（2026-10-08 作者定：提个醒就放行，不该硬拦）。
+	// 这一行改放提示（2026-10-08 作者定：提个醒就放行，不该硬拦）。该值只会在 -c 下出现：
+	// -s 与 --no-shell 互斥（2026-10-28 定）。
 	if (args.ModeName() == cli.ModeCommand || args.ModeName() == cli.ModeScript) &&
 		args.Interpreter != "" && !cli.IsBashInterpreter(args.Interpreter) {
 		value := args.Interpreter
