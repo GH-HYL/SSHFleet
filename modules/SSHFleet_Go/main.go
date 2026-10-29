@@ -105,6 +105,17 @@ var (
 	execLogRef *log.Logger
 )
 
+// restoreConsole 把控制台码页还回原值（见 main 的步骤 0）。非 Windows 上是空函数。
+// 退出统一走 exitNow：os.Exit 不跑 defer，致命的与危险命令那两条退出收不到 defer。
+var restoreConsole = func() {}
+
+// exitNow 唯一的退出出口：先把控制台码页还回去，再退。
+// os.Exit 不跑 defer，所以每个出口都得自己收尾（与 closeLogsAfterFatal 同一个道理）。
+func exitNow(code int) {
+	restoreConsole()
+	os.Exit(code)
+}
+
 // fatal 打印致命错误并退出（退出码 1）。main 独占退出权的唯一出口。
 // 交互取消（ErrCancelled）的文案已由交互器打印，此处只退出不再附加前缀。
 //
@@ -114,7 +125,7 @@ var (
 // 日志初始化之前的失败给不出这一行（那时连日志文件都还没建）。
 func fatal(where string, err error) {
 	if errors.Is(err, common.ErrCancelled) {
-		os.Exit(1)
+		exitNow(1)
 	}
 	msg := err.Error()
 	if p := toolLogPath(); p != "" {
@@ -122,7 +133,7 @@ func fatal(where string, err error) {
 	}
 	fmt.Fprintf(os.Stderr, "%s[ERROR]%s%s [function:%s]%s %s\n", colorRed, colorReset, colorYellow, where, colorReset, msg)
 	closeLogsAfterFatal(where, err)
-	os.Exit(1)
+	exitNow(1)
 }
 
 // wrapFatal 把内层错误并到外层那句话上：外层只占第一行，内层自己的「原因：」
@@ -202,6 +213,14 @@ func passwdCategoriesOf(c *config.PasswdConfig) []verdict.Category {
 }
 
 func main() {
+	// ---- 步骤 0：适配控制台 ------------------------------------------
+	// Windows 出厂控制台是 936 码页，而我们写出去的是 UTF-8 字节——不声明就会被按 GBK
+	// 解成 `涓╣慨` 一类（使用者眼里的「工具乱码」）。这里替使用者把输出码页切成 65001，
+	// 退出还原；只声明码页，字节链路不动。照 ADR-0017「控制台适配由程序自己做」，
+	// 决策见 ADR-0024 的更新记录。
+	restoreConsole = common.AdaptConsoleOutputEncoding()
+	defer restoreConsole()
+
 	// ---- 步骤 1：加载配置 --------------------------------------------
 	cfg, err := config.Load(configPath)
 	if err != nil {
@@ -323,7 +342,7 @@ func main() {
 		output.PrintDangerWarning(dangerReport, true)
 		logger.Warn(fmt.Sprintf("命中禁止命令，已退出：%s", dangerReport.Matches[0].Content))
 		_ = logger.Close()
-		os.Exit(1)
+		exitNow(1)
 	case len(dangerReport.Matches) > 0:
 		// 非 forbidden：不管交互与否都先把警告框打出来。--yes 只是替人回答了「y」，
 		// 不该连带把「命中了危险规则」这件事也从屏幕上抹掉；跳过确认时的留痕仍由 Confirm 写。
