@@ -2,7 +2,11 @@
 
 package common
 
-import "golang.org/x/sys/windows"
+import (
+	"sync"
+
+	"golang.org/x/sys/windows"
+)
 
 // cpUTF8 是 UTF-8 的代码页号。x/sys/windows 只包了函数，没包这个常量。
 const cpUTF8 uint32 = 65001
@@ -42,13 +46,10 @@ func AdaptConsoleOutputEncoding() func() {
 	if err := windows.SetConsoleOutputCP(cpUTF8); err != nil {
 		return func() {}
 	}
-	restored := false
+	restored := &sync.Once{}
 	return func() {
-		// 幂等：正常退出走 defer，致命退出走 exitNow，两条路都会调到这里。
-		if restored {
-			return
-		}
-		restored = true
-		_ = windows.SetConsoleOutputCP(orig)
+		// 幂等且并发安全：正常退出走 defer、致命退出走 exitNow、被信号兜底走另一条
+		// goroutine——三条路可能撞上，还原只能发生一次。
+		restored.Do(func() { _ = windows.SetConsoleOutputCP(orig) })
 	}
 }

@@ -116,7 +116,8 @@ func exitNow(code int) {
 	os.Exit(code)
 }
 
-// fatal 打印致命错误并退出（退出码 1）。main 独占退出权的唯一出口。
+// fatal 打印致命错误并退出（退出码 1）。main 处理致命错误的唯一出口；
+// 真正落地的退出动作在 exitNow——它还负责把控制台码页还回去。
 // 交互取消（ErrCancelled）的文案已由交互器打印，此处只退出不再附加前缀。
 //
 // 致命错误同时落日志：终端一关就只剩日志可查——此前这类错误只打 stderr，
@@ -220,6 +221,20 @@ func main() {
 	// 决策见 ADR-0024 的更新记录。
 	restoreConsole = common.AdaptConsoleOutputEncoding()
 	defer restoreConsole()
+
+	// 信号兜底：执行期之前按 Ctrl+C（或被 SIGTERM）时，先把控制台码页还回去再退。
+	// 这一段最容易按 Ctrl+C——参数写错了想重来、在确认屏上犹豫；而这时还没人接管信号，
+	// 默认行为是当场终止进程、defer 不跑，码页就停在我们改过的值上，同一窗口里后续的
+	// 命令会整片乱码。接管之后「按了立刻走」的手感不变，只是走之前把控制台还回去。
+	earlySignal := make(chan os.Signal, 1)
+	signal.Notify(earlySignal, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		if _, ok := <-earlySignal; !ok {
+			return // 下面交棒给执行期时关闭本通道
+		}
+		restoreConsole()
+		os.Exit(130) // 与「被 SIGINT 终止」的惯例一致（128+2）
+	}()
 
 	// ---- 步骤 1：加载配置 --------------------------------------------
 	cfg, err := config.Load(configPath)
@@ -404,6 +419,10 @@ func main() {
 	// 中断：信号 → 取消 context → worker 停止启动新任务；已完成的节点结果照常进入后续整理
 	execCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	// 交棒：执行期的取消由上面这个 context 管（要走正常收尾、保留「任务已取消」的结果），
+	// 步骤 0 那条兜底收掉，免得它抢先 exit、把收尾打断。
+	signal.Stop(earlySignal)
+	close(earlySignal)
 
 	execStart := time.Now()
 
