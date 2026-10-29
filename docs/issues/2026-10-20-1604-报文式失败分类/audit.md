@@ -333,7 +333,7 @@ spec《预算：全部报文清单》的核准与补全版。**本表是「出�
 - **这台 WSL 长期在后台运行，不要 `wsl --shutdown`。** 重启会让 NAT 地址变化，localhost 转发有好一阵不通。
 - **用 IP 连，不要用 localhost**：`localhost:22` 时通时断，用 `172.28.118.49:22` 稳定。
 - **待补**：`sshfleet_ok` 的 `NOPASSWD` sudo（现在一律加 `--no-sudo` 跑）；「远端不吭声」的畸形账号（改密 `no_prompt` 档）。
-  - 2026-10-29：两条都做进 podman 测试镜像了，`sshfleet_ok` 带 `NOPASSWD`（uid 1002）、`sshfleet_silent` 会话建得起来但零输出、退出码 1。四套镜像（Ubuntu 26.04 / CentOS 7.9 × base / tiny-tmp）各跑过一遍全量集成用例：`base` 3 SKIP（并发那条 + 两条提权）、`tiny-tmp` 1 SKIP、两套 0 FAIL。**但 `no_prompt` 那档仍没有自动化用例**——账号有了、没人喂它，改密这条链路还是手工验的。
+  - 2026-10-29：环境侧那两条待补已到位——现行两个基础镜像 `sshfleet-ubuntu:26.04` / `sshfleet-centos:7.9`，账号 `sshfleet`（uid 1002，`NOPASSWD` sudo）；畸形账号与限小的 `/tmp` 都在运行期自备，不写进镜像。按这个方式跑过三组全量集成用例：Ubuntu base 3 SKIP、Ubuntu 加 `/tmp` 32MB + `SSHFLEET_TEST_SUDO=1` 1 SKIP、CentOS base 3 SKIP，全部 0 FAIL；工具本体 `-c` / `--sudo` / `-s` 三条路径也各真跑过一次。**但 `no_prompt` 那档仍没有自动化用例**——账号自己能造，没人喂它，改密这条链路还是手工验的。
 
 ## 十四、实际落地与初始清单的偏差（02、03 实施后回填）
 
