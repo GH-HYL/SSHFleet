@@ -57,8 +57,8 @@
 
 | 环境          | 怎么认                                                                 | 读哪份                                           |
 | ------------- | ---------------------------------------------------------------------- | ------------------------------------------------ |
-| **DSH**       | 会话根`~/.dsh/sessions`，目录里是 `session.v4.jsonl.zstd`（多帧 zstd） | [SESSIONS-DSH.md](./SESSIONS-DSH.md)             |
-| **WorkBuddy** | 会话根`~/.workbuddy/projects`，明文 `.jsonl`                           | [SESSIONS-WORKBUDDY.md](./SESSIONS-WORKBUDDY.md) |
+| **DSH**       | 会话根`~/.dsh/sessions`，目录里是 `session.v4.jsonl.zstd`（多帧 zstd） | [SESSIONS-DSH.md](../audit-adr/SESSIONS-DSH.md)             |
+| **WorkBuddy** | 会话根`~/.workbuddy/projects`，明文 `.jsonl`                           | [SESSIONS-WORKBUDDY.md](../audit-adr/SESSIONS-WORKBUDDY.md) |
 
 **两份附件不可混用**：路径规则、字段名、用户原话判据都不一样，照另一份取数会取错。
 
