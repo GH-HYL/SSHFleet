@@ -105,12 +105,13 @@ $ SSHFleet -f nodes.csv -s install.sh -a 'a\nb,请选择架构'
 | 2 | 一致性 | 低 | 工单:8 与 :30 | 工单第 1 条的复现命令没带 `GOTMPDIR`，Comments 里的带了——同一条命令两种写法 | `TMPDIR` 含真换行时 Go 构建缓存会坏，第 1 条那条**在改动前跑会先撞构建错而不是测试红** | 把 `GOTMPDIR=… build/gotmp` 补进第 1 条命令，与 Comments 统一 |
 | 3 | 形式 | 低 | ADR-0020「影响」节 | 「影响」里写了函数名与测试名，接近「实现细节混进决策文档」（doc-guide 对 ADR 的取向），但规范「附」只对 ADR 写了「不写具体改哪个函数」的软口径 | `docs/agents/doc-guide.md:288`（「ADR 里不写具体改哪个函数」）与本文件现状冲突 | 待作者确认：是收紧 ADR 把函数名移到工单，还是接受现状（影响节写的是落地后果，有理由保留） |
 
-**未验证项**：
-- Windows 真机上的端到端行为（本轮在 Linux 验证；`D:\new` 路径在 Windows shell 里的引号行为未实测）。
-- 归档 `report.txt` 的代填记录在加密模式（`encrypt = true`）下的形态，本轮只在明文模式实跑。
+**未验证项**（2026-10-29 判：两条都不再需要，理由随条附上）：
+- Windows 真机上的端到端行为（本轮在 Linux 验证；`D:\new` 路径在 Windows shell 里的引号行为未实测）。**不再需要**：字面 `\n` 当分行符这整类行为已被 ADR-0023 取消（内联值只写一条，字面 `\n` 只是普通字符、真换行被拒），现版本构造不出「路径被切断」；剩下那半是 `D:\new` 在 Windows shell 里怎么被引号切分，那是 shell 的事，不经本工具的路径处理。
+- 归档 `report.txt` 的代填记录在加密模式（`encrypt = true`）下的形态，本轮只在明文模式实跑。**不再需要**：加密开关不在这条链路上——代填按「留痕优先」明文进归档（`internal/output/archive.go:46` 的注释），报告侧打 `entry.Describe()`（`internal/output/report.go:77`），而 `Answer.Describe` 把 `Value` 原样拼出（`internal/ssh/interactive.go:43`）。
 
 **事实核对通过的主要项**（均有实跑或 grep 证据）：`ExpandEscapedNewlines` 在 Go 代码零命中；`InlineText` 仅 `nodelist/csvread.go:64` 与 `cli/answer.go:84` 两个调用点；版本号 `9.2.0` 在 CHANGELOG 段头与 `main.go:37` 一致；spec 测试决策列的 5 条回归各有对应测试函数；README/手册/常见问题/示例无 `\n` 分隔残留；`4bc04fe` 提交存在且含所述 18 个文件；复现命令改前红改后绿可复现。
 
 ## 更新记录
 
 - 2026-10-21：内联值改为只写一条，`;;` 作行分隔作废（字面 `\n` 同样只是普通字符，真换行被拒绝）；上文「问题陈述」「方案」与「实现决策」里关于 `;;` 作行分隔的取舍不再约束，替代见 `docs/adr/0023-内联值只写一条.md`。
+- 2026-10-29：审计留下的两条未验证项判为不再需要（作者定），理由就地附在两条后面：Windows 那条的整类行为已由 ADR-0023 取消，加密那条的链路上没有加密开关。`docs/issues/未收尾清单.md` 里对应的那条一并删掉。
