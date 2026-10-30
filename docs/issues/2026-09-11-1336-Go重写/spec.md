@@ -431,3 +431,4 @@ README 既有用法写的是 `~/.MyPW/pw.txt`（受 `~` 展开，两版一致）
 
 - 2026-10-21：`--convert-secret` 的目标路径改为原样交给系统（相对、绝对、`../` 由 `os` 按 cwd 解析，`~` 与空格都不代为处理），不再拼 `secret_dir`；上文「D31 展开」小节里「统一解析顺序（两类共用一个函数，只差基准）」与「行为变化（两处）」第 2 条不再约束，替代实现见 `modules/SSHFleet_Go/internal/credential/convert.go` 的 `ConvertSecret`（清单列与配置字段仍走 `ResolveSecretPath`）
 - 2026-10-21：上条末句的「配置字段仍走 `ResolveSecretPath`」与现状不符——`config.go` 的 `normalizeConfigPath` 拒绝相对路径与 `~`，配置里三个凭据字段实际到不了拼接；清单侧只有第 5 列（私钥）真的经过它，第 4/6 列走 `credentialValueSpec` 且拼不上时报「文件不存在」。本表「配置」行的字段名也已改对（原写 `key` / `key_passphrase`，实为 `credential.key` / `credential.key_password`）。这些留给 `issues/cli-path-normalization/` 统一收口
+- 2026-10-30：**D21「框架冻结，骨架定稿即硬边界」不再约束**。上文第 32 行那条「骨架定稿即硬边界，此后所有改动都在框架内调整」的决定被取代——按五站分层重排工程结构，替代见 `docs/adr/0032-按五站分层重构工程结构.md`。新工程落 `modules/SSHFleet2_Go/`，老工程 `modules/SSHFleet_Go/` 冻结、只修紧急缺陷；决策工单在 `docs/issues/2026-10-30-2134-架构重构/`。本文其余各条不受影响
