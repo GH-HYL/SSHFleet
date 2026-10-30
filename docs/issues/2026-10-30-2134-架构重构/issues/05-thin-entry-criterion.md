@@ -2,7 +2,7 @@
 
 **Type**：grilling
 **Status**：open
-**Blocked by**：02（01、03 已解，不再是阻塞）
+**Blocked by**：无，可立即开工（01、02、03 均已解）
 
 ## Question
 
