@@ -48,7 +48,7 @@ FLAG_VALUE = "false"
 # 上游改名、下架导致匹配不上不算失败，只是清单这一行白写。
 EXCLUDED: dict[str, str] = {
     "engineering/pr": "只用来写 PR 正文，本仓提交信息够用",
-    "engineering/wayfinder": "把大活拆成决策票找路那套，本仓不走",
+    # "engineering/wayfinder": "把大活拆成决策票找路那套，本仓不走",
     "engineering/wizard": "bash 向导带人点面板、录凭据那套，本仓没有这类开通流程",
     "engineering/triage": "给议题与外部 PR 走分诊状态机那套，本仓没有外部 PR，议题状态手写",
     "engineering/research": "派后台 agent 查一手资料、把带出处的结论落成 md 那套，本仓调研直接进议题",
