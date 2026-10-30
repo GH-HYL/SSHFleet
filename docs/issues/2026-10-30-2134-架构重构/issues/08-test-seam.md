@@ -2,7 +2,7 @@
 
 **Type**：grilling
 **Status**：open
-**Blocked by**：01, 03
+**Blocked by**：无，可立即开工（01、03 已解）
 
 ## Question
 
