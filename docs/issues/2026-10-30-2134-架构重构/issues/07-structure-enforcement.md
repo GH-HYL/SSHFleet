@@ -2,7 +2,7 @@
 
 **Type**：grilling
 **Status**：open
-**Blocked by**：05, 06
+**Blocked by**：06（05 已解）
 
 ## Question
 
