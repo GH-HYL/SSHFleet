@@ -1,64 +1,28 @@
-# 取数：CodeBuddy 会话记录
+# CodeBuddy 会话记录
 
-本附件只讲**怎么找到会话、哪些行算用户原话**。审计方法见同目录 `SKILL.md`。
-另两份 `SESSIONS-WORKBUDDY.md` / `SESSIONS-DSH.md` 的格式与这份**都不同**，别混用。
+CodeBuddy 的会话记录存在本机，需要时直接读。
 
-## 一、会话在哪
+**位置**：`~/.codebuddy/projects/<工作区slug>/`
 
-会话根：`~/.codebuddy/projects/<工作区slug>/`
+- **slug**：工作区绝对路径，`/`、`\` 换成 `-`，`:` 直接删掉（所以 `D-` 而不是 `d-` 或 `D--`）；盘符大小写不定，`D-` 和 `d-` 都见过。`D:\Desktop\Code\SSHFleet` → `D-Desktop-Code-SSHFleet`
+- **主会话**：`<sessionId>.jsonl`，明文 JSONL。
+- **不看的**：同名的 `<sessionId>/` 目录（`subagents/`、`tool-results/`）、`storage.json`。
 
-- **slug**：工作区绝对路径，盘符**保留大写**，去掉 `:`，`\` 与 `/` 都换成 `-`。
-  - `D:\Desktop\Code\SSHFleet` → `D-Desktop-Code-SSHFleet`（注意与 WorkBuddy 的小写形式不同）
-- **主会话**：`<sessionId>.jsonl`，明文，可直接读。
-- **子 agent**：同名的 `<sessionId>/` 目录下，不算主会话。
-- **不用看的**：`storage.json`。
-
-目录不在就模糊匹配：
+目录算不出来就先模糊匹配：
 
 ```bash
-ls -1 ~/.codebuddy/projects | grep -i SSHFleet
+ls -1 ~/.codebuddy/projects | grep -i 关键字
 ```
 
-**一个项目目录下可能躺着多个 `.jsonl`**，按时间或标题定位，别默认取最新。
+**找哪一条**：多半只给会话标题，也可能什么线索都没有；别默认只查当前工作区那个目录。
 
-## 二、哪些行算用户原话
+- **给了标题**：标题是明文，跨工作区按关键字模糊搜，别指望一字不差：
+  ```bash
+  grep -li "标题里的几个字" ~/.codebuddy/projects/*/*.jsonl
+  ```
+  命中的文件里看 `type=="ai-title"` 记录的 `aiTitle` 和 `cwd`；不是每个会话都有标题，没有就退回正文找。**`cwd` 只证明在哪个工作区，不证明是哪一条**——同一工作区常有多条，读首条用户消息比对。
+- **没给线索**：同一个工作区里按 `timestamp`（毫秒）取最新。
 
-**`type=="message"` 且 `role=="user"`**，正文在 `content` 数组里，每个元素形如 `{"type":"input_text","text":"…"}`。
+文件可能几 MB，别整份 `Read`。
 
-**与 WorkBuddy 最大的差别：这里没有 `<user_query>` 包裹。** 正文就是纯文本，原样落盘。
-
-排除两类：
-
-- **注入块**：正文以 `<system-reminder>` 之类开头（`content` 里同样带着）。
-- **斜杠命令**：以 `/xxx` 触发技能时，**整篇技能正文会当成一条用户消息落盘**（形如 `<command-message>audit-adr</command-message>` 加技能全文）。它时长几千字，极易被当成「用户说了什么」误引。
-
-## 三、把原话导出来
-
-```bash
-python - "$SESSION_JSONL" <<'PY'
-import json, sys
-n = 0
-for ln in open(sys.argv[1], encoding="utf-8", errors="replace"):
-    try:
-        m = json.loads(ln)
-    except Exception:
-        continue
-    if m.get("type") != "message" or m.get("role") != "user":
-        continue
-    c = m.get("content")
-    txt = "".join(x.get("text", "") for x in c if isinstance(x, dict)) if isinstance(c, list) else str(c or "")
-    s = txt.lstrip()
-    if s.startswith("<system-reminder") or s.startswith("<command-message"):
-        continue
-    n += 1
-    print("### U%d (ts=%s) ###\n%s\n" % (n, m.get("timestamp"), txt.strip()[:1500]))
-PY
-```
-
-**把 U1…Un 完整读一遍再动笔**，并当作引用编号。
-
-## 四、三个坑
-
-- **会话进行中**，当前这一步可能还没落盘；以已落盘为准，缺口在报告里注明。
-- **文件不小**（一次长会话 2MB 量级），**分段读**，别一次塞进上下文；导出后先落 `build/` 再读。
-- **用户原话常常是语音转的**，有错字（「03 角色工单」其实指「03 号决策工单」、「阶段」其实指「决断」）。引原话时保留原样，理解时按上下文校正。
+**读的时候**：用户消息是 `type=="message"` 且 `role=="user"`，正文在 `content[]` 的 `text` 里（块类型 `input_text`），**没有 `<user_query>` 包裹**，就是纯文本。以 `<` 开头的是注入块或斜杠命令，不算——`/xxx` 触发技能时整篇技能正文会当成一条用户消息落盘，几千字，最容易被当成「用户说了什么」。
