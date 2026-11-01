@@ -249,3 +249,51 @@ func IsStdlib(path string) bool {
 	first, _, _ := strings.Cut(path, "/")
 	return !strings.Contains(first, ".")
 }
+
+// PkgPath 把一个短名换算成模块内完整路径。
+//
+// 规则表那一行写短名，十六个包都在 internal/ 下一级；塔尖那一行写模块名，换算回来就是模块名本身。
+// 包清单对账（类二）会保证表与目录一一对上，所以这条换算与磁盘上的形状不会各走各的。
+func (m *Module) PkgPath(short string) string {
+	if short == m.ModulePath {
+		return m.ModulePath
+	}
+	return m.ModulePath + "/internal/" + short
+}
+
+// PkgOfKind 按规则表里的类找包；同一类有多个时返回第一个。
+//
+// 契约包与检查包各只有一行，所以「按类找」在它们身上没有歧义。
+func (m *Module) PkgOfKind(k Kind) *Package {
+	for _, p := range m.Packages {
+		if p.Rule != nil && p.Rule.Kind == k {
+			return p
+		}
+	}
+	return nil
+}
+
+// IsContract 判一个短名是不是契约包——问规则表那一行的类，不问名字。
+func (m *Module) IsContract(short string) bool {
+	p := m.Pkg(short)
+	return p != nil && p.Rule != nil && p.Rule.Kind == KindContract
+}
+
+// TypeSpec 找一个包里某个类型的声明。找类型的判据都走这一处。
+func TypeSpec(p *Package, name string) (*SourceFile, *ast.TypeSpec, bool) {
+	for _, f := range p.Files {
+		for _, decl := range f.AST.Decls {
+			gen, ok := decl.(*ast.GenDecl)
+			if !ok {
+				continue
+			}
+			for _, spec := range gen.Specs {
+				ts, ok := spec.(*ast.TypeSpec)
+				if ok && ts.Name.Name == name {
+					return f, ts, true
+				}
+			}
+		}
+	}
+	return nil, nil, false
+}

@@ -13,6 +13,27 @@ func TestLoadLedger(t *testing.T) {
 	}
 }
 
+// 列序以表头为准：md 里调列，读出来的值跟着走，不是按位置硬套。
+func TestLoadLedgerHonoursHeader(t *testing.T) {
+	ex, err := LoadLedger("testdata/ledger/调序的台账.md")
+	if err != nil {
+		t.Fatalf("读样本台账失败：%v", err)
+	}
+	if len(ex) != 1 {
+		t.Fatalf("want 1 条，got %d：%v", len(ex), ex)
+	}
+	got := ex[0]
+	want := Exception{
+		Rule:  ClassTerminal,
+		Where: "internal/parse",
+		Why:   "照搬老代码，阶段 04 修",
+		Who:   "开发者 2026-11-01",
+	}
+	if got != want {
+		t.Errorf("四列读串了：\nwant %+v\ngot  %+v", want, got)
+	}
+}
+
 // 命中台账的违规不报；没盖住任何违规的那一行要交出来。
 func TestApply(t *testing.T) {
 	vs := []Violation{

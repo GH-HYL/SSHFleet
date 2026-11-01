@@ -68,13 +68,10 @@ func CheckHandoff(m *Module) []Violation {
 }
 
 func missingPaper(m *Module, pkg, typ string) Violation {
-	return Violation{
-		Class: ClassHandoff,
-		File:  m.ModulePath + "/internal/" + pkg,
-		What:  fmt.Sprintf("对账表里写着 %s.%s，但这个类型不在了", pkg, typ),
-		Why:   "对账表里的一对纸必须都能找到；少一张，这条判据就没有可比的两边",
-		Fix:   "把类型补回来，或把对账表里这一行删掉——改表要先说清为什么这一棒不再需要比对",
-	}
+	return violationAt(ClassHandoff, m.PkgPath(pkg),
+		fmt.Sprintf("对账表里写着 %s.%s，但这个类型不在了", pkg, typ),
+		"对账表里的一对纸必须都能找到；少一张，这条判据就没有可比的两边",
+		"把类型补回来，或把对账表里这一行删掉——改表要先说清为什么这一棒不再需要比对")
 }
 
 // structOf 找一个包里某个结构体类型的字段名集合。
@@ -83,26 +80,15 @@ func structOf(m *Module, pkg, typ string) (*SourceFile, token.Pos, []string, boo
 	if p == nil {
 		return nil, token.NoPos, nil, false
 	}
-	for _, f := range p.Files {
-		for _, decl := range f.AST.Decls {
-			gen, ok := decl.(*ast.GenDecl)
-			if !ok {
-				continue
-			}
-			for _, spec := range gen.Specs {
-				ts, ok := spec.(*ast.TypeSpec)
-				if !ok || ts.Name.Name != typ {
-					continue
-				}
-				st, ok := ts.Type.(*ast.StructType)
-				if !ok {
-					continue
-				}
-				return f, ts.Name.Pos(), fields(st), true
-			}
-		}
+	f, ts, ok := TypeSpec(p, typ)
+	if !ok {
+		return nil, token.NoPos, nil, false
 	}
-	return nil, token.NoPos, nil, false
+	st, ok := ts.Type.(*ast.StructType)
+	if !ok {
+		return nil, token.NoPos, nil, false
+	}
+	return f, ts.Name.Pos(), fields(st), true
 }
 
 func fields(st *ast.StructType) []string {

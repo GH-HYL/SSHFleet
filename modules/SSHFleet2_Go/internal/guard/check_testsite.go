@@ -30,7 +30,7 @@ func redlineImports(m *Module) []Violation {
 			for _, name := range sortedImportNames(f) {
 				path := f.Imports[name]
 				short, ok := m.Internal(path)
-				if !ok || short == "contract" {
+				if !ok || m.IsContract(short) {
 					continue
 				}
 				pinned = append(pinned, short)

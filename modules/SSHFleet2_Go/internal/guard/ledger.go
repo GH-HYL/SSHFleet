@@ -26,33 +26,68 @@ func (e Exception) Match(v Violation) bool {
 	return where != "" && (v.File == where || strings.HasPrefix(v.File, where+"/"))
 }
 
-// LoadLedger 读放行台账。文件不在就报错——台账读不到时静默放过，等于整套检查都可能没在跑。
+// ledgerCols 是台账的四列。列序以文件里那一行表头为准：md 里调列，代码跟着走。
+var ledgerCols = []string{"规则", "位置", "为什么放", "谁批的"}
+
+// LoadLedger 读放行台账。文件不在、或没有表头就报错——台账读不到时静默放过，
+// 等于整套检查都可能没在跑。
 func LoadLedger(path string) ([]Exception, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("读不到放行台账 %s：%w", path, err)
 	}
 	var out []Exception
-	header := false
+	var index map[string]int
 	for _, line := range strings.Split(string(raw), "\n") {
 		line = strings.TrimSpace(line)
 		if !strings.HasPrefix(line, "|") {
 			continue
 		}
-		cells := cells(line)
-		if len(cells) < 4 {
+		row := cells(line)
+		if index == nil {
+			index = headerIndex(row)
 			continue
 		}
-		if !header {
-			header = true // 表头那一行
+		if headerIndex(row) != nil || strings.HasPrefix(row[0], "---") {
 			continue
 		}
-		if strings.HasPrefix(cells[0], "---") {
-			continue
-		}
-		out = append(out, Exception{Rule: cells[0], Where: cells[1], Why: cells[2], Who: cells[3]})
+		out = append(out, Exception{
+			Rule:  cell(index, row, "规则"),
+			Where: cell(index, row, "位置"),
+			Why:   cell(index, row, "为什么放"),
+			Who:   cell(index, row, "谁批的"),
+		})
+	}
+	if index == nil {
+		return nil, fmt.Errorf("放行台账 %s 没有表头，四列要写成 %v", path, ledgerCols)
 	}
 	return out, nil
+}
+
+// headerIndex 认表头：四列都在才算数。
+func headerIndex(row []string) map[string]int {
+	index := map[string]int{}
+	for _, want := range ledgerCols {
+		at := -1
+		for i, c := range row {
+			if c == want {
+				at = i
+				break
+			}
+		}
+		if at < 0 {
+			return nil
+		}
+		index[want] = at
+	}
+	return index
+}
+
+func cell(index map[string]int, row []string, name string) string {
+	if at, ok := index[name]; ok && at < len(row) {
+		return row[at]
+	}
+	return ""
 }
 
 func cells(line string) []string {

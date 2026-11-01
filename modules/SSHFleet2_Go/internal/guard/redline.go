@@ -33,7 +33,7 @@ var redline = []RedLineEntry{
 	// 02 号工单：写终端与退出动作
 	{"TestCheckTerminal", []string{"CheckTerminal", "ClassTerminal"}},
 	{"TestCheckTerminalExemptsTestFiles", []string{"CheckTerminal"}},
-	{"TestCheckExit", []string{"CheckExit", "ClassExit"}},
+	{"TestCheckExit", []string{"CheckExit", "ClassExit", "Report"}},
 
 	// 03 号工单：依赖方向与包清单对账
 	{"TestCheckDeps", []string{"CheckDeps", "Report"}},
@@ -55,6 +55,7 @@ var redline = []RedLineEntry{
 	// 07 号工单：名单与台账本身
 	{"TestCheckRedline", []string{"CheckRedline", "RedLineEntry", "Report"}},
 	{"TestLoadLedger", []string{"LoadLedger"}},
+	{"TestLoadLedgerHonoursHeader", []string{"ClassTerminal", "Exception", "LoadLedger", "Rule"}},
 	{"TestApply", []string{"Apply", "ClassExit", "ClassTerminal", "Exception", "Rule", "Violation"}},
 
 	// 真工程整跑
@@ -74,16 +75,13 @@ func RedLine() []RedLineEntry {
 func CheckRedline(m *Module) []Violation {
 	var out []Violation
 
-	gp := checkPackage(m)
+	gp := m.PkgOfKind(KindCheck)
 	if gp == nil {
 		for _, e := range m.Redline {
-			out = append(out, Violation{
-				Class: ClassRedline,
-				File:  m.ModulePath,
-				What:  fmt.Sprintf("名单里有 %s，但工程里没有检查包", e.Test),
-				Why:   "名单钉的是检查包里的测试；包都没了，这份名单自己就先烂了",
-				Fix:   "把检查包补回来；确要改名单，走议题加 ADR",
-			})
+			out = append(out, violationAt(ClassRedline, m.ModulePath,
+				fmt.Sprintf("名单里有 %s，但工程里没有检查包", e.Test),
+				"名单钉的是检查包里的测试；包都没了，这份名单自己就先烂了",
+				"把检查包补回来；确要改名单，走议题加 ADR"))
 		}
 		return out
 	}
@@ -130,13 +128,10 @@ func CheckRedline(m *Module) []Violation {
 		if seen[e.Test] {
 			continue
 		}
-		out = append(out, Violation{
-			Class: ClassRedline,
-			File:  gp.Path,
-			What:  fmt.Sprintf("名单里的 %s 在代码里已经没有了", e.Test),
-			Why:   "删一条红线测试就算改红线：名单还留着，说明它被删掉却没走议题加 ADR",
-			Fix:   "把测试补回来；确要删，先开议题写 ADR，再动名单",
-		})
+		out = append(out, violationAt(ClassRedline, gp.Path,
+			fmt.Sprintf("名单里的 %s 在代码里已经没有了", e.Test),
+			"删一条红线测试就算改红线：名单还留着，说明它被删掉却没走议题加 ADR",
+			"把测试补回来；确要删，先开议题写 ADR，再动名单"))
 	}
 	return out
 }
@@ -206,16 +201,6 @@ func productionNames(p *Package) map[string]bool {
 		}
 	}
 	return out
-}
-
-// checkPackage 找检查包本体：规则表里那一类为「检查」的包。
-func checkPackage(m *Module) *Package {
-	for _, p := range m.Packages {
-		if p.Rule != nil && p.Rule.Kind == KindCheck {
-			return p
-		}
-	}
-	return nil
 }
 
 func entryLiteral(name string, symbols []string) string {

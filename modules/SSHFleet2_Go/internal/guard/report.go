@@ -30,6 +30,22 @@ var allClasses = []string{
 	ClassFailure, ClassTestSite, ClassHandoff, ClassRedline,
 }
 
+// skipTestFiles 说清每一类对 _test.go 的态度。
+//
+// ADR-0032 第四条只给「写终端」「依赖方向」两条豁免；第五类不扫测试是本检查自己的取舍——
+// 它防的是生产路径上把两种失败混用，测试里造一个类型来断言形状不算越界。
+// 不在这张表里的类，一律连测试一起看（退出动作、契约纯净、名单与指纹都是这样）。
+var skipTestFiles = map[string]bool{
+	ClassTerminal: true,
+	ClassDeps:     true,
+	ClassFailure:  true,
+}
+
+// scans 判一条判据要不要看这份文件。
+func scans(class string, f *SourceFile) bool {
+	return !(f.IsTest && skipTestFiles[class])
+}
+
 // Violation 是一条越界。
 //
 // 四样缺一不可：位置、哪里绕开了（What）、为什么这算绕开（Why）、该走哪一处（Fix）。
@@ -44,13 +60,24 @@ type Violation struct {
 }
 
 func (v Violation) String() string {
-	return fmt.Sprintf("%s:%d [%s] %s。%s。该走：%s", v.File, v.Line, v.Class, v.What, v.Why, v.Fix)
+	where := v.File
+	if v.Line > 0 {
+		where = fmt.Sprintf("%s:%d", v.File, v.Line)
+	}
+	return fmt.Sprintf("%s [%s] %s。%s。该走：%s", where, v.Class, v.What, v.Why, v.Fix)
+}
+
+// violationAt 是整包、整模块一级事实的构造点：这一级没有行号，位置只写文件。
+func violationAt(class, file string, what, why, fix string) Violation {
+	return Violation{Class: class, File: file, What: what, Why: why, Fix: fix}
 }
 
 // violation 是一条违规的唯一构造点：位置由调用处把语法树里的 Pos 交进来。
 // 六类都从这里出，报错形态因此只有一处可改。
 func (f *SourceFile) violation(class string, pos token.Pos, what, why, fix string) Violation {
-	return Violation{Class: class, File: f.Rel, Line: f.line(pos), What: what, Why: why, Fix: fix}
+	v := violationAt(class, f.Rel, what, why, fix)
+	v.Line = f.line(pos)
+	return v
 }
 
 // Report 把一串违规排成一段话；零违规返回空串。
