@@ -65,17 +65,17 @@ func buildPlan(cfg *settings, argv []string) (*contract.Plan, *contract.CannotSt
 		switch o.long {
 		case "--number":
 			numberRaw = val
-			if _, err := strconv.Atoi(val); err != nil {
+			if n, err := strconv.Atoi(val); err != nil || n <= 0 {
 				numberInvalid = true
 			}
 		case "--timeout":
 			timeoutRaw = val
-			if _, err := strconv.Atoi(val); err != nil {
+			if n, err := strconv.Atoi(val); err != nil || n <= 0 {
 				timeoutInvalid = true
 			}
 		case "--connect-timeout":
 			connectTimeoutRaw = val
-			if _, err := strconv.Atoi(val); err != nil {
+			if n, err := strconv.Atoi(val); err != nil || n <= 0 {
 				connectInvalid = true
 			}
 		}

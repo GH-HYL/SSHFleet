@@ -175,11 +175,12 @@ func dangerRefusal(p *contract.Plan) (*Refusal, contract.Text) {
 		return &Refusal{Say: message.DangerBox(report, true)}, contract.Text{}
 	}
 
-	screen := message.DangerBox(report, false)
-	prompt := message.ConfirmPrompt()
-	answer := ask.Ask(contract.Text{S: screen.S + prompt.S}, p.Run.Yes, false)
+	answer := ask.Ask(message.DangerBox(report, false), p.Run.Yes, false)
 	switch answer {
-	case ask.NoInput, ask.No:
+	case ask.NoInput:
+		// 屏幕上「输入结束，操作已取消」已经由 ask 打过，这里不再叠一句。
+		return &Refusal{Say: contract.Text{}}, contract.Text{}
+	case ask.No:
 		return &Refusal{Say: message.CancelLine()}, contract.Text{}
 	}
 	if p.Run.Yes {
