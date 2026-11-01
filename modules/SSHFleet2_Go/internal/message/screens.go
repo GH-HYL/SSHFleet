@@ -28,6 +28,13 @@ func ProblemHint(problem, hint string) string {
 	return problem + hintLabel + hint
 }
 
+// ProblemOrigin 拼「问题 / 出处」两行：判据文件里某一条写坏时用，出处指到那一项该怎么写。
+//
+// 老版这一处用的就是「出处：」这个标签（不是「原因：」也不是「提示：」），逐字照搬。
+func ProblemOrigin(problem, origin string) string {
+	return problem + "\n出处：" + origin
+}
+
 // Fatal 排一屏致命错误：红色 [ERROR] 头、黄色环节标签、正文，末尾附日志路径。
 //
 // 日志还没建起来时 logPath 传空串，那一行就不出现——老版同一判据。
@@ -64,6 +71,19 @@ func ConfirmPrompt() contract.Text {
 // 随阶段 04 消失，不许写进任何手册或帮助。
 func NotWiredLine() contract.Text {
 	return contract.Text{S: "这条用法还没接上：流水线随阶段 04 接线，本阶段只到闸门\n"}
+}
+
+// NotWiredKeyTools 是过渡形态：三条密钥命令随阶段 08 接线。
+// 随阶段 08 消失，不许写进任何手册或帮助。
+func NotWiredKeyTools() string {
+	return "这条用法还没接上：三条密钥命令随阶段 08 接线"
+}
+
+// LogInitFailed 排「工具日志建不起来」那一屏。此时日志还没建起来，屏上不带「日志：」行。
+//
+// 这是塔尖唯一一处自己触发的造屏：它只把系统给的错交进来，字由这里拼。
+func LogInitFailed(err error) contract.Text {
+	return Fatal("log", "初始化工具日志失败："+err.Error()+"\n请检查程序所在目录是否可写，然后重试", "")
 }
 
 // TraceDanger 是一条留给工具日志的留痕：非交互（--yes）跳过危险命令确认时写它。

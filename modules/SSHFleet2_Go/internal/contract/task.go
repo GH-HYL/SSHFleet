@@ -16,12 +16,18 @@ const (
 //
 // 五份类型不合并——命令与脚本、上传与下载共用的段落各写一遍，那是认下的重复
 // （ADR-0035 决定二：现在没有事实支持合并）。
+//
+// Path 是 -p 的原值，**单独一格**：命令与脚本模式下它不属于任何一种任务，却仍要判
+// 「-p 不能搭配 -c／-s」（老版 CheckArguments 在进任何模式分支之前就看 a.Path）。
+// 上传／下载不再各存一份，免得同一份数据有两个来源。
 type Task struct {
 	Command  *CommandTask
 	Script   *ScriptTask
 	Upload   *UploadTask
 	Download *DownloadTask
 	Passwd   *PasswdTask
+
+	Path string
 }
 
 // CommandTask 命令模式：一条命令原文。
@@ -35,16 +41,14 @@ type ScriptTask struct {
 	Body string
 }
 
-// UploadTask 上传模式：本机源路径与服务器上的目标目录。
+// UploadTask 上传模式：本机源路径。服务器上的目标目录是 Task.Path。
 type UploadTask struct {
-	Source    string
-	RemoteDir string
+	Source string
 }
 
-// DownloadTask 下载模式：服务器上的源路径与本机的目标目录。
+// DownloadTask 下载模式：服务器上的源路径。本机的目标目录是 Task.Path。
 type DownloadTask struct {
 	RemotePath string
-	LocalDir   string
 }
 
 // PasswdTask 改密模式：命令行给的新密码原值（加密开着时它是凭据文件路径，解密码随阶段 05）。

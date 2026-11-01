@@ -21,10 +21,15 @@ type RunParams struct {
 	TimeoutExecute  int
 	TimeoutTransfer int
 	Sudo            bool
-	NoShell         bool
-	Yes             bool // 非交互：不问任何问题，直接按缺省放行
-	Key             bool // 用密钥登录
-	Remark          string
+	// SudoGiven／NoSudoGiven 如实记「命令行上给了哪个开关」。两个都给要拒，而 Sudo 上只剩
+	// 后一个覆盖后的结论，看不出这件事——老版也是为此另存两个旗标。
+	SudoGiven   bool
+	NoSudoGiven bool
+	NoShell     bool
+	Yes         bool   // 非交互：不问任何问题，直接按缺省放行
+	Key         bool   // 用密钥登录
+	Answer      string // 代填的原值：改密与它互斥，04／05 还要拿它做材料检查
+	Remark      string
 }
 
 // ProblemKind 是「解析时发现的问题」的种类。解析只发现、不下结论。

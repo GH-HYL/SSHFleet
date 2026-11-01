@@ -1,7 +1,6 @@
 package gate
 
 import (
-	"fmt"
 	"strings"
 
 	"sshfleet2/internal/ask"
@@ -13,149 +12,153 @@ import (
 // 闸门的唯一口子：递一张纸，收「一个拒绝」（nil 表示放行）。
 //
 // 它只管裁量：参数搭配、互斥、取值、危险命令、使用者当场喊停。它不读文件、不读配置、
-// 不读判据表——纸上前一站给什么它就判什么。它也不打屏、不拼句子：话说由 message 造，
-// 屏由塔尖或 ask 打出去。
+// 不读判据表——纸上前一站给什么它就判什么。它也不打屏、不拼句子：每条判据只交事实
+// （哪一条没过、哪个选项、哪段原文），句子由 message 造，屏由塔尖或 ask 打出去
+// （ADR-0034 决定八、ADR-0028 决定一）。
 
 // Run 判这张纸放不放行。
 //
 // 第二个返回值是「留给日志的一句话」：非交互（--yes）跳过危险命令确认时要留痕，而日志句柄
 // 在塔尖手里（闸门不持有它），所以闸门把这个事实交上去，由塔尖落盘。
+//
+// 判的先后照老版 CheckArguments：解析层的错先报，模式其次，逐条搭配检查按老版顺序来，
+// 三个数值选项放在最后（老版把 -n／-t／-T 的取值检查放在整段末尾）。同一份命令里错两处时，
+// 使用者先看到哪一句由这个顺序定。
 func Run(p *contract.Plan) (*Refusal, contract.Text) {
-	if r := syntaxRefusal(p); r != nil {
+	if r := parseRefusal(p); r != nil {
 		return r, contract.Text{}
 	}
-	if r := checkArguments(p); r != nil {
+	if r := modeRefusal(p); r != nil {
+		return r, contract.Text{}
+	}
+	if r := argumentRefusal(p); r != nil {
+		return r, contract.Text{}
+	}
+	if r := valueRefusal(p); r != nil {
 		return r, contract.Text{}
 	}
 	return dangerRefusal(p)
 }
 
-// refuseCLI 造一个「输入不合规」的拒绝：stderr，老版那副 [ERROR] 外壳。
-func refuseCLI(head, body string) *Refusal {
-	full := head
-	if body != "" {
-		full = head + "：" + strings.TrimRight(body, "\r\n")
-	}
-	return &Refusal{Say: message.Fatal("cli", full, log.ToolPath())}
+// refuse 把一句正文交给终端：走 stderr，老版那副 [ERROR] 外壳，末尾附日志路径。
+func refuse(body string) *Refusal {
+	return &Refusal{Say: message.Fatal("cli", body, log.ToolPath())}
 }
 
-// syntaxRefusal 先把解析时记下的事实判掉：认不出的选项、缺值、值认不出、多个模式。
-//
-// 老版这几条分别出自两个出口：「选项/参数解析失败」（词法层）与「选项/参数合规性检查未通过」
-// （语义层）。这里按同一分工分成两句外壳。
-func syntaxRefusal(p *contract.Plan) *Refusal {
+// parseRefusal 词法层的两条：认不出的选项、带值选项缺值。
+func parseRefusal(p *contract.Plan) *Refusal {
 	for _, pr := range p.Problems {
 		switch pr.Kind {
 		case contract.ProblemUnknownOption:
-			return refuseCLI("选项/参数解析失败", fmt.Sprintf("unknown flag: %s", pr.Option))
+			return refuse(message.RefuseUnknownOption(pr.Option))
 		case contract.ProblemMissingValue:
-			return refuseCLI("选项/参数解析失败", fmt.Sprintf("flag needs an argument: %s", pr.Option))
-		case contract.ProblemBadValue:
-			return refuseCLI("选项/参数合规性检查未通过",
-				message.ProblemHint(fmt.Sprintf("%s 参数格式错误，%s，当前值：%s", pr.Option, pr.Detail, pr.Raw),
-					"给一个正整数（单位见该选项的说明）"))
-		case contract.ProblemMultiMode:
-			return refuseCLI("选项/参数合规性检查未通过",
-				"执行模式选项：-c、-s、-u、-d、--change-password 互斥，只能指定一个\n提示：一次只能做一件事，请只保留一个模式")
+			return refuse(message.RefuseMissingValue(pr.Option))
 		}
 	}
 	return nil
 }
 
-// checkArguments 逐条照老版 CheckArguments（除去材料那一半）：
-// 模式、搭配、取值、改密参数。
-func checkArguments(p *contract.Plan) *Refusal {
-	if p.Mode == contract.ModeNone {
-		return refuseCLI("选项/参数合规性检查未通过", "执行模式选项：-c、-s、-u、-d、--change-password 互斥，只能指定一个\n"+
-			"提示：你没有指定任何模式，请从下面五个里选一个：\n"+
-			"      -c 执行命令   -s 执行脚本   -u 上传文件   -d 下载文件   --change-password 批量改密")
+// modeRefusal 模式零个或多个。多个先判：零个与多个到纸面时是互斥的，先判哪个不影响结论。
+func modeRefusal(p *contract.Plan) *Refusal {
+	for _, pr := range p.Problems {
+		if pr.Kind == contract.ProblemMultiMode {
+			return refuse(message.RefuseModeMultiple())
+		}
 	}
+	if p.Mode == contract.ModeNone {
+		return refuse(message.RefuseModeNone())
+	}
+	return nil
+}
 
-	upload := p.Task.Upload
-	download := p.Task.Download
+// argumentRefusal 逐条搭配检查，顺序逐字照老版 CheckArguments。
+func argumentRefusal(p *contract.Plan) *Refusal {
 	command := p.Task.Command
 	script := p.Task.Script
+	upload := p.Task.Upload
+	download := p.Task.Download
+	passwd := p.Task.Passwd
+	path := p.Task.Path
 
-	// --no-shell 只能和 -c 一起用。
+	// --no-shell 只能和 -c 一起用（上传下载不拼下发命令，没有外壳可剥）。
 	if p.Run.NoShell && (script != nil || upload != nil || download != nil) {
-		return refuseCLI("选项/参数合规性检查未通过",
-			"--no-shell 只能和 -c 一起使用\n提示：请去掉 --no-shell，或改用 -c 执行")
+		return refuse(message.RefuseNoShellWithOtherMode())
 	}
 
-	// -p：上传时是服务器上的目录（必须以 / 收尾），命令与脚本不需要它。
-	if upload != nil && upload.RemoteDir != "" {
-		dir := upload.RemoteDir
-		if !strings.HasPrefix(dir, "/") {
-			return refuseCLI("选项/参数合规性检查未通过",
-				fmt.Sprintf("-p 参数指定的上传目录必须是绝对路径，当前值：%s\n提示：服务器上的路径要从 / 写起，例如 /opt/app/", dir))
-		}
-		if strings.ContainsAny(dir, "\r\n") {
-			return refuseCLI("选项/参数合规性检查未通过",
-				fmt.Sprintf("-p 参数指定的上传目录里有回车或换行：%s\n提示：一条命令只写一个路径，检查复制时是不是把换行带进来了", dir))
-		}
-		if !strings.HasSuffix(dir, "/") {
-			return refuseCLI("选项/参数合规性检查未通过",
-				fmt.Sprintf("上传模式：-p 必须是以 / 结尾的目录，当前值：%s\n提示：-p 只表示\"放到哪个目录\"，工具不会替你改文件名，所以要以 / 收尾", dir))
-		}
-	}
-	if p.Task.Command != nil || p.Task.Script != nil {
-		if dir := pathValue(p); dir != "" {
-			return refuseCLI("选项/参数合规性检查未通过",
-				"-p 参数不能搭配 -c 或 -s 使用\n提示：只有上传、下载才用 -p；命令与脚本模式不需要它")
+	// 改密与三个批量参数互斥：老版把这一段放在进任何模式分支之前。
+	if passwd != nil {
+		switch {
+		case p.Run.Answer != "":
+			return refuse(message.RefusePasswdWithAnswer())
+		case path != "":
+			return refuse(message.RefusePasswdWithPath())
+		case p.Run.Key:
+			return refuse(message.RefusePasswdWithKey())
 		}
 	}
 
-	// -d 必须配 -p，且 -d 恒为远端路径。
+	// -p：上传时是服务器上的目录（判远端形态、要以 / 收尾）；命令与脚本用不到它。
+	if path != "" {
+		if upload != nil {
+			dir := strings.TrimSpace(path)
+			if !strings.HasPrefix(dir, "/") {
+				return refuse(message.RefuseRemotePathNotAbsolute("-p", "上传目录", dir))
+			}
+			if strings.ContainsAny(dir, "\r\n") {
+				return refuse(message.RefuseRemotePathHasNewline("-p", "上传目录", dir))
+			}
+			if !strings.HasSuffix(dir, "/") {
+				return refuse(message.RefuseUploadDirNeedsSlash(dir))
+			}
+		} else if command != nil || script != nil {
+			return refuse(message.RefusePathWithCommand())
+		}
+	}
+
+	// -d：必须配 -p，且 -d 恒为远端路径（本机目录读不读得到归解析的材料自检）。
 	if download != nil {
-		if download.LocalDir == "" {
-			return refuseCLI("选项/参数合规性检查未通过",
-				"-d 参数必须搭配 -p 参数使用\n提示：-p 写文件要存到本机的哪个目录，例如 -p ./logs/")
+		if path == "" {
+			return refuse(message.RefuseDownloadNeedsPath())
 		}
-		if fail := checkRemotePath("-d", "远程路径", download.RemotePath); fail != "" {
-			return refuseCLI("选项/参数合规性检查未通过", fail)
+		remote := strings.TrimSpace(download.RemotePath)
+		if !strings.HasPrefix(remote, "/") {
+			return refuse(message.RefuseRemotePathNotAbsolute("-d", "远程路径", remote))
+		}
+		if strings.ContainsAny(remote, "\r\n") {
+			return refuse(message.RefuseRemotePathHasNewline("-d", "远程路径", remote))
 		}
 	}
 
-	// -u 必须配 -p。
-	if upload != nil && upload.RemoteDir == "" {
-		return refuseCLI("选项/参数合规性检查未通过",
-			"-u 参数必须搭配 -p 参数使用\n提示：-p 写文件要放到服务器上的哪个目录，例如 -p /opt/app/")
+	// -u：必须配 -p（源文件读不读得到归解析的材料自检）。
+	if upload != nil && path == "" {
+		return refuse(message.RefuseUploadNeedsPath())
 	}
 
-	// -c 不能为空。
+	// 执行身份：一对开关同时写就是自相矛盾。
+	if p.Run.SudoGiven && p.Run.NoSudoGiven {
+		return refuse(message.RefuseSudoConflict())
+	}
+
+	// -c 给了但只有空白（给空串算没给，落进「模式零个」那一条）。
 	if command != nil && strings.TrimSpace(command.Text) == "" {
-		return refuseCLI("选项/参数合规性检查未通过",
-			"-c 参数不能为空，请提供要执行的命令\n提示：-c 后面跟命令原文，例如 -c \"systemctl status sshd\"")
+		return refuse(message.RefuseCommandEmpty())
 	}
 
-	// 改密参数（本阶段只判形态；解密随阶段 05）。
-	if p.Task.Passwd != nil && strings.TrimSpace(p.Task.Passwd.Raw) == "" {
-		return refuseCLI("选项/参数合规性检查未通过",
-			"--change-password 的新密码不能为空\n提示：后面跟这次要统一改成的新密码")
+	// 改密的新密码只有空白（本阶段只判形态；解密随阶段 05）。
+	if passwd != nil && strings.TrimSpace(passwd.Raw) == "" {
+		return refuse(message.RefusePasswdEmpty())
 	}
-
-	_ = script
 	return nil
 }
 
-// pathValue 纸上的 -p 原值：上传与下载各存一处，命令与脚本模式只可能有下载那一处。
-func pathValue(p *contract.Plan) string {
-	if p.Task.Download != nil {
-		return p.Task.Download.LocalDir
+// valueRefusal 三个数值选项的取值：老版放在整段检查的最后。
+func valueRefusal(p *contract.Plan) *Refusal {
+	for _, pr := range p.Problems {
+		if pr.Kind == contract.ProblemBadValue {
+			return refuse(message.RefuseBadPositiveInt(pr.Option, pr.Detail, pr.Raw))
+		}
 	}
-	return ""
-}
-
-// checkRemotePath 远端路径的形态检查：必须绝对、不许含换行。返回空串表示通过。
-func checkRemotePath(flag, what, p string) string {
-	trimmed := strings.TrimSpace(p)
-	if !strings.HasPrefix(trimmed, "/") {
-		return fmt.Sprintf("%s 参数指定的%s必须是绝对路径，当前值：%s\n提示：服务器上的路径要从 / 写起，例如 /opt/app/", flag, what, trimmed)
-	}
-	if strings.ContainsAny(trimmed, "\r\n") {
-		return fmt.Sprintf("%s 参数指定的%s里有回车或换行：%s\n提示：一条命令只写一个路径，检查复制时是不是把换行带进来了", flag, what, trimmed)
-	}
-	return ""
+	return nil
 }
 
 // dangerRefusal 危险命令：禁止档直接拒，提醒档问人，答否算当场喊停。

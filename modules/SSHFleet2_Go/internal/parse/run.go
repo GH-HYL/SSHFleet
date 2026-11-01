@@ -36,14 +36,17 @@ func Run(argv []string, version string) (contract.Text, *contract.Plan, *contrac
 		name = filepath.Base(argv[0])
 	}
 
+	// 命令行只扫一遍：帮助、取值、认不出的选项一起收下（16 号单 H9）。
+	s := scan(argv)
+
 	// 帮助：-h、--help、一个参数都不给。老版在第 3 步就返回，后面一概不做。
-	if helpRequested(argv) {
+	if s.help {
 		rev, tm, dirty := buildInfo()
 		screen := message.HelpScreen(name, versionString(version, rev, tm, dirty), console.Width(), helpEntries(cfg.Execution))
 		return screen, nil, nil
 	}
 
-	plan, fail := buildPlan(cfg, argv)
+	plan, fail := buildPlan(cfg, s)
 	if fail != nil {
 		return contract.Text{}, nil, fail
 	}
@@ -58,54 +61,4 @@ func cannotStart(where, head, body string) *contract.CannotStart {
 		full = head + "：" + full
 	}
 	return &contract.CannotStart{Where: where, Say: message.Fatal(where, full, log.ToolPath()), Body: full}
-}
-
-// helpRequested 认「要不要看帮助」。认法照 pflag 的语义收窄到本工具：从左往右扫，
-// 带值选项吃掉下一个 token（所以 `-c "-h"` 不会被当成要看帮助）；不认识的选项当场停
-// （老版那时就报错，轮不到帮助）；`--` 之后不再有选项；位置参数不拦。
-func helpRequested(argv []string) bool {
-	if len(argv) <= 1 {
-		return true // 一个参数都不给：老版打帮助后以 0 退出
-	}
-	for i := 1; i < len(argv); i++ {
-		tok := argv[i]
-		switch {
-		case tok == "--":
-			return false
-		case tok == "-h" || tok == "--help":
-			return true
-		case !strings.HasPrefix(tok, "-") || tok == "-":
-			continue // 位置参数，不拦
-		}
-		switch kindOf(tok) {
-		case optTakesValue:
-			i++ // 下一个 token 是它的值，不是选项
-		case optKnown:
-			// 继续扫
-		default:
-			return false // 不认识的选项：老版当场报错
-		}
-	}
-	return false
-}
-
-// optKind 一个 token 在选项表里的身份。
-type optKind int
-
-const (
-	optUnknown    optKind = iota // 不在表里
-	optKnown                     // 开关，不带值
-	optTakesValue                // 带值，吃下一个 token
-)
-
-func kindOf(tok string) optKind {
-	for _, o := range options {
-		if tok == o.short || tok == o.long {
-			if o.takesValue {
-				return optTakesValue
-			}
-			return optKnown
-		}
-	}
-	return optUnknown
 }

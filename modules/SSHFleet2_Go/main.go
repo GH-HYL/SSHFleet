@@ -28,8 +28,7 @@ func main() {
 	// 步骤 2：建工具日志。建不起来就是「起不来」，此时连日志都没有，那屏不带日志行。
 	lg, err := log.Init(contract.HistoryDir, contract.ToolLogName)
 	if err != nil {
-		say := message.Fatal("log", "初始化工具日志失败："+err.Error()+"\n请检查程序所在目录是否可写，然后重试", "")
-		console.Print(say)
+		console.Print(message.LogInitFailed(err))
 		console.Restore()
 		os.Exit(exitcode.Code(exitcode.CannotStart))
 	}

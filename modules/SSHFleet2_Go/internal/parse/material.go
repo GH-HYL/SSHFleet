@@ -24,28 +24,39 @@ import (
 const materialHead = "选项/参数合规性检查未通过"
 
 // checkMaterial 检查脚本、上传源、下载目录、清单文件。返回非空即「起不来」。
+//
+// 每一条只交「哪件事、哪段原文、系统说了什么」，三段话的行与标签由 `message` 加
+// （ADR-0028 决定一、五：标签只许在构造点）。
 func checkMaterial(p *contract.Plan, given map[string]bool, vals map[string]string) *contract.CannotStart {
 	// -s：脚本文件读得到、非空、非二进制、UTF-8；正文只读一次，危险检测与下发共用。
 	if script := vals["--script"]; script != "" {
 		info, err := os.Stat(script)
 		if err == nil && info.IsDir() {
-			return materialFail(fmt.Sprintf("-s 参数指定的路径是目录，不是脚本文件：%s\n提示：请指向一个脚本文件", script))
+			return materialFail(message.ProblemHint(
+				fmt.Sprintf("-s 参数指定的路径是目录，不是脚本文件：%s", script),
+				"请指向一个脚本文件"))
 		}
 		data, rerr := os.ReadFile(script)
 		if rerr != nil {
 			return materialFail(message.Problem(
 				fmt.Sprintf("-s 参数指定的脚本文件读不到：%s", script),
-				rerr.Error(),
+				message.SystemReason(rerr),
 				"请检查文件是否存在、当前用户有没有读权限"))
 		}
 		if len(data) == 0 {
-			return materialFail(fmt.Sprintf("-s 参数指定的脚本文件为空：%s\n提示：请先写入内容再执行", script))
+			return materialFail(message.ProblemHint(
+				fmt.Sprintf("-s 参数指定的脚本文件为空：%s", script),
+				"请先写入内容再执行"))
 		}
 		if bytes.IndexByte(data, 0) >= 0 {
-			return materialFail(fmt.Sprintf("-s 参数指定的脚本是二进制文件：%s\n提示：请换一个文本格式的脚本", script))
+			return materialFail(message.ProblemHint(
+				fmt.Sprintf("-s 参数指定的脚本是二进制文件：%s", script),
+				"请换一个文本格式的脚本"))
 		}
 		if !utf8ValidExceptBOM(data) {
-			return materialFail(fmt.Sprintf("-s 参数指定的脚本不是 UTF-8 编码：%s\n提示：请把脚本转成 UTF-8 后再执行", script))
+			return materialFail(message.ProblemHint(
+				fmt.Sprintf("-s 参数指定的脚本不是 UTF-8 编码：%s", script),
+				"请把脚本转成 UTF-8 后再执行"))
 		}
 		if p.Task.Script != nil {
 			p.Task.Script.Body = string(data)
@@ -58,14 +69,18 @@ func checkMaterial(p *contract.Plan, given map[string]bool, vals map[string]stri
 		if err != nil {
 			return materialFail(message.Problem(
 				fmt.Sprintf("-u 参数指定的上传文件或目录读不到：%s", upload),
-				err.Error(),
+				message.SystemReason(err),
 				"-u 后面要写本机上真实存在的文件或目录"))
 		}
 		if info.Mode()&os.ModeSymlink != 0 {
-			return materialFail(fmt.Sprintf("-u 参数指定的上传文件或目录是符号链接，不能上传：%s\n提示：请直接写它指向的真实文件或目录", upload))
+			return materialFail(message.ProblemHint(
+				fmt.Sprintf("-u 参数指定的上传文件或目录是符号链接，不能上传：%s", upload),
+				"请直接写它指向的真实文件或目录"))
 		}
 		if info.IsDir() && !dirHasRealFile(upload) {
-			return materialFail(fmt.Sprintf("-u 参数指定的上传目录及其所有子目录中都没有真正的文件（只有符号链接）：%s\n提示：请改上传真实文件所在的目录", upload))
+			return materialFail(message.ProblemHint(
+				fmt.Sprintf("-u 参数指定的上传目录及其所有子目录中都没有真正的文件（只有符号链接）：%s", upload),
+				"请改上传真实文件所在的目录"))
 		}
 	}
 
@@ -75,11 +90,13 @@ func checkMaterial(p *contract.Plan, given map[string]bool, vals map[string]stri
 		if err != nil {
 			return materialFail(message.Problem(
 				fmt.Sprintf("下载模式：-p 参数指定的本地目录读不到：%s", vals["--path"]),
-				err.Error(),
+				message.SystemReason(err),
 				"这个目录要在本机上先建好，工具不会替你建"))
 		}
 		if !info.IsDir() {
-			return materialFail(fmt.Sprintf("下载模式：-p 参数指定的本地路径不是目录：%s\n提示：这个目录要在本机上先建好，工具不会替你建", vals["--path"]))
+			return materialFail(message.ProblemHint(
+				fmt.Sprintf("下载模式：-p 参数指定的本地路径不是目录：%s", vals["--path"]),
+				"这个目录要在本机上先建好，工具不会替你建"))
 		}
 	}
 
@@ -90,14 +107,18 @@ func checkMaterial(p *contract.Plan, given map[string]bool, vals map[string]stri
 			if rerr != nil {
 				return materialFail(message.Problem(
 					fmt.Sprintf("-f 参数指定的 CSV 文件读不到：%s", csv),
-					rerr.Error(),
+					message.SystemReason(rerr),
 					"请检查文件是否存在、当前用户有没有读权限"))
 			}
 			if len(data) == 0 {
-				return materialFail(fmt.Sprintf("-f 参数指定的 CSV 文件为空：%s\n提示：一行写一台机器，只写 IP 就能跑（端口、用户名、密码走配置）", csv))
+				return materialFail(message.ProblemHint(
+					fmt.Sprintf("-f 参数指定的 CSV 文件为空：%s", csv),
+					"一行写一台机器，只写 IP 就能跑（端口、用户名、密码走配置）"))
 			}
 			if bytes.IndexByte(data, 0) >= 0 {
-				return materialFail(fmt.Sprintf("-f 参数指定的清单是二进制文件：%s\n提示：清单要是文本文件（CSV）", csv))
+				return materialFail(message.ProblemHint(
+					fmt.Sprintf("-f 参数指定的清单是二进制文件：%s", csv),
+					"清单要是文本文件（CSV）"))
 			}
 		}
 	}
