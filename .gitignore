@@ -70,6 +70,15 @@ docs/越界记录/
 tools/skill-manager/__pycache__/
 tools/release/__pycache__/
 
+# ---- 重构期临时追踪（2026-11-02 开发者点名留，用完即删）----
+# 这是**专门给「新工程建站」这次重构用的临时追踪文件**，不是工程内容、也不是要交付的东西：
+# 2026-11-02 换到 Ubuntu 开发环境，build/ 下沙盒不进版本控制、换机器就没了，而这两样
+# 重建一次不划算——A/B 参数矩阵（阶段 09 逐字比对还要用）、终端宽度区间表生成器
+# （width.go 的注释指着它）。**重构完成（阶段 10 切换之后）连同本段一起删掉**，
+# 文件内的说明见 tools/refactor/README.md。
+!tools/refactor/
+!tools/refactor/**
+
 # 个人技能：工作区 skills/person 是技能实体（~/.workbuddy/skills/person 链过来），随仓库跟踪。
 # engineering / productivity 不在其内——它们是 mattpocock/skills 的上游副本，update_skills.py
 # 每次整目录换掉，进版本库只会天天冲突；要复现就重跑更新脚本。逐层放行，理由同上一条。
