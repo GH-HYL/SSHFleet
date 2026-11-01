@@ -6,7 +6,7 @@
 
 **Blocked by**：无，可立即开工。
 
-**Status**：ready-for-agent
+**Status**：done
 
 ## 判据
 
@@ -20,11 +20,11 @@
 
 ## 验收
 
-- [ ] `go test ./...` 绿；`gofmt -l .` 干净
-- [ ] `modules/SSHFleet2_Go/config/` 下六个文件在，`git status` 里能看到它们被纳入版本控制（`.gitignore` 没有把它们吞掉）
-- [ ] 逐字节对比：六份文件与老工程对应文件 `diff` 为空（一次性的，结果贴 `## Comments`）
-- [ ] 对账测试：把新工程任一份里的一个键改名，测试立刻红并指出文件名与键名；改回来后绿
-- [ ] 对账测试：临时删掉一份文件，测试红并指出缺哪份
+- [x] `go test ./...` 绿；`gofmt -l .` 干净
+- [x] `modules/SSHFleet2_Go/config/` 下六个文件在，`git status` 里能看到它们被纳入版本控制（`.gitignore` 没有把它们吞掉）
+- [x] 逐字节对比：六份文件与老工程对应文件 `diff` 为空（一次性的，结果贴 `## Comments`）
+- [x] 对账测试：把新工程任一份里的一个键改名，测试立刻红并指出文件名与键名；改回来后绿
+- [x] 对账测试：临时删掉一份文件，测试红并指出缺哪份
 
 ## 不在这单
 
@@ -33,3 +33,11 @@
 ## 做完之后
 
 08 号单要用这份配置跑通 `-h`；阶段 03 在它上面长校验。
+
+## Comments
+
+### 2026-11-01：交付
+
+- 六份文件从老工程复制，`cmp` 逐字节相同（`SSHFleet.conf`、`SSHFleet-for-linux.conf`、`SSHFleet-for-windows.conf`、`keywords_dangerous.conf`、`keywords_error.conf`、`keywords_passwd.conf`）；`.gitignore` 没有吞它们，已纳入版本控制。
+- 对账测试绿：文件清单相等 + 每份的内容集合相等；改动一个键名即红并指出文件与键。
+- 一处要交代的：`keywords_dangerous.conf` 不是键值形态（一行一条正则），对账对它用**行形态兜底**——非空、非注释的行整行参与比较。判据仍是「这份料一个字没少」，不是它的语法。

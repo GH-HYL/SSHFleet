@@ -35,7 +35,7 @@ var contractAndCrosscut = []string{
 	"console", "log", "ask", "archive", "exitcode", "credential", "message", "mask",
 }
 
-// crosscutDeps 是横切包允许的那一条：只许契约。console 与 archive 连契约都用不到。
+// crosscutDeps 是横切包允许的那一条：只许契约。
 var crosscutDeps = []string{"contract"}
 
 // tipDeps 是塔尖的整张清单：五站、八个横切包、契约、密钥管理包。
@@ -58,8 +58,9 @@ var rules = []Rule{
 	// 契约
 	{"contract", KindContract, nil},
 
-	// 八个横切
-	{"console", KindCrosscut, nil},
+	// 八个横切。console 那行带契约：Print 收的是 contract.Text（ADR-0032 第四条权限表
+	// 本就许它依赖契约；Text 落进契约是 2026-11-01 的事，见建站 02 的规格 Comments）。
+	{"console", KindCrosscut, crosscutDeps},
 	{"log", KindCrosscut, crosscutDeps},
 	{"ask", KindCrosscut, []string{"contract", "console", "message"}}, // 叶子之间唯一的边
 	{"archive", KindCrosscut, nil},

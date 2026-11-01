@@ -60,6 +60,11 @@ var redline = []RedLineEntry{
 
 	// 真工程整跑
 	{"TestProjectIsClean", []string{"CheckAll", "DefaultFailures", "Load", "LoadLedger", "RedLine", "Report", "Rules", "Target"}},
+
+	// 02 阶段：帮助与版本——三种接缝上长出来的头三条（新增不算改，ADR-0037 决定五）
+	{"TestRedlineTipRunsHelp", []string{}},
+	{"TestRedlineParseSaysOrFail", []string{"parse.Run"}},
+	{"TestRedlineMessageRendersHelp", []string{"Kind", "message.EntryOption", "message.HelpEntry", "message.HelpScreen"}},
 }
 
 // RedLine 返回名单的一份拷贝。检查读它；改返回值影响不到名单本身。

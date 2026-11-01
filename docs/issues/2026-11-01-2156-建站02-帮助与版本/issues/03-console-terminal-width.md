@@ -6,7 +6,7 @@
 
 **Blocked by**：无，可立即开工。
 
-**Status**：ready-for-agent
+**Status**：done
 
 ## 判据
 
@@ -30,3 +30,11 @@
 ## 做完之后
 
 08 号单接线时把它作为替身的一格递给解析站。
+
+## Comments
+
+### 2026-11-01：交付（留一条待真机）
+
+- 管道场景实测 0（测试里用真管道，不 mock）；`GOOS=windows` 与 `GOOS=linux` 交叉编译都过；`go.mod` 无 `require`。
+- Windows 走 `kernel32` 的 `GetConsoleScreenBufferInfo`（标准库惰性加载），Linux 走 `ioctl TIOCGWINSZ`，都不引 `x/sys`；其余平台直接 0。
+- **待真机核对的一条**：真终端下宽度大于 0。本环境（无人交互终端）跑不了，跳过不算绿。核对办法：在真终端里跑 `go run . -h`（说明列应按终端宽度折行）或 `go run . -h | more` 之外直接看屏，列数应与窗口一致。**阶段 02 在这一条上未闭环，等真机点头。**
