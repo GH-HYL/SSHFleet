@@ -4,7 +4,7 @@
 
 **Blocked by**：02（`console`）、10（`message` 摆问题用的那一屏）。
 
-**Status**：ready-for-agent
+**Status**：done
 
 ## 判据
 
@@ -32,3 +32,9 @@
 ## 做完之后
 
 导出面与三种返回写进 `## Comments`；13 号单接提醒档。
+
+## Comments
+
+### 2026-11-01：交付
+
+按本单判据落地，结论并入阶段议题 `spec.md` 的「阶段 03 交付」一节（同一批改动、同一份证据）。

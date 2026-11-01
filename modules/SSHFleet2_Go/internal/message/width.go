@@ -248,3 +248,7 @@ func trimRightSpace(s string) string {
 	}
 	return s
 }
+
+// DisplayWidth 报一段文本的终端显示宽度。导出给「判据表里 example／reason 不许超宽」
+// 那一条校验用——宽度的算法只住这里一处。
+func DisplayWidth(s string) int { return displayWidth(s) }

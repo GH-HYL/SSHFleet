@@ -1,5 +1,6 @@
-// 塔尖：只做三件——分叉走哪条路、把信封交给下一站、给退出码。
+// 塔尖：只做四件——把控制台摆正、建日志、分叉走哪条路、给退出码。
 //
+// 它不判参数、不读配置、不拼句子：argv 与号递给解析站，纸递给闸门，话交给终端。
 // 判据见 ADR-0032 第五条。
 package main
 
@@ -7,20 +8,64 @@ import (
 	"os"
 
 	"sshfleet2/internal/console"
+	"sshfleet2/internal/contract"
+	"sshfleet2/internal/exitcode"
+	"sshfleet2/internal/gate"
+	"sshfleet2/internal/log"
+	"sshfleet2/internal/message"
 	"sshfleet2/internal/parse"
 )
 
 // appVersion 是版本号的唯一出处：发布脚本按这一行改号（release.py 认这个字面量）。
 // 初值取老工程当前发布号；两套并存期间脚本只改老工程那一行，这里不许自己编号。
-// 日常改代码不动它——只有 tools/release/release.py 在发布时改。
 const appVersion = "1.0.0"
 
 func main() {
-	// 塔尖不拼句子、不判「该不该看帮助」：argv 与号递给解析站，话交终端，按结局给退出码。
-	// 退出码 1 是过渡值（起不来），阶段 03 换成退出码表的查表结果。
-	say, fail := parse.Run(os.Args, appVersion)
-	console.Print(say)
-	if fail != nil {
-		os.Exit(1)
+	// 步骤 0：适配控制台。Windows 出厂控制台是 936 码页，我们写出去的是 UTF-8 字节。
+	// 退出前一定要还回去——os.Exit 不跑 defer，所以每一条退出路径自己收尾。
+	console.Prepare()
+
+	// 步骤 2：建工具日志。建不起来就是「起不来」，此时连日志都没有，那屏不带日志行。
+	lg, err := log.Init(contract.HistoryDir, contract.ToolLogName)
+	if err != nil {
+		say := message.Fatal("log", "初始化工具日志失败："+err.Error()+"\n请检查程序所在目录是否可写，然后重试", "")
+		console.Print(say)
+		console.Restore()
+		os.Exit(exitcode.Code(exitcode.CannotStart))
+	}
+	lg.Startup()
+
+	// 步骤 3 起：解析站给结局，闸门判放不放行。
+	say, plan, fail := parse.Run(os.Args, appVersion)
+	switch {
+	case fail != nil:
+		lg.Fatal(fail.Where, fail.Body)
+		console.Print(fail.Say)
+		lg.Close()
+		console.Restore()
+		os.Exit(exitcode.Code(exitcode.CannotStart))
+
+	case plan != nil:
+		refusal, note := gate.Run(plan)
+		if note.S != "" {
+			lg.Warn(note.S) // 非交互放行危险命令的留痕：闸门不持有日志，交上来由这里落盘
+		}
+		if refusal != nil {
+			console.Print(refusal.Say)
+			lg.Close()
+			console.Restore()
+			os.Exit(exitcode.Code(exitcode.Refused))
+		}
+		// 过渡形态：放行之后没有下一站，随阶段 04 接上执行站。
+		console.Print(message.NotWiredLine())
+		lg.Close()
+		console.Restore()
+		os.Exit(exitcode.Code(exitcode.Refused))
+
+	default:
+		console.Print(say)
+		lg.Close()
+		console.Restore()
+		os.Exit(exitcode.Code(exitcode.Success))
 	}
 }

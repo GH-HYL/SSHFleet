@@ -34,8 +34,9 @@ func contentSet(t *testing.T, path string) []string {
 	if err != nil {
 		t.Fatalf("读 %s 失败：%v", path, err)
 	}
-	raw, perr := parseRawConfig(data)
+	lines, perr := tokenize(data)
 	if perr == nil {
+		raw := rawView(lines)
 		var out []string
 		for section, kv := range raw {
 			out = append(out, section)

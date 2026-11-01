@@ -10,8 +10,8 @@ import (
 // 配置不在时是起不来；两种情况都要有话。配置在不在靠切换工作目录，不靠注入。
 
 func TestRedlineParseSaysOrFail(t *testing.T) {
-	t.Chdir("../..") // 配置在：随包那份
-	say, fail := parse.Run([]string{"sshfleet2", "-h"}, "9.9.9")
+	t.Chdir(writeRedlineConfig(t)) // 配置在：按本机形态造一份（假件只住测试）
+	say, _, fail := parse.Run([]string{"sshfleet2", "-h"}, "9.9.9")
 	if fail != nil {
 		t.Errorf("配置在时不应是起不来")
 	}
@@ -20,11 +20,11 @@ func TestRedlineParseSaysOrFail(t *testing.T) {
 	}
 
 	t.Chdir(t.TempDir()) // 配置不在
-	blank, fail := parse.Run([]string{"sshfleet2", "-h"}, "9.9.9")
+	_, _, fail = parse.Run([]string{"sshfleet2", "-h"}, "9.9.9")
 	if fail == nil {
 		t.Errorf("配置不在应是起不来")
 	}
-	if blank.S == "" {
+	if fail != nil && fail.Say.S == "" {
 		t.Errorf("起不来也要有一句话")
 	}
 }
