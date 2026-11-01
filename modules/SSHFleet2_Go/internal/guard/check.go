@@ -1,11 +1,18 @@
 package guard
 
+// 两个失败类型的家。名字只在这里写一次：契约包那行问规则表也能问到，但闸门是五个站之一，
+// 规则表的「类」分不出哪一个是它，只能点名。
+const (
+	cannotStartHome = "contract" // 「起不来」住契约包（ADR-0034 决定三）
+	refusalHome     = "gate"     // 「拒绝」只住闸门
+)
+
 // DefaultFailures 是第五类要判的两处（ADR-0034 决定三）：
 // 起不来谁都能造、闸门里不许造；拒绝只许闸门造。
 func DefaultFailures() []FailureSite {
 	return []FailureSite{
-		{Pkg: "contract", Type: "CannotStart", NeverIn: []string{"gate"}},
-		{Pkg: "gate", Type: "Refusal", OnlyIn: []string{"gate"}},
+		{Pkg: cannotStartHome, Type: "CannotStart", NeverIn: []string{refusalHome}},
+		{Pkg: refusalHome, Type: "Refusal", OnlyIn: []string{refusalHome}},
 	}
 }
 
@@ -32,13 +39,10 @@ func CheckAll(m *Module) []Violation {
 
 	kept, stale := Apply(vs, m.Ledger)
 	for _, e := range stale {
-		kept = append(kept, Violation{
-			Class: e.Rule,
-			File:  e.Where,
-			What:  "台账这一行已经盖不住任何违规了",
-			Why:   "放行是让一条已知的越界暂时过去；那一处改好之后台账还留着，条目就只会越攒越多，翻的人也就不翻了",
-			Fix:   "把这一行删掉——删它同样要开发者点头",
-		})
+		kept = append(kept, violationAt(e.Rule, e.Where,
+			"台账这一行已经盖不住任何违规了",
+			"放行是让一条已知的越界暂时过去；那一处改好之后台账还留着，条目就只会越攒越多，翻的人也就不翻了",
+			"把这一行删掉——删它同样要开发者点头"))
 	}
 	return kept
 }

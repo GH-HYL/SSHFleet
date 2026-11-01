@@ -22,7 +22,7 @@ func CheckTerminal(m *Module) []Violation {
 			continue
 		}
 		for _, f := range p.Files {
-			if f.IsTest {
+			if !scans(ClassTerminal, f) {
 				continue
 			}
 			ast.Inspect(f.AST, func(n ast.Node) bool {

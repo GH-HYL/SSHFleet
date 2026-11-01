@@ -31,7 +31,7 @@ func CheckDeps(m *Module) []Violation {
 
 	for _, p := range m.Packages {
 		for _, f := range p.Files {
-			if f.IsTest {
+			if !scans(ClassDeps, f) {
 				continue
 			}
 			out = append(out, checkImports(m, p, f)...)
@@ -47,13 +47,10 @@ func reconcile(m *Module) []Violation {
 	present := map[string]bool{}
 	for _, p := range m.Packages {
 		if p.Rule == nil {
-			out = append(out, Violation{
-				Class: ClassDeps,
-				File:  p.Path,
-				What:  fmt.Sprintf("包 %s 不在规则表里（规则表十七行，没有它）", p.Path),
-				Why:   "包清单以规则表为准：多一个包而表里没有，它属于哪一类、能依赖谁就没人说得清",
-				Fix:   "要么删掉这个包，要么先改规则表并说清它属于哪一类——规则表是约束类，改它要开发者点头",
-			})
+			out = append(out, violationAt(ClassDeps, p.Path,
+				fmt.Sprintf("包 %s 不在规则表里（规则表十七行，没有它）", p.Path),
+				"包清单以规则表为准：多一个包而表里没有，它属于哪一类、能依赖谁就没人说得清",
+				"要么删掉这个包，要么先改规则表并说清它属于哪一类——规则表是约束类，改它要开发者点头"))
 			continue
 		}
 		present[p.Rule.Package] = true
@@ -63,13 +60,10 @@ func reconcile(m *Module) []Violation {
 		if present[r.Package] {
 			continue
 		}
-		out = append(out, Violation{
-			Class: ClassDeps,
-			File:  m.ModulePath,
-			What:  fmt.Sprintf("规则表里的 %s 在工程里不存在", r.Package),
-			Why:   "表里少一个包，等于有一条边界没有对应的代码：要么包被悄悄删了，要么路径改了而表没跟上",
-			Fix:   "把包补回来；确要少一个包，先改规则表并说清为什么",
-		})
+		out = append(out, violationAt(ClassDeps, m.ModulePath,
+			fmt.Sprintf("规则表里的 %s 在工程里不存在", r.Package),
+			"表里少一个包，等于有一条边界没有对应的代码：要么包被悄悄删了，要么路径改了而表没跟上",
+			"把包补回来；确要少一个包，先改规则表并说清为什么"))
 	}
 	return out
 }
@@ -142,7 +136,7 @@ func checkTipSymbols(m *Module) []Violation {
 	}
 	var out []Violation
 	for _, f := range tip.Files {
-		if f.IsTest {
+		if !scans(ClassDeps, f) {
 			continue
 		}
 		ast.Inspect(f.AST, func(n ast.Node) bool {

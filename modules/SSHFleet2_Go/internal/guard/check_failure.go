@@ -36,23 +36,17 @@ func CheckFailure(m *Module) []Violation {
 	for _, site := range m.Failures {
 		decl := m.Pkg(site.Pkg)
 		if decl == nil {
-			out = append(out, Violation{
-				Class: ClassFailure,
-				File:  m.ModulePath,
-				What:  fmt.Sprintf("约定的 %s 类型所在的包 %s 不在了", site.Type, site.Pkg),
-				Why:   "第五类拿这两个类型当判据；包没了，这一条就没有可判对象",
-				Fix:   "把包和类型补回来；确要换落点，先改 ADR-0034 决定三（红线，单独点头）",
-			})
+			out = append(out, violationAt(ClassFailure, m.ModulePath,
+				fmt.Sprintf("约定的 %s 类型所在的包 %s 不在了", site.Type, site.Pkg),
+				"第五类拿这两个类型当判据；包没了，这一条就没有可判对象",
+				"把包和类型补回来；确要换落点，先改 ADR-0034 决定三（红线，单独点头）"))
 			continue
 		}
 		if !hasType(decl, site.Type) {
-			out = append(out, Violation{
-				Class: ClassFailure,
-				File:  decl.Path,
-				What:  fmt.Sprintf("约定的失败类型 %s.%s 不见了", site.Pkg, site.Type),
-				Why:   "没有这个类型，第五类就判不出「谁在哪儿造它」——删掉它等于让这条检查闭嘴",
-				Fix:   "把类型补回 " + site.Pkg + "；确要换名字，先改 ADR-0034 决定三（红线，单独点头）",
-			})
+			out = append(out, violationAt(ClassFailure, decl.Path,
+				fmt.Sprintf("约定的失败类型 %s.%s 不见了", site.Pkg, site.Type),
+				"没有这个类型，第五类就判不出「谁在哪儿造它」——删掉它等于让这条检查闭嘴",
+				"把类型补回 "+site.Pkg+"；确要换名字，先改 ADR-0034 决定三（红线，单独点头）"))
 			continue
 		}
 		out = append(out, constructionSites(m, decl, site)...)
@@ -64,7 +58,7 @@ func constructionSites(m *Module, decl *Package, site FailureSite) []Violation {
 	var out []Violation
 	for _, p := range m.Packages {
 		for _, f := range p.Files {
-			if f.IsTest {
+			if !scans(ClassFailure, f) {
 				continue
 			}
 			ast.Inspect(f.AST, func(n ast.Node) bool {
@@ -116,19 +110,6 @@ func isTypeOf(expr ast.Expr, f *SourceFile, decl *Package, name string) bool {
 
 // hasType 判一个包里有没有这个类型声明。
 func hasType(p *Package, name string) bool {
-	for _, f := range p.Files {
-		for _, decl := range f.AST.Decls {
-			gen, ok := decl.(*ast.GenDecl)
-			if !ok {
-				continue
-			}
-			for _, spec := range gen.Specs {
-				ts, ok := spec.(*ast.TypeSpec)
-				if ok && ts.Name.Name == name {
-					return true
-				}
-			}
-		}
-	}
-	return false
+	_, _, ok := TypeSpec(p, name)
+	return ok
 }
