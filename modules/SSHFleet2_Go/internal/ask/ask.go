@@ -32,10 +32,12 @@ const (
 //
 // assumeYes（--yes）时不打屏、不读输入，直接交回「按缺省放行」这个事实；留痕由调用方写。
 func Ask(screen contract.Text, assumeYes bool, defaultYes bool) Answer {
+	// 屏照打：--yes 只替人回答了「y」，不该连「命中了危险规则」这件事也抹掉。
+	console.Print(screen)
 	if assumeYes {
 		return Yes
 	}
-	console.Print(screen)
+	console.Print(message.ConfirmPrompt())
 
 	line, ok := readLine()
 	if !ok {

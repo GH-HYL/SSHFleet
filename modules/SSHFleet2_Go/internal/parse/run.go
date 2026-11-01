@@ -52,9 +52,10 @@ func Run(argv []string, version string) (contract.Text, *contract.Plan, *contrac
 
 // cannotStart 排一屏「起不来」：环节、外壳句与原因照老版那一处。
 func cannotStart(where, head, body string) *contract.CannotStart {
-	full := head
-	if body != "" {
-		full = head + "：" + strings.TrimRight(body, "\r\n")
+	// head 为空表示老版那一处没有外壳句（判据表坏掉的三处就是这样），此时不补冒号。
+	full := strings.TrimRight(body, "\r\n")
+	if head != "" {
+		full = head + "：" + full
 	}
 	return &contract.CannotStart{Where: where, Say: message.Fatal(where, full, log.ToolPath()), Body: full}
 }
