@@ -340,6 +340,8 @@ GitHub 与 Gitee 的 `master` 都在 `5ddcdca`。
 
 ### 这一步做了什么
 
+**提交**：`d6cddbd`（GitHub 与 Gitee 的 `master` 都在这一笔上）。
+
 逐条落点与验收全在 `docs/issues/2026-11-01-2244-建站03-起不来与拒绝/issues/16-audit-mustfix.md` 的 `## Comments`，这里只留索引：
 
 - **谁拼话**：闸门的 18 处句子搬进 `internal/message/refuse.go`（参数是事实），闸门本体只剩四段判断；解析站 23 处裸拼改成 `Problem`／`ProblemHint`／`ProblemOrigin`；塔尖那一屏收进 `message.LogInitFailed`。判据是 `message/labels_test.go`（塞探针验过会红）。
