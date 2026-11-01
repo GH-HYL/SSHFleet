@@ -1,6 +1,11 @@
 package message
 
-import "sshfleet2/internal/contract"
+import (
+	"strconv"
+	"strings"
+
+	"sshfleet2/internal/contract"
+)
 
 // 起不来与拒绝那几屏：版式照老版 main.go 的 fatal 与危险检测那几处，一个字不改。
 //
@@ -67,16 +72,19 @@ func ConfirmPrompt() contract.Text {
 	return contract.Text{S: "\n" + ansiYellow + "确定继续？" + ansiReset + " " + ansiRed + "[y/N]" + ansiReset + ": "}
 }
 
+// notWiredHead 是过渡形态那一类话的开头：本阶段还没接上的用法都这么起头，随阶段 04／08 一起消失。
+const notWiredHead = "这条用法还没接上："
+
 // NotWiredLine 是过渡形态：流水线还没接上，放行之后无处可去。
 // 随阶段 04 消失，不许写进任何手册或帮助。
 func NotWiredLine() contract.Text {
-	return contract.Text{S: "这条用法还没接上：流水线随阶段 04 接线，本阶段只到闸门\n"}
+	return contract.Text{S: notWiredHead + "流水线随阶段 04 接线，本阶段只到闸门\n"}
 }
 
 // NotWiredKeyTools 是过渡形态：三条密钥命令随阶段 08 接线。
 // 随阶段 08 消失，不许写进任何手册或帮助。
 func NotWiredKeyTools() string {
-	return "这条用法还没接上：三条密钥命令随阶段 08 接线"
+	return notWiredHead + "三条密钥命令随阶段 08 接线"
 }
 
 // LogInitFailed 排「工具日志建不起来」那一屏。此时日志还没建起来，屏上不带「日志：」行。
@@ -88,13 +96,24 @@ func LogInitFailed(err error) contract.Text {
 
 // TraceDanger 是一条留给工具日志的留痕：非交互（--yes）跳过危险命令确认时写它。
 // 它是**记要给日志看的**，不是给使用者的句子——所以不加上色，也不走屏幕。
+//
+// 形态逐字照老版 `dangercheck.Match.Note()`：级别用英文枚举、带来源行、示例与说明不论空否都留着。
 func TraceDanger(m contract.DangerMatch) contract.Text {
-	note := m.RuleName + "（" + riskLevelText(m.Level) + "）：" + m.Content
-	if m.Example != "" {
-		note += "；示例：" + m.Example
-	}
-	if m.Reason != "" {
-		note += "；说明：" + m.Reason
-	}
+	note := m.RuleName + "（" + m.Level + "，来源行 " + linesText(m.Lines) + "）：" + m.Content +
+		"；示例：" + m.Example + "；说明：" + m.Reason
 	return contract.Text{S: "非交互模式放行危险命令：" + note}
+}
+
+// TraceForbidden 是禁止档退场时那一行日志留痕，逐字照老版 `main`：只记原文。
+func TraceForbidden(content string) contract.Text {
+	return contract.Text{S: "命中禁止命令，已退出：" + content}
+}
+
+// linesText 把行号排成 `3, 7, 12`（日志用；框里那行要截到 46 列，另走 formatLines）。
+func linesText(lines []int) string {
+	parts := make([]string, 0, len(lines))
+	for _, n := range lines {
+		parts = append(parts, strconv.Itoa(n))
+	}
+	return strings.Join(parts, ", ")
 }

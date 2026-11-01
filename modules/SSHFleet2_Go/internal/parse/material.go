@@ -6,7 +6,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"strings"
 	"unicode/utf8"
 
 	"sshfleet2/internal/contract"
@@ -19,9 +18,6 @@ import (
 // 对不上的是这次给的东西（参数搭配、取值、危险命令）→ 「拒绝」，由闸门造。
 //
 // 外壳句与话术逐字照老版：这几条在老版里都经「选项/参数合规性检查未通过」那层壳打出。
-
-// materialHead 是老版那层外壳句。
-const materialHead = "选项/参数合规性检查未通过"
 
 // checkMaterial 检查脚本、上传源、下载目录、清单文件。返回非空即「起不来」。
 //
@@ -128,9 +124,9 @@ func checkMaterial(p *contract.Plan, given map[string]bool, vals map[string]stri
 	return nil
 }
 
-// materialFail 包一层老版那句外壳，再按「起不来」排屏。
+// materialFail 套上老版那句外壳，再按「起不来」排屏。外壳句住在 `message`，不在这里抄一份。
 func materialFail(body string) *contract.CannotStart {
-	return cannotStart("cli", materialHead, body)
+	return cannotStart("cli", message.HeadCompliance, body)
 }
 
 // dirHasRealFile 目录树里有没有真实文件（不是符号链接）。
@@ -154,6 +150,3 @@ func utf8ValidExceptBOM(data []byte) bool {
 	data = bytes.TrimPrefix(data, []byte{0xEF, 0xBB, 0xBF})
 	return utf8.Valid(data)
 }
-
-// trimCRLF 去掉尾部换行，拼句时不留空行。
-func trimCRLF(s string) string { return strings.TrimRight(s, "\r\n") }

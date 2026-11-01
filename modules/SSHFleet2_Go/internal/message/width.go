@@ -1,6 +1,9 @@
 package message
 
-import "unicode"
+import (
+	"strings"
+	"unicode"
+)
 
 // 终端显示宽度与折行：全工具单一实现（ADR-0032 第四条——量、截、折并进拼句包，字只在一处成形）。
 //
@@ -252,3 +255,12 @@ func trimRightSpace(s string) string {
 // DisplayWidth 报一段文本的终端显示宽度。导出给「判据表里 example／reason 不许超宽」
 // 那一条校验用——宽度的算法只住这里一处。
 func DisplayWidth(s string) int { return displayWidth(s) }
+
+// padTo 按显示宽度把一段文本补空格到 w 列。框线每行等宽与帮助各列对齐都靠它，
+// 所以补法只写这一份。
+func padTo(s string, w int) string {
+	if d := displayWidth(s); d < w {
+		return s + strings.Repeat(" ", w-d)
+	}
+	return s
+}

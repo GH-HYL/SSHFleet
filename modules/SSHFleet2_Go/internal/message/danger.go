@@ -49,12 +49,6 @@ func DangerBox(report contract.DangerReport, forbidden bool) contract.Text {
 		color = ansiYellow
 	}
 
-	pad := func(text string) string {
-		if w := displayWidth(text); w < inner {
-			return text + strings.Repeat(" ", inner-w)
-		}
-		return text
-	}
 	center := func(text string) string {
 		remain := inner - displayWidth(text)
 		if remain <= 0 {
@@ -78,13 +72,13 @@ func DangerBox(report contract.DangerReport, forbidden bool) contract.Text {
 		// 每块固定七行：来源 / 行号 / 内容 / 规则 / 示例 / 说明 / 级别。
 		// 内容只是位置提示，超宽截断——按行号回原脚本看原文即可。
 		lines = append(lines,
-			line("║"+pad("    来源: "+trimToWidth(source, dangerFieldLimit))+"║"),
-			line("║"+pad("    行号: "+formatLines(m.Lines))+"║"),
-			line("║"+pad("    内容: "+trimToWidth(m.Content, dangerFieldLimit-2))+"║"),
-			line("║"+pad("    规则: "+trimToWidth(m.RuleName, dangerFieldLimit))+"║"),
-			line("║"+pad("    示例: "+trimToWidth(m.Example, dangerFieldLimit))+"║"),
-			line("║"+pad("    说明: "+trimToWidth(m.Reason, dangerFieldLimit))+"║"),
-			line("║"+pad("    级别: "+riskLevelText(m.Level))+"║"),
+			line("║"+padTo("    来源: "+trimToWidth(source, dangerFieldLimit), inner)+"║"),
+			line("║"+padTo("    行号: "+formatLines(m.Lines), inner)+"║"),
+			line("║"+padTo("    内容: "+trimToWidth(m.Content, dangerFieldLimit-2), inner)+"║"),
+			line("║"+padTo("    规则: "+trimToWidth(m.RuleName, dangerFieldLimit), inner)+"║"),
+			line("║"+padTo("    示例: "+trimToWidth(m.Example, dangerFieldLimit), inner)+"║"),
+			line("║"+padTo("    说明: "+trimToWidth(m.Reason, dangerFieldLimit), inner)+"║"),
+			line("║"+padTo("    级别: "+riskLevelText(m.Level), inner)+"║"),
 			// 右端用 ╣：框的左右边框都是双线，分隔行两端也得是双线。
 			line("╠"+bar+"╣"),
 		)

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"sshfleet2/internal/contract"
@@ -23,6 +24,17 @@ const (
 
 // ruleTextLimit 是规则里 example／reason 的显示宽度上限（一个汉字算两列）。
 const ruleTextLimit = 30
+
+// unknownCategoryField 是错误分类表两条「含未识别字段」共用的句子头。
+const unknownCategoryField = "错误分类关键词含未识别字段："
+
+// maxMustBePositive 是改密 max 那一格的句子：算出来的值与非正数都走它。
+const maxMustBePositive = "max 必须是正整数，当前值：%s"
+
+// passwdIssue 给「改密提示词表第 N 条」的失败排一句：前缀只在这里拼，七条失败共用。
+func passwdIssue(kind string, i int, format string, args ...any) string {
+	return "改密配置第 " + strconv.Itoa(i) + " 条 " + kind + "：" + fmt.Sprintf(format, args...)
+}
 
 // loadTables 读三份表。任何一份不成器都是「起不来」。
 func loadTables(mode contract.Mode) (contract.Tables, *contract.CannotStart) {
@@ -46,11 +58,7 @@ func loadTables(mode contract.Mode) (contract.Tables, *contract.CannotStart) {
 			"改密缺少入场信号",
 			"判据文件里「密码过期」分类没有关键词，工具认不出哪台机器要改密",
 			"该分类在 config/keywords_error.conf，别删它")
-		return contract.Tables{}, &contract.CannotStart{
-			Where: "ssh",
-			Say:   message.Fatal("ssh", body, ""),
-			Body:  body,
-		}
+		return contract.Tables{}, cannotStart("ssh", "", body)
 	}
 
 	return contract.Tables{
@@ -72,20 +80,25 @@ func keywordsOf(cats []contract.Category, name string) []string {
 	return nil
 }
 
+// dangerFail 排一屏「危险规则表不成器」：环节与外壳句照老版那一处，五条失败共用一个入口。
+func dangerFail(body string) *contract.CannotStart {
+	return cannotStart("dangercheck", message.HeadDangerRules, body)
+}
+
 // loadDangerRules 读危险规则表：六项字段、四档等级、正则编译、示例与说明的宽度。
 func loadDangerRules() ([]contract.DangerRule, *contract.CannotStart) {
 	data, err := os.ReadFile(dangerRulesPath)
 	if err != nil {
-		return nil, cannotStart("dangercheck", "危险关键词内容检查未通过",
+		return nil, dangerFail(
 			message.ProblemReason("读取危险命令检测规则失败："+dangerRulesPath, err.Error()))
 	}
 	lines, err := tokenize(data)
 	if err != nil {
-		return nil, cannotStart("dangercheck", "危险关键词内容检查未通过",
+		return nil, dangerFail(
 			message.ProblemReason("危险命令检测规则解析失败："+dangerRulesPath, err.Error()))
 	}
 	if !hasArrayTable(lines, "rules") {
-		return nil, cannotStart("dangercheck", "危险关键词内容检查未通过",
+		return nil, dangerFail(
 			fmt.Sprintf("危险命令检测规则里一条 rules 都没有：%s", dangerRulesPath))
 	}
 
@@ -93,14 +106,14 @@ func loadDangerRules() ([]contract.DangerRule, *contract.CannotStart) {
 	out := make([]contract.DangerRule, 0, len(items))
 	for i, item := range items {
 		if unknown := unknownRuleKeys(item); len(unknown) > 0 {
-			return nil, cannotStart("dangercheck", "危险关键词内容检查未通过",
+			return nil, dangerFail(
 				message.ProblemOrigin(
 					fmt.Sprintf("危险命令检测规则含未识别字段：%s", strings.Join(unknown, ", ")),
 					"规则只认 name / example / reason / regex / risk_level / enabled 六项，把它删掉或改成这六项之一"))
 		}
 		rule, err := buildRule(item)
 		if err != nil {
-			return nil, cannotStart("dangercheck", "危险关键词内容检查未通过",
+			return nil, dangerFail(
 				fmt.Sprintf("危险命令检测规则第 %d 条：%v", i+1, err))
 		}
 		out = append(out, rule)
@@ -195,10 +208,10 @@ func loadErrorKeywords() ([]contract.Category, []contract.Category, *contract.Ca
 			message.ProblemReason("错误分类关键词解析失败："+errorKeywordsPath, err.Error()))
 	}
 	if unknown := unknownCategoryKeys(lines, "categories"); len(unknown) > 0 {
-		return nil, nil, cannotStart("verdict", "", "错误分类关键词含未识别字段："+strings.Join(unknown, ", "))
+		return nil, nil, cannotStart("verdict", "", unknownCategoryField+strings.Join(unknown, ", "))
 	}
 	if unknown := unknownCategoryKeys(lines, "exit_code_categories"); len(unknown) > 0 {
-		return nil, nil, cannotStart("verdict", "", "错误分类关键词含未识别字段："+strings.Join(unknown, ", "))
+		return nil, nil, cannotStart("verdict", "", unknownCategoryField+strings.Join(unknown, ", "))
 	}
 
 	cats, err := buildCategories(lines, "categories")
@@ -291,28 +304,29 @@ func loadPasswdKeywords() ([]contract.PasswdStep, []contract.Category, *contract
 			Value:    unquote(item["value"]),
 		}
 		if len(step.Keywords) == 0 {
-			return nil, nil, cannotStart("config", "", fmt.Sprintf("改密配置第 %d 条 step：缺少 keywords（提示原文）", i+1))
+			return nil, nil, cannotStart("config", "", passwdIssue("step", i+1, "缺少 keywords（提示原文）"))
 		}
 		for _, kw := range step.Keywords {
 			if strings.TrimSpace(kw) == "" {
-				return nil, nil, cannotStart("config", "", fmt.Sprintf("改密配置第 %d 条 step：keywords 里有空项", i+1))
+				return nil, nil, cannotStart("config", "", passwdIssue("step", i+1, "keywords 里有空项"))
 			}
 		}
 		switch step.Value {
 		case contract.PasswdValueCurrent, contract.PasswdValueNew:
 		default:
-			return nil, nil, cannotStart("config", "", fmt.Sprintf("改密配置第 %d 条 step：value 只能写 %s 或 %s，当前值：%s",
-				i+1, contract.PasswdValueCurrent, contract.PasswdValueNew, step.Value))
+			return nil, nil, cannotStart("config", "", passwdIssue("step", i+1,
+				"value 只能写 %s 或 %s，当前值：%s",
+				contract.PasswdValueCurrent, contract.PasswdValueNew, step.Value))
 		}
 		if maxRaw := strings.TrimSpace(unquote(item["max"])); maxRaw != "" {
 			n, err := atoi(maxRaw)
 			if err != nil || n < 1 {
-				return nil, nil, cannotStart("config", "", fmt.Sprintf("改密配置第 %d 条 step：max 必须是正整数，当前值：%s", i+1, maxRaw))
+				return nil, nil, cannotStart("config", "", passwdIssue("step", i+1, maxMustBePositive, maxRaw))
 			}
 			step.Max = n
 		}
 		if step.Max < 1 {
-			return nil, nil, cannotStart("config", "", fmt.Sprintf("改密配置第 %d 条 step：max 必须是正整数，当前值：0", i+1))
+			return nil, nil, cannotStart("config", "", passwdIssue("step", i+1, maxMustBePositive, "0"))
 		}
 		steps = append(steps, step)
 	}
@@ -325,11 +339,11 @@ func loadPasswdKeywords() ([]contract.PasswdStep, []contract.Category, *contract
 			Tip:      unquote(item["tip"]),
 		}
 		if strings.TrimSpace(c.Name) == "" {
-			return nil, nil, cannotStart("config", "", fmt.Sprintf("改密配置第 %d 条 category：缺少 name（分类名）", i+1))
+			return nil, nil, cannotStart("config", "", passwdIssue("category", i+1, "缺少 name（分类名）"))
 		}
 		for _, kw := range c.Keywords {
 			if strings.TrimSpace(kw) == "" {
-				return nil, nil, cannotStart("config", "", fmt.Sprintf("改密配置第 %d 条 category：%s 的 keywords 里有空项", i+1, c.Name))
+				return nil, nil, cannotStart("config", "", passwdIssue("category", i+1, "%s 的 keywords 里有空项", c.Name))
 			}
 		}
 		cats = append(cats, c)

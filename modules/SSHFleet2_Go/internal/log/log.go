@@ -36,12 +36,18 @@ type Logger struct {
 // 这是**纯计算**：只按内置常量加当前目录算，不看文件建没建起来、也不读任何包级状态。
 // 起不来那一屏末尾的「日志：…」向它要路径。
 func ToolPath() string {
-	rel := filepath.Join(contract.HistoryDir, contract.ToolLogName)
-	abs, err := filepath.Abs(rel)
-	if err != nil {
-		return rel
+	return absolute(logFilePath(contract.HistoryDir, contract.ToolLogName))
+}
+
+// logFilePath 是「目录 + 文件名」那条路径的唯一拼法：要路径的三处都从这里出。
+func logFilePath(dir, file string) string { return filepath.Join(dir, file) }
+
+// absolute 把相对路径换成本机绝对路径；换不成时原样交回。
+func absolute(p string) string {
+	if abs, err := filepath.Abs(p); err == nil {
+		return abs
 	}
-	return abs
+	return p
 }
 
 // Init 建目录、开日志文件（追加）。建不起来返回错误，本包不造屏、不退出。
@@ -49,7 +55,7 @@ func Init(historyDir, toolFile string) (*Logger, error) {
 	if err := os.MkdirAll(historyDir, 0o755); err != nil {
 		return nil, err
 	}
-	path := filepath.Join(historyDir, toolFile)
+	path := absolute(logFilePath(historyDir, toolFile))
 	rotateIfBig(path)
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {

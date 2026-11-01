@@ -22,13 +22,9 @@ import (
 func Run(argv []string, version string) (contract.Text, *contract.Plan, *contract.CannotStart) {
 	cfg, err := load()
 	if err != nil {
-		// 配置这一步失败时日志还没建起来（老版也是这个先后），所以那一屏不带「日志：」行。
-		body := "加载配置文件失败（" + shownConfigPath + "）：" + strings.TrimRight(err.Error(), "\r\n")
-		return contract.Text{}, nil, &contract.CannotStart{
-			Where: "config",
-			Say:   message.Fatal("config", body, ""),
-			Body:  body,
-		}
+		// 配置这一步失败时日志还没建起来（老版步骤 1 在步骤 2 之前），所以那一屏不带「日志：」行。
+		return contract.Text{}, nil, cannotStartBeforeLog("config",
+			"加载配置文件失败（"+shownConfigPath+"）", err.Error())
 	}
 
 	name := "sshfleet2"
@@ -53,12 +49,19 @@ func Run(argv []string, version string) (contract.Text, *contract.Plan, *contrac
 	return contract.Text{}, plan, nil
 }
 
-// cannotStart 排一屏「起不来」：环节、外壳句与原因照老版那一处。
+// cannotStart 排一屏「起不来」：环节、外壳句与原因照老版那一处，末尾附工具日志路径。
 func cannotStart(where, head, body string) *contract.CannotStart {
-	// head 为空表示老版那一处没有外壳句（判据表坏掉的三处就是这样），此时不补冒号。
-	full := strings.TrimRight(body, "\r\n")
-	if head != "" {
-		full = head + "：" + full
-	}
-	return &contract.CannotStart{Where: where, Say: message.Fatal(where, full, log.ToolPath()), Body: full}
+	return cannotStartScreen(where, head, body, log.ToolPath())
+}
+
+// cannotStartBeforeLog 是配置那一步的「起不来」：老版读配置时日志还没建起来，
+// 所以那一屏不带「日志：」行。两个具名入口各表一件事，调用点不许拿空串自己表达。
+func cannotStartBeforeLog(where, head, body string) *contract.CannotStart {
+	return cannotStartScreen(where, head, body, "")
+}
+
+// cannotStartScreen 是「起不来」屏的唯一拼装处：外壳句由 message 加（ADR-0028 决定一）。
+func cannotStartScreen(where, head, body, logPath string) *contract.CannotStart {
+	full := message.Shell(head, strings.TrimRight(body, "\r\n"))
+	return &contract.CannotStart{Where: where, Say: message.Fatal(where, full, logPath), Body: full}
 }

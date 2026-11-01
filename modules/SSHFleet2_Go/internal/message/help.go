@@ -69,12 +69,6 @@ func HelpScreen(name, version string, width int, entries []HelpEntry) contract.T
 		wLong = max(wLong, displayWidth(e.Long))
 		wTag = max(wTag, displayWidth(e.Tag))
 	}
-	padTo := func(s string, w int) string {
-		if d := displayWidth(s); d < w {
-			return s + strings.Repeat(" ", w-d)
-		}
-		return s
-	}
 	// 说明列的起始列与可用宽度：折行必须落在说明列内，不串到其它列
 	descStart := displayWidth(helpIndent) + wShort + displayWidth(helpOptGap) +
 		wLong + displayWidth(helpGap) + wTag + displayWidth(helpGap)
@@ -126,5 +120,5 @@ func HelpScreen(name, version string, width int, entries []HelpEntry) contract.T
 // CannotStartLine 起不来那一句话。本阶段是过渡形态：只有一句加一个换行，
 // 话术与退出码表随阶段 03 定稿，别当口径抄。
 func CannotStartLine(head, detail string) contract.Text {
-	return contract.Text{S: head + "：" + detail + "\n"}
+	return contract.Text{S: Shell(head, detail) + "\n"}
 }
