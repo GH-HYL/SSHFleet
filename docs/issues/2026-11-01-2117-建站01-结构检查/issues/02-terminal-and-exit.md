@@ -9,7 +9,7 @@
 
 **Blocked by**：01。
 
-**Status**：ready-for-agent
+**Status**：done
 
 ## 判据出处
 
@@ -17,12 +17,20 @@ ADR-0032 第四条（写终端、退出动作）、第五条（退出只许塔�
 
 ## 验收
 
-- [ ] 坏样本：`testdata/violations` 里有一个非 `console` 包写 `fmt.Println`、一个包引用 `os.Stdout`、一个包调 `os.Exit`，三条各自产出**指定类名**的违规，位置指到文件与行
-- [ ] 好样本：`console` 包里同样的调用零违规；某个 `_test.go` 里写 `fmt.Println` 零违规；塔尖里调 `os.Exit` 零违规
-- [ ] 报错话术里出现「该走 `console`」／「该把结论交给塔尖」，不是只说「不许」
-- [ ] 真工程跑一遍零违规（`console` 还是空包，塔尖还是空 `main`）
-- [ ] `go test ./...` 绿
+- [x] 坏样本：`testdata/violations` 里有一个非 `console` 包写 `fmt.Println`、一个包引用 `os.Stdout`、一个包调 `os.Exit`，三条各自产出**指定类名**的违规，位置指到文件与行
+- [x] 好样本：`console` 包里同样的调用零违规；某个 `_test.go` 里写 `fmt.Println` 零违规；塔尖里调 `os.Exit` 零违规
+- [x] 报错话术里出现「该走 `console`」／「该把结论交给塔尖」，不是只说「不许」
+- [x] 真工程跑一遍零违规（`console` 还是空包，塔尖还是空 `main`）
+- [x] `go test ./...` 绿
 
 ## 不在这单
 
 依赖方向（03）——`console` 能被谁调、塔尖能 import 谁，那一单管。
+
+## Comments
+
+### 2026-11-01：交付
+
+`check_terminal.go`／`check_exit.go`。类一按「动作」数：`fmt.Print` 族、内建 `println`、引用 `os.Stdout`／`os.Stderr`；`fmt.Fprintf` 写到内存缓冲不报，写到屏幕必然引用 `os.Stdout`，所以不做特例。例外只有 `console` 包与 `_test.go` 后缀。
+
+样本上：`violations` 的 `parse/run.go` 出三条（`fmt.Println`、`os.Stderr`、`os.Exit`），`clean` 的塔尖调 `os.Exit` 不报，`console` 包里打印不报。

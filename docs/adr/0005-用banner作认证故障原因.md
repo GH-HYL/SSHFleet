@@ -15,7 +15,7 @@ fatal: Access denied for user sftest2 by PAM account configuration [preauth]
 
 统一话术 + `[preauth]` 是防账号探测的设计。客户端侧只能拿到 `ssh: handshake failed: EOF`，于是被 `error_keywords.toml` 里的 `ssh: handshake failed: eof` 判成「SSH协议错误」——一个会把人引去查网络与协议版本的**错误结论**。
 
-但服务端其实留了一个口子：**sshd 把 PAM 的话当作 `SSH_MSG_USERAUTH_BANNER` 发出来**。`x/crypto/ssh` 会解析这个消息，而 `internal/ssh/client.go` 的 `ClientConfig` 没有配 `BannerCallback`，`handleBannerResponse` 在回调为空时**直接丢弃**整包。也就是说原因一直在包里，只是没接。
+但服务端其实留了一个口子：**sshd 把 PAM 的话当作 `SSH_MSG_USERAUTH_BANNER` 发出来**。`x/crypto/ssh` 会解析这个消息，而 `execute` 的 `ClientConfig` 没有配 `BannerCallback`，`handleBannerResponse` 在回调为空时**直接丢弃**整包。也就是说原因一直在包里，只是没接。
 
 2026-09-16 用 Go 客户端挂上 `BannerCallback` 实测：
 
@@ -77,3 +77,7 @@ fatal: Access denied for user sftest2 by PAM account configuration [preauth]
   （正常行依旧不出现 MOTD）。
 - 本《决定》《理由》《影响》原样保留，作为"当时为什么并入"的记录；其中"不新增字段""原有文本
   处理逻辑一行不改"两句自本修订起作废。
+
+## 更新记录
+
+- 2026-11-01：上文的老工程路径已按迁移地图换到新落点（建连与认证、含 `BannerCallback` 那一段，全归 `execute`）；决策内容一字未动，映射见 `docs/issues/2026-10-30-2134-架构重构/issues/04-legacy-package-mapping.md` 的迁移地图。

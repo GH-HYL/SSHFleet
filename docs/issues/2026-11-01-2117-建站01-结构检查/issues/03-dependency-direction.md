@@ -15,16 +15,24 @@
 
 **Blocked by**：01。
 
-**Status**：ready-for-agent
+**Status**：done
 
 ## 验收
 
-- [ ] 坏样本：一个站 import 另一个站、一个横切包 import 站、契约包 import 别的包、一个包 import `example.com/x`、塔尖用 `os.Getenv`——五条各自产出**指定类名**的违规，位置指到文件与行
-- [ ] 坏样本：假模块里多一个包（规则表里没有）、少一个包（表里有、目录没有），两条都报「依赖方向」这一类，并说出是哪个包
-- [ ] 好样本：`ask` import `console` 与 `message` 零违规；`_test.go` 里 import 站零违规；塔尖 import 五站与横切零违规
-- [ ] 真工程跑一遍：十七个包与表逐行对上，零违规；违规话术里能看出「该依赖谁」
-- [ ] `go test ./...` 绿
+- [x] 坏样本：一个站 import 另一个站、一个横切包 import 站、契约包 import 别的包、一个包 import `example.com/x`、塔尖用 `os.Getenv`——五条各自产出**指定类名**的违规，位置指到文件与行
+- [x] 坏样本：假模块里多一个包（规则表里没有）、少一个包（表里有、目录没有），两条都报「依赖方向」这一类，并说出是哪个包
+- [x] 好样本：`ask` import `console` 与 `message` 零违规；`_test.go` 里 import 站零违规；塔尖 import 五站与横切零违规
+- [x] 真工程跑一遍：十七个包与表逐行对上，零违规；违规话术里能看出「该依赖谁」
+- [x] `go test ./...` 绿
 
 ## 不在这单
 
 红线测试的 import 白名单（05）；交接件宽窄（06）。
+
+## Comments
+
+### 2026-11-01：交付
+
+`check_deps.go`。三档按 map 框架条目那条：生产文件按规则表、普通 `_test.go` 豁免、红线测试交第六类。另含包清单对账（多一个、少一个都报）、塔尖三个包的点名符号、零第三方依赖。
+
+`violations` 样本上六条全中：站依赖站、横切反向依赖站、`example.com/x`、多一个包（`extra`）、少一个包（`log`）、塔尖用 `os.Getenv`。
