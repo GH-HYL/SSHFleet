@@ -27,10 +27,18 @@ func main() {
 
 	// 步骤 2：建工具日志。建不起来就是「起不来」，此时连日志都没有，那屏不带日志行。
 	lg, err := log.Init(contract.HistoryDir, contract.ToolLogName)
+
+	// finish 是唯一的退场收尾：关日志、还码页、查表退出。os.Exit 不跑 defer，每条路径都得显式收，
+	// 所以只写这一处（lg 为 nil 时 Close 自己是空动作）。
+	finish := func(kind exitcode.Kind) {
+		_ = lg.Close()
+		console.Restore()
+		os.Exit(exitcode.Code(kind))
+	}
+
 	if err != nil {
 		console.Print(message.LogInitFailed(err))
-		console.Restore()
-		os.Exit(exitcode.Code(exitcode.CannotStart))
+		finish(exitcode.CannotStart)
 	}
 	lg.Startup()
 
@@ -40,9 +48,7 @@ func main() {
 	case fail != nil:
 		lg.Fatal(fail.Where, fail.Body)
 		console.Print(fail.Say)
-		lg.Close()
-		console.Restore()
-		os.Exit(exitcode.Code(exitcode.CannotStart))
+		finish(exitcode.CannotStart)
 
 	case plan != nil:
 		refusal, note := gate.Run(plan)
@@ -51,20 +57,14 @@ func main() {
 		}
 		if refusal != nil {
 			console.Print(refusal.Say)
-			lg.Close()
-			console.Restore()
-			os.Exit(exitcode.Code(exitcode.Refused))
+			finish(exitcode.Refused)
 		}
 		// 过渡形态：放行之后没有下一站，随阶段 04 接上执行站。
 		console.Print(message.NotWiredLine())
-		lg.Close()
-		console.Restore()
-		os.Exit(exitcode.Code(exitcode.Refused))
+		finish(exitcode.Refused)
 
 	default:
 		console.Print(say)
-		lg.Close()
-		console.Restore()
-		os.Exit(exitcode.Code(exitcode.Success))
+		finish(exitcode.Success)
 	}
 }

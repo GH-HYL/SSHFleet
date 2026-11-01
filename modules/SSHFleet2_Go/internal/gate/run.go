@@ -100,15 +100,8 @@ func argumentRefusal(p *contract.Plan) *Refusal {
 	// -p：上传时是服务器上的目录（判远端形态、要以 / 收尾）；命令与脚本用不到它。
 	if path != "" {
 		if upload != nil {
-			dir := strings.TrimSpace(path)
-			if !strings.HasPrefix(dir, "/") {
-				return refuse(message.RefuseRemotePathNotAbsolute("-p", "上传目录", dir))
-			}
-			if strings.ContainsAny(dir, "\r\n") {
-				return refuse(message.RefuseRemotePathHasNewline("-p", "上传目录", dir))
-			}
-			if !strings.HasSuffix(dir, "/") {
-				return refuse(message.RefuseUploadDirNeedsSlash(dir))
+			if r := checkRemotePath("-p", "上传目录", path, true); r != nil {
+				return r
 			}
 		} else if command != nil || script != nil {
 			return refuse(message.RefusePathWithCommand())
@@ -120,12 +113,8 @@ func argumentRefusal(p *contract.Plan) *Refusal {
 		if path == "" {
 			return refuse(message.RefuseDownloadNeedsPath())
 		}
-		remote := strings.TrimSpace(download.RemotePath)
-		if !strings.HasPrefix(remote, "/") {
-			return refuse(message.RefuseRemotePathNotAbsolute("-d", "远程路径", remote))
-		}
-		if strings.ContainsAny(remote, "\r\n") {
-			return refuse(message.RefuseRemotePathHasNewline("-d", "远程路径", remote))
+		if r := checkRemotePath("-d", "远程路径", download.RemotePath, false); r != nil {
+			return r
 		}
 	}
 
@@ -147,6 +136,22 @@ func argumentRefusal(p *contract.Plan) *Refusal {
 	// 改密的新密码只有空白（本阶段只判形态；解密随阶段 05）。
 	if passwd != nil && strings.TrimSpace(passwd.Raw) == "" {
 		return refuse(message.RefusePasswdEmpty())
+	}
+	return nil
+}
+
+// checkRemotePath 判一个远端路径的形态：先从 / 写起、不含回车换行；上传的目录还要求以 / 收尾。
+// 上传与下载共用这一份，`what` 只决定那句话怎么称呼这个位置。
+func checkRemotePath(flag, what, value string, needDirSlash bool) *Refusal {
+	path := strings.TrimSpace(value)
+	if !strings.HasPrefix(path, "/") {
+		return refuse(message.RefuseRemotePathNotAbsolute(flag, what, path))
+	}
+	if strings.ContainsAny(path, "\r\n") {
+		return refuse(message.RefuseRemotePathHasNewline(flag, what, path))
+	}
+	if needDirSlash && !strings.HasSuffix(path, "/") {
+		return refuse(message.RefuseUploadDirNeedsSlash(path))
 	}
 	return nil
 }
@@ -175,7 +180,8 @@ func dangerRefusal(p *contract.Plan) (*Refusal, contract.Text) {
 	}
 
 	if report.Matches[0].Level == contract.RiskForbidden {
-		return &Refusal{Say: message.DangerBox(report, true)}, contract.Text{}
+		// 屏幕给框、日志留一行——老版两处都写，跳过哪一处都是改行为。
+		return &Refusal{Say: message.DangerBox(report, true)}, message.TraceForbidden(report.Matches[0].Content)
 	}
 
 	answer := ask.Ask(message.DangerBox(report, false), p.Run.Yes, false)
