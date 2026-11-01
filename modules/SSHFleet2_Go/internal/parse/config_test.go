@@ -12,11 +12,11 @@ func sample(t *testing.T, name string) rawConfig {
 	if err != nil {
 		t.Fatalf("读样本 %s 失败：%v", name, err)
 	}
-	raw, err := parseRawConfig(data)
+	lines, err := tokenize(data)
 	if err != nil {
 		t.Fatalf("样本 %s 解析失败：%v", name, err)
 	}
-	return raw
+	return rawView(lines)
 }
 
 func TestParseRawConfigShapes(t *testing.T) {
@@ -36,8 +36,8 @@ func TestParseRawConfigShapes(t *testing.T) {
 
 	// 点号节原样当节名，不碍着别的节
 	raw = sample(t, "dotted.conf")
-	if raw["interpreter.script"]["\".sh\""] == "" {
-		t.Errorf("点号节的键应原样收下：%v", raw["interpreter.script"])
+	if raw["interpreter.script"][".sh"] == "" {
+		t.Errorf("点号节的键应原样收下（外层引号去掉）：%v", raw["interpreter.script"])
 	}
 	if raw["interpreter"]["command"] != "bash" {
 		t.Errorf("点号节不碍着普通节：%v", raw["interpreter"])
@@ -57,19 +57,38 @@ func TestParseRawConfigShapes(t *testing.T) {
 }
 
 func TestParseRawConfigRejects(t *testing.T) {
-	if _, err := parseRawConfig([]byte("孤零零一行\n")); err == nil {
+	if _, err := tokenize([]byte("孤零零一行\n")); err == nil {
 		t.Errorf("既不是节也不是键值对的行应报错")
 	}
-	if _, err := parseRawConfig([]byte("key = \"v\"\n")); err == nil {
+	if _, err := tokenize([]byte("key = \"v\"\n")); err == nil {
 		t.Errorf("键出现在任何节之前应报错")
 	}
-	if _, err := parseRawConfig([]byte("[   ]\n")); err == nil {
+	if _, err := tokenize([]byte("[   ]\n")); err == nil {
 		t.Errorf("空节名应报错")
 	}
 }
 
+// execFrom 只从原文表取 [execution] 四格：样本文件是片段，不该逼它凑齐整份配置。
+func execFrom(raw rawConfig) (execution, error) {
+	var f execution
+	var err error
+	if f.Sudo, err = boolOf(raw, "execution", "sudo"); err != nil {
+		return execution{}, err
+	}
+	if f.TimeoutConnect, err = intOf(raw, "execution", "timeout_connect"); err != nil {
+		return execution{}, err
+	}
+	if f.TimeoutExecute, err = intOf(raw, "execution", "timeout_execute"); err != nil {
+		return execution{}, err
+	}
+	if f.TimeoutTransfer, err = intOf(raw, "execution", "timeout_transfer"); err != nil {
+		return execution{}, err
+	}
+	return f, nil
+}
+
 func TestExecutionOf(t *testing.T) {
-	f, err := executionOf(sample(t, "normal.conf"))
+	f, err := execFrom(sample(t, "normal.conf"))
 	if err != nil {
 		t.Fatalf("四格应取得到：%v", err)
 	}
@@ -79,33 +98,30 @@ func TestExecutionOf(t *testing.T) {
 	}
 
 	// 缺 [execution] 段：起不来
-	if _, err := executionOf(sample(t, "no_execution.conf")); err == nil {
+	if _, err := execFrom(sample(t, "no_execution.conf")); err == nil {
 		t.Errorf("缺 [execution] 段应报错")
 	}
 
 	// 取值非法：起不来
 	raw := sample(t, "normal.conf")
 	raw["execution"]["timeout_execute"] = "abc"
-	if _, err := executionOf(raw); err == nil {
+	if _, err := execFrom(raw); err == nil {
 		t.Errorf("非整数应报错")
 	}
 	raw["execution"]["sudo"] = "maybe"
-	if _, err := executionOf(raw); err == nil {
+	if _, err := execFrom(raw); err == nil {
 		t.Errorf("非布尔应报错")
 	}
 }
 
 // 真配置：切换到模块根，读的就是随包那份（里面是出厂值）。
 func TestReadRealConfig(t *testing.T) {
-	t.Chdir("../..")
-	raw, err := readRawConfig()
+	writeTempConfig(t)
+	cfg, err := load()
 	if err != nil {
 		t.Fatalf("真配置应读得到：%v", err)
 	}
-	f, err := executionOf(raw)
-	if err != nil {
-		t.Fatalf("真配置四格应取得到：%v", err)
-	}
+	f := cfg.Execution
 	if f.Sudo != true || f.TimeoutConnect != 10 || f.TimeoutExecute != 60 || f.TimeoutTransfer != 300 {
 		t.Errorf("真配置四格与出厂值不符：%+v", f)
 	}
@@ -114,7 +130,7 @@ func TestReadRealConfig(t *testing.T) {
 // 真配置不在（切到一个空目录）：readRawConfig 报「这个位置没有配置文件」那套话。
 func TestReadMissingConfig(t *testing.T) {
 	t.Chdir(t.TempDir())
-	_, err := readRawConfig()
+	_, err := load()
 	if err == nil {
 		t.Fatalf("空目录下应读不到配置")
 	}

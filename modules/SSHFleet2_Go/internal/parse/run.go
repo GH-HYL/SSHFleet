@@ -6,52 +6,62 @@ import (
 
 	"sshfleet2/internal/console"
 	"sshfleet2/internal/contract"
+	"sshfleet2/internal/log"
 	"sshfleet2/internal/message"
 )
 
 // 解析站对外的唯一口子（出口白名单：至多一个函数，ADR-0037 决定三）。
-// 本阶段只认「要不要看帮助」：-h、--help、一个参数都不给。
+//
+// 它递回三样里的某一样：一屏话（帮助）、一张纸（进流水线）、一个「起不来」。
+// 三样的组合就是塔尖认的结局，塔尖不自己判「这次该干嘛」。
 
-// Run 塔尖把整条 argv 与那行版本常量递进来，拿回「一句要打给使用者的话」
-// 加「是不是起不来」（nil 表示不是）。配置与终端宽度由本站自己取——塔尖除了
-// argv 和号，什么都不递（ADR-0032 第五条：它只搬，不看配置、不看文件在不在）。
-func Run(argv []string, version string) (contract.Text, *contract.CannotStart) {
+// Run 吃整条 argv 与那行版本常量，吐「一屏话 + 一张纸 + 是不是起不来」。
+//
+// 配置、判据表、终端宽度都由本站自己取——塔尖除了 argv 和号，什么都不递
+// （ADR-0032 第五条：它只搬，不看配置、不看文件在不在）。
+func Run(argv []string, version string) (contract.Text, *contract.Plan, *contract.CannotStart) {
+	cfg, err := load()
+	if err != nil {
+		// 配置这一步失败时日志还没建起来（老版也是这个先后），所以那一屏不带「日志：」行。
+		body := "加载配置文件失败（" + shownConfigPath + "）：" + strings.TrimRight(err.Error(), "\r\n")
+		return contract.Text{}, nil, &contract.CannotStart{
+			Where: "config",
+			Say:   message.Fatal("config", body, ""),
+			Body:  body,
+		}
+	}
+
 	name := "sshfleet2"
 	if len(argv) > 0 {
 		name = filepath.Base(argv[0])
 	}
+
+	// 帮助：-h、--help、一个参数都不给。老版在第 3 步就返回，后面一概不做。
 	if helpRequested(argv) {
-		return helpScreen(name, version)
+		rev, tm, dirty := buildInfo()
+		screen := message.HelpScreen(name, versionString(version, rev, tm, dirty), console.Width(), helpEntries(cfg.Execution))
+		return screen, nil, nil
 	}
-	// 帮助之外的用法本阶段没接上：一律「起不来」。
-	// 这是过渡形态（见阶段规格 Out of Scope），随阶段 03、04 被真正的解析与合规检查取代。
-	return message.CannotStartLine(
-		"这条用法还没接上",
-		"本阶段只认 -h / --help / 空参数；其余选项随阶段 03、04 接线",
-	), &contract.CannotStart{}
+
+	plan, fail := buildPlan(cfg, argv)
+	if fail != nil {
+		return contract.Text{}, nil, fail
+	}
+	return contract.Text{}, plan, nil
 }
 
-// helpScreen 出帮助那一屏：配置四格 + 选项表 + 版本串 + 终端宽度，交给 message 排。
-// 配置读不到、读不懂都是「起不来」——一句话加非 0 退出（话术随阶段 03 定稿）。
-func helpScreen(name, num string) (contract.Text, *contract.CannotStart) {
-	raw, err := readRawConfig()
-	var f execution
-	if err == nil {
-		f, err = executionOf(raw)
+// cannotStart 排一屏「起不来」：环节、外壳句与原因照老版那一处。
+func cannotStart(where, head, body string) *contract.CannotStart {
+	full := head
+	if body != "" {
+		full = head + "：" + strings.TrimRight(body, "\r\n")
 	}
-	if err != nil {
-		return message.CannotStartLine("加载配置文件失败（"+shownConfigPath+"）", err.Error()), &contract.CannotStart{}
-	}
-	rev, tm, dirty := buildInfo()
-	ver := versionString(num, rev, tm, dirty)
-	return message.HelpScreen(name, ver, console.Width(), helpEntries(f)), nil
+	return &contract.CannotStart{Where: where, Say: message.Fatal(where, full, log.ToolPath()), Body: full}
 }
 
 // helpRequested 认「要不要看帮助」。认法照 pflag 的语义收窄到本工具：从左往右扫，
 // 带值选项吃掉下一个 token（所以 `-c "-h"` 不会被当成要看帮助）；不认识的选项当场停
-// （老版那时就报错，轮不到帮助）；`--` 之后不再有选项；位置参数不拦（选项与位置参数
-// 允许混排，老版同此）。带 `=` 的取值（`-c=x`）按不认识的选项停—— outcomes 与老版一致：
-// 都不出帮助。
+// （老版那时就报错，轮不到帮助）；`--` 之后不再有选项；位置参数不拦。
 func helpRequested(argv []string) bool {
 	if len(argv) <= 1 {
 		return true // 一个参数都不给：老版打帮助后以 0 退出

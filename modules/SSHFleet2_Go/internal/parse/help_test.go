@@ -66,15 +66,12 @@ const goldenHelp = `SSHFleet - 批量 SSH 运维工具（命令/脚本执行、�
 
 // 整屏逐字：解析站的事实（选项表 + 配置四格）加 message 的排版，合出来必须与老版一字不差。
 func TestHelpScreenMatchesLegacy(t *testing.T) {
-	t.Chdir("../..") // 读随包那份 config/SSHFleet.conf
-	raw, err := readRawConfig()
+	writeTempConfig(t)
+	cfg, err := load()
 	if err != nil {
 		t.Fatalf("读随包配置失败：%v", err)
 	}
-	f, err := executionOf(raw)
-	if err != nil {
-		t.Fatalf("随包配置四格取不到：%v", err)
-	}
+	f := cfg.Execution
 	got := helpScreenText("PROG", "TEST", f)
 	if got != goldenHelp {
 		t.Errorf("帮助整屏与老版不一致：\n--- got ---\n%s\n--- want ---\n%s", got, goldenHelp)
@@ -83,12 +80,12 @@ func TestHelpScreenMatchesLegacy(t *testing.T) {
 
 // 示例与用法两行里的选项名必须都在选项表里——两处各写一份迟早漂移，这条断言钉住它。
 func TestUsageAndExamplesMatchOptionTable(t *testing.T) {
-	t.Chdir("../..")
-	raw, _ := readRawConfig()
-	f, err := executionOf(raw)
+	writeTempConfig(t)
+	cfg, err := load()
 	if err != nil {
 		t.Fatalf("随包配置四格取不到：%v", err)
 	}
+	f := cfg.Execution
 	screen := helpScreenText("PROG", "TEST", f)
 
 	table := map[string]bool{}
