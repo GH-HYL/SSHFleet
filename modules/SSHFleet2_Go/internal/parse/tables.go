@@ -94,8 +94,9 @@ func loadDangerRules() ([]contract.DangerRule, *contract.CannotStart) {
 	for i, item := range items {
 		if unknown := unknownRuleKeys(item); len(unknown) > 0 {
 			return nil, cannotStart("dangercheck", "危险关键词内容检查未通过",
-				fmt.Sprintf("危险命令检测规则含未识别字段：%s\n出处：规则只认 name / example / reason / regex / risk_level / enabled 六项，把它删掉或改成这六项之一",
-					strings.Join(unknown, ", ")))
+				message.ProblemOrigin(
+					fmt.Sprintf("危险命令检测规则含未识别字段：%s", strings.Join(unknown, ", ")),
+					"规则只认 name / example / reason / regex / risk_level / enabled 六项，把它删掉或改成这六项之一"))
 		}
 		rule, err := buildRule(item)
 		if err != nil {
@@ -161,7 +162,9 @@ func buildRule(item map[string]string) (contract.DangerRule, error) {
 		return rule, fmt.Errorf("%s 的 regex 是空的", rule.Name)
 	}
 	for _, p := range patterns {
-		re, err := regexp.Compile(p)
+		// 大小写不敏感：老版编译时统一加 `(?i)`（对位旧实现的 re.IGNORECASE），
+		// 不照搬就会漏掉 `RM -RF /etc` 这一类写法。
+		re, err := regexp.Compile("(?i)" + p)
 		if err != nil {
 			return rule, fmt.Errorf("%s 的一条正则编译不过：%v", rule.Name, err)
 		}
@@ -277,7 +280,9 @@ func loadPasswdKeywords() ([]contract.PasswdStep, []contract.Category, *contract
 	stepItems := arrayItems(lines, "step")
 	if len(stepItems) == 0 {
 		return nil, nil, cannotStart("config", "",
-			fmt.Sprintf("改密配置里一条 step 都没有：%s\n提示：至少留一条 [[step]]", passwdKeywordsPath))
+			fmt.Sprintf("%s", message.ProblemHint(
+				"改密配置里一条 step 都没有："+passwdKeywordsPath,
+				"至少留一条 [[step]]")))
 	}
 	var steps []contract.PasswdStep
 	for i, item := range stepItems {

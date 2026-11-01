@@ -133,7 +133,7 @@ var required = [][2]string{
 	{"interpreter", "command"},
 }
 
-// Load 读配置并校验。返回的错误已经是给使用者看的那一段话（含「原因：」「提示：」）。
+// Load 读配置并校验。返回的错误已经是给使用者看的那一段话（三行套由 message 拼好，这里只给内容）。
 func load() (*settings, error) {
 	data, err := os.ReadFile(configPath)
 	if err != nil {
@@ -141,23 +141,33 @@ func load() (*settings, error) {
 	}
 	lines, err := tokenize(data)
 	if err != nil {
-		return nil, fmt.Errorf("解析 TOML 失败：%v\n提示：多数是引号或方括号没配对，照随包的配置文件核一遍", err)
+		return nil, fmt.Errorf("%s", message.ProblemHint(
+			fmt.Sprintf("解析 TOML 失败：%v", err),
+			"多数是引号或方括号没配对，照随包的配置文件核一遍"))
 	}
 	raw := rawView(lines)
 
 	// 已移除的段：给一句能照做的说明，不混进「未识别字段」。
 	if _, ok := raw["paths"]; ok {
-		return nil, fmt.Errorf("配置里不允许出现 [paths] 段\n提示：把 [paths] 整段删掉即可，其余字段不用动")
+		return nil, fmt.Errorf("%s", message.ProblemHint(
+			"配置里不允许出现 [paths] 段",
+			"把 [paths] 整段删掉即可，其余字段不用动"))
 	}
 	if _, ok := raw["execution.env"]; ok {
-		return nil, fmt.Errorf("配置里不再有 [execution.env] 段\n提示：把段名改成 [env] 即可——挪到顶层，里面一个个变量不用动")
+		return nil, fmt.Errorf("%s", message.ProblemHint(
+			"配置里不再有 [execution.env] 段",
+			"把段名改成 [env] 即可——挪到顶层，里面一个个变量不用动"))
 	}
 
 	if unknown := unknownKeys(raw); len(unknown) > 0 {
-		return nil, fmt.Errorf("配置包含未识别字段：%s\n提示：请使用随包提供的配置文件，不要增删任何字段", strings.Join(unknown, ", "))
+		return nil, fmt.Errorf("%s", message.ProblemHint(
+			"配置包含未识别字段："+strings.Join(unknown, ", "),
+			"请使用随包提供的配置文件，不要增删任何字段"))
 	}
 	if missing := missingKeys(raw); len(missing) > 0 {
-		return nil, fmt.Errorf("配置缺少必填字段：%s\n提示：请使用随包提供的配置文件，不要删掉里面的任何一行", strings.Join(missing, ", "))
+		return nil, fmt.Errorf("%s", message.ProblemHint(
+			"配置缺少必填字段："+strings.Join(missing, ", "),
+			"请使用随包提供的配置文件，不要删掉里面的任何一行"))
 	}
 
 	cfg, err := decode(raw)
@@ -176,12 +186,11 @@ func load() (*settings, error) {
 // missingConfigError 对位老实现 config.Load 的缺失文案（系统原话那句不翻新）。
 func missingConfigError() error {
 	wd, _ := os.Getwd()
-	return fmt.Errorf(
+	return fmt.Errorf("%s", message.ProblemHint(
 		"这个位置没有配置文件\n"+
-			"      应该在这里：%s\n"+
-			"      当前目录：%s\n"+
-			"提示：请在本工具的解压目录下执行；配置文件必须放在该目录的 config 文件夹里",
-		shownConfigPath, wd)
+			"      应该在这里："+shownConfigPath+"\n"+
+			"      当前目录："+wd,
+		"请在本工具的解压目录下执行；配置文件必须放在该目录的 config 文件夹里"))
 }
 
 // unknownKeys 列出不认识的键；开放表里的键名不校验。
@@ -397,13 +406,17 @@ func trailingBackslashes(s string) int {
 func validateInterpreter(it *interpreter) error {
 	it.Command = strings.TrimSpace(it.Command)
 	if it.Command == "" {
-		return fmt.Errorf("interpreter.command 不能为空\n提示：写命令模式（-c）要用的解释器，例如 bash")
+		return fmt.Errorf("%s", message.ProblemHint(
+			"interpreter.command 不能为空",
+			"写命令模式（-c）要用的解释器，例如 bash"))
 	}
 	if strings.ContainsAny(it.Command, "\r\n") {
 		return fmt.Errorf("interpreter.command 不能含换行，当前值：%q", it.Command)
 	}
 	if len(it.Script) == 0 {
-		return fmt.Errorf("interpreter.script 至少要配一条\n提示：写成 \".sh\" = \"bash\" 这样，后缀带点、等号两边都要有值")
+		return fmt.Errorf("%s", message.ProblemHint(
+			"interpreter.script 至少要配一条",
+			"写成 \".sh\" = \"bash\" 这样，后缀带点、等号两边都要有值"))
 	}
 	norm := make(map[string]string, len(it.Script))
 	seen := make(map[string]string, len(it.Script))
@@ -411,20 +424,28 @@ func validateInterpreter(it *interpreter) error {
 		key := strings.TrimSpace(rawKey)
 		val := strings.TrimSpace(rawVal)
 		if key == "" {
-			return fmt.Errorf("interpreter.script 里有一条后缀是空的\n提示：每条都要写成 \".sh\" = \"bash\"，后缀带点、等号两边都要有值")
+			return fmt.Errorf("%s", message.ProblemHint(
+				"interpreter.script 里有一条后缀是空的",
+				"每条都要写成 \".sh\" = \"bash\"，后缀带点、等号两边都要有值"))
 		}
 		if !strings.HasPrefix(key, ".") {
-			return fmt.Errorf("interpreter.script 的后缀要以点开头，当前值：%q\n提示：写成 \".sh\"，不要写成 \"sh\"", key)
+			return fmt.Errorf("%s", message.ProblemHint(
+				fmt.Sprintf("interpreter.script 的后缀要以点开头，当前值：%q", key),
+				"写成 \".sh\"，不要写成 \"sh\""))
 		}
 		if val == "" {
-			return fmt.Errorf("interpreter.script 里 %q 没有配解释器\n提示：等号右边要写解释器，例如 \".sh\" = \"bash\"", key)
+			return fmt.Errorf("%s", message.ProblemHint(
+				fmt.Sprintf("interpreter.script 里 %q 没有配解释器", key),
+				"等号右边要写解释器，例如 \".sh\" = \"bash\""))
 		}
 		if strings.ContainsAny(val, "\r\n") {
 			return fmt.Errorf("interpreter.script 里 %q 的解释器不能含换行，当前值：%q", key, val)
 		}
 		lower := strings.ToLower(key)
 		if prev, dup := seen[lower]; dup {
-			return fmt.Errorf("interpreter.script 里后缀重复：%q 与 %q 是同一个后缀（大小写不区分）\n提示：一个后缀只能配一个解释器", prev, key)
+			return fmt.Errorf("%s", message.ProblemHint(
+				fmt.Sprintf("interpreter.script 里后缀重复：%q 与 %q 是同一个后缀（大小写不区分）", prev, key),
+				"一个后缀只能配一个解释器"))
 		}
 		seen[lower] = key
 		norm[lower] = val

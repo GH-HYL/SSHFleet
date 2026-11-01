@@ -13,8 +13,71 @@ import (
 // 语法错（不认识的选项、缺值、值认不出）**只记事实、不下结论**——判「这条不过」是闸门的活
 // （上一张图 01 号工单：停只一处）。
 
-// buildPlan 把 argv 认成一张纸。认不了的当事实记在纸上的 Problems 里。
-func buildPlan(cfg *settings, argv []string) (*contract.Plan, *contract.CannotStart) {
+// scanned 是「命令行读一遍」得到的全部事实。
+//
+// 只读一遍：帮助、取值、认不出的选项、位置参数都在同一次里记下。两套扫法会给出两个口径
+// （`--command=ls -h` 这种带等号的写法，老版 pflag 认得出、另写一套扫法认不出），
+// 这正是 16 号单 H9 指的那件事。
+type scanned struct {
+	vals     map[string]string
+	given    map[string]bool
+	problems []contract.Problem
+	help     bool     // 要看帮助；扫到它就停（老版 pflag 当场返回 ErrHelp）
+	extras   []string // 位置参数：老版一律报「多余的参数」，本阶段只记（见 16 号单）
+}
+
+// scan 从左往右扫一遍 argv。
+//
+// 停下有三处，与老版 pflag 一致：撞上 `-h`／`--help`（看帮助）、认不出的选项（当场报错）、
+// 带值选项缺值（当场报错）。所以 `--zzz -h` 报的是选项错，`-h --zzz` 出的是帮助。
+func scan(argv []string) scanned {
+	s := scanned{vals: map[string]string{}, given: map[string]bool{}}
+	if len(argv) <= 1 {
+		s.help = true // 一个参数都不给：老版打帮助后以 0 退出
+		return s
+	}
+	for i := 1; i < len(argv); i++ {
+		tok := argv[i]
+		switch {
+		case tok == "--":
+			s.extras = append(s.extras, argv[i+1:]...)
+			return s
+		case !strings.HasPrefix(tok, "-") || tok == "-":
+			s.extras = append(s.extras, tok) // 位置参数：记下，不拦
+			continue
+		}
+
+		name, inline, hasInline := splitOption(tok)
+		if name == "-h" || name == "--help" {
+			s.help = true
+			return s
+		}
+		o, ok := lookupOption(name)
+		if !ok {
+			s.problems = append(s.problems, contract.Problem{Kind: contract.ProblemUnknownOption, Option: name})
+			return s
+		}
+		if !o.takesValue {
+			s.given[o.long] = true
+			continue
+		}
+		val := inline
+		if !hasInline {
+			if i+1 >= len(argv) {
+				s.problems = append(s.problems, contract.Problem{Kind: contract.ProblemMissingValue, Option: name})
+				return s
+			}
+			i++
+			val = argv[i]
+		}
+		s.vals[o.long] = val
+		s.given[o.long] = true
+	}
+	return s
+}
+
+// buildPlan 把扫出来的事实认成一张纸。认不了的照样记在纸上的 Problems 里。
+func buildPlan(cfg *settings, s scanned) (*contract.Plan, *contract.CannotStart) {
 	p := &contract.Plan{
 		Run: contract.RunParams{
 			TimeoutConnect:  cfg.Execution.TimeoutConnect,
@@ -22,123 +85,64 @@ func buildPlan(cfg *settings, argv []string) (*contract.Plan, *contract.CannotSt
 			TimeoutTransfer: cfg.Execution.TimeoutTransfer,
 			Sudo:            cfg.Execution.Sudo,
 		},
+		Problems: s.problems,
 	}
 
-	vals := map[string]string{}
-	given := map[string]bool{}
-	numberRaw, timeoutRaw, connectTimeoutRaw := "", "", ""
-	numberInvalid, timeoutInvalid, connectInvalid := false, false, false
-
-	for i := 1; i < len(argv); i++ {
-		tok := argv[i]
-		switch {
-		case tok == "--":
-			i = len(argv) // 后面全是位置参数，本工具不认
-			continue
-		case !strings.HasPrefix(tok, "-") || tok == "-":
-			continue // 位置参数不拦（老版允许与选项混排）
-		}
-
-		name, inline, hasInline := splitOption(tok)
-		o, ok := lookupOption(name)
-		if !ok {
-			p.Problems = append(p.Problems, contract.Problem{Kind: contract.ProblemUnknownOption, Option: name})
-			continue
-		}
-		if !o.takesValue {
-			given[o.long] = true
-			continue
-		}
-		val := inline
-		if !hasInline {
-			if i+1 >= len(argv) {
-				p.Problems = append(p.Problems, contract.Problem{Kind: contract.ProblemMissingValue, Option: name})
-				continue
-			}
-			i++
-			val = argv[i]
-		}
-		vals[o.long] = val
-		given[o.long] = true
-
-		// 三个数值选项当场解一遍：认不出就是「值认不出」这条事实。
-		switch o.long {
-		case "--number":
-			numberRaw = val
-			if n, err := strconv.Atoi(val); err != nil || n <= 0 {
-				numberInvalid = true
-			}
-		case "--timeout":
-			timeoutRaw = val
-			if n, err := strconv.Atoi(val); err != nil || n <= 0 {
-				timeoutInvalid = true
-			}
-		case "--connect-timeout":
-			connectTimeoutRaw = val
-			if n, err := strconv.Atoi(val); err != nil || n <= 0 {
-				connectInvalid = true
-			}
-		}
-	}
+	vals, given := s.vals, s.given
+	numberRaw, timeoutRaw, connectTimeoutRaw := vals["--number"], vals["--timeout"], vals["--connect-timeout"]
 
 	// 三条密钥命令本阶段不接（随阶段 08）：先按「还没接上」报，别让它落进「没指定模式」。
 	for _, k := range []string{"--gen-key", "--key-status", "--convert-secret"} {
 		if given[k] {
-			return nil, &contract.CannotStart{
-				Where: "cli",
-				Say:   message.Fatal("cli", "这条用法还没接上：三条密钥命令随阶段 08 接线", ""),
-				Body:  "这条用法还没接上：三条密钥命令随阶段 08 接线",
-			}
+			return nil, cannotStart("cli", "", message.NotWiredKeyTools())
 		}
 	}
 
-	// 数值选项：认不出记一条事实；认得出就落到执行参数上。
-	if numberRaw != "" && !numberInvalid {
-		if n, err := strconv.Atoi(numberRaw); err == nil && n > 0 {
-			p.Run.Concurrency = n
-		}
+	// 三个数值选项：空值与 0 都算「不填」（老版 checkPositiveInt 的第一条），
+	// 认不出或不是正数才记一条事实。
+	if n, ok := positiveValue(numberRaw); ok {
+		p.Run.Concurrency = n
+	} else {
+		p.Problems = append(p.Problems, contract.Problem{
+			Kind: contract.ProblemBadValue, Option: "-n", Raw: numberRaw, Detail: message.SubjectConcurrency,
+		})
 	}
-	if timeoutRaw != "" && !timeoutInvalid {
-		if n, err := strconv.Atoi(timeoutRaw); err == nil && n > 0 {
-			p.Run.TimeoutExecute = n
-			p.Run.TimeoutTransfer = n
-		}
+	if n, ok := positiveValue(timeoutRaw); ok {
+		p.Run.TimeoutExecute = n
+		p.Run.TimeoutTransfer = n
+	} else {
+		p.Problems = append(p.Problems, contract.Problem{
+			Kind: contract.ProblemBadValue, Option: "-t", Raw: timeoutRaw, Detail: message.SubjectTimeout,
+		})
 	}
-	if connectTimeoutRaw != "" && !connectInvalid {
-		if n, err := strconv.Atoi(connectTimeoutRaw); err == nil && n > 0 {
-			p.Run.TimeoutConnect = n
-		}
-	}
-	for _, bad := range []struct {
-		flag    string
-		invalid bool
-		detail  string
-	}{
-		{"-n", numberInvalid, "并发数必须是正整数"},
-		{"-t", timeoutInvalid, "命令或传输超时必须是正整数"},
-		{"-T", connectInvalid, "连接超时必须是正整数"},
-	} {
-		if bad.invalid {
-			p.Problems = append(p.Problems, contract.Problem{
-				Kind: contract.ProblemBadValue, Option: bad.flag, Raw: vals[longOf(bad.flag)], Detail: bad.detail,
-			})
-		}
+	if n, ok := positiveValue(connectTimeoutRaw); ok {
+		p.Run.TimeoutConnect = n
+	} else {
+		p.Problems = append(p.Problems, contract.Problem{
+			Kind: contract.ProblemBadValue, Option: "-T", Raw: connectTimeoutRaw, Detail: message.SubjectConnect,
+		})
 	}
 
 	p.Run.NoShell = given["--no-shell"]
 	p.Run.Yes = given["--yes"]
 	p.Run.Key = given["--key"]
+	p.Run.Answer = vals["--answer"]
 	p.Run.Remark = vals["--remark"]
-	if given["--sudo"] {
+	// 两个身份开关各记各的：同时给要由闸门拒，只看结论就看不出这件事。
+	p.Run.SudoGiven = given["--sudo"]
+	p.Run.NoSudoGiven = given["--no-sudo"]
+	if p.Run.SudoGiven {
 		p.Run.Sudo = true
 	}
-	if given["--no-sudo"] {
+	if p.Run.NoSudoGiven {
 		p.Run.Sudo = false
 	}
 
 	// 认出五种模式：给的这些原样装进任务格，零个／多个都只记事实，由闸门下结论。
-	mode, modes := modeOf(given)
+	// -p 单独一格——命令与脚本模式下它不属于任何一种任务，却仍要判「不能搭配」。
+	mode, modes := modeOf(vals)
 	p.Mode = mode
+	p.Task.Path = vals["--path"]
 	if len(modes) > 1 {
 		p.Problems = append(p.Problems, contract.Problem{
 			Kind:   contract.ProblemMultiMode,
@@ -151,9 +155,9 @@ func buildPlan(cfg *settings, argv []string) (*contract.Plan, *contract.CannotSt
 	case contract.ModeScript:
 		p.Task.Script = &contract.ScriptTask{Path: vals["--script"]}
 	case contract.ModeUpload:
-		p.Task.Upload = &contract.UploadTask{Source: vals["--upload"], RemoteDir: vals["--path"]}
+		p.Task.Upload = &contract.UploadTask{Source: vals["--upload"]}
 	case contract.ModeDownload:
-		p.Task.Download = &contract.DownloadTask{RemotePath: vals["--download"], LocalDir: vals["--path"]}
+		p.Task.Download = &contract.DownloadTask{RemotePath: vals["--download"]}
 	case contract.ModePasswd:
 		p.Task.Passwd = &contract.PasswdTask{Raw: vals["--change-password"]}
 	}
@@ -179,22 +183,23 @@ func buildPlan(cfg *settings, argv []string) (*contract.Plan, *contract.CannotSt
 
 // modeOf 认出给了哪一种模式，以及一共给了几种。
 //
-// 零个与多个都不在这里报错——那两句原话由闸门说（停只一处）。这里只如实回答「给了哪些」。
-func modeOf(given map[string]bool) (contract.Mode, []string) {
+// **按值认，不按「出现过没有」认**：`-c ""` 在老版里等于没给（Args.Command 是空串），
+// 结局是「模式零个」。零个与多个都不在这里报错——那两句原话由闸门说（停只一处）。
+func modeOf(vals map[string]string) (contract.Mode, []string) {
 	var modes []string
-	if given["--command"] {
+	if vals["--command"] != "" {
 		modes = append(modes, "--command")
 	}
-	if given["--script"] {
+	if vals["--script"] != "" {
 		modes = append(modes, "--script")
 	}
-	if given["--upload"] {
+	if vals["--upload"] != "" {
 		modes = append(modes, "--upload")
 	}
-	if given["--download"] {
+	if vals["--download"] != "" {
 		modes = append(modes, "--download")
 	}
-	if given["--change-password"] {
+	if vals["--change-password"] != "" {
 		modes = append(modes, "--change-password")
 	}
 	if len(modes) != 1 {
@@ -213,12 +218,17 @@ func modeOf(given map[string]bool) (contract.Mode, []string) {
 	return contract.ModePasswd, modes
 }
 
-// longOf 短名对回长名，取值时用。
-func longOf(short string) string {
-	if o, ok := lookupOption(short); ok {
-		return o.long
+// positiveValue 解一个「正整数」选项：空值与 0 都算不填（老版 checkPositiveInt 第一条），
+// 认得出就交回值，认不出交回 false。
+func positiveValue(raw string) (int, bool) {
+	if raw == "" || raw == "0" {
+		return 0, true
 	}
-	return short
+	n, err := strconv.Atoi(raw)
+	if err != nil || n <= 0 {
+		return 0, false
+	}
+	return n, true
 }
 
 // splitOption 拆 `-c=x` 与 `--command=x`：返回值里带「是不是内联给的」。
