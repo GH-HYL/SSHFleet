@@ -11,8 +11,10 @@ const consolePkg = "console"
 
 // tipSymbols 是塔尖能从这三个包里用的符号，点名的几个，不是「这三个包随便用」
 // （ADR-0032 第五条）。包路径写在左边，所以 os/signal 与 os 分得开。
+// os.Args 是 2026-11-01 补的：argv 是塔尖「把命令行递给解析站」那件事的输入，
+// 没有它塔尖连第一格都搬不动；详见 ADR-0032 末尾的更新记录。
 var tipSymbols = map[string][]string{
-	"os":        {"Exit"},
+	"os":        {"Exit", "Args"},
 	"os/signal": {"Notify"},
 	"errors":    {"As", "Is"},
 }
