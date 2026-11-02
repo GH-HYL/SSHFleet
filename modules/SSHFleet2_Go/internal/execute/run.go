@@ -139,7 +139,7 @@ func visit(ctx context.Context, p *contract.Plan, idx int, rep *reporter) contra
 
 	// 事实收齐了才定分类：两条路都要定，不然连不上的那些台在结算站那里没有名字。
 	res.Category = categoryOf(p.Mode, p.Tables, &res)
-	rep.result(res)
+	rep.result(res, node.User)
 	return res
 }
 

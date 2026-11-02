@@ -176,9 +176,9 @@ func runOneInto(t *testing.T, ctx context.Context, p *contract.Plan) (contract.N
 	return onlyItem(t, paper), term, execLog
 }
 
-// TestRunCommandWritesResultLine 真机跑一台：屏幕上那一行，同时落进终端输出文件与执行期日志。
+// TestRunCommandWritesResultLine 真机跑一台：屏幕上那一行落进终端输出文件，日志另写节点明细。
 //
-// 三处同一段字：文件里是整段（带末尾换行），日志里是同一个正文加一条时间戳前缀。
+// 给人看的那一段（屏幕与文件）是同一段字；日志是记录，成功那台只有一行。
 func TestRunCommandWritesResultLine(t *testing.T) {
 	node, _ := integrationTarget(t)
 	p := oneNodePlan(node)
@@ -194,10 +194,42 @@ func TestRunCommandWritesResultLine(t *testing.T) {
 		t.Fatalf("terminal-output.txt 与那一行不一样。\n期望：\n%s\n实际：\n%s", want, got)
 	}
 
-	const prefix = "  -  [INFO   ]  -  "
-	body := strings.TrimSuffix(textAfter(t, execLog, prefix), "\n")
-	if body != strings.TrimSuffix(want, "\n") {
-		t.Fatalf("执行期日志那条与那一行不一样。\n期望：\n%s\n实际：\n%s",
-			strings.TrimSuffix(want, "\n"), body)
+	// 日志另走一条：成功那台只有一行「成功：连接 …，执行 …」，不是给人看的那一段字。
+	logged := readAll(t, execLog)
+	if !strings.Contains(logged, "【"+item.IP+"】成功：连接 ") {
+		t.Fatalf("执行期日志里没有成功那一行：\n%s", logged)
+	}
+	if strings.Contains(logged, strings.Repeat("=", 50)) {
+		t.Fatalf("日志里不该出现给人看的那条分隔线：\n%s", logged)
+	}
+}
+
+// TestRunCommandLogsNodeDetail 真机跑一个失败节点：执行期日志是五级明细，不是给人看的那一段字。
+//
+// 与老版真跑产物（`build/建站04_12_2026-11-02_1440/ab_old/`，`-c "exit 3"`）对过：级别、
+// 节点前缀、行文一致；老版那句多一截「登录方式 密码」，纸里没有那一格，宁缺不猜。
+func TestRunCommandLogsNodeDetail(t *testing.T) {
+	node, _ := integrationTarget(t)
+	p := oneNodePlan(node)
+	p.Task.Command.Text = "exit 3"
+
+	item, term, execLog := runOneInto(t, context.Background(), p)
+
+	logged := readAll(t, execLog)
+	for _, want := range []string{
+		"  -  [SUCCESS]  -  【" + item.IP + "】连接成功，用户 " + node.User + "，耗时 ",
+		"  -  [ERROR  ]  -  【" + item.IP + "】命令执行失败，退出码 3，耗时 ",
+		"  -  [INFO   ]  -  【" + item.IP + "】分类: 执行失败(退出码3)",
+	} {
+		if !strings.Contains(logged, want) {
+			t.Fatalf("执行期日志缺这一级 %q：\n%s", want, logged)
+		}
+	}
+	// 给人看的那一段字不进日志：分隔线只在 terminal-output.txt 里。
+	if strings.Contains(logged, strings.Repeat("=", 50)) {
+		t.Fatalf("日志里出现了给人看的分隔线：\n%s", logged)
+	}
+	if !strings.Contains(readAll(t, term), strings.Repeat("=", 50)) {
+		t.Fatalf("terminal-output.txt 里没有那条分隔线")
 	}
 }
