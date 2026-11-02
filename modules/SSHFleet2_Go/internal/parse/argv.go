@@ -172,6 +172,10 @@ func buildPlan(cfg *settings, s scanned) (*contract.Plan, *contract.CannotStart)
 		}
 	}
 
+	// 执行资源：这次用到的原料在哪。清单这一格是 `-f` 的原值，两种形态（文件路径、
+	// 内联记录）都照原样装着；脚本与代填随阶段 05 加。
+	p.Resources.Manifest = vals["--csv-file"]
+
 	// 判据表：解析读一次、校验一次，随纸交给闸门。
 	tables, fail := loadTables(mode)
 	if fail != nil {
