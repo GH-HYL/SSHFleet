@@ -57,3 +57,49 @@ func TestScanStopsAtFirstProblem(t *testing.T) {
 		t.Fatalf("位置参数只记不拦，应当记下 misc，实际 %v", s.extras)
 	}
 }
+
+// 两个身份开关同给：解析站只记一条事实，纸上只留一个结论字段（RunParams.Sudo）。
+//
+// 这条钉的是「事实在解析站产生」——只测闸门的话，把 argv.go 里记事实那一段删掉，
+// 闸门测试照样绿（它自己塞 Problem），线上就变成静默按后一个覆盖。
+func TestSudoConflictRecordedAsProblem(t *testing.T) {
+	dir := writeTempConfig(t)
+	manifest := writeFile(t, dir, "ok.csv", "10.0.0.1,22,root,pw\n")
+
+	cfg, err := load()
+	if err != nil {
+		t.Fatalf("临时配置读不通：%v", err)
+	}
+
+	both := scan([]string{"sshfleet2", "--sudo", "--no-sudo", "-c", "uptime", "-f", manifest})
+	p, fail := buildPlan(cfg, both)
+	if fail != nil {
+		t.Fatalf("两个开关同给不该走到「起不来」：%v", fail.Body)
+	}
+	found := false
+	for _, pr := range p.Problems {
+		if pr.Kind == contract.ProblemFlagConflict {
+			found = true
+			if pr.Option != "--sudo --no-sudo" {
+				t.Errorf("冲突那条要记下两个开关名，实际 %q", pr.Option)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("两个开关同给应当记一条 ProblemFlagConflict，实际 Problems=%v", p.Problems)
+	}
+
+	onlyNo := scan([]string{"sshfleet2", "--no-sudo", "-c", "uptime", "-f", manifest})
+	p, fail = buildPlan(cfg, onlyNo)
+	if fail != nil {
+		t.Fatalf("只给 --no-sudo 不该走到「起不来」：%v", fail.Body)
+	}
+	for _, pr := range p.Problems {
+		if pr.Kind == contract.ProblemFlagConflict {
+			t.Fatalf("只给一个开关不该记冲突，实际 Problems=%v", p.Problems)
+		}
+	}
+	if p.Run.Sudo {
+		t.Errorf("只给 --no-sudo 时结论应当是不用 sudo，实际 %v", p.Run.Sudo)
+	}
+}

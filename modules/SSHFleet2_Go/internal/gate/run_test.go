@@ -127,8 +127,10 @@ func TestRefuseArguments(t *testing.T) {
 			name: "两个身份开关同给",
 			plan: planOf(contract.ModeCommand, func(p *contract.Plan) {
 				p.Task.Command = &contract.CommandTask{Text: "ls"}
-				p.Run.SudoGiven = true
-				p.Run.NoSudoGiven = true
+				p.Problems = append(p.Problems, contract.Problem{
+					Kind:   contract.ProblemFlagConflict,
+					Option: "--sudo --no-sudo",
+				})
 			}),
 			want: "选项/参数合规性检查未通过：--sudo 与 --no-sudo 只能给一个（两个都不给=按配置里的值）",
 		},

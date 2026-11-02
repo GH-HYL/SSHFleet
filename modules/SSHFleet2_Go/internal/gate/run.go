@@ -200,8 +200,9 @@ func argumentRefusal(p *contract.Plan) *Refusal {
 		return refuse(message.RefuseUploadNeedsPath())
 	}
 
-	// 执行身份：一对开关同时写就是自相矛盾。
-	if p.Run.SudoGiven && p.Run.NoSudoGiven {
+	// 执行身份：一对开关同时写就是自相矛盾。事实由解析站记（纸上只有一个结论字段，
+	// 装不下「两个都给」），这里只照那条事实下结论。
+	if flagConflict(p, "--sudo --no-sudo") {
 		return refuse(message.RefuseSudoConflict())
 	}
 
@@ -215,6 +216,17 @@ func argumentRefusal(p *contract.Plan) *Refusal {
 		return refuse(message.RefusePasswdEmpty())
 	}
 	return nil
+}
+
+// flagConflict 报「这一对开关同时给了」。事实在解析站记着（那里看得见命令行原样），
+// 闸门只认这条事实、自己不再比较选项——纸上没有那两格可比。
+func flagConflict(p *contract.Plan, options string) bool {
+	for _, pr := range p.Problems {
+		if pr.Kind == contract.ProblemFlagConflict && pr.Option == options {
+			return true
+		}
+	}
+	return false
 }
 
 // checkRemotePath 判一个远端路径的形态：先从 / 写起、不含回车换行；上传的目录还要求以 / 收尾。
