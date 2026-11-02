@@ -32,6 +32,13 @@ func TestCheckDepsClean(t *testing.T) {
 	}
 }
 
+// 类二第三条：读当前时刻只许塔尖、执行站与日志包；解析站读一次就报。
+//
+// 同一个样本证明两半：那三个家各写一次 time.Now 不红，第四个包写一次就红。
+func TestCheckDepsClock(t *testing.T) {
+	wantOne(t, CheckDeps(loadFixture(t, "clock")), ClassDeps, "internal/parse/run.go", "time.Now")
+}
+
 func anyContains(vs []Violation, sub string) bool {
 	for _, v := range vs {
 		if strings.Contains(v.String(), sub) {

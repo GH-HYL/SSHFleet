@@ -52,6 +52,18 @@ var thirdParty = []string{
 	"github.com/charmbracelet/lipgloss",
 }
 
+// clockReaders 是「问现在几点」的那三个函数：谁在运行时读它们，谁就在决定「现在」。
+//
+// 许读的包只有三处（开发者 2026-11-02 定的口径）：执行站（耗时、超时、握手 deadline 全是
+// 实时的，它必须读）、日志包（每行时间戳与轮转文件改名）、塔尖（建归档目录要「现在」
+// 这一个值）。别处要时间就让它从参数进来——`archive.Create` 收的是一个现成的时刻，测试给
+// 个固定值就能把目录名钉死；反过来，一处随手取「现在」，那条路径在测试里就再也对不准。
+var clockReaders = []string{"Now", "Since", "Until"}
+
+// clockHomes 是许读时钟的包（短名）。塔尖不写在这一行——它按规则表那一行的类别认，
+// 因为塔尖在表里写的是模块名 `sshfleet2`，不是 `main`（见 checkClock、clockHome）。
+var clockHomes = []string{"execute", "log"}
+
 // tipDeps 是塔尖的整张清单：五站、八个横切包、契约、密钥管理包。
 var tipDeps = []string{
 	"parse", "gate", "execute", "settle", "report",

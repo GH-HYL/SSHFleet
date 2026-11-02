@@ -40,6 +40,8 @@ var redline = []RedLineEntry{
 	// 03 号工单：依赖方向与包清单对账
 	{"TestCheckDeps", []string{"CheckDeps", "Report"}},
 	{"TestCheckDepsClean", []string{"CheckDeps", "Report"}},
+	// 04 阶段质量审计命中二：谁许读当前时刻（新增不算改）
+	{"TestCheckDepsClock", []string{"CheckDeps", "ClassDeps"}},
 
 	// 04 号工单：契约纯净与失败类型的构造点
 	{"TestCheckContract", []string{"CheckContract", "ClassContract"}},
