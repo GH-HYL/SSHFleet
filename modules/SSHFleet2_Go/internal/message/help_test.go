@@ -161,10 +161,3 @@ func TestHelpScreenFloorsDescriptionWidth(t *testing.T) {
 		t.Fatalf("木偶数据的选项行不在屏里：\n%s", screen)
 	}
 }
-
-func TestCannotStartLine(t *testing.T) {
-	got := CannotStartLine("加载失败", "原因那几行").Text()
-	if got != "加载失败：原因那几行\n" {
-		t.Errorf("起不来那句话的形态：%q", got)
-	}
-}

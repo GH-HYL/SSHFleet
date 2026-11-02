@@ -3,9 +3,9 @@ package gate
 import (
 	"strings"
 
+	"sshfleet2/internal/archive"
 	"sshfleet2/internal/ask"
 	"sshfleet2/internal/contract"
-	"sshfleet2/internal/log"
 	"sshfleet2/internal/mask"
 	"sshfleet2/internal/message"
 )
@@ -119,7 +119,7 @@ func confirmRefusal(p *contract.Plan) (*Refusal, message.Line) {
 
 // refuse 把一句正文交给终端：走 stderr，老版那副 [ERROR] 外壳，末尾附日志路径。
 func refuse(body string) *Refusal {
-	return &Refusal{Say: message.Fatal("cli", body, log.ToolPath())}
+	return &Refusal{Say: message.Fatal("cli", body, archive.ToolLogPath(contract.HistoryDir))}
 }
 
 // parseRefusal 解析层那三条：认不出的选项、带值选项缺值、多出来的位置参数。

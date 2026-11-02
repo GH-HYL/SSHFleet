@@ -114,9 +114,3 @@ func HelpScreen(name, version string, width int, entries []HelpEntry) Line {
 	b.WriteString("\n更多用法、配置说明、示例：见 docs/\n")
 	return Line{s: b.String()}
 }
-
-// CannotStartLine 起不来那一句话。本阶段是过渡形态：只有一句加一个换行，
-// 话术与退出码表随阶段 03 定稿，别当口径抄。
-func CannotStartLine(head, detail string) Line {
-	return Line{s: Shell(head, detail) + "\n"}
-}

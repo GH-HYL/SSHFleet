@@ -62,7 +62,7 @@ var redline = []RedLineEntry{
 	// 建站 03：闸门的入口、ask 的那一件事、exitcode 的那一件事
 	{"TestRedlineGateRefusesBadCombination", []string{"Kind", "contract.Problem", "contract.ProblemMultiMode", "gate.Run"}},
 	{"TestRedlineGatePassesCleanPaper", []string{"gate.Run"}},
-	{"TestRedlineAskNonInteractive", []string{"ask.Ask", "ask.Yes", "message.NotWiredLine"}},
+	{"TestRedlineAskNonInteractive", []string{"ask.Ask", "ask.Yes", "message.ConfirmPrompt"}},
 	{"TestRedlineExitCodeTable", []string{"Kind", "exitcode.CannotStart", "exitcode.Code", "exitcode.Interrupted", "exitcode.Kind", "exitcode.Refused", "exitcode.Success"}},
 
 	// 真工程整跑
