@@ -182,6 +182,24 @@ func buildPlan(cfg *settings, s scanned) (*contract.Plan, *contract.CannotStart)
 		return nil, fail
 	}
 	p.Tables = tables
+
+	// 读清单：第一张纸的「对谁做」那一格。只在模式已定死时读——给了多个模式时
+	// 先让闸门报「互斥」，与材料自检同一条次序（老版就是这个顺序）。
+	if len(modes) == 1 {
+		m, nfail := readManifest(p.Resources.Manifest)
+		if nfail != nil {
+			return nil, nfail
+		}
+		if m.notice.S != "" {
+			p.Notices = append(p.Notices, m.notice)
+		}
+		nodes, notices, nfail := buildNodes(m.rows, cfg, given["--key"])
+		if nfail != nil {
+			return nil, nfail
+		}
+		p.Nodes = nodes
+		p.Notices = append(p.Notices, notices...)
+	}
 	return p, nil
 }
 

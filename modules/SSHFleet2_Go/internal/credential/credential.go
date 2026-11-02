@@ -89,14 +89,16 @@ func Secret(value string, encrypted bool) (string, error) {
 	if !encrypted {
 		return value, nil
 	}
-	key, err := MasterKey()
-	if err != nil {
-		return "", err
-	}
+	// 先看文件在不在、读不读得到，再谈密钥：文件不在与密钥不对是两件事，
+	// 说错了使用者会去修错的那一头（老版也是先 Stat 再解）。
 	path := strings.TrimSpace(value)
 	content, err := os.ReadFile(path)
 	if err != nil {
 		return "", fmt.Errorf("读不到凭据文件 %s：%w", path, err)
+	}
+	key, err := MasterKey()
+	if err != nil {
+		return "", err
 	}
 	return Decrypt(strings.TrimSpace(string(content)), key)
 }
