@@ -84,6 +84,8 @@ var redline = []RedLineEntry{
 	{"TestRedlineSettleFillsLedger", []string{"contract.Extra", "contract.ModeCommand", "contract.NodeResult", "contract.ResultPaper", "settle.Run"}},
 	// 04 阶段 12 号单：那一行真的落到盘上（新增不算改）
 	{"TestRedlineExecuteWritesResultLine", []string{"contract.CommandTask", "contract.ModeCommand", "contract.Node", "contract.Plan", "contract.Task", "execute.Run"}},
+	// 04 阶段 15 号单：报告站的屏幕那一段是「话」，落点由别人给（新增不算改）
+	{"TestRedlineReportScreenAndPath", []string{"Kind", "contract.Ledger", "message.Line", "message.StatisticsLine", "report.Run"}},
 }
 
 // RedLine 返回名单的一份拷贝。检查读它；改返回值影响不到名单本身。

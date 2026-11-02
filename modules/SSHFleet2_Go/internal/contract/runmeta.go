@@ -13,7 +13,11 @@ package contract
 // internal/parse/runmeta.go 与 internal/report/runmeta.go，密钥各写一次。
 type RunMeta []byte
 
-// RunMetaBody 是封进去之前的那份东西：报告站写 `report.txt` 第一段要用到的一切原值。
+// RunMetaBody 是封进去之前的那份东西：报告站出那两样（屏幕统计块、`report.txt`）要用到的一切原值。
+//
+// 头一段是「使用者敲了什么」，后两样是「这次生效的呈现口径」——三类都只有解析站取得到，
+// 而报告站只收得到第三张纸，所以一次收齐封进来（开发者 2026-11-02：「他要什么，解析站就给
+// 什么，一个解析站直接全获取了，直接打包好加密」）。
 //
 // 它是「解析站封进去的一份副本」，不是第二处算出来的值——全工程只有解析站写它一次。
 // 报告站之外谁也不该读它，也读不到。
@@ -39,6 +43,20 @@ type RunMetaBody struct {
 	TimeoutConnect  int `json:"timeout_connect,omitempty"`
 	TimeoutExecute  int `json:"timeout_execute,omitempty"`
 	TimeoutTransfer int `json:"timeout_transfer,omitempty"`
+
+	// ShowCategoryTips 是配置 `enable.show_category_tips` 的原值：屏幕上统计块末尾那段
+	// 「提示：」与 `report.txt` 里那一段都由它决定出不出（关掉时屏幕退回「常见退出码」一行）。
+	//
+	// 报告站手上只有第三张纸与这一段密文，读不到配置——而两处产出都要它，所以随原值一起封进来
+	// （开发者 2026-11-02：报告站要什么，解析站一次收齐封好）。
+	ShowCategoryTips bool `json:"show_category_tips,omitempty"`
+
+	// ErrorKeywordsPath 是判据文件的展示路径（`config/keywords_error.conf`）：屏幕上
+	// 「未归类」那三行引导里有一句「可把它的特征词补进 〈这里〉」。
+	//
+	// 存的是**已经按展示形态算好**的值（老版 `config.DisplayPath` 去掉开头的 `./`），
+	// 报告站只管印——它不该为了印一行路径去认路径怎么归一。
+	ErrorKeywordsPath string `json:"error_keywords_path,omitempty"`
 }
 
 // 封法常量：两处（封与解）共用，改格式只改这里一处。

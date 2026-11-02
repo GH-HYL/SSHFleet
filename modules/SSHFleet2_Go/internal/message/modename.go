@@ -6,12 +6,14 @@ package message
 // 逐处核对七个点、手改四处），新工程里 `cli` 劈进了解析与闸门、模式类型住契约，而契约不许
 // 有函数——所以这张表落在 `message`：它是唯一改字处，ADR-0013 要的「名字只改一处」照样成立。
 //
-// 眼下只搬了要被两个以上站同时读到的两列：
+// 眼下搬了这几列：
 //
 //	成功分类  执行站写进纸、结算站比对、报告站印（11 号单）
 //	动作名    结果行前半截「执行: 成功 - 0.123s」（12 号单）
+//	模式名    确认屏与报告「执行模式：」那一行（15 号单）
+//	超时行措辞 报告「执行超时／传输超时／改密超时」（15 号单）
 //
-// 其余七列（归档目录名、报告标题、模式行、超时行措辞……）随 05／07／15 各自要用时再并进来。
+// 其余几列（归档目录名、报告标题之外的那几处叫法……）随 05／07 各自要用时再并进来。
 // 并的时候整张表一处成形，别处仍不许写字。
 
 import "sshfleet2/internal/contract"
@@ -73,6 +75,36 @@ func LogLabel(m contract.Mode) string {
 	switch m {
 	case contract.ModeCommand, contract.ModeScript:
 		return logName(m) + ActionName(m)
+	}
+	return ""
+}
+
+// modeTitle 本模式的正式叫法：确认屏「执行模式」那一格与 `report.txt` 同一行都用它
+// （老版 `ScreenLabel`／`ReportTitle` 两列同值，这里并成一列）。
+func modeTitle(m contract.Mode) string {
+	switch m {
+	case contract.ModeCommand:
+		return "命令模式"
+	case contract.ModeScript:
+		return "脚本模式"
+	case contract.ModeUpload:
+		return "上传模式"
+	case contract.ModeDownload:
+		return "下载模式"
+	case contract.ModePasswd:
+		return "改密模式"
+	}
+	return ""
+}
+
+// timeoutLabel 报告里那个超时行怎么称呼：命令与脚本是执行超时、上传下载是传输超时、
+// 改密是改密超时（老版 `TimeoutLabel`）。
+func timeoutLabel(m contract.Mode) string {
+	switch m {
+	case contract.ModeCommand, contract.ModeScript, contract.ModePasswd:
+		return "执行超时"
+	case contract.ModeUpload, contract.ModeDownload:
+		return "传输超时"
 	}
 	return ""
 }
