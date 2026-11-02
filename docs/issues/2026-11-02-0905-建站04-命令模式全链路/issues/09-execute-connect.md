@@ -4,7 +4,7 @@
 
 **Blocked by**：01（纸上要有那台机器）、02（加密开着时要解密码）。
 
-**Status**：ready-for-agent
+**Status**：done
 
 ## 要落的判断
 
@@ -32,3 +32,26 @@
 ## 做完之后
 
 10 号单在它建起来的会话上交一条命令。
+
+## Comments
+
+### 2026-11-02：交付
+
+**落了什么**：执行站从一句包注释变成能连机器——`message.go`（报文格式，七种环境一次搬齐）、`connect_message.go`（九个环节名与两条翻译）、`client.go`（拨号、认证、收服务端提示、关掉）、`run.go`（入口 `Run`：按纸上并发跑、按节点序交回、取消之后不再开工）。跑命令、定分类、刷屏仍是后面几张单的事，`visit` 里「连上之后」那一段就是留给 10 的落点。
+
+**三处判断**：
+
+1. **服务端提示并进「错误原文」，不另立一格**。理由在纸上：`contract/result.go` 的 `ErrorText` 注释原本就写着「工具自己那条报文、远端原话、服务端提示都原样在里面」。合并的次序是**原文在前、提示在后**——与老版把 `Error` 与 `ServerBanner` 合成显示的次序一致；连上了也写（密码过期那类提示伴随的是成功的连接，分类要靠它认出来），屏幕上正常行不显示这一格，由 12 号单与报告站把关。11 号单的「三样合起来撞关键词」因此落在 `ErrorText + Output` 两格上，不用再找第三个字段。
+2. **私钥文件读不到也挂 `key_parse_failed`**，不新造环节名：`keywords_error.conf` 按 `sshfleet.connect.key_parse_failed` 认「密钥解析失败」那一类，新造一个名字只会让这一类落到「未归类」。
+3. **并发调度并入本单**：老版这一段是 `batch/pool.go`，迁移地图把它摊给执行站，而 01–16 号单里没有别的主人（13 号单只要求界面显示「当前并发」）。纸上「并发」为 0 表示全部并行，收工按节点下标保序，取消后已开工的照常上交——三条都与老版同。
+
+**验收**（`build/建站04_09_2026-11-02_1210/` 是当天沙盒）：
+
+- 真机四条，对 `u1`（`127.0.0.1:2201`）：连得上（`ErrorText` 为空）／密码错（`sshfleet.connect.auth_failed: …`）／端口不通（`sshfleet.connect.refused: …`）／过期账号拿到 PAM 提示。
+- **过期账号两种造法都验过**：`chage -E 0`（账号到期）是**连不上**，原文 `sshfleet.connect.handshake_failed: ssh: handshake failed: EOF` 后面紧跟 `Your account has expired; please contact your system administrator.`——正是 ADR-0005 那个案子；`chage -d 0`（密码到期）是**连得上**，`ErrorText` 里是 `You are required to change your password immediately (administrator enforced).`。这台机器上两个账号都留着：`t1`（密码到期）、`t2`（账号到期），两者与核心四样一起按 `SSHFLEET_TEST_*` 取，缺一个整批 skip。
+- 本机五条：三条翻译表、报文格式（含环境名写错时的坏形状）、入口四条（失败一条事实／并发保序／已取消的 context 立刻收场／没节点零条）。`-race` 另跑一遍，干净。
+- 四项检查全绿；17 包零违规、放行台账 0 条、红线 30 → 31 条（新增执行站入口那一条，按 ADR-0037 决定五「新增不算改」）；`go.mod` 只多 `golang.org/x/crypto v0.57.0`（从 `// indirect` 转直接），`go.sum` 无新增条目。
+
+**一条已知差异（要留到 09 逐字比对判）**：**私钥 PEM 的读取与校验位置**。老版在清单那一步就把 PEM 读出来验（`nodelist/precheck.go` 的 `cache.keyPEM`），坏了是**整批退**、话是中文三行套里的「密钥」那一条；新版在建连这一步读，坏了是**这一台失败**、话是报文 `sshfleet.connect.key_parse_failed: …`。差的是「报得早还是晚」与措辞，不是「报不报」。要抹平只能把读取提前到解析站（那是解析站的活，且会动「先报哪一句」的次序，归 `docs/issues/2026-11-02-1132-建站0x-参数报错顺序/` 那一类），本单不碰。
+
+**没做的**：09 号单只连不跑，所以「会话建起来之后」的那半截（下发行、收输出、退出码）仍是 10 号单；`AuthMethod`（执行期日志的「登录方式」）这一格纸上没有，等 12 号单要日志那一行时一起定。

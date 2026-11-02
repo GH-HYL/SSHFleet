@@ -74,6 +74,8 @@ var redline = []RedLineEntry{
 	// 04 阶段：凭据包的那一件事（新增不算改）
 	{"TestRedlineCredentialReportsState", []string{"credential.KeyMissing", "credential.KeyReady", "credential.Secret", "credential.Status"}},
 	{"TestRedlineArchiveHandsOutPaths", []string{"archive.Create"}},
+	// 04 阶段 09 号单：执行站入口（新增不算改）
+	{"TestRedlineExecuteRecordsConnectFact", []string{"contract.CommandTask", "contract.ModeCommand", "contract.Node", "contract.Plan", "contract.Task", "execute.Run"}},
 }
 
 // RedLine 返回名单的一份拷贝。检查读它；改返回值影响不到名单本身。
