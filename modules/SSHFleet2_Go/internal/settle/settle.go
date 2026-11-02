@@ -16,12 +16,6 @@ import (
 	"sshfleet2/internal/message"
 )
 
-// 跑没跑齐那两个取值。中断造成的缺额不叫「异常」——那是使用者自己按的。
-const (
-	verifyPassed = "通过"
-	verifyFailed = "异常"
-)
-
 // Run 递一张第二张纸，交回第三张纸。纯计算：不写终端、不写文件。
 //
 // 附加格一个字段都不打开，原样递给报告站（ADR-0035 决定九）。
@@ -48,13 +42,16 @@ func Run(paper contract.ResultPaper) contract.Ledger {
 	}
 
 	// 缺额分两种：中断没跑完（用户自己按的，不该叫「异常」），与其它原因的不一致（真异常）。
+	//
+	// 那两个名字不在这里另立一份：住 `message`（唯一改字处），统计块按
+	// `l.Verify == message.VerifyPassed` 判——两边各写一份，改一处就当场判不上。
 	switch {
 	case ledger.NotRun == 0:
-		ledger.Verify = verifyPassed
+		ledger.Verify = message.VerifyPassed
 	case paper.Interrupted:
 		ledger.Verify = ""
 	default:
-		ledger.Verify = verifyFailed
+		ledger.Verify = message.VerifyFailed
 	}
 
 	counts := map[string]int{}

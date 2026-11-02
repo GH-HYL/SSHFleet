@@ -54,45 +54,36 @@ func Run(p *contract.Plan) (*Refusal, message.Line) {
 // 这条只在纸被造错时才响（写着命令、装的却是脚本），正常使用撞不上——所以它的话说得直白，
 // 不往使用者身上推。算「输入不合规」那一类，不另立一类（ADR-0035 决定七）。
 func envelopeRefusal(p *contract.Plan) *Refusal {
+	// 五种载荷的称呼向 `message` 要（模式名字表一处成形，ADR-0013 决定三）：闸门自己抄一遍，
+	// 改叫法时这一屏就会与确认屏、报告各说各的。
 	set := make([]string, 0, 5)
 	for _, one := range []struct {
-		name    string
+		mode    contract.Mode
 		present bool
 	}{
-		{"命令", p.Task.Command != nil},
-		{"脚本", p.Task.Script != nil},
-		{"上传", p.Task.Upload != nil},
-		{"下载", p.Task.Download != nil},
-		{"改密", p.Task.Passwd != nil},
+		{contract.ModeCommand, p.Task.Command != nil},
+		{contract.ModeScript, p.Task.Script != nil},
+		{contract.ModeUpload, p.Task.Upload != nil},
+		{contract.ModeDownload, p.Task.Download != nil},
+		{contract.ModePasswd, p.Task.Passwd != nil},
 	} {
 		if one.present {
-			set = append(set, one.name)
+			set = append(set, message.LogName(one.mode))
 		}
 	}
 	if len(set) > 1 {
-		return refuse(message.RefuseEnvelope("同时装了" + strings.Join(set, "、")))
+		return refuse(message.RefuseEnvelopeMulti(set))
 	}
 
-	want := ""
-	switch p.Mode {
-	case contract.ModeCommand:
-		want = "命令"
-	case contract.ModeScript:
-		want = "脚本"
-	case contract.ModeUpload:
-		want = "上传"
-	case contract.ModeDownload:
-		want = "下载"
-	case contract.ModePasswd:
-		want = "改密"
-	default:
+	want := message.LogName(p.Mode)
+	if want == "" {
 		return nil // 模式零个／多个由上一条判据报，这里不抢
 	}
 	if len(set) == 0 {
-		return refuse(message.RefuseEnvelope("标签是" + want + "，载荷却是空的"))
+		return refuse(message.RefuseEnvelopeEmpty(want))
 	}
 	if set[0] != want {
-		return refuse(message.RefuseEnvelope("标签是" + want + "，装的是" + set[0]))
+		return refuse(message.RefuseEnvelopeWrong(want, set[0]))
 	}
 	return nil
 }
@@ -207,7 +198,7 @@ func argumentRefusal(p *contract.Plan) *Refusal {
 
 	// 执行身份：一对开关同时写就是自相矛盾。事实由解析站记（纸上只有一个结论字段，
 	// 装不下「两个都给」），这里只照那条事实下结论。
-	if flagConflict(p, "--sudo --no-sudo") {
+	if flagConflict(p, contract.FlagPairSudo) {
 		return refuse(message.RefuseSudoConflict())
 	}
 

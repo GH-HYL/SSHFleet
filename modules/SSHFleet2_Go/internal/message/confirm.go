@@ -12,6 +12,11 @@ import (
 //
 // 事实从纸上来（模式、命令、清单、台数、并发、超时、备注），排版只在这一处成形。
 
+// modeRowLabel 是「执行模式」这一格的标签：确认屏的表头与 `report.txt` 的同一行都用它。
+//
+// 一处成形——两处各写一次，改叫法就要改两处，而它们印的是同一件事。
+const modeRowLabel = "执行模式"
+
 // 那一屏用到的颜色（老版 common/color.go 的取值，一个不改）。
 const (
 	ansiBrightCyan   = "\x1b[96m"
@@ -48,9 +53,9 @@ func confirmRows(p *contract.Plan, manifest string) [][2]string {
 	case contract.ModeCommand:
 		// 标签用「命令内容」不用「执行命令」：-c 收的是一段命令文本，后者两种读法都通，
 		// 把文件名误敲给 -c 时扫一眼就过去了（老版 2026-10 定的措辞）。
-		t = append(t, [2]string{"执行模式", modeTitle(p.Mode)}, [2]string{"命令内容", p.Task.Command.Text}, [2]string{"", ""})
+		t = append(t, [2]string{modeRowLabel, modeTitle(p.Mode)}, [2]string{"命令内容", p.Task.Command.Text}, [2]string{"", ""})
 	case contract.ModeScript:
-		t = append(t, [2]string{"执行模式", modeTitle(p.Mode)}, [2]string{"脚本路径", p.Task.Script.Path}, [2]string{"", ""})
+		t = append(t, [2]string{modeRowLabel, modeTitle(p.Mode)}, [2]string{"脚本路径", p.Task.Script.Path}, [2]string{"", ""})
 	}
 
 	t = append(t,
@@ -63,7 +68,7 @@ func confirmRows(p *contract.Plan, manifest string) [][2]string {
 		t = append(t, [2]string{"连接超时", strconv.Itoa(p.Run.TimeoutConnect) + "s"})
 	}
 	if p.Run.TimeoutExecute != 0 {
-		t = append(t, [2]string{"执行超时", strconv.Itoa(p.Run.TimeoutExecute) + "s"})
+		t = append(t, [2]string{timeoutLabel(p.Mode), strconv.Itoa(p.Run.TimeoutExecute) + "s"})
 	}
 	if p.Run.Remark != "" {
 		t = append(t, [2]string{"备注", strings.TrimSpace(p.Run.Remark)})
@@ -151,10 +156,28 @@ func CancelTrace() Line {
 	return Line{s: "执行已取消，SSHFleet工具已退出"}
 }
 
-// RefuseEnvelope 是「标签与载荷对不上」那一句的正文。
+// refuseEnvelope 是「标签与载荷对不上」那一句的外壳。
 //
 // 正常用不到：它只在纸被造错时才出现（写着命令、装的却是脚本）。真要撞上就是内部缺陷，
 // 所以话说清是「这次要做什么与装的东西不一致」，不往使用者身上推。
-func RefuseEnvelope(what string) string {
+//
+// 括号里那截由下面三个具名构造点给：闸门只交事实（有哪几份、标签是什么、装的是什么），
+// 句子在这里成形（ADR-0034 决定八）。
+func refuseEnvelope(what string) string {
 	return HeadCompliance + "：这次要做什么与它的载荷对不上（" + what + "）"
+}
+
+// RefuseEnvelopeMulti 一次装了不止一份载荷：labels 是那几份的称呼。
+func RefuseEnvelopeMulti(labels []string) string {
+	return refuseEnvelope("同时装了" + strings.Join(labels, "、"))
+}
+
+// RefuseEnvelopeEmpty 标签说是哪一种活，载荷却是空的。
+func RefuseEnvelopeEmpty(want string) string {
+	return refuseEnvelope("标签是" + want + "，载荷却是空的")
+}
+
+// RefuseEnvelopeWrong 标签与载荷对不上：标签是 want，装的是 got。
+func RefuseEnvelopeWrong(want, got string) string {
+	return refuseEnvelope("标签是" + want + "，装的是" + got)
 }

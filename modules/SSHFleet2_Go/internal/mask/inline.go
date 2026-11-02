@@ -23,7 +23,7 @@ func InlineRecord(s string) string {
 	}
 	for _, idx := range []int{3, 5} {
 		if idx < len(fields) && strings.TrimSpace(fields[idx]) != "" {
-			fields[idx] = "****"
+			fields[idx] = maskToken
 		}
 	}
 	var b strings.Builder

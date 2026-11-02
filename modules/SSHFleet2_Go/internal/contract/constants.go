@@ -15,3 +15,16 @@ const (
 // 而这一格是塔尖要递给归档包的**根**，所以留在这里：`archive` 按权限表不依赖契约，
 // 根只能由调用方给（03 号单的落地口径）。
 const HistoryDir = "history"
+
+// WhereOutput 是「起不来」发生在哪一环的取值之一：写归档目录那一步。
+//
+// 其余几个取值（cli／nodelist／config／verdict／dangercheck／ssh）各只在一个站里出现，
+// 住在那个站里就够；这一个跨两个包——执行站建终端输出文件失败时用它，塔尖建归档目录、
+// 写 `report.txt` 失败时也用它，所以提到契约：改一次两处一起变。
+const WhereOutput = "output"
+
+// FlagPairSudo 是「两个身份开关同时给」这条事实的标签。
+//
+// 解析站把它记进 `Problem.Option`，闸门按它认出是哪一对冲突——两处比的是同一个串，
+// 所以只许有这一份：一处改了另一处没改，闸门那条判据会静默不响。
+const FlagPairSudo = "--sudo --no-sudo"

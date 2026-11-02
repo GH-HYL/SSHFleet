@@ -381,4 +381,21 @@ ADR-0035 决定九给了两条路（单立一个小包，或两边各写一遍�
 
 **命中二已处置（2026-11-02）**：塔尖 `main.go:89` 读时钟，而 ADR-0032 决定五那张依赖清单没有 `time`，检查的缺省又是「未登记的标准库整包放行」，于是没人报。开发者当日口径「执行站必须用，而且他是实时的」「那就只允许 main 和执行站使用 time」，问过日志包那两处（每行时间戳、轮转改名）之后追加「名单三个包 允许用」。落成类二第三条窄判据：`time.Now`／`Since`／`Until` 的**调用点**只许塔尖、执行站、日志包；判调用点不判 import（`archive.Create` 收一个现成的时刻合法）。落点 `guard/rules.go`、`guard/check_deps.go` 的 `checkClock`、`guard/redline.go` 名单加一行（新增不算改）、样本 `guard/testdata/clock/`（三个家各一次不红、解析站一次红）。验的结果：`gofmt -l .` 空、`go build`／`go vet`／`go test ./...` 全绿；真工程仍 17 包零违规、放行 0 条、红线 37 条。
 
-**其余 13 条待处置**（清单在本次会话的审计回报里，处置前不动代码）：闸门又自己拼句子（`gate/run.go:73/92/95`，撞 ADR-0034 决定八，正是 03 那轮刚搬走过的那种形状）、闸门自己抄五个模式名（该问 `message.LogName`）、结算站自己立「通过／异常」（该问 `message.VerifyPassed`，两边不同值时统计块会掉进 default 分支多印一栏）、确认屏的「执行超时」没走 `timeoutLabel`（15 号单声称已改）、`--sudo --no-sudo` 与 `****` 与 `读取内容时发生错误` 与 `【IP】` 与 `"output"` 各自两个以上写入点、`message` 包内四处同一版式各拼两次。
+**其余 13 条已处置（2026-11-02，同一会话）**：
+
+- **闸门拼句**（`gate/run.go:73/92/95`）→ `message` 加三个具名构造点（`RefuseEnvelopeMulti`／`Empty`／`Wrong`），闸门只交事实（有哪几份、标签是什么、装的是什么）；外壳收成 `refuseEnvelope` 不再导出（外面没人调，留着就是新的死导出）。撞 ADR-0034 决定八那条。
+- **闸门自己抄五个模式名** → `envelopeRefusal` 改调 `message.LogName`，称呼回到名字表一处（ADR-0013 决定三）。
+- **结算站自己立「通过／异常」** → 改读 `message.VerifyPassed`／`VerifyFailed`，删掉本包那两个常量。两边一旦不同值，统计块会掉进 `default` 分支、每屏多印一栏「总数校验」。
+- **确认屏的「执行超时」** → 走 `timeoutLabel(p.Mode)`（15 号单 Comments 声称改过，代码里没改）。
+- **`--sudo --no-sudo`** → 契约加常量 `contract.FlagPairSudo`：解析站记进 `Problem.Option`、闸门按同一个串认。原来靠两处字面量对齐，改一处闸门就静默不响。
+- **`"output"`** → 契约加常量 `contract.WhereOutput`：塔尖两处与执行站一处同源。
+- **`****`** → `mask` 包加 `maskToken`，三个写入点收成一个。
+- **`读取内容时发生错误: %v`** → `parse/nodelist.go` 的 `readFailure` 一处成形（两处本是同一句话）。
+- **节点前缀 `【IP】`** → `message.NodeTag`，结果行那五行走 `tagged`；执行期日志也从它取（原来两个包各拼一份）。
+- **`message` 包内四处同一版式各拼两次** → `modeRowLabel`（执行模式）、`costLine`（总耗时）、`tagged`（结果行前缀）、`keyRows`（配了私钥那半句）。
+
+验的结果：`gofmt -l .` 空、`go build ./...`、`go vet ./...`、`go test ./...`、`go test -race ./...` 全绿（12 个包 ok）；真工程 17 包零违规、放行 0 条、红线 37 条。**屏幕上一个字没动**——确认屏、结果行、统计块那几条逐字断言（`message/confirm_test.go`、`gate/confirm_test.go`、`message/result_test.go`、`settle/settle_test.go`）全过。
+
+**两条判据不足，不改**：`settle` 打开 `Extra.Mode`（那是附加格的标签，ADR 原文只说「字段」）；闸门不新造纸（ADR-0032 决定三的边界写着「两张纸一样宽……就直接递上一份」）。
+
+**范围外发现，只报告不动**：`message/danger.go:71` 的 `source := "命令"` 与名字表里那个「命令」同字，是阶段 03 落的（`f8d720d`），不在本批改动里。

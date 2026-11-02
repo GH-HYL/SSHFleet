@@ -67,7 +67,7 @@ func manifestText(raw string) (string, bool, *contract.CannotStart) {
 		// 老版这里也是把空串当路径交给系统，报的就是系统那一句
 		// （`读取内容时发生错误: open : no such file or directory`）。照办，不另写一句话。
 		_, err := os.ReadFile(raw)
-		return "", false, cannotStart("nodelist", "", fmt.Sprintf("读取内容时发生错误: %v", err))
+		return "", false, cannotStart("nodelist", "", readFailure(err))
 	}
 
 	info, statErr := os.Stat(raw)
@@ -106,6 +106,15 @@ func manifestText(raw string) (string, bool, *contract.CannotStart) {
 	return raw, true, nil
 }
 
+// readFailure 是「读清单这一步栽了」的那一句：系统原话照贴，不自己另写一句
+// （ADR-0025 决定六）。
+//
+// 一处成形：空串当路径交给系统那一句、CSV 读不下去又不是语法错的那一句，本来就是同一句话，
+// 分开各拼一次，改口径就会改漏一处。
+func readFailure(err error) string {
+	return fmt.Sprintf("读取内容时发生错误: %v", err)
+}
+
 // csvRows 把文本读成行：剥 BOM、`#` 注释行跳过、空行跳过、列数不限、引号成对时可含逗号与换行。
 //
 // 这套口径与 `-a` 代填共用（那张单随阶段 05 的其余模式），所以单独一处写清，
@@ -135,7 +144,7 @@ func csvRows(text string) ([][]string, error) {
 func manifestSyntaxError(raw string, inline bool, err error) string {
 	var parseErr *csv.ParseError
 	if !errors.As(err, &parseErr) {
-		return fmt.Sprintf("读取内容时发生错误: %v", err)
+		return readFailure(err)
 	}
 	where := "内联节点信息的"
 	if !inline {

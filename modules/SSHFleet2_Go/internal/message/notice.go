@@ -46,10 +46,15 @@ func UnusedKeyNotice(rows []int) Line {
 	case len(rows) > shown:
 		list = fmt.Sprintf("共 %d 行配了私钥（如第 %s 行）", len(rows), list)
 	case len(rows) == 1:
-		list = "第 " + list + " 行配了私钥"
+		list = keyRows(list)
 		tail = "这一台会用密码登录"
 	default:
-		list = "第 " + list + " 行配了私钥"
+		list = keyRows(list)
 	}
 	return Line{s: fmt.Sprintf("[提示] 清单%s，本次没加 -k，%s\n", list, tail)}
+}
+
+// keyRows 是「第 X 行配了私钥」那半句：单行与多行两个分支只差抬头，句子本身一处成形。
+func keyRows(list string) string {
+	return "第 " + list + " 行配了私钥"
 }

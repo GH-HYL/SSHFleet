@@ -22,6 +22,19 @@ const resultRuleWidth = 50
 // unknownError 连接失败、原文又是空的时候那句兜底（老版同字）。
 const unknownError = "未知错误"
 
+// NodeTag 是每一行前面的节点前缀「【IP】」。
+//
+// 屏幕那一行、执行期日志的每一级、报告里按类归拢的清单都用它——同一个节点在三处必须是
+// 同一个写法，否则按 IP 过滤就漏。执行站也从这里取（它 import message，不自己拼）。
+func NodeTag(ip string) string {
+	return "【" + ip + "】"
+}
+
+// tagged 是「节点前缀 + 空格 + 这一行的正文」：结果行里那五行都走它。
+func tagged(ip, rest string) string {
+	return NodeTag(ip) + " " + rest
+}
+
 // ResultLine 一台的结果，末尾带换行：屏幕与 `terminal-output.txt` 拿的是它。
 func ResultLine(res contract.NodeResult, mode contract.Mode) Line {
 	return Line{s: ResultLineText(res, mode) + "\n"}
@@ -32,20 +45,20 @@ func ResultLine(res contract.NodeResult, mode contract.Mode) Line {
 func ResultLineText(res contract.NodeResult, mode contract.Mode) string {
 	ip := res.IP
 	lines := make([]string, 0, 6)
-	lines = append(lines, fmt.Sprintf("【%s】 %s", ip, connStatus(res)))
+	lines = append(lines, tagged(ip, connStatus(res)))
 
 	if res.Connected {
-		lines = append(lines, fmt.Sprintf("【%s】 %s", ip, statusLine(res, mode)))
+		lines = append(lines, tagged(ip, statusLine(res, mode)))
 		// 连上了却没跑成：失败详情也要在明细里看得到。这一行原先只在连接失败时才有，
 		// 那类结果的细节只能事后翻表格（老版 D35 改的那一处）。
 		if !IsSuccess(res, mode) && res.ErrorText != "" {
-			lines = append(lines, fmt.Sprintf("【%s】 错误详情: %s", ip, showControlChars(res.ErrorText)))
+			lines = append(lines, tagged(ip, "错误详情: "+showControlChars(res.ErrorText)))
 		}
 	} else {
-		lines = append(lines, fmt.Sprintf("【%s】 错误: %s", ip, showControlChars(UnknownIfEmpty(res.ErrorText))))
+		lines = append(lines, tagged(ip, "错误: "+showControlChars(UnknownIfEmpty(res.ErrorText))))
 	}
 
-	lines = append(lines, fmt.Sprintf("【%s】 分类: %s", ip, res.Category))
+	lines = append(lines, tagged(ip, "分类: "+res.Category))
 
 	// 只有连上了才有原文可说：连都连不上时那一格是空的，印一行空白只会让人以为「有输出但看不见」。
 	if res.Connected && res.Output != "" {
