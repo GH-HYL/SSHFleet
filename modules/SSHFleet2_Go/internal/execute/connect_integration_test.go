@@ -20,7 +20,7 @@ import (
 func TestConnectSucceeds(t *testing.T) {
 	node, _ := integrationTarget(t)
 
-	paper, fail := Run(context.Background(), oneNodePlan(node))
+	paper, fail := runPlan(t, context.Background(), oneNodePlan(node))
 	if fail != nil {
 		t.Fatalf("不该起不来：%+v", fail)
 	}
@@ -37,7 +37,7 @@ func TestConnectWrongPasswordIsAuthFailed(t *testing.T) {
 	node, _ := integrationTarget(t)
 	node.Password = "definitely-not-the-password"
 
-	paper, _ := Run(context.Background(), oneNodePlan(node))
+	paper, _ := runPlan(t, context.Background(), oneNodePlan(node))
 	item := onlyItem(t, paper)
 	if item.Connected {
 		t.Fatal("密码错却记成连上了")
@@ -51,7 +51,7 @@ func TestConnectClosedPortIsRefused(t *testing.T) {
 	node, _ := integrationTarget(t)
 	node.Port = deadPort(t)
 
-	paper, _ := Run(context.Background(), oneNodePlan(node))
+	paper, _ := runPlan(t, context.Background(), oneNodePlan(node))
 	item := onlyItem(t, paper)
 	if item.Connected {
 		t.Fatal("端口没人听却记成连上了")
@@ -79,7 +79,7 @@ func TestConnectCarriesServerBanner(t *testing.T) {
 		Password: integrationEnv(t, "SSHFLEET_TEST_EXPIRED_PASSWORD"),
 	}
 
-	paper, _ := Run(context.Background(), oneNodePlan(node))
+	paper, _ := runPlan(t, context.Background(), oneNodePlan(node))
 	item := onlyItem(t, paper)
 
 	hints := []string{

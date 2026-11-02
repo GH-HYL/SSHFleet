@@ -8,11 +8,13 @@ package execute
 
 import (
 	"context"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"sshfleet2/internal/contract"
+	"sshfleet2/internal/message"
 )
 
 // TestRunCommandSucceeds 干净退出：退出码 0、输出是命令的输出、没有报错原文。
@@ -157,9 +159,45 @@ func TestRunCommandAppliesEnv(t *testing.T) {
 // runOne 跑一台，断言恰好一条事实。
 func runOne(t *testing.T, ctx context.Context, p *contract.Plan) contract.NodeResult {
 	t.Helper()
-	paper, fail := Run(ctx, p)
+	item, _, _ := runOneInto(t, ctx, p)
+	return item
+}
+
+// runOneInto 跑一台，把这次的两个落点一并交回（要读盘的那几条用）。
+func runOneInto(t *testing.T, ctx context.Context, p *contract.Plan) (contract.NodeResult, string, string) {
+	t.Helper()
+	dir := t.TempDir()
+	term := filepath.Join(dir, "terminal-output.txt")
+	execLog := filepath.Join(dir, "SSHFleetExec.log")
+	paper, fail := Run(ctx, p, term, execLog)
 	if fail != nil {
 		t.Fatalf("不该起不来：%+v", fail)
 	}
-	return onlyItem(t, paper)
+	return onlyItem(t, paper), term, execLog
+}
+
+// TestRunCommandWritesResultLine 真机跑一台：屏幕上那一行，同时落进终端输出文件与执行期日志。
+//
+// 三处同一段字：文件里是整段（带末尾换行），日志里是同一个正文加一条时间戳前缀。
+func TestRunCommandWritesResultLine(t *testing.T) {
+	node, _ := integrationTarget(t)
+	p := oneNodePlan(node)
+	p.Task.Command.Text = "echo fleet-ok"
+
+	item, term, execLog := runOneInto(t, context.Background(), p)
+	if item.Category != "执行成功" {
+		t.Fatalf("干净成功该归「执行成功」，实际 %q", item.Category)
+	}
+
+	want := message.ResultLine(item, contract.ModeCommand).Text()
+	if got := readAll(t, term); got != want {
+		t.Fatalf("terminal-output.txt 与那一行不一样。\n期望：\n%s\n实际：\n%s", want, got)
+	}
+
+	const prefix = "  -  [INFO   ]  -  "
+	body := strings.TrimSuffix(textAfter(t, execLog, prefix), "\n")
+	if body != strings.TrimSuffix(want, "\n") {
+		t.Fatalf("执行期日志那条与那一行不一样。\n期望：\n%s\n实际：\n%s",
+			strings.TrimSuffix(want, "\n"), body)
+	}
 }

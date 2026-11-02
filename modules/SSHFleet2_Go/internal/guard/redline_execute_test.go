@@ -3,6 +3,7 @@ package guard
 import (
 	"context"
 	"net"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -16,13 +17,17 @@ import (
 // 只钉形状与流向，不钉值：连不上是端口没人听的必然结果，这里不去断言它算成功还是失败
 // （那是结算站按分类解释的事，ADR-0035 决定四）。也不用真机器：本机占一个端口再让出来，
 // 拨过去立刻被拒。
+//
+// 两个落点给临时目录里的路径：12 号单起，执行站边跑边往 `terminal-output.txt` 与执行期日志
+// 里写，入口因此多要两条路径。**引用面没变**（还是 `execute.Run` 加纸的字），指纹不动。
 func TestRedlineExecuteRecordsConnectFact(t *testing.T) {
+	dir := t.TempDir()
 	node := contract.Node{IP: "127.0.0.1", Port: closedPort(t), User: "u", Password: "p"}
 	paper, fail := execute.Run(context.Background(), &contract.Plan{
 		Mode:  contract.ModeCommand,
 		Task:  contract.Task{Command: &contract.CommandTask{Text: "uptime"}},
 		Nodes: []contract.Node{node},
-	})
+	}, filepath.Join(dir, "terminal-output.txt"), filepath.Join(dir, "SSHFleetExec.log"))
 	if fail != nil {
 		t.Fatalf("不该起不来：%+v", fail)
 	}
