@@ -38,6 +38,16 @@ var contractAndCrosscut = []string{
 // crosscutDeps 是横切包允许的那一条：只许契约。
 var crosscutDeps = []string{"contract"}
 
+// thirdParty 是**模块之外**许 import 的点名白名单。
+//
+// 名单外的一律报红：模块之外的依赖要点名，不是为了「零依赖」，是为了供应链里每一个包
+// 都有人认领。加一个名记一行（map.md 框架条目「模块之外的 import 放不放」那一行）；
+// 新增一类用途（不是同一个库的另一个包）仍要开发者点头。
+var thirdParty = []string{
+	// 阶段 04 的 09 号单：SSH 建连。与老版同版本，开发者 2026-11-02 点头。
+	"golang.org/x/crypto/ssh",
+}
+
 // tipDeps 是塔尖的整张清单：五站、八个横切包、契约、密钥管理包。
 var tipDeps = []string{
 	"parse", "gate", "execute", "settle", "report",

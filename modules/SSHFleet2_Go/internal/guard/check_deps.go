@@ -22,7 +22,7 @@ var tipSymbols = map[string][]string{
 // CheckDeps 是类二：谁 import 谁。
 //
 // 三档（ADR-0032 第四条）：生产文件按规则表那一行；普通 _test.go 豁免；红线测试不享这条豁免，
-// 按它自己的 import 白名单判（那一条在类六）。另含两条窄判据：塔尖的点名符号、零第三方依赖。
+// 按它自己的 import 白名单判（那一条在类六）。另含两条窄判据：塔尖的点名符号、模块之外的 import。
 //
 // 规则表与真实包清单对不上也归这一类：「多一个」「少一个」都是这张尺子失准，不另立类号
 // （map.md 阶段表 01 那一行）。
@@ -80,10 +80,13 @@ func checkImports(m *Module, p *Package, f *SourceFile) []Violation {
 			if IsStdlib(path) {
 				continue
 			}
+			if slices.Contains(thirdParty, path) {
+				continue
+			}
 			out = append(out, f.violation(ClassDeps, f.importPos[path],
-				fmt.Sprintf("import 了模块之外的 %s", path),
-				"新工程零第三方依赖：包里一条 require 都没有，多一条就得连供应链一起管",
-				"要的东西先在标准库里找；确实不够，先开议题说清为什么",
+				fmt.Sprintf("import 了模块之外的 %s，它不在点名白名单里", path),
+				"模块之外的依赖要点名：白名单外的第三方包一律报红，供应链要一条条认得出来，不是「第三方随便用」",
+				fmt.Sprintf("要的包先在标准库里找；确实不够，在 guard 的规则表里加一个名并说清用途（加名记一行，新增一类用途要开发者点头）。今天点名的是：%v", thirdParty),
 			))
 			continue
 		}
