@@ -46,6 +46,13 @@ func Run(argv []string, version string) (contract.Text, *contract.Plan, *contrac
 	if fail != nil {
 		return contract.Text{}, nil, fail
 	}
+	// 运行上下文：把这次的原值封进纸上那一格。封不起来就是内部写死的密钥或格式坏了，
+	// 按「起不来」报——不静默降级成明文，那等于把这一格的意义抹掉。
+	sealed, err := sealRunMeta(runMetaBodyOf(plan, argv))
+	if err != nil {
+		return contract.Text{}, nil, cannotStartBeforeLog("cli", "", err.Error())
+	}
+	plan.RunMeta = sealed
 	return contract.Text{}, plan, nil
 }
 
