@@ -26,9 +26,8 @@ const rotateBytes = 50 * 1024 * 1024
 // Logger 是一次运行的工具日志。句柄由调用方持有、由调用方关闭——本包不设包级变量，
 // 免得出第二个「当前日志在哪」的来源。
 type Logger struct {
-	mu   sync.Mutex
-	f    *os.File
-	path string
+	mu sync.Mutex
+	f  *os.File
 }
 
 // ToolPath 报工具日志的绝对路径。
@@ -55,13 +54,26 @@ func Init(historyDir, toolFile string) (*Logger, error) {
 	if err := os.MkdirAll(historyDir, 0o755); err != nil {
 		return nil, err
 	}
-	path := absolute(logFilePath(historyDir, toolFile))
+	return open(logFilePath(historyDir, toolFile))
+}
+
+// InitExec 开执行期日志：本次运行里节点级的明细，落在归档目录里。
+//
+// 路径由归档包给（`archive.Paths.ExecLog`）——本包不拼它、也不记它。目录由归档包建过，
+// 所以这里不再 MkdirAll：建不出来就是上游没给对，不该在这里默默补一个目录。
+func InitExec(path string) (*Logger, error) {
+	return open(path)
+}
+
+// open 是「到点轮转、追加打开」那一段：工具日志与执行期日志共用，只有路径来源不同。
+func open(path string) (*Logger, error) {
+	path = absolute(path)
 	rotateIfBig(path)
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
 		return nil, err
 	}
-	return &Logger{f: f, path: path}, nil
+	return &Logger{f: f}, nil
 }
 
 // rotateIfBig 到阈值就把旧文件改名留档。
@@ -77,14 +89,6 @@ func rotateIfBig(path string) {
 	base := strings.TrimSuffix(path, ext)
 	stamp := time.Now().Format("20060102T150405")
 	_ = os.Rename(path, fmt.Sprintf("%s-%s%s", base, stamp, ext))
-}
-
-// Path 报本次日志文件的路径（与 ToolPath 同源，只是不经文件系统归一）。
-func (lg *Logger) Path() string {
-	if lg == nil {
-		return ""
-	}
-	return lg.path
 }
 
 // Close 关闭句柄；幂等。
