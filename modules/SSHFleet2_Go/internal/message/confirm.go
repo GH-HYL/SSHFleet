@@ -24,21 +24,24 @@ const (
 const confirmTitle = "           SSHFleet - 执行选项/参数确认           "
 
 // ConfirmScreen 是确认那一屏：横幅 + 一张两列表。
-func ConfirmScreen(p *contract.Plan) contract.Text {
+//
+// manifest 是**已经遮过**的节点清单：内联清单里就写着密码，不能原样上屏。遮法住 mask，
+// 由调用方（闸门）取一次递进来——`message` 的依赖白名单里只有契约，不新开一条叶子之间的边。
+func ConfirmScreen(p *contract.Plan, manifest string) contract.Text {
 	border := strings.Repeat("═", len([]rune(confirmTitle))+10)
 
 	var b strings.Builder
 	b.WriteString("\n" + ansiCyan + "╔" + border + "╗" + ansiReset + "\n")
 	b.WriteString(ansiCyan + "║  " + confirmTitle + "  ║" + ansiReset + "\n")
 	b.WriteString(ansiCyan + "╚" + border + "╝" + ansiReset + "\n\n")
-	b.WriteString(infoTable(confirmRows(p)))
+	b.WriteString(infoTable(confirmRows(p, manifest)))
 	return contract.Text{S: b.String()}
 }
 
 // confirmRows 是那张表的行，次序照老版：模式与内容 → 清单与台数 → 执行参数。
 //
 // 空的一行（两列都空）在排版里落成一个换行，用来把表分块。
-func confirmRows(p *contract.Plan) [][2]string {
+func confirmRows(p *contract.Plan, manifest string) [][2]string {
 	var t [][2]string
 
 	switch p.Mode {
@@ -51,7 +54,7 @@ func confirmRows(p *contract.Plan) [][2]string {
 	}
 
 	t = append(t,
-		[2]string{"节点清单", p.Resources.Manifest},
+		[2]string{"节点清单", manifest},
 		[2]string{"节点数量", strconv.Itoa(len(p.Nodes))},
 		[2]string{"并发数", concurrencyText(p)},
 		[2]string{"", ""},

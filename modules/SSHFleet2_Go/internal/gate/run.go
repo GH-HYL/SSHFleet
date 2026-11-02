@@ -6,6 +6,7 @@ import (
 	"sshfleet2/internal/ask"
 	"sshfleet2/internal/contract"
 	"sshfleet2/internal/log"
+	"sshfleet2/internal/mask"
 	"sshfleet2/internal/message"
 )
 
@@ -106,7 +107,7 @@ func confirmRefusal(p *contract.Plan) (*Refusal, contract.Text) {
 		ask.Ask(message.ConfirmSkippedLine(), true, true)
 		return nil, message.ConfirmSkippedTrace()
 	}
-	switch ask.AskWith(message.ConfirmScreen(p), message.ExecConfirmPrompt(), true) {
+	switch ask.AskWith(message.ConfirmScreen(p, mask.InlineRecordIf(p.Resources.Manifest)), message.ExecConfirmPrompt(), true) {
 	case ask.NoInput:
 		// 屏幕上「输入结束，操作已取消」已经由 ask 打过，这里不再叠一句。
 		return &Refusal{Say: contract.Text{}}, contract.Text{}
