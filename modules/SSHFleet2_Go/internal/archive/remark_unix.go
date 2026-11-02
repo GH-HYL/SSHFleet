@@ -12,11 +12,11 @@ import "strings"
 // 换掉它们是丢信息。
 const remarkInvalidChars = "/"
 
-// sanitizeRemark 把备注里平台不允许的字符换成下划线。
+// SanitizeRemark 把备注里平台不允许的字符换成下划线。
 //
 // 叫「替换」不叫「转义」：丢原字符换占位符，不是加标记让原字符安全通过——文件系统层面
 // 没有 escape 手段。
-func sanitizeRemark(s string) string {
+func SanitizeRemark(s string) string {
 	return strings.Map(func(r rune) rune {
 		if strings.ContainsRune(remarkInvalidChars, r) {
 			return '_'

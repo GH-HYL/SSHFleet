@@ -47,7 +47,7 @@ func Create(root, mode, remark string, now time.Time) (Paths, error) {
 	}
 	name := now.Format("2006-01-02_15-04-05") + "_" + mode
 	if r := strings.TrimSpace(remark); r != "" {
-		name += "_" + sanitizeRemark(r)
+		name += "_" + SanitizeRemark(r)
 	}
 
 	dir := filepath.Join(root, name)

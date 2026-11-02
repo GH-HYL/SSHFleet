@@ -18,8 +18,8 @@ var remarkReservedNames = []string{
 	"lpt0", "lpt1", "lpt2", "lpt3", "lpt4", "lpt5", "lpt6", "lpt7", "lpt8", "lpt9",
 }
 
-// sanitizeRemark 见 remark_unix.go 的同名函数：丢原字符换占位符，不是转义。
-func sanitizeRemark(s string) string {
+// SanitizeRemark 见 remark_unix.go 的同名函数：丢原字符换占位符，不是转义。
+func SanitizeRemark(s string) string {
 	out := strings.Map(func(r rune) rune {
 		if strings.ContainsRune(remarkInvalidChars, r) {
 			return '_'
