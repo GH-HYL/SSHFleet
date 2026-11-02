@@ -30,10 +30,10 @@ func SuccessCategory(m contract.Mode) string {
 	return ""
 }
 
-// actionName 本模式那个动作叫什么：结果行前半截（`执行: 成功 - 0.123s`）用它。
+// ActionName 本模式那个动作叫什么：结果行前半截（`执行: 成功 - 0.123s`）与执行期日志都用它。
 //
 // 命令与脚本共用一个「执行」——老版名字表里这两档本来就同值，不是这里合并的。
-func actionName(m contract.Mode) string {
+func ActionName(m contract.Mode) string {
 	switch m {
 	case contract.ModeCommand, contract.ModeScript:
 		return "执行"
@@ -43,6 +43,36 @@ func actionName(m contract.Mode) string {
 		return "下载"
 	case contract.ModePasswd:
 		return "改密"
+	}
+	return ""
+}
+
+// logName 本模式在执行期日志里怎么称呼：写日志时才用得上。
+func logName(m contract.Mode) string {
+	switch m {
+	case contract.ModeCommand:
+		return "命令"
+	case contract.ModeScript:
+		return "脚本"
+	case contract.ModeUpload:
+		return "上传"
+	case contract.ModeDownload:
+		return "下载"
+	case contract.ModePasswd:
+		return "改密"
+	}
+	return ""
+}
+
+// LogLabel 执行期日志里「…失败」那一行的主语：「命令执行」「脚本执行」。
+//
+// 只有命令与脚本用得上这一句——上传下载与改密在日志里另起句式（老版 `logNode` 里就是
+// 分开的三支，那两支不取 LogName + ActionName），所以这里对其余模式给空串，缺的那几支
+// 随阶段 05。给空串而不是硬拼：拼出「上传上传」比空着更难查。
+func LogLabel(m contract.Mode) string {
+	switch m {
+	case contract.ModeCommand, contract.ModeScript:
+		return logName(m) + ActionName(m)
 	}
 	return ""
 }

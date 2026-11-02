@@ -38,11 +38,11 @@ func ResultLineText(res contract.NodeResult, mode contract.Mode) string {
 		lines = append(lines, fmt.Sprintf("【%s】 %s", ip, statusLine(res, mode)))
 		// 连上了却没跑成：失败详情也要在明细里看得到。这一行原先只在连接失败时才有，
 		// 那类结果的细节只能事后翻表格（老版 D35 改的那一处）。
-		if !isSuccess(res, mode) && res.ErrorText != "" {
+		if !IsSuccess(res, mode) && res.ErrorText != "" {
 			lines = append(lines, fmt.Sprintf("【%s】 错误详情: %s", ip, showControlChars(res.ErrorText)))
 		}
 	} else {
-		lines = append(lines, fmt.Sprintf("【%s】 错误: %s", ip, showControlChars(unknownIfEmpty(res.ErrorText))))
+		lines = append(lines, fmt.Sprintf("【%s】 错误: %s", ip, showControlChars(UnknownIfEmpty(res.ErrorText))))
 	}
 
 	lines = append(lines, fmt.Sprintf("【%s】 分类: %s", ip, res.Category))
@@ -67,23 +67,24 @@ func connStatus(res contract.NodeResult) string {
 // statusLine 执行状态那半截：「执行: 成功 - 0.456s」。
 func statusLine(res contract.NodeResult, mode contract.Mode) string {
 	status := "失败"
-	if isSuccess(res, mode) {
+	if IsSuccess(res, mode) {
 		status = "成功"
 	}
-	return fmt.Sprintf("%s: %s - %.3fs", actionName(mode), status, res.Cost.Seconds())
+	return fmt.Sprintf("%s: %s - %.3fs", ActionName(mode), status, res.Cost.Seconds())
 }
 
-// isSuccess 这一台算不算成功。判据只有一句：分类是本模式的成功分类（ADR-0035 决定四）。
+// IsSuccess 这一台算不算成功。判据只有一句：分类是本模式的成功分类（ADR-0035 决定四）。
 //
 // 这不是第二套判法——分类名与成功分类名出自同一张模式名字表，这里只是把同一个名字对一次。
-// 结算站那边对的是同一个名字，两边对出来的结果必然一致。
-func isSuccess(res contract.NodeResult, mode contract.Mode) bool {
+// 结算站那边对的是同一个名字，两边对出来的结果必然一致。结果行与执行期日志都从这里取，
+// 免得两处各判一次、各漂各的。
+func IsSuccess(res contract.NodeResult, mode contract.Mode) bool {
 	name := SuccessCategory(mode)
 	return name != "" && res.Category == name
 }
 
-// unknownIfEmpty 原文为空时给那句兜底。
-func unknownIfEmpty(text string) string {
+// UnknownIfEmpty 原文为空时给那句兜底（老版同一句）。
+func UnknownIfEmpty(text string) string {
 	if strings.TrimSpace(text) == "" {
 		return unknownError
 	}

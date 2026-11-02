@@ -18,7 +18,7 @@ import (
 	"sshfleet2/internal/message"
 )
 
-// TestReporterWritesThreePlaces 一条结果：终端输出文件整段、执行期日志一条，两处逐字相同。
+// TestReporterWritesThreePlaces 一条结果三个去处：屏幕与文件同一段字，日志是节点明细。
 func TestReporterWritesThreePlaces(t *testing.T) {
 	dir := t.TempDir()
 	term := filepath.Join(dir, "terminal-output.txt")
@@ -41,7 +41,7 @@ func TestReporterWritesThreePlaces(t *testing.T) {
 		ErrorText:   "sshfleet.run.rejected: rejected by remote",
 		Output:      "line one\nline two",
 	}
-	rep.result(res)
+	rep.result(res, "sshfleet")
 
 	want := message.ResultLine(res, contract.ModeCommand).Text()
 
@@ -50,12 +50,20 @@ func TestReporterWritesThreePlaces(t *testing.T) {
 		t.Fatalf("terminal-output.txt 与拼出来的那段字不一样。\n期望：\n%s\n实际：\n%s", want, got)
 	}
 
-	// 二、执行期日志：同一条，前缀是「时间戳  -  [级别]  -  」。
-	const prefix = "  -  [INFO   ]  -  "
-	body := strings.TrimSuffix(textAfter(t, execLog, prefix), "\n")
-	if body != strings.TrimSuffix(want, "\n") {
-		t.Fatalf("执行期日志那条与那一行不一样。\n期望：\n%s\n实际：\n%s",
-			strings.TrimSuffix(want, "\n"), body)
+	// 二、执行期日志：**不是**那一段字，而是五级明细（给人看的版面进日志只会把版面拉稀）。
+	logged := readAll(t, execLog)
+	if strings.Contains(logged, strings.Repeat("=", 50)) {
+		t.Fatalf("日志里不该出现给人看的那条分隔线：\n%s", logged)
+	}
+	for _, want := range []string{
+		"【10.0.0.1】连接成功，用户 sshfleet，耗时 0.123s",
+		"【10.0.0.1】命令执行失败，退出码 3，耗时 0.456s",
+		"【10.0.0.1】错误详情：sshfleet.run.rejected: rejected by remote",
+		"【10.0.0.1】分类: 执行失败(退出码3)",
+	} {
+		if !strings.Contains(logged, want) {
+			t.Fatalf("日志里少了这一级：%q\n实际：\n%s", want, logged)
+		}
 	}
 }
 
@@ -73,8 +81,8 @@ func TestReporterAppendsPerResult(t *testing.T) {
 
 	first := contract.NodeResult{IP: "10.0.0.1", Connected: true, Category: "执行成功"}
 	second := contract.NodeResult{IP: "10.0.0.2", Category: "连接失败", ErrorText: "sshfleet.connect.refused: refused"}
-	rep.result(first)
-	rep.result(second)
+	rep.result(first, "sshfleet")
+	rep.result(second, "sshfleet")
 
 	got := readAll(t, term)
 	// 两段各自以分隔线收尾：分隔线出现两次，先后顺序就是出行的顺序。
@@ -84,8 +92,13 @@ func TestReporterAppendsPerResult(t *testing.T) {
 	if strings.Index(got, "10.0.0.1") > strings.Index(got, "10.0.0.2") {
 		t.Fatalf("两条的先后不对（应是谁先跑完谁在前）：\n%s", got)
 	}
-	if n := strings.Count(readAll(t, execLog), "  -  [INFO   ]  -  "); n != 2 {
-		t.Fatalf("执行期日志应有两条，实际 %d 条", n)
+	// 日志里成功那台只有一行（`成功：…`），失败那台才有「分类」收尾——与老版同一口径。
+	logged := readAll(t, execLog)
+	if n := strings.Count(logged, "】成功："); n != 1 {
+		t.Fatalf("成功那台应正好一行，实际 %d 行：\n%s", n, logged)
+	}
+	if n := strings.Count(logged, "】分类: "); n != 1 {
+		t.Fatalf("失败那台应正好一条分类行，实际 %d 条：\n%s", n, logged)
 	}
 }
 
@@ -97,17 +110,6 @@ func readAll(t *testing.T, path string) string {
 		t.Fatalf("读 %s 失败：%v", path, err)
 	}
 	return string(b)
-}
-
-// textAfter 取「前缀之后那一整段」，prefix 必须在文件里出现且只出现一次。
-func textAfter(t *testing.T, path, prefix string) string {
-	t.Helper()
-	s := readAll(t, path)
-	idx := strings.Index(s, prefix)
-	if idx < 0 {
-		t.Fatalf("%s 里没有 %q：\n%s", path, prefix, s)
-	}
-	return s[idx+len(prefix):]
 }
 
 // TestResultLineKeepsNoSecret 内联清单里的密码不进那两个落点。
@@ -165,7 +167,7 @@ func TestReporterScreenAndFileMatch(t *testing.T) {
 		t.Fatalf("换管道失败：%v", err)
 	}
 	os.Stdout = w
-	rep.result(res)
+	rep.result(res, "sshfleet")
 	_ = w.Close()
 	os.Stdout = old
 	rep.close()
