@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"sshfleet2/internal/contract"
 )
@@ -52,9 +53,10 @@ func sealRunMeta(body contract.RunMetaBody) (contract.RunMeta, error) {
 
 // runMetaBodyOf 把这次的原值收进那一格的内容里。
 //
-// 收的全是「使用者敲了什么」：整条命令行、模式、各模式的原值、以及这次生效的执行参数。
-// 它不重算任何东西——执行参数取的是纸上算好的那几个数，不是再解一遍命令行。
-func runMetaBodyOf(p *contract.Plan, argv []string) contract.RunMetaBody {
+// 收的全是报告站出那两样要用的东西：整条命令行、模式、各模式的原值、这次生效的执行参数，
+// 再加两样「呈现口径」——提示开关与判据文件的展示路径。它不重算任何东西：执行参数取的是
+// 纸上算好的那几个数，不是再解一遍命令行；那两样直接取配置里的原值。
+func runMetaBodyOf(p *contract.Plan, argv []string, cfg *settings) contract.RunMetaBody {
 	body := contract.RunMetaBody{
 		Argv:            append([]string(nil), argv...),
 		Mode:            p.Mode,
@@ -63,6 +65,9 @@ func runMetaBodyOf(p *contract.Plan, argv []string) contract.RunMetaBody {
 		TimeoutConnect:  p.Run.TimeoutConnect,
 		TimeoutExecute:  p.Run.TimeoutExecute,
 		TimeoutTransfer: p.Run.TimeoutTransfer,
+
+		ShowCategoryTips:  cfg.enable.ShowCategoryTips,
+		ErrorKeywordsPath: displayPath(errorKeywordsPath),
 	}
 	switch {
 	case p.Task.Command != nil:
@@ -91,3 +96,9 @@ func runMetaGCM() (cipher.AEAD, error) {
 	}
 	return gcm, nil
 }
+
+// displayPath 给使用者看的路径形态：去掉开头的 `./`，它对使用者没有意义（老版
+// `config.DisplayPath` 同一形态、同一个道理）。
+//
+// 算在解析站这一侧，是因为报「判据文件在哪」只该有一处口径：报告站按纸印，不认路径怎么归一。
+func displayPath(p string) string { return strings.TrimPrefix(p, "./") }

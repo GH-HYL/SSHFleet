@@ -4,7 +4,7 @@
 
 **Blocked by**：14、03（路径）、01（第三张纸与运行上下文）、07（`mask`）。
 
-**Status**：ready-for-agent
+**Status**：done（已完成）
 
 ## 要落的判断
 
@@ -50,3 +50,38 @@
 - `RunParams.ErrorKeywordsPath string` —— 判据文件的展示路径原值（解析站已按老版 `DisplayPath` 算好，报告站只管印）。
 
 不加的退路（都不好看）：统计块恒显提示（改行为）；路径那句改成写死「判据文件」（丢信息）。
+
+### 2026-11-02：两格进了运行上下文，报告站一次全拿到
+
+开发者的口径（原话）：「report.txt 这块我记得是单独走个加密的上下文，之前决策过」；「上下文里面就是给 report.txt 用的，他要什么，分析站就给什么，反正一个分析站就直接全获取了，直接打包好加密」。**「分析站」即解析站。**
+
+据此改了加法：**不加 `RunParams` 两格**，改加进 `contract.RunMetaBody`——`ShowCategoryTips bool` 与 `ErrorKeywordsPath string`。三条理由：
+
+1. 两样的消费者只有报告站（`ShowCategoryTips` 用在 `report.txt` 与屏幕统计块两处，判据文件路径只用在屏幕「未归类」那三行引导里）；
+2. 进 `RunParams` 等于让闸门、执行站也揣着两样永远用不上的东西——那正是当初把这一格封起来要拦的样子；
+3. 运行上下文是「第二类格子」，不参与「后一张不许比前一张宽」的计法，**第一张纸一格都没变宽**。
+
+代价两条：`RunMetaBody` 的口径从「使用者敲了什么」扩成「报告站出那两样要用的原值」（含呈现口径），已改头注释；封与解两处各有一条固定密文样本，随之重录（`RunMetaVersion` 没动：两侧同步改，盘上没有旧数据）。ADR-0035 末尾追加了更新记录。
+
+### 2026-11-02：交付
+
+**落了什么**
+
+- `internal/message/stats.go`（新）：统计块（`StatisticsLine`，带色码）与 `report.txt` 全文（`ReportText`）、命令行还原（`DisplayCommand`）、提示语与退出码含义、兜底分类判据。字全在这里成形，报告站一个版面都不排。
+- `internal/message/modename.go`：模式名字表补「模式名」与「超时行措辞」两列（15 号单要用），确认屏那两处字面量改用它——屏幕输出未变。
+- `internal/report/report.go`（新）：入口 `Run(第三张纸, report.txt 路径)`——解运行上下文、遮秘密（`mask.CommandLine`、`mask.InlineRecordIf`）、上屏走 `console`、落盘 `os.WriteFile`。解不开就报，不落「看着对」的报告。
+- `internal/mask/mask.go`：补 `CommandLine`（老版 `common.MaskCommandLine` 同口径：改密取值、`-f` 内联、`-f=` 三种位置）。
+- `internal/contract/runmeta.go`：`RunMetaBody` 加上述两格。
+- `internal/parse/runmeta.go`：封的时候从配置取那两样；补 `displayPath`（去开头的 `./`，老版 `config.DisplayPath` 同形态）。
+- 测试：`message/stats_test.go`（八条，期望串从老版真跑产物录）、`report/report_test.go`（四条）、`mask/mask_test.go` 补两条、`guard/redline_report_test.go`（新红线，名单 35 → 36）。
+
+**验的结果**
+
+- `report.txt`：同输入（1 台、`exit 3`）下与新代码产出**逐字节相同**（`diff` 为空，时间戳取老版那一次的实测值）。
+- 屏幕统计块：同输入下与老版两次真跑（成功那台、失败那台）**逐字节相同**（含 ANSI 色码；老版二进制重跑于 `build/建站04_15_2026-11-02_1515/`，现场是 `u1` 容器）。
+- `go build ./... && go vet ./... && gofmt -l . && go test ./...` 全绿；17 包零违规、放行台账 0 条；`-race` 干净。
+
+**没做到的**
+
+- 「未归类」那三行只有手搓用例（`TestStatisticsBlockUnclassified`），真机走不到：命中的分类都在表里，表里没有的名字只在改密模式的另一张表里出现（阶段 05）。三行字照老版 `output/terminal.go:220-224` 逐字写。
+- `report.txt` 里「代填」那几行与上传/下载/改密三个分支没落：本阶段只跑命令模式，`RunParams.Answer` 的内容层随 05（04 规格「本阶段只实现命令那一支」）。

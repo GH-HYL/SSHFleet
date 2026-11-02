@@ -48,9 +48,9 @@ func confirmRows(p *contract.Plan, manifest string) [][2]string {
 	case contract.ModeCommand:
 		// 标签用「命令内容」不用「执行命令」：-c 收的是一段命令文本，后者两种读法都通，
 		// 把文件名误敲给 -c 时扫一眼就过去了（老版 2026-10 定的措辞）。
-		t = append(t, [2]string{"执行模式", "命令模式"}, [2]string{"命令内容", p.Task.Command.Text}, [2]string{"", ""})
+		t = append(t, [2]string{"执行模式", modeTitle(p.Mode)}, [2]string{"命令内容", p.Task.Command.Text}, [2]string{"", ""})
 	case contract.ModeScript:
-		t = append(t, [2]string{"执行模式", "脚本模式"}, [2]string{"脚本路径", p.Task.Script.Path}, [2]string{"", ""})
+		t = append(t, [2]string{"执行模式", modeTitle(p.Mode)}, [2]string{"脚本路径", p.Task.Script.Path}, [2]string{"", ""})
 	}
 
 	t = append(t,

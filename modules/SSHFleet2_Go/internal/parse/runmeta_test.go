@@ -12,17 +12,26 @@ import (
 // 拿它比「这串能不能开回同一份内容」。谁把密钥或格式写歪了，两边各有一条会红。
 //
 // 期望值不是被测代码现算的：这串是格式定稿后录下来的固定样本。
-const runMetaVector = "AfdssCUJKsojw9X630aRo22ZZgb/+0pRd99AmUWcfb4Nr+VFTGg1g1UhR9xO6+gbmfvBV2VQlcpfdt6zd/o2YPZSjTJLhWw+4UE872GTOc6oeu3FTRPY6UBxbAf06KibkiVeV2QVXEzKXeL2XZb6qJS0/lx7qs29nkGrMR1iqn1c2Sd6HILvMnpx7kjBca06HnV5Y0qCCjNCt4fKDPPNtw=="
+const runMetaVector = "AclJG+3JQG8GfH2q0iziaoncki/R7bwU6fQIBeKznCOETaXZ9TA+MeI9pL/UYaUoVyYV27l2hfLWQEJxxwGJSJydb0euFkf6v1pDirfrjHr8M5uW/xIzVWs23/8I6sfli8JSs/TGQ14nkccAHYrPyoAYtBYDQBKaxCxwnOFO/L2C5xg3kqNskPYJUupp6PQGZWdhWSh0oOKrABGH1aPppHGVT5wrb7QE1x2hp6fvO00df9h7Anl9H0rfTg8y9WhQ00HEiF9pdlXj002DA4GA7IPssfjdv3amLymVlmHR0UHu2y6OP7E4mQi/3tFn"
 
+// runMetaSample 是两处固定样本共用的那份内容：命令行、模式、原值、执行参数，
+// 加两样呈现口径（提示开关、判据文件的展示路径）。
 func runMetaSample() contract.RunMetaBody {
 	return contract.RunMetaBody{
-		Argv:           []string{"sshfleet2", "-f", "nodes.csv", "-c", "uptime"},
-		Mode:           contract.ModeCommand,
-		Command:        "uptime",
-		Concurrency:    0,
-		TimeoutConnect: 10,
-		TimeoutExecute: 60,
+		Argv:              []string{"sshfleet2", "-f", "nodes.csv", "-c", "uptime"},
+		Mode:              contract.ModeCommand,
+		Command:           "uptime",
+		Concurrency:       0,
+		TimeoutConnect:    10,
+		TimeoutExecute:    60,
+		ShowCategoryTips:  true,
+		ErrorKeywordsPath: "config/keywords_error.conf",
 	}
+}
+
+// runMetaSettings 造一份只带这两样的配置：封运行上下文时从它取呈现口径。
+func runMetaSettings() *settings {
+	return &settings{enable: enable{ShowCategoryTips: true}}
 }
 
 func TestSealRunMetaMatchesRecordedVector(t *testing.T) {
@@ -93,7 +102,7 @@ func TestRunMetaBodyCarriesOriginals(t *testing.T) {
 	}
 	argv := []string{"sshfleet2", "-f", "nodes.csv", "-c", "uptime"}
 
-	body := runMetaBodyOf(plan, argv)
+	body := runMetaBodyOf(plan, argv, runMetaSettings())
 
 	if len(body.Argv) != len(argv) || body.Argv[4] != "uptime" {
 		t.Fatalf("整条命令行没原样装进去：%v", body.Argv)
@@ -104,6 +113,10 @@ func TestRunMetaBodyCarriesOriginals(t *testing.T) {
 	if body.Concurrency != 4 || body.TimeoutExecute != 60 || body.Answers != "y,continue" {
 		t.Fatalf("执行参数没带上：%+v", body)
 	}
+	// 报告站手上没有配置，这两样只能从这里过去。
+	if !body.ShowCategoryTips || body.ErrorKeywordsPath != "config/keywords_error.conf" {
+		t.Fatalf("呈现口径没带上：%+v", body)
+	}
 	// 路径不是命令模式的东西，不该被顺手装进来。
 	if body.Target != "" {
 		t.Fatalf("命令模式不该带目标位置：%q", body.Target)
@@ -113,7 +126,7 @@ func TestRunMetaBodyCarriesOriginals(t *testing.T) {
 // 装进去的是副本：改了 argv 不该影响纸上已经封好的那份。
 func TestRunMetaBodyCopiesArgv(t *testing.T) {
 	argv := []string{"sshfleet2", "-c", "uptime"}
-	body := runMetaBodyOf(&contract.Plan{Task: contract.Task{Command: &contract.CommandTask{Text: "uptime"}}}, argv)
+	body := runMetaBodyOf(&contract.Plan{Task: contract.Task{Command: &contract.CommandTask{Text: "uptime"}}}, argv, runMetaSettings())
 	argv[2] = "whoami"
 	if body.Argv[2] != "uptime" {
 		t.Fatal("那一格与调用方的切片共用了底层数组，改一边会动另一边")

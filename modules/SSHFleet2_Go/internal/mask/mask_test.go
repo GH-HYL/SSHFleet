@@ -53,3 +53,60 @@ func TestInlineRecordHidesPassword(t *testing.T) {
 		t.Fatalf("认机器的几段被抹掉了：%s", got)
 	}
 }
+
+// 命令行脱敏：三个位置会带秘密，其余段一个字都不许动。
+//
+// 期望值照老版 common.MaskCommandLine 的口径写成字面量（前二后二、内联记录整段抹）。
+func TestCommandLineMasksCredentialPositions(t *testing.T) {
+	cases := []struct {
+		name string
+		argv []string
+		want []string
+	}{
+		{
+			name: "内联清单",
+			argv: []string{"sshfleet2", "-f", "10.0.0.1,22,root,hunter2", "-c", "uptime"},
+			want: []string{"sshfleet2", "-f", "10.0.0.1,22,root,****", "-c", "uptime"},
+		},
+		{
+			name: "等号写法的内联清单",
+			argv: []string{"sshfleet2", "-f=10.0.0.1,22,root,hunter2", "-c", "uptime"},
+			want: []string{"sshfleet2", "-f=10.0.0.1,22,root,****", "-c", "uptime"},
+		},
+		{
+			name: "改密的新密码（空格写法）",
+			argv: []string{"sshfleet2", "--change-password", "Ne#wpass", "-f", "u1.csv"},
+			want: []string{"sshfleet2", "--change-password", "Ne****ss", "-f", "u1.csv"},
+		},
+		{
+			name: "改密的新密码（等号写法）",
+			argv: []string{"sshfleet2", "--change-password=Ne#wpass"},
+			want: []string{"sshfleet2", "--change-password=Ne****ss"},
+		},
+		{
+			name: "命令正文里长得像内联清单的那一段不动",
+			argv: []string{"sshfleet2", "-c", "echo 10.0.0.1,22,root,hunter2"},
+			want: []string{"sshfleet2", "-c", "echo 10.0.0.1,22,root,hunter2"},
+		},
+	}
+	for _, c := range cases {
+		got := CommandLine(c.argv)
+		if len(got) != len(c.want) {
+			t.Fatalf("%s：段数不对：%v", c.name, got)
+		}
+		for i := range got {
+			if got[i] != c.want[i] {
+				t.Fatalf("%s：第 %d 段\n got=%q\nwant=%q", c.name, i, got[i], c.want[i])
+			}
+		}
+	}
+}
+
+// 遮完不该动调用方的切片：报告与日志各拿一份，谁改都不该影响对方。
+func TestCommandLineDoesNotTouchCallerSlice(t *testing.T) {
+	argv := []string{"sshfleet2", "-f", "10.0.0.1,22,root,hunter2"}
+	_ = CommandLine(argv)
+	if argv[2] != "10.0.0.1,22,root,hunter2" {
+		t.Fatalf("原切片被改了：%v", argv)
+	}
+}

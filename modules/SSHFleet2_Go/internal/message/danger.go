@@ -16,11 +16,14 @@ const (
 	dangerFieldLimit = 46
 )
 
+// 全书的色码只在这一处：统计块、危险框、确认屏、节点表都从这里取。
 const (
 	ansiReset  = "\x1b[0m"
 	ansiRed    = "\x1b[31m"
+	ansiGreen  = "\x1b[32m"
 	ansiYellow = "\x1b[33m"
 	ansiWhite  = "\x1b[37m"
+	ansiDim    = "\x1b[90m" // 暗灰：统计块的「提示：」块用它，与内容同色
 )
 
 // DangerBox 排一张危险命令框。没有命中返回空串。

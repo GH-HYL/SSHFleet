@@ -47,7 +47,7 @@ func Run(argv []string, version string) (message.Line, *contract.Plan, *contract
 	}
 	// 运行上下文：把这次的原值封进纸上那一格。封不起来就是内部写死的密钥或格式坏了，
 	// 按「起不来」报——不静默降级成明文，那等于把这一格的意义抹掉。
-	sealed, err := sealRunMeta(runMetaBodyOf(plan, argv))
+	sealed, err := sealRunMeta(runMetaBodyOf(plan, argv, cfg))
 	if err != nil {
 		return message.Line{}, nil, cannotStartBeforeLog("cli", "", err.Error())
 	}
