@@ -26,7 +26,13 @@ type scanned struct {
 	given    map[string]bool
 	problems []contract.Problem
 	help     bool     // 要看帮助；扫到它就停（老版 pflag 当场返回 ErrHelp）
-	extras   []string // 位置参数：老版一律报「多余的参数」，本阶段只记（见 16 号单）
+	extras   []string // 位置参数：一段都不丢，全部收下交给闸门
+	// extraOwner 第一个多余段紧跟在哪个选项的值后面（回溯 argv 得来），认不出为空。
+	//
+	// 它是事实，不是结论：「这算不算错、该怎么报」归闸门。收它是因为「值里有空格没加引号」
+	// 与「参数打多了」在屏幕上要说成两句不同的话，而分辨它们要原始 argv——那东西只在
+	// 解析站手上。
+	extraOwner string
 }
 
 // scan 从左往右扫一遍 argv。
@@ -44,9 +50,9 @@ func scan(argv []string) scanned {
 		switch {
 		case tok == "--":
 			s.extras = append(s.extras, argv[i+1:]...)
-			return s
+			return s.withExtraOwner(argv)
 		case !strings.HasPrefix(tok, "-") || tok == "-":
-			s.extras = append(s.extras, tok) // 位置参数：记下，不拦
+			s.extras = append(s.extras, tok) // 位置参数：收下，判归闸门
 			continue
 		}
 
@@ -76,6 +82,33 @@ func scan(argv []string) scanned {
 		s.vals[o.long] = val
 		s.given[o.long] = true
 	}
+	return s.withExtraOwner(argv)
+}
+
+// withExtraOwner 回溯第一个多余段，看它是不是紧跟在「某个选项的值」后面。
+//
+// 判据逐字照老版 args.go 的 splitOwner：多余段前面是一个值、值前面是一个以 `-` 开头的
+// 选项，才认得出主。差别只在索引——老版传的是 os.Args[1:]（不含程序名），这里传整条 argv，
+// 所以门槛从 2 抬到 3，argv[0] 是程序名，不能被当成「值前面的选项」。
+func (s scanned) withExtraOwner(argv []string) scanned {
+	if len(s.extras) == 0 {
+		return s
+	}
+	first := s.extras[0]
+	pos := -1
+	for i, tok := range argv {
+		if tok == first {
+			pos = i
+			break
+		}
+	}
+	if pos < 3 {
+		return s
+	}
+	value, flag := argv[pos-1], argv[pos-2]
+	if flag != "--" && strings.HasPrefix(flag, "-") && !strings.HasPrefix(value, "-") {
+		s.extraOwner = flag
+	}
 	return s
 }
 
@@ -93,6 +126,18 @@ func buildPlan(cfg *settings, s scanned) (*contract.Plan, *contract.CannotStart)
 
 	vals, given := s.vals, s.given
 	numberRaw, timeoutRaw, connectTimeoutRaw := vals["--number"], vals["--timeout"], vals["--connect-timeout"]
+
+	// 多余的位置参数：一段都不许静默丢掉——静默丢掉会造成「看起来成功、实际少传」。
+	//
+	// 记事实，不判要不要拒。排在词法那两条之后、数值取值之前，对位老版：pflag 先报解析错，
+	// 再 `fs.Args()` 查多余段，然后才轮到取值与合规。
+	if len(s.extras) > 0 {
+		p.Problems = append(p.Problems, contract.Problem{
+			Kind:   contract.ProblemExtraArgs,
+			Option: s.extraOwner,
+			Raw:    strings.Join(s.extras, " "),
+		})
+	}
 
 	// 三条密钥命令本阶段不接（随阶段 08）：先按「还没接上」报，别让它落进「没指定模式」。
 	for _, k := range []string{"--gen-key", "--key-status", "--convert-secret"} {
@@ -183,9 +228,12 @@ func buildPlan(cfg *settings, s scanned) (*contract.Plan, *contract.CannotStart)
 
 	// 材料自检（-s／-u／-d／-f）：读不到、不能当文本用，都属于「起不来」。
 	//
-	// 只在「这次干什么」已经定死时才做：给了多个模式时先让闸门报「互斥」——老版就是这个
-	// 顺序（先判互斥，再去 stat 文件），两份同时出错时使用者先看到的是「只能选一个」。
-	if len(modes) == 1 {
+	// 只在「这次干什么」已经定死、且纸上一个问题都没有时才做。有问题的纸一律先交给闸门：
+	// 老版 pflag 解析完、CheckArguments 判完，才轮到读清单与 stat 材料（main.go 的步骤 5
+	// 在读清单之前）。这一条守住那个次序——否则「-p 不能搭配 -c」会被「清单读不到」顶掉，
+	// 使用者看到的是别的一件事。
+	proceed := len(modes) == 1 && len(p.Problems) == 0
+	if proceed {
 		if fail := checkMaterial(p, given, vals); fail != nil {
 			return nil, fail
 		}
@@ -208,9 +256,10 @@ func buildPlan(cfg *settings, s scanned) (*contract.Plan, *contract.CannotStart)
 	}
 	p.Tables = tables
 
-	// 读清单：第一张纸的「对谁做」那一格。只在模式已定死时读——给了多个模式时
-	// 先让闸门报「互斥」，与材料自检同一条次序（老版就是这个顺序）。
-	if len(modes) == 1 {
+	// 读清单：第一张纸的「对谁做」那一格。只在模式已定死、且没有多余参数时读——
+	// 给了多个模式时先让闸门报「互斥」，有多余段时先让它报「多余的参数」，与材料自检
+	// 同一条次序（老版就是这个顺序）。
+	if proceed {
 		m, nfail := readManifest(p.Resources.Manifest)
 		if nfail != nil {
 			return nil, nfail

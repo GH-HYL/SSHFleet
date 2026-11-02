@@ -122,7 +122,10 @@ func refuse(body string) *Refusal {
 	return &Refusal{Say: message.Fatal("cli", body, log.ToolPath())}
 }
 
-// parseRefusal 词法层的两条：认不出的选项、带值选项缺值。
+// parseRefusal 解析层那三条：认不出的选项、带值选项缺值、多出来的位置参数。
+//
+// 三条都排在合规之前，对位老版：pflag 先报解析错，`fs.Args()` 再查多余段，
+// 然后才进 CheckArguments。
 func parseRefusal(p *contract.Plan) *Refusal {
 	for _, pr := range p.Problems {
 		switch pr.Kind {
@@ -130,6 +133,8 @@ func parseRefusal(p *contract.Plan) *Refusal {
 			return refuse(message.RefuseUnknownOption(pr.Option))
 		case contract.ProblemMissingValue:
 			return refuse(message.RefuseMissingValue(pr.Option))
+		case contract.ProblemExtraArgs:
+			return refuse(message.RefuseExtraArgs(pr.Option, pr.Raw))
 		}
 	}
 	return nil
