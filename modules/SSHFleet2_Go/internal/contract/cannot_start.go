@@ -11,8 +11,12 @@ type CannotStart struct {
 	// Where 是老版错误屏上 [function:xxx] 那一格：撞上的是哪一环（config、cli、dangercheck…）。
 	Where string
 
-	// Say 是那一屏话：由撞上的那一处把事实交给 message 拼好，这里只搬。
-	Say Text
+	// NoLog 为真表示这一屏末尾**不带**「日志：」那一行：配置那一步日志还没建起来
+	// （老版步骤 1 在步骤 2 之前）。塔尖照它决定附不附日志路径。
+	//
+	// 这里刻意不装成品的话：一屏话只能由 message 造（`message.Line`），契约里连字都
+	// 装不了——否则谁都能自己拼一句塞给屏幕（ADR-0032 第四条）。
+	NoLog bool
 
 	// Body 是**给日志看**的那一段：不带 [ERROR] 前缀、不带颜色，就是老三行那几句话。
 	// 屏与记要形态不同——屏给使用者看（ADR-0028 第五节），日志留现场（第四节）。

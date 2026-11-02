@@ -11,13 +11,20 @@ import (
 //
 // 两条判据都按文件讲（ADR-0037 决定三）：
 //
-//   - import 白名单：一个红线测试文件只许 import 标准库、契约包，以及被它钉的那一个包。
-//     钉 0 个是合法的——站在塔尖进程出入口上的测试起二进制、看产出，不 import 任何站。
+//   - import 白名单：一个红线测试文件只许 import 标准库、契约包、`message`，以及被它钉的
+//     那一个包。钉 0 个是合法的——站在塔尖进程出入口上的测试起二进制、看产出，不 import 任何站。
+//
+//     `message` 为什么与契约同级：话只能由它造（`message.Line` 字段不导出），任何一条要判
+//     「有没有那一句话」的红线测试都绕不开它。它不是「被钉的第二个包」，是造话的工具。
+//
 //   - 出口白名单：每个站包至多导出「一个函数加一个类型」（入口函数、替身插口的类型）。
 //     骨架阶段 0 个也算过；多一个就红。
 func CheckTestSite(m *Module) []Violation {
 	return append(redlineImports(m), stationExports(m)...)
 }
+
+// lineHome 是造话那个横切包的短名：红线测试 import 它不算「钉第二个包」。
+const lineHome = "message"
 
 func redlineImports(m *Module) []Violation {
 	var out []Violation
@@ -30,7 +37,7 @@ func redlineImports(m *Module) []Violation {
 			for _, name := range sortedImportNames(f) {
 				path := f.Imports[name]
 				short, ok := m.Internal(path)
-				if !ok || m.IsContract(short) {
+				if !ok || m.IsContract(short) || short == lineHome {
 					continue
 				}
 				pinned = append(pinned, short)

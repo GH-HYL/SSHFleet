@@ -2,8 +2,6 @@ package message
 
 import (
 	"strings"
-
-	"sshfleet2/internal/contract"
 )
 
 // 帮助那一屏：事实由解析站给（有哪些选项、版本是多少），排版归这里——
@@ -59,7 +57,7 @@ var helpExamples = [][2]string{
 }
 
 // HelpScreen 把帮助排成一整屏。width 是终端列数，<=0 表示不折行（管道下长行更便于 grep）。
-func HelpScreen(name, version string, width int, entries []HelpEntry) contract.Text {
+func HelpScreen(name, version string, width int, entries []HelpEntry) Line {
 	wShort, wLong, wTag := 0, 0, 0
 	for _, e := range entries {
 		if e.Kind != EntryOption {
@@ -114,11 +112,11 @@ func HelpScreen(name, version string, width int, entries []HelpEntry) contract.T
 		b.WriteString("  " + padTo(e[0], labelWidth) + " " + strings.ReplaceAll(e[1], "%s", name) + "\n")
 	}
 	b.WriteString("\n更多用法、配置说明、示例：见 docs/\n")
-	return contract.Text{S: b.String()}
+	return Line{s: b.String()}
 }
 
 // CannotStartLine 起不来那一句话。本阶段是过渡形态：只有一句加一个换行，
 // 话术与退出码表随阶段 03 定稿，别当口径抄。
-func CannotStartLine(head, detail string) contract.Text {
-	return contract.Text{S: Shell(head, detail) + "\n"}
+func CannotStartLine(head, detail string) Line {
+	return Line{s: Shell(head, detail) + "\n"}
 }

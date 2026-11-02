@@ -27,7 +27,7 @@ func confirmTestPlan() *contract.Plan {
 }
 
 func TestConfirmScreenLooksLikeOldTool(t *testing.T) {
-	got := stripANSI(ConfirmScreen(confirmTestPlan(), "ok.csv").S)
+	got := stripANSI(ConfirmScreen(confirmTestPlan(), "ok.csv").Text())
 
 	want := "\n" +
 		"╔════════════════════════════════════════════════════╗\n" +
@@ -55,7 +55,7 @@ func TestConfirmScreenSaysAllParallelWhenUnset(t *testing.T) {
 	p := confirmTestPlan()
 	p.Nodes = []contract.Node{{IP: "a"}, {IP: "b"}, {IP: "c"}}
 
-	if got := stripANSI(ConfirmScreen(p, "ok.csv").S); !strings.Contains(got, "▶ 并发数  -→   3（全部并行）") {
+	if got := stripANSI(ConfirmScreen(p, "ok.csv").Text()); !strings.Contains(got, "▶ 并发数  -→   3（全部并行）") {
 		t.Fatalf("没标「全部并行」：\n%s", got)
 	}
 }
@@ -65,7 +65,7 @@ func TestConfirmScreenShowsGivenConcurrency(t *testing.T) {
 	p := confirmTestPlan()
 	p.Run.Concurrency = 4
 
-	got := stripANSI(ConfirmScreen(p, "ok.csv").S)
+	got := stripANSI(ConfirmScreen(p, "ok.csv").Text())
 	if !strings.Contains(got, "▶ 并发数  -→   4\n") {
 		t.Fatalf("并发数不对：\n%s", got)
 	}
@@ -79,7 +79,7 @@ func TestConfirmScreenOmitsEmptyRemark(t *testing.T) {
 	p := confirmTestPlan()
 	p.Run.Remark = ""
 
-	if got := stripANSI(ConfirmScreen(p, "ok.csv").S); strings.Contains(got, "备注") {
+	if got := stripANSI(ConfirmScreen(p, "ok.csv").Text()); strings.Contains(got, "备注") {
 		t.Fatalf("空备注不该占一行：\n%s", got)
 	}
 }

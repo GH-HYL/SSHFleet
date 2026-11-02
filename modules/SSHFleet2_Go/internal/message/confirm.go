@@ -27,7 +27,7 @@ const confirmTitle = "           SSHFleet - 执行选项/参数确认           
 //
 // manifest 是**已经遮过**的节点清单：内联清单里就写着密码，不能原样上屏。遮法住 mask，
 // 由调用方（闸门）取一次递进来——`message` 的依赖白名单里只有契约，不新开一条叶子之间的边。
-func ConfirmScreen(p *contract.Plan, manifest string) contract.Text {
+func ConfirmScreen(p *contract.Plan, manifest string) Line {
 	border := strings.Repeat("═", len([]rune(confirmTitle))+10)
 
 	var b strings.Builder
@@ -35,7 +35,7 @@ func ConfirmScreen(p *contract.Plan, manifest string) contract.Text {
 	b.WriteString(ansiCyan + "║  " + confirmTitle + "  ║" + ansiReset + "\n")
 	b.WriteString(ansiCyan + "╚" + border + "╝" + ansiReset + "\n\n")
 	b.WriteString(infoTable(confirmRows(p, manifest)))
-	return contract.Text{S: b.String()}
+	return Line{s: b.String()}
 }
 
 // confirmRows 是那张表的行，次序照老版：模式与内容 → 清单与台数 → 执行参数。
@@ -108,33 +108,33 @@ func infoTable(rows [][2]string) string {
 // ExecConfirmPrompt 是确认屏之后那句问句：先一条 60 个等号的分隔线，再问一句。
 //
 // 方括号与冒号由 ask 补（它按缺省是是还是否决定写 [Y/n] 还是 [y/N]），这里只给问句。
-func ExecConfirmPrompt() contract.Text {
+func ExecConfirmPrompt() Line {
 	s := "\n" + strings.Repeat("═", 60) + "\n\n" +
 		ansiBrightYellow + "以上确认无误，开始执行？" + ansiReset
-	return contract.Text{S: s}
+	return Line{s: s}
 }
 
 // ConfirmSkippedLine 是非交互（--yes）跳过确认时上屏的那一行。
 //
 // 老版此时**不打参数屏**，只打这一行——`--yes` 是替人回答了「y」，不是替人看了屏。
-func ConfirmSkippedLine() contract.Text {
-	return contract.Text{S: ansiYellow + " [非交互模式] 跳过执行选项/参数确认环节，直接执行" + ansiReset + "\n\n"}
+func ConfirmSkippedLine() Line {
+	return Line{s: ansiYellow + " [非交互模式] 跳过执行选项/参数确认环节，直接执行" + ansiReset + "\n\n"}
 }
 
 // ConfirmSkippedTrace 是跳过确认写进工具日志的那一句。
-func ConfirmSkippedTrace() contract.Text {
-	return contract.Text{S: "非交互模式（--yes）跳过执行选项/参数确认，直接执行"}
+func ConfirmSkippedTrace() Line {
+	return Line{s: "非交互模式（--yes）跳过执行选项/参数确认，直接执行"}
 }
 
 // StartLine 是用户按下 y 之后那两行「开始执行」。
-func StartLine() contract.Text {
-	return contract.Text{S: "SSHFleet工具" + "\x1b[34m" + "开始执行" + ansiReset + "......\n" +
+func StartLine() Line {
+	return Line{s: "SSHFleet工具" + "\x1b[34m" + "开始执行" + ansiReset + "......\n" +
 		strings.Repeat("=", 50) + "\n"}
 }
 
 // CancelTrace 是确认屏上答否时写进工具日志的那一句（老版 logger.Warn 的原话）。
-func CancelTrace() contract.Text {
-	return contract.Text{S: "执行已取消，SSHFleet工具已退出"}
+func CancelTrace() Line {
+	return Line{s: "执行已取消，SSHFleet工具已退出"}
 }
 
 // RefuseEnvelope 是「标签与载荷对不上」那一句的正文。

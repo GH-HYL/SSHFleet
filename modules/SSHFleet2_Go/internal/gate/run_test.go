@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"sshfleet2/internal/contract"
+	"sshfleet2/internal/message"
 )
 
 // 参数搭配那一段（自定义区）：递一张纸，收一个拒绝。
@@ -28,9 +29,9 @@ func planOf(mode contract.Mode, edit func(*contract.Plan)) *contract.Plan {
 var ansiEscape = regexp.MustCompile("\x1b\\[[0-9;]*m")
 
 // firstLine 取一屏话的问题句：老版那副外壳之后、第一个换行为止。
-func firstLine(t *testing.T, say contract.Text) string {
+func firstLine(t *testing.T, say message.Line) string {
 	t.Helper()
-	line := ansiEscape.ReplaceAllString(say.S, "")
+	line := ansiEscape.ReplaceAllString(say.Text(), "")
 	if i := strings.Index(line, "\n"); i >= 0 {
 		line = line[:i]
 	}
@@ -171,10 +172,10 @@ func TestRefuseArguments(t *testing.T) {
 			if r == nil {
 				t.Fatalf("应当拒绝，实际放行")
 			}
-			if note.S != "" {
-				t.Fatalf("拒绝时不该带回日志留痕：%q", note.S)
+			if note.Text() != "" {
+				t.Fatalf("拒绝时不该带回日志留痕：%q", note.Text())
 			}
-			if !r.Say.ToErr {
+			if !r.Say.Stderr() {
 				t.Fatalf("参数不合规要写标准错误，实际写的是标准输出")
 			}
 			if got := firstLine(t, r.Say); got != c.want {
@@ -190,7 +191,7 @@ func TestPassesCleanPlan(t *testing.T) {
 		p.Task.Command = &contract.CommandTask{Text: "echo hi"}
 	})
 	if r, _ := Run(plan); r != nil {
-		t.Fatalf("干净的命令不该拒：%q", r.Say.S)
+		t.Fatalf("干净的命令不该拒：%q", r.Say.Text())
 	}
 
 	plan = planOf(contract.ModeUpload, func(p *contract.Plan) {
@@ -198,7 +199,7 @@ func TestPassesCleanPlan(t *testing.T) {
 		p.Task.Path = "/tmp/"
 	})
 	if r, _ := Run(plan); r != nil {
-		t.Fatalf("干净的上传不该拒：%q", r.Say.S)
+		t.Fatalf("干净的上传不该拒：%q", r.Say.Text())
 	}
 
 	plan = planOf(contract.ModeDownload, func(p *contract.Plan) {
@@ -206,6 +207,6 @@ func TestPassesCleanPlan(t *testing.T) {
 		p.Task.Path = "/tmp"
 	})
 	if r, _ := Run(plan); r != nil {
-		t.Fatalf("干净的下载不该拒：%q", r.Say.S)
+		t.Fatalf("干净的下载不该拒：%q", r.Say.Text())
 	}
 }

@@ -6,7 +6,6 @@ import (
 
 	"sshfleet2/internal/console"
 	"sshfleet2/internal/contract"
-	"sshfleet2/internal/log"
 	"sshfleet2/internal/message"
 )
 
@@ -19,11 +18,11 @@ import (
 //
 // 配置、判据表、终端宽度都由本站自己取——塔尖除了 argv 和号，什么都不递
 // （ADR-0032 第五条：它只搬，不看配置、不看文件在不在）。
-func Run(argv []string, version string) (contract.Text, *contract.Plan, *contract.CannotStart) {
+func Run(argv []string, version string) (message.Line, *contract.Plan, *contract.CannotStart) {
 	cfg, err := load()
 	if err != nil {
 		// 配置这一步失败时日志还没建起来（老版步骤 1 在步骤 2 之前），所以那一屏不带「日志：」行。
-		return contract.Text{}, nil, cannotStartBeforeLog("config",
+		return message.Line{}, nil, cannotStartBeforeLog("config",
 			"加载配置文件失败（"+shownConfigPath+"）", err.Error())
 	}
 
@@ -44,31 +43,34 @@ func Run(argv []string, version string) (contract.Text, *contract.Plan, *contrac
 
 	plan, fail := buildPlan(cfg, s)
 	if fail != nil {
-		return contract.Text{}, nil, fail
+		return message.Line{}, nil, fail
 	}
 	// 运行上下文：把这次的原值封进纸上那一格。封不起来就是内部写死的密钥或格式坏了，
 	// 按「起不来」报——不静默降级成明文，那等于把这一格的意义抹掉。
 	sealed, err := sealRunMeta(runMetaBodyOf(plan, argv))
 	if err != nil {
-		return contract.Text{}, nil, cannotStartBeforeLog("cli", "", err.Error())
+		return message.Line{}, nil, cannotStartBeforeLog("cli", "", err.Error())
 	}
 	plan.RunMeta = sealed
-	return contract.Text{}, plan, nil
+	return message.Line{}, plan, nil
 }
 
 // cannotStart 排一屏「起不来」：环节、外壳句与原因照老版那一处，末尾附工具日志路径。
 func cannotStart(where, head, body string) *contract.CannotStart {
-	return cannotStartScreen(where, head, body, log.ToolPath())
+	return cannotStartScreen(where, head, body, false)
 }
 
 // cannotStartBeforeLog 是配置那一步的「起不来」：老版读配置时日志还没建起来，
 // 所以那一屏不带「日志：」行。两个具名入口各表一件事，调用点不许拿空串自己表达。
 func cannotStartBeforeLog(where, head, body string) *contract.CannotStart {
-	return cannotStartScreen(where, head, body, "")
+	return cannotStartScreen(where, head, body, true)
 }
 
 // cannotStartScreen 是「起不来」屏的唯一拼装处：外壳句由 message 加（ADR-0028 决定一）。
-func cannotStartScreen(where, head, body, logPath string) *contract.CannotStart {
+//
+// 它只交事实（哪一环、哪句话、带不带日志行），那一屏由塔尖向 message 要——契约里
+// 装不了成品的话（`message.Line` 的字段不导出）。
+func cannotStartScreen(where, head, body string, noLog bool) *contract.CannotStart {
 	full := message.Shell(head, strings.TrimRight(body, "\r\n"))
-	return &contract.CannotStart{Where: where, Say: message.Fatal(where, full, logPath), Body: full}
+	return &contract.CannotStart{Where: where, NoLog: noLog, Body: full}
 }

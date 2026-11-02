@@ -47,17 +47,24 @@ func main() {
 	switch {
 	case fail != nil:
 		lg.Fatal(fail.Where, fail.Body)
-		console.Print(fail.Say)
+		// 那一屏在这里向 message 要：纸上只装了事实（哪一环、哪句话、带不带日志行），
+		// 成品的话只在 message 里成形——契约里连字都装不了（`message.Line` 字段不导出）。
+		logPath := log.ToolPath()
+		if fail.NoLog {
+			logPath = "" // 配置那一步日志还没建起来，老版那一屏也不带「日志：」行
+		}
+		console.Print(message.Fatal(fail.Where, fail.Body, logPath))
 		finish(exitcode.CannotStart)
 
 	case plan != nil:
 		// 解析站路上攒下的提示先打出去：老版的次序也是「读清单的提示在前、确认屏在后」。
+		// 纸上是种类与事实，句子向 message 要。
 		for _, n := range plan.Notices {
-			console.Print(n)
+			console.Print(message.NoticeLine(n))
 		}
 		refusal, note := gate.Run(plan)
-		if note.S != "" {
-			lg.Warn(note.S) // 非交互放行危险命令的留痕：闸门不持有日志，交上来由这里落盘
+		if note.Text() != "" {
+			lg.Warn(note.Text()) // 非交互放行危险命令的留痕：闸门不持有日志，交上来由这里落盘
 		}
 		if refusal != nil {
 			console.Print(refusal.Say)

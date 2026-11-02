@@ -1,7 +1,5 @@
 package message
 
-import "sshfleet2/internal/contract"
-
 // 读清单那一段要说的话：一句提示、两处失败文案、一条去路。
 //
 // 清单是使用者天天手改的文件，这几句是最先撞上的那一屏，逐字照老版。
@@ -19,9 +17,9 @@ const ManifestGoneHint = "要临时传一台机器，可以直接写一行节点
 //
 // 老版形态：青色 [INFO] + 黄色 [function:read_nodes_infos] + 正文，后跟一个换行。
 // 解站自己不写终端，这一屏挂在纸上，由塔尖打出去（Plan.Notices）。
-func ManifestHeaderDropped() contract.Text {
+func ManifestHeaderDropped() Line {
 	s := ansiCyan + "[INFO]" + ansiReset +
 		ansiYellow + " [function:read_nodes_infos]" + ansiReset +
 		" 第一行不是IP格式，已移除表头行\n"
-	return contract.Text{S: s}
+	return Line{s: s}
 }

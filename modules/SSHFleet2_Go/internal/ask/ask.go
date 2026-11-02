@@ -12,7 +12,6 @@ import (
 	"strings"
 
 	"sshfleet2/internal/console"
-	"sshfleet2/internal/contract"
 	"sshfleet2/internal/message"
 )
 
@@ -31,7 +30,7 @@ const (
 // Ask 打出一屏、收一行回答。
 //
 // assumeYes（--yes）时不打屏、不读输入，直接交回「按缺省放行」这个事实；留痕由调用方写。
-func Ask(screen contract.Text, assumeYes bool, defaultYes bool) Answer {
+func Ask(screen message.Line, assumeYes bool, defaultYes bool) Answer {
 	// 屏照打：--yes 只替人回答了「y」，不该连「命中了危险规则」这件事也抹掉。
 	console.Print(screen)
 	if assumeYes {
@@ -54,14 +53,14 @@ func readLine() (string, bool) {
 //
 // 危险提醒那句问句与确认屏那句不是一句话；屏幕也一样——确认屏是一整张表。
 // [Y/n] 与 [y/N] 的形态仍由这里按 defaultYes 定：使用者看方括号就知道回车会怎样。
-func AskWith(screen, question contract.Text, defaultYes bool) Answer {
+func AskWith(screen, question message.Line, defaultYes bool) Answer {
 	console.Print(screen)
 	return readAnswer(question, defaultYes)
 }
 
 // readAnswer 打问句与方括号提示，再收一行。
-func readAnswer(question contract.Text, defaultYes bool) Answer {
-	console.Print(contract.Text{S: question.S + " " + message.AskHint(defaultYes) + ": "})
+func readAnswer(question message.Line, defaultYes bool) Answer {
+	console.Print(message.PromptWith(question, defaultYes))
 
 	line, ok := readLine()
 	if !ok {

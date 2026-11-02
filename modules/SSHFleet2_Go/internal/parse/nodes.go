@@ -39,7 +39,7 @@ type rowCred struct {
 }
 
 // buildNodes 把清单补成一台台的机器。返回节点、要打给使用者的提示、以及「起不来」。
-func buildNodes(rows [][]string, cfg *settings, useKey bool) ([]contract.Node, []contract.Text, *contract.CannotStart) {
+func buildNodes(rows [][]string, cfg *settings, useKey bool) ([]contract.Node, []contract.Notice, *contract.CannotStart) {
 	creds, fail := precheckCredentials(rows, cfg)
 	if fail != nil {
 		return nil, nil, fail
@@ -123,9 +123,9 @@ func buildNodes(rows [][]string, cfg *settings, useKey bool) ([]contract.Node, [
 		})
 	}
 
-	var notices []contract.Text
-	if notice := unusedKeyNotice(unused); notice != "" {
-		notices = append(notices, contract.Text{S: notice})
+	var notices []contract.Notice
+	if len(unused) > 0 {
+		notices = append(notices, contract.Notice{Kind: contract.NoticeUnusedKey, Rows: unused})
 	}
 	if len(errs) > 0 {
 		return nil, nil, cannotStart("nodelist", "", "发现以下错误:"+"\n"+strings.Join(errs, "\n"))
@@ -256,35 +256,6 @@ func resolveSecret(raw string, cfg *settings) (string, error) {
 
 // errNoSecretDir 写的是相对名、配置里却没有 secret_dir：这是配置缺项，不是这一行的写法问题。
 var errNoSecretDir = errors.New("写的是相对路径，但配置里没配 credential.secret_dir（提示：在配置的 [credential] 段配上 secret_dir，或这一格改写本机绝对路径）")
-
-// unusedKeyNotice 是「清单里配了私钥、这次没加 -k」的那句提示。
-//
-// 只说前五行、多于一行的说「共 N 行」——清单可能几百行，一句提示刷满屏没有意义。
-func unusedKeyNotice(rows []int) string {
-	if len(rows) == 0 {
-		return ""
-	}
-	const shown = 5
-	parts := make([]string, 0, shown)
-	for i, r := range rows {
-		if i >= shown {
-			break
-		}
-		parts = append(parts, strconv.Itoa(r))
-	}
-	list := strings.Join(parts, "、")
-	tail := "这几台会用密码登录"
-	switch {
-	case len(rows) > shown:
-		list = fmt.Sprintf("共 %d 行配了私钥（如第 %s 行）", len(rows), list)
-	case len(rows) == 1:
-		list = "第 " + list + " 行配了私钥"
-		tail = "这一台会用密码登录"
-	default:
-		list = "第 " + list + " 行配了私钥"
-	}
-	return fmt.Sprintf("[提示] 清单%s，本次没加 -k，%s\n", list, tail)
-}
 
 // padRow 把短行列补到六列：缺的列按空值处理，由各自的补全规则去兜底。
 func padRow(row []string) []string {

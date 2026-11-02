@@ -3,23 +3,26 @@ package console
 import (
 	"os"
 
-	"sshfleet2/internal/contract"
+	"sshfleet2/internal/message"
 )
 
 // Print 把话写到终端——全工程唯一的终端出口（ADR-0032 第四条）。
 //
-// 两条流按 Text.ToErr 走：错误走 stderr、其余走 stdout。老版里同一类失败走哪条流是固定的
-// （错误套 [ERROR] 走 stderr，危险框与「操作已取消」走 stdout），重定向时看得见，所以
-// 流跟着句子走，不由塔尖猜。
+// 它只收 `message.Line`：那个类型的字段不导出，别的包拼不出来，也就没有东西可塞进来。
+// 于是「自己取个数拼一句直接打出去」在编译期就过不去，不用靠检查盯。
+//
+// 两条流按那句话自己的标记走：错误走 stderr、其余走 stdout。老版里同一类失败走哪条流是
+// 固定的（错误套 [ERROR] 走 stderr，危险框与「操作已取消」走 stdout），重定向时看得见，
+// 所以流跟着句子走，不由塔尖猜。
 //
 // 颜色也在这里定去留：message 拼出来的句子一律带色码，这里按老版 detectColor 的判据
 // 决定留着还是剥掉。判据只有一份，就在本包。
-func Print(t contract.Text) {
+func Print(l message.Line) {
 	w := os.Stdout
-	if t.ToErr {
+	if l.Stderr() {
 		w = os.Stderr
 	}
-	s := t.S
+	s := l.Text()
 	if !colorSupported() {
 		s = stripANSI(s)
 	}
