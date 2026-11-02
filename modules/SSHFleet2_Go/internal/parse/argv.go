@@ -1,9 +1,12 @@
 package parse
 
 import (
+	"path"
+	"path/filepath"
 	"strconv"
 	"strings"
 
+	"sshfleet2/internal/archive"
 	"sshfleet2/internal/contract"
 	"sshfleet2/internal/message"
 )
@@ -101,22 +104,29 @@ func buildPlan(cfg *settings, s scanned) (*contract.Plan, *contract.CannotStart)
 	// 三个数值选项：空值与 0 都算「不填」（老版 checkPositiveInt 的第一条），
 	// 认不出或不是正数才记一条事实。
 	if n, ok := positiveValue(numberRaw); ok {
-		p.Run.Concurrency = n
+		if numberRaw != "" {
+			p.Run.Concurrency = n
+		}
 	} else {
 		p.Problems = append(p.Problems, contract.Problem{
 			Kind: contract.ProblemBadValue, Option: "-n", Raw: numberRaw, Detail: message.SubjectConcurrency,
 		})
 	}
 	if n, ok := positiveValue(timeoutRaw); ok {
-		p.Run.TimeoutExecute = n
-		p.Run.TimeoutTransfer = n
+		// 没给就不动：这两个值有配置默认，写 0 会把默认抹掉（老版也是「不给就留原值」）。
+		if timeoutRaw != "" {
+			p.Run.TimeoutExecute = n
+			p.Run.TimeoutTransfer = n
+		}
 	} else {
 		p.Problems = append(p.Problems, contract.Problem{
 			Kind: contract.ProblemBadValue, Option: "-t", Raw: timeoutRaw, Detail: message.SubjectTimeout,
 		})
 	}
 	if n, ok := positiveValue(connectTimeoutRaw); ok {
-		p.Run.TimeoutConnect = n
+		if connectTimeoutRaw != "" {
+			p.Run.TimeoutConnect = n
+		}
 	} else {
 		p.Problems = append(p.Problems, contract.Problem{
 			Kind: contract.ProblemBadValue, Option: "-T", Raw: connectTimeoutRaw, Detail: message.SubjectConnect,
@@ -175,6 +185,12 @@ func buildPlan(cfg *settings, s scanned) (*contract.Plan, *contract.CannotStart)
 	// 执行资源：这次用到的原料在哪。清单这一格是 `-f` 的原值，两种形态（文件路径、
 	// 内联记录）都照原样装着；脚本与代填随阶段 05 加。
 	p.Resources.Manifest = vals["--csv-file"]
+
+	// 备注：没给 -r 就自动生成（命令取首词，脚本与上传取文件名，下载按远端规则切），
+	// 生成过之后照样过平台过滤——它要当归档目录名的一段，也要原样显示在确认屏上。
+	if p.Run.Remark == "" {
+		p.Run.Remark = defaultRemark(p)
+	}
 
 	// 判据表：解析读一次、校验一次，随纸交给闸门。
 	tables, fail := loadTables(mode)
@@ -251,6 +267,29 @@ func positiveValue(raw string) (int, bool) {
 		return 0, false
 	}
 	return n, true
+}
+
+// defaultRemark 没给 -r 时自动生成一次备注。
+//
+// 与老版同一条路：命令取首词、脚本与上传取本机文件名、下载取远端文件名（按 POSIX 规则切，
+// 因为远端那条路径里 `\` 只是一个普通字符）。生成之后过一遍平台过滤——归档目录名要用它。
+//
+// 不截断：老版曾截到 8 字符，确认屏把备注原样显示出来之后出现了「afile.tx」这种半截名字，
+// 已取消（2026-10 定）。
+func defaultRemark(p *contract.Plan) string {
+	switch {
+	case p.Task.Command != nil:
+		if fields := strings.Fields(p.Task.Command.Text); len(fields) > 0 {
+			return archive.SanitizeRemark(fields[0])
+		}
+	case p.Task.Script != nil:
+		return archive.SanitizeRemark(filepath.Base(p.Task.Script.Path))
+	case p.Task.Upload != nil:
+		return archive.SanitizeRemark(filepath.Base(p.Task.Upload.Source))
+	case p.Task.Download != nil:
+		return archive.SanitizeRemark(path.Base(p.Task.Download.RemotePath))
+	}
+	return ""
 }
 
 // splitOption 拆 `-c=x` 与 `--command=x`：返回值里带「是不是内联给的」。

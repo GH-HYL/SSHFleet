@@ -16,7 +16,8 @@ func redlinePaper() *contract.Plan {
 	return &contract.Plan{
 		Mode: contract.ModeCommand,
 		Task: contract.Task{Command: &contract.CommandTask{Text: "uptime"}},
-		Run:  contract.RunParams{Concurrency: 0, TimeoutConnect: 10, TimeoutExecute: 60, TimeoutTransfer: 300},
+		// Yes 为真：这张纸只用来判形状，不该真的去等一行输入。
+		Run: contract.RunParams{Concurrency: 0, TimeoutConnect: 10, TimeoutExecute: 60, TimeoutTransfer: 300, Yes: true},
 	}
 }
 

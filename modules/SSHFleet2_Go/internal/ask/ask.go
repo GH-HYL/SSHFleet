@@ -37,24 +37,7 @@ func Ask(screen contract.Text, assumeYes bool, defaultYes bool) Answer {
 	if assumeYes {
 		return Yes
 	}
-	console.Print(message.ConfirmPrompt())
-
-	line, ok := readLine()
-	if !ok {
-		console.Print(message.InputEndLine())
-		return NoInput
-	}
-	line = strings.ToLower(strings.TrimSpace(line))
-	if line == "" {
-		if defaultYes {
-			return Yes
-		}
-		return No
-	}
-	if line == "y" || line == "yes" {
-		return Yes
-	}
-	return No
+	return readAnswer(message.ConfirmPrompt(), defaultYes)
 }
 
 // readLine 从标准输入读一行；流结束时 ok 为假。
@@ -65,4 +48,35 @@ func readLine() (string, bool) {
 		return "", false
 	}
 	return sc.Text(), true
+}
+
+// AskWith 与 Ask 同，但**屏与问句都由调用方给**。
+//
+// 危险提醒那句问句与确认屏那句不是一句话；屏幕也一样——确认屏是一整张表。
+// [Y/n] 与 [y/N] 的形态仍由这里按 defaultYes 定：使用者看方括号就知道回车会怎样。
+func AskWith(screen, question contract.Text, defaultYes bool) Answer {
+	console.Print(screen)
+	return readAnswer(question, defaultYes)
+}
+
+// readAnswer 打问句与方括号提示，再收一行。
+func readAnswer(question contract.Text, defaultYes bool) Answer {
+	console.Print(contract.Text{S: question.S + " " + message.AskHint(defaultYes) + ": "})
+
+	line, ok := readLine()
+	if !ok {
+		console.Print(message.InputEndLine())
+		return NoInput
+	}
+	line = strings.ToLower(strings.TrimSpace(line))
+	switch {
+	case line == "" && defaultYes:
+		return Yes
+	case line == "" || line == "n" || line == "no":
+		return No
+	case line == "y" || line == "yes":
+		return Yes
+	default:
+		return No
+	}
 }

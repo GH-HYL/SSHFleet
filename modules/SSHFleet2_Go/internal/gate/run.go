@@ -37,7 +37,83 @@ func Run(p *contract.Plan) (*Refusal, contract.Text) {
 	if r := valueRefusal(p); r != nil {
 		return r, contract.Text{}
 	}
-	return dangerRefusal(p)
+	if r, note := dangerRefusal(p); r != nil || note.S != "" {
+		return r, note
+	}
+	// 信封合法性排在最后一道：前面几条判的都是「这次给的东西对不对」，
+	// 这一条判的是「纸本身有没有被造错」——它不该抢在人的毛病前面报。
+	if r := envelopeRefusal(p); r != nil {
+		return r, contract.Text{}
+	}
+	return confirmRefusal(p)
+}
+
+// envelopeRefusal 验信封：标签说是哪一种活，载荷就得是那一份、而且只有那一份。
+//
+// 这条只在纸被造错时才响（写着命令、装的却是脚本），正常使用撞不上——所以它的话说得直白，
+// 不往使用者身上推。算「输入不合规」那一类，不另立一类（ADR-0035 决定七）。
+func envelopeRefusal(p *contract.Plan) *Refusal {
+	set := make([]string, 0, 5)
+	for _, one := range []struct {
+		name    string
+		present bool
+	}{
+		{"命令", p.Task.Command != nil},
+		{"脚本", p.Task.Script != nil},
+		{"上传", p.Task.Upload != nil},
+		{"下载", p.Task.Download != nil},
+		{"改密", p.Task.Passwd != nil},
+	} {
+		if one.present {
+			set = append(set, one.name)
+		}
+	}
+	if len(set) > 1 {
+		return refuse(message.RefuseEnvelope("同时装了" + strings.Join(set, "、")))
+	}
+
+	want := ""
+	switch p.Mode {
+	case contract.ModeCommand:
+		want = "命令"
+	case contract.ModeScript:
+		want = "脚本"
+	case contract.ModeUpload:
+		want = "上传"
+	case contract.ModeDownload:
+		want = "下载"
+	case contract.ModePasswd:
+		want = "改密"
+	default:
+		return nil // 模式零个／多个由上一条判据报，这里不抢
+	}
+	if len(set) == 0 {
+		return refuse(message.RefuseEnvelope("标签是" + want + "，载荷却是空的"))
+	}
+	if set[0] != want {
+		return refuse(message.RefuseEnvelope("标签是" + want + "，装的是" + set[0]))
+	}
+	return nil
+}
+
+// confirmRefusal 是闸门的最后一道：把这次要做什么摊给使用者看，问一句。
+//
+// 屏与问句由 message 造，打屏与收行归 ask——闸门自己一行都不写（ADR-0032 第四条）。
+// 答否算当场喊停；读到输入结束算「没答完」，同样不放行。
+func confirmRefusal(p *contract.Plan) (*Refusal, contract.Text) {
+	if p.Run.Yes {
+		// --yes 是替人回答了「y」，不是替人看了屏：老版此时不打参数屏，只打这一行。
+		ask.Ask(message.ConfirmSkippedLine(), true, true)
+		return nil, message.ConfirmSkippedTrace()
+	}
+	switch ask.AskWith(message.ConfirmScreen(p), message.ExecConfirmPrompt(), true) {
+	case ask.NoInput:
+		// 屏幕上「输入结束，操作已取消」已经由 ask 打过，这里不再叠一句。
+		return &Refusal{Say: contract.Text{}}, contract.Text{}
+	case ask.No:
+		return &Refusal{Say: message.CancelLine()}, message.CancelTrace()
+	}
+	return nil, contract.Text{}
 }
 
 // refuse 把一句正文交给终端：走 stderr，老版那副 [ERROR] 外壳，末尾附日志路径。

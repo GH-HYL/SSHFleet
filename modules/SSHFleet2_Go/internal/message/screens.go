@@ -66,10 +66,21 @@ func InputEndLine() contract.Text {
 	return contract.Text{S: "\n" + ansiYellow + "输入结束，操作已取消" + ansiReset + "\n"}
 }
 
-// ConfirmPrompt 是危险提醒档的问句：前面一个换行、问句、红色 [y/N]、冒号与一个空格。
-// 形态照老版交互器——缺了 [y/N] 使用者不知道能敲什么。
+// ConfirmPrompt 是危险提醒档的问句本身（前面留一个空行）。
+//
+// 方括号那半截由 AskHint 给：问句与「回车会怎样」是两件事，一个在哪儿问、一个缺省是什么，
+// 分开之后确认屏那句问句也能共用同一套方括号。
 func ConfirmPrompt() contract.Text {
-	return contract.Text{S: "\n" + ansiYellow + "确定继续？" + ansiReset + " " + ansiRed + "[y/N]" + ansiReset + ": "}
+	return contract.Text{S: "\n" + ansiYellow + "确定继续？" + ansiReset}
+}
+
+// AskHint 是问句后面那个红色方括号：缺省答是写 [Y/n]，缺省答否写 [y/N]。
+// 使用者看方括号就知道敲回车会怎样——这不是装饰。
+func AskHint(defaultYes bool) string {
+	if defaultYes {
+		return ansiRed + "[Y/n]" + ansiReset
+	}
+	return ansiRed + "[y/N]" + ansiReset
 }
 
 // notWiredHead 是过渡形态那一类话的开头：本阶段还没接上的用法都这么起头，随阶段 04／08 一起消失。

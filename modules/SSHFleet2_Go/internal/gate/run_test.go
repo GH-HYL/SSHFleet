@@ -16,7 +16,8 @@ import (
 // 纸是手搓的（临时用具，真纸随阶段 04），只填本案要看的那几格。
 
 func planOf(mode contract.Mode, edit func(*contract.Plan)) *contract.Plan {
-	p := &contract.Plan{Mode: mode}
+	// Yes 为真：这些用例判的是「拦不拦」，不该真去等一行输入（确认屏由 07 号单的用例管）。
+	p := &contract.Plan{Mode: mode, Run: contract.RunParams{Yes: true}}
 	if edit != nil {
 		edit(p)
 	}
