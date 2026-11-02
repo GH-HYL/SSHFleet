@@ -1,6 +1,6 @@
 # 规格：阶段 04——命令模式全链路
 
-**Status**：ready-for-agent
+**Status**：done
 
 ## 边界（照抄母规格三条）
 
