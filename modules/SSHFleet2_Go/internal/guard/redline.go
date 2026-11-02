@@ -70,6 +70,9 @@ var redline = []RedLineEntry{
 	{"TestRedlineTipRunsHelp", []string{}},
 	{"TestRedlineParseSaysOrFail", []string{"parse.Run"}},
 	{"TestRedlineMessageRendersHelp", []string{"Kind", "message.EntryOption", "message.HelpEntry", "message.HelpScreen"}},
+
+	// 04 阶段：凭据包的那一件事（新增不算改）
+	{"TestRedlineCredentialReportsState", []string{"credential.KeyMissing", "credential.KeyReady", "credential.Secret", "credential.Status"}},
 }
 
 // RedLine 返回名单的一份拷贝。检查读它；改返回值影响不到名单本身。
