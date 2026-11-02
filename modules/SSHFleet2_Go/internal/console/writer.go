@@ -1,0 +1,33 @@
+package console
+
+import (
+	"io"
+	"os"
+)
+
+// Writer 交出往标准输出写字节的那个口子。
+//
+// 为什么要有它：进度界面要独占屏幕——画帧与结果行走同一条流，才不会互相盖。bubbletea 就是
+// 这么干的（`tea.WithOutput(w)` 之后 `Println` 往上插行、`View` 原地重绘），所以它要的不是
+// 「一句话」，是一条流。
+//
+// **谁可以拿**：只有执行站（`guard` 类一盯着这一处，别处调它就红）。别处要说话仍走 `Print`
+// ——那句话只能由 `message` 造出来，这一条不变。口子从「只许调 Print」放宽成「写终端的实体
+// 只有 console，借 writer 的人只许一个」，数得出来。
+//
+// 判据见 ADR-0032 第四条；这一处是 2026-11-02 开发者点头的（原话见 04 规格「进度界面的屏幕
+// 出口定了」）。
+func Writer() io.Writer {
+	return os.Stdout
+}
+
+// IsTerminal 标准输出这会儿是不是连在终端上。
+//
+// 判据与老版的 `isatty(os.Stdout)` 同一件事，落在各平台的 `isterminal_*.go` 里。**不看列数**：
+// 伪终端上报 0 列仍是终端，界面该出——用列数判会把 `script`、部分 CI、ssh 里的会话误判成
+// 重定向，跑起来一屏进度都没有。
+//
+// 进度界面只在是终端时出，不是终端时退化成直通。
+func IsTerminal() bool {
+	return isTerminal()
+}

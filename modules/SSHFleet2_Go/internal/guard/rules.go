@@ -46,6 +46,10 @@ var crosscutDeps = []string{"contract"}
 var thirdParty = []string{
 	// 阶段 04 的 09 号单：SSH 建连。与老版同版本，开发者 2026-11-02 点头。
 	"golang.org/x/crypto/ssh",
+	// 阶段 04 的 13 号单：进度界面三件，与老版同版本（04 规格第八节那张名单）。
+	"github.com/charmbracelet/bubbletea",
+	"github.com/charmbracelet/bubbles",
+	"github.com/charmbracelet/lipgloss",
 }
 
 // tipDeps 是塔尖的整张清单：五站、八个横切包、契约、密钥管理包。

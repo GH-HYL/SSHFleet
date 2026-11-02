@@ -5,6 +5,15 @@ import (
 	"slices"
 )
 
+// writerEntry 是 console 交出「往标准输出写字节」的那个入口；writerHome 是唯一许拿它的包。
+//
+// 别的包拿到它就能绕过 `Print` 直接往屏幕上灌字节——「字只从 message 出」当场失效。所以它
+// 按调用点限制，与 os.Exit 只许塔尖调同一种做法（2026-11-02 开发者点头，见 04 规格）。
+const (
+	writerEntry = "Writer"
+	writerHome  = "execute"
+)
+
 // printFamily 是「写终端」那一类的点名：fmt 里不指定写入对象、直接落标准输出的三个。
 // 带 F 的那几个要指定写入对象，写到内存缓冲不算，所以不在这儿——写到屏幕的那种必然引用
 // os.Stdout／os.Stderr，被下面那条抓住。
@@ -15,6 +24,9 @@ var printFamily = []string{"Print", "Printf", "Println"}
 // 判据（ADR-0032 第四条）：凡往标准输出、标准错误写字即算——fmt.Print 族、内建 println、
 // 引用 os.Stdout／os.Stderr，一律算，不看走哪个函数。只有 console 包与 _test.go 文件例外；
 // 例外按文件名后缀划，不按目录划——否则打印会搬进一个被生产代码调用的「测试辅助」包。
+//
+// 第三条判据是 13 号单加的：`console.Writer()` 那条流的调用点只许在执行站。它是同上那条
+// 「唯一出口」的放宽——写终端的实体仍只有 console，借 writer 的人只许一个，口子数得出来。
 func CheckTerminal(m *Module) []Violation {
 	var out []Violation
 	for _, p := range m.Packages {
@@ -49,7 +61,20 @@ func CheckTerminal(m *Module) []Violation {
 						"把要显示的事实交给 console——它收的是 message 造得出来的那一型"))
 				case *ast.SelectorExpr:
 					id, ok := x.X.(*ast.Ident)
-					if !ok || f.ImportPath(id.Name) != "os" {
+					if !ok {
+						return true
+					}
+					path := f.ImportPath(id.Name)
+					if short, internal := m.Internal(path); internal && short == consolePkg && x.Sel.Name == writerEntry {
+						if p.Short != writerHome {
+							out = append(out, f.violation(ClassTerminal, x.Pos(),
+								"取了 console 的 writer 直接往屏幕写字节",
+								"那条流是给进度界面独占屏幕用的，只许执行站拿；别处拿到它就绕开了唯一出口",
+								"要说话走 console.Print——它收的是 message 造得出来的那一型"))
+						}
+						return true
+					}
+					if path != "os" {
 						return true
 					}
 					if x.Sel.Name != "Stdout" && x.Sel.Name != "Stderr" {

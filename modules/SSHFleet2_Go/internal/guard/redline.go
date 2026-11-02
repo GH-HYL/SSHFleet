@@ -32,6 +32,8 @@ var redline = []RedLineEntry{
 
 	// 02 号工单：写终端与退出动作
 	{"TestCheckTerminal", []string{"CheckTerminal", "ClassTerminal"}},
+	// 04 阶段 13 号单：writer 只许执行站拿（新增不算改）
+	{"TestCheckTerminalWriterHome", []string{"CheckTerminal"}},
 	{"TestCheckTerminalExemptsTestFiles", []string{"CheckTerminal"}},
 	{"TestCheckExit", []string{"CheckExit", "ClassExit", "Report"}},
 
