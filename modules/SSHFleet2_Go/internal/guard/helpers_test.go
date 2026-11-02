@@ -60,6 +60,14 @@ func fixtureRules(name string) []Rule {
 		return []Rule{
 			{"contract", KindContract, nil},
 		}
+	case "clock":
+		// 类二第三条判据的样本：许读的三个家各一次（不红），解析站一次（红）。
+		return []Rule{
+			{"parse", KindStation, nil},
+			{"execute", KindStation, nil},
+			{"log", KindCrosscut, nil},
+			{"fixture", KindTip, []string{"parse", "execute", "log"}},
+		}
 	default: // clean
 		return []Rule{
 			{"parse", KindStation, []string{"contract", "console", "message"}},
