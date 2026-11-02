@@ -138,13 +138,22 @@ func buildPlan(cfg *settings, s scanned) (*contract.Plan, *contract.CannotStart)
 	p.Run.Key = given["--key"]
 	p.Run.Answer = vals["--answer"]
 	p.Run.Remark = vals["--remark"]
-	// 两个身份开关各记各的：同时给要由闸门拒，只看结论就看不出这件事。
-	p.Run.SudoGiven = given["--sudo"]
-	p.Run.NoSudoGiven = given["--no-sudo"]
-	if p.Run.SudoGiven {
+	// 执行身份：纸上只留一个结论——「这一次到底用不用 sudo」。命令行给了哪个开关就按哪个算，
+	// 都没给留着配置里的值。
+	//
+	// 「两个都给」不装进纸（一个布尔装不下两个事实），改成由解析站记一条 Problem：命令行
+	// 原样在这儿看得见，闸门照它拒。使用者看到的仍是一句话的拒绝，不会被静默覆盖。
+	sudoGiven, noSudoGiven := given["--sudo"], given["--no-sudo"]
+	if sudoGiven && noSudoGiven {
+		p.Problems = append(p.Problems, contract.Problem{
+			Kind:   contract.ProblemFlagConflict,
+			Option: "--sudo --no-sudo",
+		})
+	}
+	if sudoGiven {
 		p.Run.Sudo = true
 	}
-	if p.Run.NoSudoGiven {
+	if noSudoGiven {
 		p.Run.Sudo = false
 	}
 
