@@ -8,8 +8,8 @@ import (
 // 遮秘密那一件事：遮过之后找不到原值，没遮的部分一字不变。
 func TestSecretKeepsShapeNotContent(t *testing.T) {
 	cases := []struct{ in, want string }{
-		{"pw", "****"},              // 四个字符以内整个遮掉
-		{"1234", "****"},            //
+		{"pw", "****"},                // 四个字符以内整个遮掉
+		{"1234", "****"},              //
 		{"Sshfleet#2026", "Ss****26"}, // 再长的留前二后二，够对上号、不足以还原
 	}
 	for _, c := range cases {
@@ -29,8 +29,8 @@ func TestInlineRecordMasksCredentialColumns(t *testing.T) {
 	cases := []struct{ in, want string }{
 		{"10.0.0.1,22,root,pw", "10.0.0.1,22,root,****"},
 		{"10.0.0.1,22,root,pw,/k/id_rsa,pass", "10.0.0.1,22,root,****,/k/id_rsa,****"},
-		{"10.0.0.1", "10.0.0.1"},                                  // 没有凭据段，不遮
-		{"这不是一条记录", "这不是一条记录"},                            // 读不成，原样
+		{"10.0.0.1", "10.0.0.1"},                                            // 没有凭据段，不遮
+		{"这不是一条记录", "这不是一条记录"},                                              // 读不成，原样
 		{"10.0.0.1,22,root,\"p,w\",/k,kp", "10.0.0.1,22,root,****,/k,****"}, // 引号里的逗号不算分列
 	}
 	for _, c := range cases {
