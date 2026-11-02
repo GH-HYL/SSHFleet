@@ -3,9 +3,14 @@ package execute
 // 执行站的入口：收下闸门放行的那张纸，按纸上的并发跑完每一台，交回第二张纸。
 //
 // 每台两步：建连与认证（老版步骤 8 的前半），建起来之后跑那条命令并收回退出码与输出，
-// 收齐事实再按判据表定分类（10、11 号单）。脚本、上传、下载随阶段 05；刷屏随 12。
+// 收齐事实再按判据表定分类（10、11 号单），跑完一台立刻出一行、同时去三个去处（12 号单）。
+// 脚本、上传、下载随阶段 05；进度界面随 13。
 //
 // 出口白名单：这个包对外只露 `Run` 一个函数，纸的类型都在契约包里（ADR-0037 决定三）。
+//
+// 两个路径参数是本次归档目录里的两个落点（`terminal-output.txt`、`SSHFleetExec.log`），
+// 由归档包发、塔尖转手。**收字符串而不是 `archive.Paths`**：站多 import 一个包，红线测试
+// 就得跟着 import 第二个包（类六只许钉一个），而本包真正要的也只是两条路径。
 
 import (
 	"context"
@@ -20,9 +25,10 @@ import (
 // context 取消时**不再开工**，已开工的那台跑完照常上交（老版 `batch/pool.go` 的口径：
 // 取消不等于没执行，目标机可能已经被改过）；压根没开跑的那台不造行，只在总台数里以缺额出现。
 //
-// 第二个返回值是「起不来」：本单还没有哪一种前提缺失会走到这里（配置、清单、凭据都在上游
-// 判过），留着是因为站与站之间递东西的形状就两种——一张纸，或者起不来（ADR-0034 决定三）。
-func Run(ctx context.Context, p *contract.Plan) (contract.ResultPaper, *contract.CannotStart) {
+// 第二个返回值是「起不来」：本阶段只有一处会走到它——两个落点开不出来（目录没建、没权限）。
+// 别的前提缺失（配置、清单、凭据）都在上游判过；站与站之间递东西的形状就两种，一张纸或者
+// 起不来（ADR-0034 决定三）。
+func Run(ctx context.Context, p *contract.Plan, termPath, execLogPath string) (contract.ResultPaper, *contract.CannotStart) {
 	paper := contract.ResultPaper{
 		Total:     len(p.Nodes),
 		Extra:     contract.Extra{Mode: p.Mode},
@@ -30,6 +36,13 @@ func Run(ctx context.Context, p *contract.Plan) (contract.ResultPaper, *contract
 		RunMeta:   p.RunMeta,
 		StartedAt: time.Now(),
 	}
+
+	rep, err := newReporter(termPath, execLogPath, p.Mode)
+	if err != nil {
+		return contract.ResultPaper{}, &contract.CannotStart{Where: "output", Body: err.Error()}
+	}
+	defer rep.close()
+
 	if len(p.Nodes) == 0 {
 		paper.StoppedAt = paper.StartedAt
 		return paper, nil
@@ -61,7 +74,7 @@ func Run(ctx context.Context, p *contract.Plan) (contract.ResultPaper, *contract
 					if !ok {
 						return
 					}
-					slots[idx] = slot{res: visit(ctx, p, idx), filled: true}
+					slots[idx] = slot{res: visit(ctx, p, idx, rep), filled: true}
 				}
 			}
 		}()
@@ -91,11 +104,13 @@ func Run(ctx context.Context, p *contract.Plan) (contract.ResultPaper, *contract
 	return paper, nil
 }
 
-// visit 对一台做一遍：建连、认证、跑那条命令，收成一条事实，再定一个分类。
+// visit 对一台做一遍：建连、认证、跑那条命令，收成一条事实，定一个分类，立刻出一行。
 //
 // 事实与分类都在这一处收口：连不上的那台也要定分类——它的报错原文就是分类依据，而「这一台
 // 算成功还是失败」仍不在这里（结算站拿分类去对，ADR-0035 决定四）。
-func visit(ctx context.Context, p *contract.Plan, idx int) contract.NodeResult {
+//
+// 出那一行也在这里、且就在这台跑完之后：不攒到最后一起打——中途被强杀时盘上已经有痕迹。
+func visit(ctx context.Context, p *contract.Plan, idx int, rep *reporter) contract.NodeResult {
 	node := p.Nodes[idx]
 	res := contract.NodeResult{IP: node.IP}
 
@@ -124,6 +139,7 @@ func visit(ctx context.Context, p *contract.Plan, idx int) contract.NodeResult {
 
 	// 事实收齐了才定分类：两条路都要定，不然连不上的那些台在结算站那里没有名字。
 	res.Category = categoryOf(p.Mode, p.Tables, &res)
+	rep.result(res)
 	return res
 }
 

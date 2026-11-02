@@ -5,6 +5,7 @@ package execute
 import (
 	"context"
 	"net"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -15,7 +16,7 @@ import (
 
 // TestRunRecordsConnectFailure 一台连不上：造一条事实，报文进「错误原文」。
 func TestRunRecordsConnectFailure(t *testing.T) {
-	paper, fail := Run(context.Background(), plan("127.0.0.1", deadPort(t)))
+	paper, fail := runPlan(t, context.Background(), plan("127.0.0.1", deadPort(t)))
 	if fail != nil {
 		t.Fatalf("不该起不来：%+v", fail)
 	}
@@ -49,7 +50,7 @@ func TestRunKeepsNodeOrder(t *testing.T) {
 			{IP: "127.0.0.3", Port: ports[2], User: "u", Password: "p"},
 		},
 	}
-	paper, fail := Run(context.Background(), p)
+	paper, fail := runPlan(t, context.Background(), p)
 	if fail != nil {
 		t.Fatalf("不该起不来：%+v", fail)
 	}
@@ -75,7 +76,7 @@ func TestRunCanceledContextStopsAtOnce(t *testing.T) {
 	p := plan("127.0.0.1", deadPort(t))
 	done := make(chan contract.ResultPaper, 1)
 	go func() {
-		paper, _ := Run(ctx, p)
+		paper, _ := runPlan(t, ctx, p)
 		done <- paper
 	}()
 
@@ -96,7 +97,7 @@ func TestRunCanceledContextStopsAtOnce(t *testing.T) {
 
 // TestRunWithoutNodes 没节点：交回零条的纸，不是「起不来」。
 func TestRunWithoutNodes(t *testing.T) {
-	paper, fail := Run(context.Background(), &contract.Plan{Mode: contract.ModeCommand})
+	paper, fail := runPlan(t, context.Background(), &contract.Plan{Mode: contract.ModeCommand})
 	if fail != nil {
 		t.Fatalf("不该起不来：%+v", fail)
 	}
@@ -135,4 +136,26 @@ func deadPort(t *testing.T) string {
 		t.Fatalf("让出端口失败：%v", err)
 	}
 	return strconv.Itoa(port)
+}
+
+// TestRunCannotStartWhenPlaceMissing 落点开不出来（目录没建）：交「起不来」，不是一张空纸。
+func TestRunCannotStartWhenPlaceMissing(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "没有这个目录")
+	_, fail := Run(context.Background(), plan("127.0.0.1", deadPort(t)),
+		filepath.Join(dir, "terminal-output.txt"), filepath.Join(dir, "SSHFleetExec.log"))
+	if fail == nil {
+		t.Fatal("落点开不出来，却没交「起不来」")
+	}
+	if fail.Where != "output" {
+		t.Fatalf("那屏该指到 output，实际 %q", fail.Where)
+	}
+}
+
+// runPlan 给一张纸配上两个落点（临时目录里）再跑。
+func runPlan(t *testing.T, ctx context.Context, p *contract.Plan) (contract.ResultPaper, *contract.CannotStart) {
+	t.Helper()
+	dir := t.TempDir()
+	return Run(ctx, p,
+		filepath.Join(dir, "terminal-output.txt"),
+		filepath.Join(dir, "SSHFleetExec.log"))
 }
