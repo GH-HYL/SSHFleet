@@ -56,6 +56,7 @@ const (
 	ProblemBadValue      ProblemKind = "bad_value"      // 值认不出（例如 -n abc）
 	ProblemMultiMode     ProblemKind = "multi_mode"     // 同时给了多个模式
 	ProblemFlagConflict  ProblemKind = "flag_conflict"  // 一对互斥开关同时给了
+	ProblemExtraArgs     ProblemKind = "extra_args"     // 多出几段位置参数：值里的空格没加引号
 )
 
 // Problem 一条事实：哪个选项、原值是什么、哪一处对不上。
@@ -63,7 +64,7 @@ const (
 // 它不带结论，也不带句子——判「这条不过」是闸门的活，拼话是 message 的活。
 type Problem struct {
 	Kind   ProblemKind
-	Option string // 选项名，例如 -n；冲突那一类装的是两个开关名，空格分开
-	Raw    string // 命令行上给的原值，没给值时为空
+	Option string // 选项名，例如 -n；冲突那一类装的是两个开关名，空格分开；多余参数装的是它跟在谁后面
+	Raw    string // 命令行上给的原值，没给值时为空；多余参数装的是那几段按原样拼起来
 	Detail string // 一句事实说明，例如「必须是正整数」
 }

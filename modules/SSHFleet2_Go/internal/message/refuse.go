@@ -43,6 +43,27 @@ func RefuseMissingValue(name string) string {
 	return Shell(HeadParse, "选项 "+name+" 缺少值"+helpHint)
 }
 
+// RefuseExtraArgs 多出来的位置参数：本机收到的比想要的多，说明原文没被完整收下。
+//
+// owner 是「第一个多余段前面那个选项名」（解析站回溯出来的事实，认不出为空）；
+// joined 是多余段按原样拼起来。三条常见原因与那句提示逐字照老版 `args.go` 的
+// `extraArgsError`——这几句是给使用者排错用的，改一个字都是改行为。
+//
+// 这一段不用 `ProblemHint`：它的中间还夹着三条编号原因，版式与「问题／提示」两段不同。
+// 编号与那个缩进是屏幕上的样子，所以只许在这里成形。
+func RefuseExtraArgs(owner, joined string) string {
+	head := "出现多余的参数（未被使用）：" + joined
+	if owner != "" {
+		// 认得出主：多半是值里有空格、没加引号，被 shell 切成了两段。
+		head = owner + " 的值后面还有一段没法识别：" + joined
+	}
+	return Shell(HeadParse, head+"\n常见原因：\n"+
+		"  ① 值里有空格但没加引号——shell 按空格把参数切成了两段\n"+
+		"  ② 通配符被终端展开（`-u /x/abc/*` 会变成多个路径；上传目录不需要通配符）\n"+
+		"  ③ 参数打多了或打错了"+
+		hintLabel+"本来想写成一个值的，把整条用双引号包起来，例如 -p \"/opt/my dir/\"（bash、Git Bash、cmd、PowerShell 都认双引号）")
+}
+
 // 三个数值选项在报错里怎么称呼自己。解析站挑一个填进事实（contract.Problem.Detail），
 // 句子仍由这里成形——称呼是话，不归站。
 const (

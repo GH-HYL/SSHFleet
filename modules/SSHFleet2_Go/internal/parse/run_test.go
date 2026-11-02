@@ -103,3 +103,67 @@ func TestSudoConflictRecordedAsProblem(t *testing.T) {
 		t.Errorf("只给 --no-sudo 时结论应当是不用 sudo，实际 %v", p.Run.Sudo)
 	}
 }
+
+// 多余的位置参数：一段都不许丢，而且要认出它跟在哪个选项的值后面。
+//
+// 「认出主」这件事只在解析站做得了——分辨「值里有空格没加引号」与「参数打多了」
+// 要看原始 argv，那东西只在扫描那一步手上。这里只验「事实认得准」，拒是闸门的事。
+func TestExtraArgsCollected(t *testing.T) {
+	cases := []struct {
+		name      string
+		argv      []string
+		wantOwner string
+	}{
+		{"跟在一个带空格的值后面", []string{"sshfleet2", "-c", "echo hi", "extra"}, "-c"},
+		{"跟在短选项值后面", []string{"sshfleet2", "-p", "/opt/a", "extra"}, "-p"},
+		{"多余段在最前，认不出主", []string{"sshfleet2", "misc", "-c", "ls"}, ""},
+		{"双横线之后的两段", []string{"sshfleet2", "-c", "ls", "--", "a", "b"}, ""},
+		{"没有多余段", []string{"sshfleet2", "-c", "ls"}, ""},
+	}
+	for _, c := range cases {
+		s := scan(c.argv)
+		if len(s.extras) == 0 {
+			if c.name != "没有多余段" {
+				t.Errorf("%s：应当收到多余段，实际一段都没有", c.name)
+			}
+			continue
+		}
+		if s.extraOwner != c.wantOwner {
+			t.Errorf("%s：认出的主 want %q，实际 %q", c.name, c.wantOwner, s.extraOwner)
+		}
+	}
+
+	// 两段以上要原样拼回去，不能只留第一段。
+	if s := scan([]string{"sshfleet2", "-c", "ls", "--", "a", "b"}); len(s.extras) != 2 {
+		t.Errorf("双横线之后的两段都要收下，实际 %v", s.extras)
+	}
+}
+
+// 多余的段要变成纸上的一条事实（ProblemExtraArgs），闸门才有东西可拒。
+//
+// 顺带钉住次序：有多余段时不读清单——老版 pflag 解析完发现多余段就 return，
+// 本机一个 os 调用都还没发出去。少了这条，`-c x extra` 会先报「清单读不到」。
+func TestExtraArgsRecordedAsProblem(t *testing.T) {
+	writeTempConfig(t)
+	cfg, err := load()
+	if err != nil {
+		t.Fatalf("临时配置读不通：%v", err)
+	}
+
+	p, fail := buildPlan(cfg, scan([]string{"sshfleet2", "-c", "echo hi", "extra"}))
+	if fail != nil {
+		t.Fatalf("有多余段时不该走到「起不来」（应当交给闸门拒）：%v", fail.Body)
+	}
+	found := false
+	for _, pr := range p.Problems {
+		if pr.Kind == contract.ProblemExtraArgs {
+			found = true
+			if pr.Option != "-c" || pr.Raw != "extra" {
+				t.Errorf("多余段那条要记下主与原样，实际 Option=%q Raw=%q", pr.Option, pr.Raw)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("多余段应当记一条 ProblemExtraArgs，实际 Problems=%v", p.Problems)
+	}
+}
