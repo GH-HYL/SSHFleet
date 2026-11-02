@@ -750,6 +750,7 @@ HOME=$PWD/../home_x ../sshfleet2   -c uptime -f ok.csv    # 新版
 - 读 `docs/issues/2026-11-02-0905-建站04-命令模式全链路/issues/13-execute-progress-ui.md`。它要动**检查本体（类一）**，属「单独点头」档——04 规格「进度界面的屏幕出口定了」那节记着开发者的原话，那句话就是点头，照它落。
 - 形状已定：`console` 交出一个 writer，执行站把它交给 `tea.WithOutput`，**画帧与结果行都从这个 writer 出去**；不加「逐帧转交 console」那层。12 号单是按 `console.Print` 打的，13 号要把它换成同一个 writer——`execute/reporter.go` 是唯一要改的地方。
 - 三件依赖已进白名单（`bubbletea`／`bubbles`／`lipgloss`），版本与老版一致。
+- **一条硬要求**（开发者 2026-11-02）：「终端输出的样子和那个 output.txt 的样子要一样，不说一模一样，也得版面一样」。屏幕那一路与 `terminal-output.txt` 现在逐字相同，12 号单有测试钉着（`TestReporterScreenAndFileMatch`）；换 writer 时不许在屏幕那一路另排一遍——不折行、不截断、不加前导空白。
 
 ### 环境（备好的，别重复做）
 
