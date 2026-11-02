@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"go/ast"
 	"slices"
+	"strings"
 )
 
 // consolePkg 是唯一许往终端写字的包。
@@ -80,7 +81,7 @@ func checkImports(m *Module, p *Package, f *SourceFile) []Violation {
 			if IsStdlib(path) {
 				continue
 			}
-			if slices.Contains(thirdParty, path) {
+			if namedImport(path) {
 				continue
 			}
 			out = append(out, f.violation(ClassDeps, f.importPos[path],
@@ -176,4 +177,18 @@ func sortedImportNames(f *SourceFile) []string {
 	}
 	slices.Sort(names)
 	return names
+}
+
+// namedImport 判一条模块之外的 import 在不在点名白名单里。
+//
+// 按「库」认，不按包认：登记一个名，它的子包一起放行。理由是同一条供应链上的东西——
+// 认领 `charmbracelet/bubbles` 就等于认领它下面的 `bubbles/progress`，一行一个子包只会
+// 让名单变成一张包清单，看不出「认了哪几个库」。
+func namedImport(path string) bool {
+	for _, name := range thirdParty {
+		if path == name || strings.HasPrefix(path, name+"/") {
+			return true
+		}
+	}
+	return false
 }

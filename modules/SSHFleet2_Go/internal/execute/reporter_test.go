@@ -1,13 +1,13 @@
 package execute
 
-// 结果行的三个去处：屏幕、`terminal-output.txt`、执行期日志拿到的是**同一段字**。
+// 一条结果的三个去处：屏幕与 `terminal-output.txt` 拿到同一段字，执行期日志写节点明细。
 //
-// 屏幕那一路不打桩（`console` 是唯一出口，只收 `message` 造得出来的话，没有注入口），
-// 所以这里比的是文件与日志两处——两处与拼出来的那段字逐字相同，屏幕读的是同一个值。
+// 屏幕那一路的流可注入（`newScreen(w)`），所以这里拿一个 `bytes.Buffer` 当屏幕：进来看字节、
+// 进来什么就证明屏幕上是什么。生产里那条流由 `console.Writer()` 给，只此一处。
 
 import (
+	"bytes"
 	"context"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -24,7 +24,8 @@ func TestReporterWritesThreePlaces(t *testing.T) {
 	term := filepath.Join(dir, "terminal-output.txt")
 	execLog := filepath.Join(dir, "SSHFleetExec.log")
 
-	rep, err := newReporter(term, execLog, contract.ModeCommand)
+	var screenBuf bytes.Buffer
+	rep, err := newReporter(newScreen(&screenBuf), term, execLog, contract.ModeCommand)
 	if err != nil {
 		t.Fatalf("开落点失败：%v", err)
 	}
@@ -45,9 +46,12 @@ func TestReporterWritesThreePlaces(t *testing.T) {
 
 	want := message.ResultLine(res, contract.ModeCommand).Text()
 
-	// 一、终端输出文件：整段照抄，连末尾那个换行一起。
+	// 一、屏幕与终端输出文件：两处都是那一段字，连末尾那个换行一起。
 	if got := readAll(t, term); got != want {
 		t.Fatalf("terminal-output.txt 与拼出来的那段字不一样。\n期望：\n%s\n实际：\n%s", want, got)
+	}
+	if got := screenBuf.String(); got != want {
+		t.Fatalf("屏幕与拼出来的那段字不一样。\n期望：\n%s\n实际：\n%s", want, got)
 	}
 
 	// 二、执行期日志：**不是**那一段字，而是五级明细（给人看的版面进日志只会把版面拉稀）。
@@ -73,7 +77,8 @@ func TestReporterAppendsPerResult(t *testing.T) {
 	term := filepath.Join(dir, "terminal-output.txt")
 	execLog := filepath.Join(dir, "SSHFleetExec.log")
 
-	rep, err := newReporter(term, execLog, contract.ModeCommand)
+	var screenBuf bytes.Buffer
+	rep, err := newReporter(newScreen(&screenBuf), term, execLog, contract.ModeCommand)
 	if err != nil {
 		t.Fatalf("开落点失败：%v", err)
 	}
@@ -137,14 +142,15 @@ func TestResultLineKeepsNoSecret(t *testing.T) {
 
 // TestReporterScreenAndFileMatch 屏幕上打的那一段与落盘的那一段是同一段字：版面只有一版。
 //
-// 屏幕的出口是 `console`（它写 `os.Stdout`），测试里把那根管道换掉，抓到的就是使用者
-// 看到的那一段；再与 `terminal-output.txt` 逐字比。这条钉的是「版面不许两处各排一遍」。
+// 流注入成一个缓冲，抓到的就是使用者看到的那一段；再与 `terminal-output.txt` 逐字比。
+// 这条钉的是「版面不许两处各排一遍」。
 func TestReporterScreenAndFileMatch(t *testing.T) {
 	dir := t.TempDir()
 	term := filepath.Join(dir, "terminal-output.txt")
 	execLog := filepath.Join(dir, "SSHFleetExec.log")
 
-	rep, err := newReporter(term, execLog, contract.ModeCommand)
+	var screenBuf bytes.Buffer
+	rep, err := newReporter(newScreen(&screenBuf), term, execLog, contract.ModeCommand)
 	if err != nil {
 		t.Fatalf("开落点失败：%v", err)
 	}
@@ -161,22 +167,10 @@ func TestReporterScreenAndFileMatch(t *testing.T) {
 		Output:      "line one\nline two",
 	}
 
-	old := os.Stdout
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("换管道失败：%v", err)
-	}
-	os.Stdout = w
 	rep.result(res, "sshfleet")
-	_ = w.Close()
-	os.Stdout = old
 	rep.close()
 
-	screen, err := io.ReadAll(r)
-	if err != nil {
-		t.Fatalf("读屏幕那一路失败：%v", err)
-	}
-	if got, want := string(screen), readAll(t, term); got != want {
+	if got, want := screenBuf.String(), readAll(t, term); got != want {
 		t.Fatalf("屏幕与 terminal-output.txt 版面不一样。\n屏幕：\n%s\n文件：\n%s", got, want)
 	}
 }

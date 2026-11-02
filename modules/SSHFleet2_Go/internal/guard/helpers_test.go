@@ -46,6 +46,16 @@ func fixtureRules(name string) []Rule {
 			{"guard", KindCheck, nil},
 			{"fixture", KindTip, nil},
 		}
+	case "writer":
+		// 类一第三条判据的样本：解析站与执行站各取一次 console 的 writer。
+		return []Rule{
+			{"parse", KindStation, []string{"contract", "console"}},
+			{"execute", KindStation, []string{"contract", "console"}},
+			{"contract", KindContract, nil},
+			{"console", KindCrosscut, nil},
+			{"guard", KindCheck, nil},
+			{"fixture", KindTip, nil},
+		}
 	case "handoff":
 		return []Rule{
 			{"contract", KindContract, nil},

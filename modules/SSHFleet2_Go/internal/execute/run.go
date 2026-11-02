@@ -17,7 +17,9 @@ import (
 	"sync"
 	"time"
 
+	"sshfleet2/internal/console"
 	"sshfleet2/internal/contract"
+	"sshfleet2/internal/message"
 )
 
 // Run 跑一遍：每台一条事实，按纸上的节点顺序交回。
@@ -37,7 +39,11 @@ func Run(ctx context.Context, p *contract.Plan, termPath, execLogPath string) (c
 		StartedAt: time.Now(),
 	}
 
-	rep, err := newReporter(termPath, execLogPath, p.Mode)
+	// 屏幕那一路：流从 console 拿（执行站是唯一可以拿它的包），进度界面懒起来。
+	scr := newScreen(console.Writer())
+	defer scr.stop()
+
+	rep, err := newReporter(scr, termPath, execLogPath, p.Mode)
 	if err != nil {
 		return contract.ResultPaper{}, &contract.CannotStart{Where: "output", Body: err.Error()}
 	}
@@ -47,6 +53,9 @@ func Run(ctx context.Context, p *contract.Plan, termPath, execLogPath string) (c
 		paper.StoppedAt = paper.StartedAt
 		return paper, nil
 	}
+
+	// 一开工就把面板摆出来（0 台完成）：老版也是执行一开始就有那块界面，而不是等第一台跑完。
+	scr.progress(0, 0, 0, paper.Total, paper.StartedAt)
 
 	limit := p.Run.Concurrency
 	if limit <= 0 || limit > len(p.Nodes) {
@@ -59,6 +68,14 @@ func Run(ctx context.Context, p *contract.Plan, termPath, execLogPath string) (c
 		filled bool
 	}
 	slots := make([]slot, len(p.Nodes))
+
+	// 进度面板的数字：跑完几台、成了几台、败了几台。只喂面板，不进纸。
+	var (
+		statMu    sync.Mutex
+		completed int
+		succeeded int
+		failed    int
+	)
 
 	todo := make(chan int, len(p.Nodes))
 	var wg sync.WaitGroup
@@ -74,7 +91,22 @@ func Run(ctx context.Context, p *contract.Plan, termPath, execLogPath string) (c
 					if !ok {
 						return
 					}
-					slots[idx] = slot{res: visit(ctx, p, idx, rep), filled: true}
+					res := visit(ctx, p, idx)
+					slots[idx] = slot{res: res, filled: true}
+
+					// 先推进度、再出那一行：界面起来了，那一行才会经由它打到面板上方
+					// （老版也是这个次序——面板在底部，明细往上滚）。
+					statMu.Lock()
+					completed++
+					if message.IsSuccess(res, p.Mode) {
+						succeeded++
+					} else {
+						failed++
+					}
+					c, s, f := completed, succeeded, failed
+					statMu.Unlock()
+					scr.progress(c, s, f, paper.Total, paper.StartedAt)
+					rep.result(res, p.Nodes[idx].User)
 				}
 			}
 		}()
@@ -104,13 +136,14 @@ func Run(ctx context.Context, p *contract.Plan, termPath, execLogPath string) (c
 	return paper, nil
 }
 
-// visit 对一台做一遍：建连、认证、跑那条命令，收成一条事实，定一个分类，立刻出一行。
+// visit 对一台做一遍：建连、认证、跑那条命令，收成一条事实，定一个分类。
 //
 // 事实与分类都在这一处收口：连不上的那台也要定分类——它的报错原文就是分类依据，而「这一台
 // 算成功还是失败」仍不在这里（结算站拿分类去对，ADR-0035 决定四）。
 //
-// 出那一行也在这里、且就在这台跑完之后：不攒到最后一起打——中途被强杀时盘上已经有痕迹。
-func visit(ctx context.Context, p *contract.Plan, idx int, rep *reporter) contract.NodeResult {
+// 出那一行在 `Run` 里紧跟着做完（先推进度、再出行），不攒到最后一起打——中途被强杀时
+// 盘上已经有痕迹。
+func visit(ctx context.Context, p *contract.Plan, idx int) contract.NodeResult {
 	node := p.Nodes[idx]
 	res := contract.NodeResult{IP: node.IP}
 
@@ -139,7 +172,6 @@ func visit(ctx context.Context, p *contract.Plan, idx int, rep *reporter) contra
 
 	// 事实收齐了才定分类：两条路都要定，不然连不上的那些台在结算站那里没有名字。
 	res.Category = categoryOf(p.Mode, p.Tables, &res)
-	rep.result(res, node.User)
 	return res
 }
 

@@ -233,3 +233,30 @@ func TestRunCommandLogsNodeDetail(t *testing.T) {
 		t.Fatalf("terminal-output.txt 里没有那条分隔线")
 	}
 }
+
+// TestRunCommandManyNodes 三台一起跑：三条事实、文件里三段、进度面板有得可画。
+//
+// 同一台机器重复三遍（容器只有一个），要的是「多台并行 + 逐台出行」这条路。
+func TestRunCommandManyNodes(t *testing.T) {
+	node, _ := integrationTarget(t)
+	p := &contract.Plan{
+		Mode:  contract.ModeCommand,
+		Task:  contract.Task{Command: &contract.CommandTask{Text: "echo hi"}},
+		Nodes: []contract.Node{node, node, node},
+		Run:   contract.RunParams{TimeoutConnect: 10, TimeoutExecute: 30, Interpreter: "bash", English: true},
+	}
+	dir := t.TempDir()
+	term := filepath.Join(dir, "terminal-output.txt")
+	execLog := filepath.Join(dir, "SSHFleetExec.log")
+
+	paper, fail := Run(context.Background(), p, term, execLog)
+	if fail != nil {
+		t.Fatalf("不该起不来：%+v", fail)
+	}
+	if len(paper.Items) != 3 {
+		t.Fatalf("三台应造三条事实，实际 %d 条", len(paper.Items))
+	}
+	if n := strings.Count(readAll(t, term), strings.Repeat("=", 50)); n != 3 {
+		t.Fatalf("terminal-output.txt 里应有三段，实际 %d 段", n)
+	}
+}
