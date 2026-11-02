@@ -7,6 +7,7 @@ package execute
 
 import (
 	"context"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -129,5 +130,51 @@ func TestResultLineKeepsNoSecret(t *testing.T) {
 		if strings.Contains(readAll(t, path), password) {
 			t.Fatalf("%s 里出现了明文密码", path)
 		}
+	}
+}
+
+// TestReporterScreenAndFileMatch 屏幕上打的那一段与落盘的那一段是同一段字：版面只有一版。
+//
+// 屏幕的出口是 `console`（它写 `os.Stdout`），测试里把那根管道换掉，抓到的就是使用者
+// 看到的那一段；再与 `terminal-output.txt` 逐字比。这条钉的是「版面不许两处各排一遍」。
+func TestReporterScreenAndFileMatch(t *testing.T) {
+	dir := t.TempDir()
+	term := filepath.Join(dir, "terminal-output.txt")
+	execLog := filepath.Join(dir, "SSHFleetExec.log")
+
+	rep, err := newReporter(term, execLog, contract.ModeCommand)
+	if err != nil {
+		t.Fatalf("开落点失败：%v", err)
+	}
+
+	code := 3
+	res := contract.NodeResult{
+		IP:          "10.0.0.1",
+		Connected:   true,
+		ConnectCost: 123 * time.Millisecond,
+		Cost:        456 * time.Millisecond,
+		Category:    "执行失败(退出码3)",
+		ExitCode:    &code,
+		ErrorText:   "sshfleet.run.rejected: rejected by remote",
+		Output:      "line one\nline two",
+	}
+
+	old := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("换管道失败：%v", err)
+	}
+	os.Stdout = w
+	rep.result(res)
+	_ = w.Close()
+	os.Stdout = old
+	rep.close()
+
+	screen, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatalf("读屏幕那一路失败：%v", err)
+	}
+	if got, want := string(screen), readAll(t, term); got != want {
+		t.Fatalf("屏幕与 terminal-output.txt 版面不一样。\n屏幕：\n%s\n文件：\n%s", got, want)
 	}
 }
