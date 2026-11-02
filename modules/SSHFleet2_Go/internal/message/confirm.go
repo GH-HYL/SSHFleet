@@ -75,10 +75,24 @@ func confirmRows(p *contract.Plan, manifest string) [][2]string {
 //
 // 老版在出屏之前就把 args.Number 填成节点数，所以屏上写的是个数、外加一句解释。
 func concurrencyText(p *contract.Plan) string {
-	if p.Run.Concurrency != 0 {
-		return strconv.Itoa(p.Run.Concurrency)
+	return strconv.Itoa(concurrencyValue(p.Run.Concurrency, len(p.Nodes))) + suffixForUnset(p.Run.Concurrency)
+}
+
+// concurrencyValue 把「没指定 -n」那一格（0）换成它实际生效的值：全部并行 = 节点数。
+// 确认屏与 `report.txt` 两处读同一个换法——老版里两处写的也是同一个数。
+func concurrencyValue(n, total int) int {
+	if n != 0 {
+		return n
 	}
-	return strconv.Itoa(len(p.Nodes)) + "（全部并行）"
+	return total
+}
+
+// suffixForUnset 没指定 -n 时补的那半句；指定了就是空串。
+func suffixForUnset(n int) string {
+	if n != 0 {
+		return ""
+	}
+	return "（全部并行）"
 }
 
 // infoTable 把两列表排成对齐的文本：标签按显示宽度补齐，值一律亮橙。

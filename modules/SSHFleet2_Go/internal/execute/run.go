@@ -50,6 +50,16 @@ func Run(ctx context.Context, p *contract.Plan, termPath, execLogPath string) (c
 	}
 	defer rep.close()
 
+	// 实际生效的并发数：0 表示不填，按全部并行（老版同口径）。
+	limit := p.Run.Concurrency
+	if limit <= 0 || limit > len(p.Nodes) {
+		limit = len(p.Nodes)
+	}
+
+	// 开工前先把「这一轮怎么跑、发下去的是什么」记进执行期日志：命令行里只剩固定形态的
+	// `sh -c`，事后没有这一段就查不出原始命令与执行身份（老版写在协程起来之前，同一处）。
+	logSessionHead(rep.lg, p, limit)
+
 	if len(p.Nodes) == 0 {
 		paper.StoppedAt = paper.StartedAt
 		return paper, nil
@@ -57,11 +67,6 @@ func Run(ctx context.Context, p *contract.Plan, termPath, execLogPath string) (c
 
 	// 一开工就把面板摆出来（0 台完成）：老版也是执行一开始就有那块界面，而不是等第一台跑完。
 	scr.progress(0, 0, 0, paper.Total, paper.StartedAt)
-
-	limit := p.Run.Concurrency
-	if limit <= 0 || limit > len(p.Nodes) {
-		limit = len(p.Nodes) // 0 表示不填，按全部并行（老版同口径）
-	}
 
 	// 每台一格。worker 各写自己那一格，互不相干；保序靠下标，不靠收上来的先后。
 	type slot struct {

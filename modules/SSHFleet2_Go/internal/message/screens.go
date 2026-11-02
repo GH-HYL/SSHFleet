@@ -51,11 +51,6 @@ func Fatal(where, body, logPath string) Line {
 	return Line{s: s, toErr: true}
 }
 
-// RefuseLine 排一屏走标准输出的拒绝：危险框已经由 DangerBox 排好，这里只补那一句取消。
-func RefuseLine(text string) Line {
-	return Line{s: text + "\n"}
-}
-
 // CancelLine 是危险提醒档答否时那一行。老版 fmt.Println 在它前面没有空行。
 func CancelLine() Line {
 	return Line{s: ansiYellow + "操作已取消" + ansiReset + "\n"}
@@ -92,14 +87,8 @@ func PromptWith(question Line, defaultYes bool) Line {
 	return Line{s: question.Text() + " " + AskHint(defaultYes) + ": "}
 }
 
-// notWiredHead 是过渡形态那一类话的开头：本阶段还没接上的用法都这么起头，随阶段 04／08 一起消失。
+// notWiredHead 是过渡形态那一类话的开头：本阶段还没接上的用法都这么起头，随阶段 08 一起消失。
 const notWiredHead = "这条用法还没接上："
-
-// NotWiredLine 是过渡形态：流水线还没接上，放行之后无处可去。
-// 随阶段 04 消失，不许写进任何手册或帮助。
-func NotWiredLine() Line {
-	return Line{s: notWiredHead + "流水线随阶段 04 接线，本阶段只到闸门\n"}
-}
 
 // NotWiredKeyTools 是过渡形态：三条密钥命令随阶段 08 接线。
 // 随阶段 08 消失，不许写进任何手册或帮助。

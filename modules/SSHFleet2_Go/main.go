@@ -5,15 +5,21 @@
 package main
 
 import (
+	"context"
 	"os"
+	"time"
 
+	"sshfleet2/internal/archive"
 	"sshfleet2/internal/console"
 	"sshfleet2/internal/contract"
+	"sshfleet2/internal/execute"
 	"sshfleet2/internal/exitcode"
 	"sshfleet2/internal/gate"
 	"sshfleet2/internal/log"
 	"sshfleet2/internal/message"
 	"sshfleet2/internal/parse"
+	"sshfleet2/internal/report"
+	"sshfleet2/internal/settle"
 )
 
 // appVersion 是版本号的唯一出处：发布脚本按这一行改号（release.py 认这个字面量）。
@@ -26,7 +32,10 @@ func main() {
 	console.Prepare()
 
 	// 步骤 2：建工具日志。建不起来就是「起不来」，此时连日志都没有，那屏不带日志行。
-	lg, err := log.Init(contract.HistoryDir, contract.ToolLogName)
+	// 两格落点由归档包发（本包不拼路径），本包只把这两格递给日志包。
+	toolDir, toolFile := archive.ToolLog(contract.HistoryDir)
+	toolPath := archive.ToolLogPath(contract.HistoryDir)
+	lg, err := log.Init(toolDir, toolFile)
 
 	// finish 是唯一的退场收尾：关日志、还码页、查表退出。os.Exit 不跑 defer，每条路径都得显式收，
 	// 所以只写这一处（lg 为 nil 时 Close 自己是空动作）。
@@ -36,25 +45,30 @@ func main() {
 		os.Exit(exitcode.Code(kind))
 	}
 
+	// fatal 是「起不来」的唯一收尾：落日志、打那一屏、按种类退。
+	// 那一屏向 message 要——纸上只装事实（哪一环、哪句话、带不带日志行），成品的话只在
+	// message 里成形（契约里连字都装不了：`message.Line` 字段不导出）。
+	fatal := func(where, body, logPath string) {
+		lg.Fatal(where, body)
+		console.Print(message.Fatal(where, body, logPath))
+		finish(exitcode.CannotStart)
+	}
+
 	if err != nil {
 		console.Print(message.LogInitFailed(err))
 		finish(exitcode.CannotStart)
 	}
-	lg.Startup()
+	lg.Startup(toolDir, toolFile)
 
 	// 步骤 3 起：解析站给结局，闸门判放不放行。
 	say, plan, fail := parse.Run(os.Args, appVersion)
 	switch {
 	case fail != nil:
-		lg.Fatal(fail.Where, fail.Body)
-		// 那一屏在这里向 message 要：纸上只装了事实（哪一环、哪句话、带不带日志行），
-		// 成品的话只在 message 里成形——契约里连字都装不了（`message.Line` 字段不导出）。
-		logPath := log.ToolPath()
+		logPath := toolPath
 		if fail.NoLog {
 			logPath = "" // 配置那一步日志还没建起来，老版那一屏也不带「日志：」行
 		}
-		console.Print(message.Fatal(fail.Where, fail.Body, logPath))
-		finish(exitcode.CannotStart)
+		fatal(fail.Where, fail.Body, logPath)
 
 	case plan != nil:
 		// 解析站路上攒下的提示先打出去：老版的次序也是「读清单的提示在前、确认屏在后」。
@@ -70,12 +84,38 @@ func main() {
 			console.Print(refusal.Say)
 			finish(exitcode.Refused)
 		}
-		// 过渡形态：放行之后没有下一站，随阶段 04 接上执行站。
-		console.Print(message.NotWiredLine())
-		finish(exitcode.Refused)
+
+		// 步骤 8 前半：建本次的归档目录。本次执行的产物全在它下面，四条落点由它发。
+		paths, aerr := archive.Create(contract.HistoryDir, string(plan.Mode), plan.Run.Remark, time.Now())
+		if aerr != nil {
+			fatal("output", aerr.Error(), toolPath)
+		}
+
+		// 步骤 8：执行站连上去跑，跑完交第二张纸。取消的响应随阶段 06，本包只把 context 递下去。
+		paper, cannot := execute.Run(context.Background(), plan, paths.Terminal, paths.ExecLog)
+		if cannot != nil {
+			fatal(cannot.Where, cannot.Body, toolPath)
+		}
+
+		// 步骤 9、10：结算站算总账，报告站出屏幕统计块与 `report.txt`。
+		ledger := settle.Run(paper)
+
+		// 执行期日志收尾那一行：老版也是算完统计才补它，所以排在结算之后、报告之前。
+		// 句子由 message 成形，本包只把第三张纸递过去、让日志包落盘。
+		if execLog, lerr := log.InitExec(paths.ExecLog); lerr == nil {
+			execLog.Info(message.ExecSummaryLog(ledger))
+			_ = execLog.Close()
+		}
+
+		if rerr := report.Run(ledger, paths.Report); rerr != nil {
+			fatal("output", rerr.Error(), toolPath)
+		}
 
 	default:
 		console.Print(say)
 		finish(exitcode.Success)
 	}
+
+	// 跑完：有节点失败也退 0（既有行为，`exitcode` 那四格不动）。
+	finish(exitcode.Success)
 }

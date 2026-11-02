@@ -22,6 +22,10 @@ const (
 	nameReport   = "report.txt"
 	nameTerminal = "terminal-output.txt"
 	nameExecLog  = "SSHFleetExec.log"
+
+	// 工具日志是**整个历史根共用的一份**滚动文件，不进本次目录——老版横跨所有运行、
+	// 到 50MB 才换名留档，所以它与上面四个不同族：那四个在本次目录里，这一个在根上。
+	nameToolLog = "SSHFleetTools.log"
 )
 
 // Paths 是本次运行的落点。**只有字符串**：目录还是文件、建没建，由要写的人自己管。
@@ -63,4 +67,32 @@ func Create(root, mode, remark string, now time.Time) (Paths, error) {
 		Terminal: filepath.Join(dir, nameTerminal),
 		ExecLog:  filepath.Join(dir, nameExecLog),
 	}, nil
+}
+
+// ToolLog 报工具日志的两格落点：目录（历史根，调用方给）与文件名。
+//
+// 两格分开给，是因为 `log.Init` 收的就是这两格——它的签名因此不变，换掉的只是来源：
+// 这条路径不再由日志包自己算（ADR-0032 第四条：路径只能从本包拿）。
+//
+// 目录原样交回、不换成绝对路径：日志自己那一行记的是「history」这个相对名（老版同），
+// 换成绝对路径就改了那一行的样子。要绝对路径的是屏幕上那一行，见 `ToolLogPath`。
+func ToolLog(root string) (dir, file string) {
+	return root, nameToolLog
+}
+
+// ToolLogPath 报同一份日志的完整路径（绝对路径）。
+//
+// 起不来那一屏末尾的「日志：…」向它要——那一行是给人照着去找文件的，相对路径在别的
+// 工作目录下就找不着。与 `ToolLog` 同一处拼，不另写一份。
+func ToolLogPath(root string) string {
+	dir, file := ToolLog(root)
+	return absolute(filepath.Join(dir, file))
+}
+
+// absolute 把相对路径换成本机绝对路径；换不成时原样交回。
+func absolute(p string) string {
+	if abs, err := filepath.Abs(p); err == nil {
+		return abs
+	}
+	return p
 }

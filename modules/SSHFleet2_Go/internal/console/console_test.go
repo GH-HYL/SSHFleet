@@ -38,7 +38,7 @@ func TestPrintWritesVerbatim(t *testing.T) {
 	os.Stdout = w
 	// 话造不出来，只能向 message 要一句——这正是这次要的那道闸：console 的测试
 	// 也得走 message，绕不过去。
-	say := message.NotWiredLine()
+	say := message.CancelLine()
 	Print(say)
 	_ = w.Close()
 	os.Stdout = old

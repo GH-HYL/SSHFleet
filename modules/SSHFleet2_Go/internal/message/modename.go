@@ -49,8 +49,8 @@ func ActionName(m contract.Mode) string {
 	return ""
 }
 
-// logName 本模式在执行期日志里怎么称呼：写日志时才用得上。
-func logName(m contract.Mode) string {
+// LogName 本模式在执行期日志里怎么称呼（「开始执行任务：… 模式 命令」那一行）。
+func LogName(m contract.Mode) string {
 	switch m {
 	case contract.ModeCommand:
 		return "命令"
@@ -74,7 +74,7 @@ func logName(m contract.Mode) string {
 func LogLabel(m contract.Mode) string {
 	switch m {
 	case contract.ModeCommand, contract.ModeScript:
-		return logName(m) + ActionName(m)
+		return LogName(m) + ActionName(m)
 	}
 	return ""
 }

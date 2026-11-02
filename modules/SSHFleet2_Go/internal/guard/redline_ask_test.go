@@ -12,7 +12,8 @@ import (
 
 func TestRedlineAskNonInteractive(t *testing.T) {
 	// 话造不出来（`message.Line` 字段不导出），只能向 message 要一句——红线测试也不例外。
-	got := ask.Ask(message.NotWiredLine(), true, false)
+	// 样本取确认问句：它不随哪个阶段到期而消失（ADR-0039）。
+	got := ask.Ask(message.ConfirmPrompt(), true, false)
 	if got != ask.Yes {
 		t.Errorf("--yes 时应交回按缺省放行，got %v", got)
 	}

@@ -96,7 +96,8 @@ func checkMaterial(p *contract.Plan, given map[string]bool, vals map[string]stri
 		}
 	}
 
-	// -f：是个文件就查读得了、非空、非二进制；不是文件就当一条内联记录（内容层随阶段 04）。
+	// -f：是个文件就查读得了、非空、非二进制；不是文件就当一条内联记录。
+	// 内容层（按 CSV 规则读出行来）归 nodelist.go，不在这里。
 	if csv := vals["--csv-file"]; csv != "" {
 		if info, err := os.Stat(csv); err == nil && !info.IsDir() {
 			data, rerr := os.ReadFile(csv)

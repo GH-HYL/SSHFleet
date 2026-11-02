@@ -53,9 +53,17 @@ func readLine() (string, bool) {
 //
 // 危险提醒那句问句与确认屏那句不是一句话；屏幕也一样——确认屏是一整张表。
 // [Y/n] 与 [y/N] 的形态仍由这里按 defaultYes 定：使用者看方括号就知道回车会怎样。
+//
+// 答了 y 就紧跟着打那两行「开始执行」：老版收下 y 之后在确认函数里当场打（confirm.go:112），
+// 它是这次交互的收尾，不是开工那一侧的话——所以住 ask，随这一屏一起出去。危险提醒档走
+// `Ask`，没有这一笔。
 func AskWith(screen, question message.Line, defaultYes bool) Answer {
 	console.Print(screen)
-	return readAnswer(question, defaultYes)
+	answer := readAnswer(question, defaultYes)
+	if answer == Yes {
+		console.Print(message.StartLine())
+	}
+	return answer
 }
 
 // readAnswer 打问句与方括号提示，再收一行。

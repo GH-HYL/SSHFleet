@@ -151,7 +151,9 @@ func ReportText(l contract.Ledger, body contract.RunMetaBody, maskedArgv []strin
 	}
 	fmt.Fprintf(&b, "  节点清单： %s\n", maskedManifest)
 	fmt.Fprintf(&b, "  节点数量： %d\n", l.Total)
-	fmt.Fprintf(&b, "  并发数： %d\n", body.Concurrency)
+	// 并发数与确认屏那一格同一条规则：没指定 -n 时（0）记「全部并行」，也就是节点数——
+	// 老版在确认之前就把这个数填成了节点数，report.txt 里写的因此是生效值，不是原值 0。
+	fmt.Fprintf(&b, "  并发数： %d\n", concurrencyValue(body.Concurrency, l.Total))
 	if body.TimeoutConnect != 0 {
 		fmt.Fprintf(&b, "  连接超时： %ds\n", body.TimeoutConnect)
 	}
@@ -329,4 +331,13 @@ func modeTimeout(body contract.RunMetaBody) int {
 		return body.TimeoutTransfer
 	}
 	return body.TimeoutExecute
+}
+
+// ExecSummaryLog 执行期日志的收尾那一行：这一轮成了几台、几台连上。
+//
+// 它是**记录**，不是版面：老版在算完统计之后往执行期日志里补这一行，位置就在这批节点
+// 明细的最后。成败的数从第三张纸来（结算站算的），塔尖只把它递进来——执行站不解释成败。
+func ExecSummaryLog(l contract.Ledger) string {
+	return fmt.Sprintf("执行结束：成功 %d 台，失败 %d 台；连接成功 %d，连接失败 %d",
+		l.SuccessCounts, l.FailCounts, l.ConnectSuccessCounts, l.ConnectFailCounts)
 }
