@@ -56,3 +56,20 @@
 **验收**：对 `u1` 四条路径各一次（退出 0、退出 3、命令不存在 127、`sleep 10` 配 1 秒超时）；取消那条用自造 context 验（500ms 后取消，`Cancelled` 真、`TimedOut` 假、`ExitCode` 空）；另加一条 `[env]` 真生效（`echo $FLEET_PROBE` → `ok`，这是下发行形状的硬证据）。`go build`／`go vet`／`gofmt -l`／`go test ./...` 全干净；集成用例带 `integration` 标签，缺变量整批 skip。
 
 **一处已知差别（记账）**：跑完命令时把服务端提示合进「错误原文」（`client.mergeBanner`），与老版「banner 单独一格、呈现时再合并」的观感一致——契约里只有一格承载它，不另立。取消时那句 `sshfleet.abort.*` 报文随 06 接信号，本单只置事实标志。
+
+### 2026-11-02：交付后的质量审计
+
+口径 `skills/person/audit-quality/SKILL.md`（本地主分支上没有未合并的议题分支，按它第 3 条从议题目录缩小到提交 `b8c831d`：15 个文件、756 行新增；`a1b2a63` 只动账本，不在范围）。
+
+**分两批**（按 `internal/` 下一级目录切）：批一 `execute`（新增 `build.go`／`run_command.go`／`stages.go`）；批二 `contract`、`parse`（三格与装格）。
+
+**分母**：新增函数与方法 19 个；拼装类字面量 12 处；涉及目录 3 个。
+
+**命中：1.1 零条；1.2 零条；1.3 零条。**
+
+- 1.2 逐条核过并履行：ADR-0015 决定 2 按 2026-11-01 更新记录（`envPrefix` 落点全归 `execute`）核；ADR-0015 决定 3／4（键名排序、`export` 与 `;` 由工具补、空表不导入）；ADR-0016 决定 1／2／3（一律双引号、只转义 `"`、奇数反斜杠启动期拦——后者在 `parse/config.go` 的 `validateEnv`）；ADR-0030 决定 2（编码片段实测 **201 / 223 字节**，与决定原文的实测数一致）；ADR-0014 决定 2／6／7；ADR-0031（`--no-shell` 只服务 `-c`）；ADR-0037 决定三（`execute` 导出的符号只有 `Run` 一个）。
+- 1.3 无重叠：`extractExitCode` 是 ADR-0021 决定 8 点名要的；`strPtr`／`deref`／`lockedBuffer`／`copyEnv` 包里没有同形的既有符号。
+
+**一处自己报错又收回的**（留着，免得下一个人重走）：先报了「`export` 语句有三个写入点各自拼」（`exportPrefix`、`encodingFragment` 内的 `export LC_CTYPE`、`localeFragment` 的 `export LC_MESSAGES`），复核后不成立——`exportPrefix` 拼的是**一条语句多条目 + 值一律双引号**，工具补那两句是**一条语句单条目 + 值裸写**；把它们并进 `exportPrefix` 会多出一对引号，下发行当场与老版对不上，撞「逐字节相同」那条验收。形态相似不等于该有同一个构造点。
+
+**顺带**：`go test -run TestProjectIsClean ./internal/guard/` 绿，17 包零违规。
