@@ -2,8 +2,8 @@ package execute
 
 // 执行站的入口：收下闸门放行的那张纸，按纸上的并发跑完每一台，交回第二张纸。
 //
-// 每台两步：建连与认证（老版步骤 8 的前半），建起来之后跑那条命令并收回退出码与输出
-// （10 号单）。脚本、上传、下载随阶段 05；分类与刷屏随 11、12。
+// 每台两步：建连与认证（老版步骤 8 的前半），建起来之后跑那条命令并收回退出码与输出，
+// 收齐事实再按判据表定分类（10、11 号单）。脚本、上传、下载随阶段 05；刷屏随 12。
 //
 // 出口白名单：这个包对外只露 `Run` 一个函数，纸的类型都在契约包里（ADR-0037 决定三）。
 
@@ -91,10 +91,10 @@ func Run(ctx context.Context, p *contract.Plan) (contract.ResultPaper, *contract
 	return paper, nil
 }
 
-// visit 对一台做一遍：建连、认证，把结果收成一条事实。
+// visit 对一台做一遍：建连、认证、跑那条命令，收成一条事实，再定一个分类。
 //
-// 只写事实，不写结论：连上没连上是事实，「这一台算成功还是失败」由结算站按本模式的成功
-// 分类解释（ADR-0035 决定四）。
+// 事实与分类都在这一处收口：连不上的那台也要定分类——它的报错原文就是分类依据，而「这一台
+// 算成功还是失败」仍不在这里（结算站拿分类去对，ADR-0035 决定四）。
 func visit(ctx context.Context, p *contract.Plan, idx int) contract.NodeResult {
 	node := p.Nodes[idx]
 	res := contract.NodeResult{IP: node.IP}
@@ -108,19 +108,22 @@ func visit(ctx context.Context, p *contract.Plan, idx int) contract.NodeResult {
 		res.ErrorText = c.errorText(err)
 		// 被取消与「目标机自己的毛病」是两件事：前者是外部喊停，记成事实标志。
 		res.Cancelled = ctx.Err() != nil
-		return res
-	}
-	res.Connected = true
-	// 连上了也把服务端提示交出去（老版无条件写）：密码过期那类提示伴随的是成功的连接，
-	// 分类要靠它认出来。屏幕上正常行不显示这一格（呈现那一步的事）。
-	res.ErrorText = c.errorText(nil)
+	} else {
+		res.Connected = true
+		// 连上了也把服务端提示交出去（老版无条件写）：密码过期那类提示伴随的是成功的连接，
+		// 分类要靠它认出来。屏幕上正常行不显示这一格（呈现那一步的事）。
+		res.ErrorText = c.errorText(nil)
 
-	// 连上之后：本阶段只有命令模式有下一步（脚本、上传、下载随阶段 05）。
-	if p.Task.Command != nil {
-		c.runCommand(ctx, p, &res)
+		// 连上之后：本阶段只有命令模式有下一步（脚本、上传、下载随阶段 05）。
+		if p.Task.Command != nil {
+			c.runCommand(ctx, p, &res)
+		}
+
+		c.close()
 	}
 
-	c.close()
+	// 事实收齐了才定分类：两条路都要定，不然连不上的那些台在结算站那里没有名字。
+	res.Category = categoryOf(p.Mode, p.Tables, &res)
 	return res
 }
 

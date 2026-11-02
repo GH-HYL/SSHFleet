@@ -76,6 +76,8 @@ var redline = []RedLineEntry{
 	{"TestRedlineArchiveHandsOutPaths", []string{"archive.Create"}},
 	// 04 阶段 09 号单：执行站入口（新增不算改）
 	{"TestRedlineExecuteRecordsConnectFact", []string{"contract.CommandTask", "contract.ModeCommand", "contract.Node", "contract.Plan", "contract.Task", "execute.Run"}},
+	// 04 阶段 11 号单：第二张纸里没有「成败」（新增不算改）
+	{"TestRedlineResultHasNoVerdict", []string{"contract.NodeResult", "contract.ResultPaper"}},
 }
 
 // RedLine 返回名单的一份拷贝。检查读它；改返回值影响不到名单本身。

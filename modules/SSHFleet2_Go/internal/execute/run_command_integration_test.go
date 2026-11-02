@@ -40,6 +40,10 @@ func TestRunCommandSucceeds(t *testing.T) {
 	if item.TimedOut || item.Cancelled {
 		t.Fatalf("干净成功却带着超时/取消标志：%+v", item)
 	}
+	// 分类也要真的定出来：干净走完就是本模式成功那一类，判据表一条都不用配。
+	if item.Category != "执行成功" {
+		t.Fatalf("干净成功该归「执行成功」，实际 %q", item.Category)
+	}
 }
 
 // TestRunCommandNonZeroExit 非 0 退出：退出码照实给，报错原文仍空——
@@ -58,6 +62,10 @@ func TestRunCommandNonZeroExit(t *testing.T) {
 	}
 	if item.TimedOut || item.Cancelled {
 		t.Fatalf("非 0 退出不该带超时/取消标志：%+v", item)
+	}
+	// 判据表空着时按退出码兜底：分类名是「执行失败(退出码3)」，退出码本身另有一格。
+	if item.Category != "执行失败(退出码3)" {
+		t.Fatalf("判据表未命中该按退出码兜底，实际分类 %q", item.Category)
 	}
 }
 
