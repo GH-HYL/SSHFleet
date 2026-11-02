@@ -51,6 +51,10 @@ func main() {
 		finish(exitcode.CannotStart)
 
 	case plan != nil:
+		// 解析站路上攒下的提示先打出去：老版的次序也是「读清单的提示在前、确认屏在后」。
+		for _, n := range plan.Notices {
+			console.Print(n)
+		}
 		refusal, note := gate.Run(plan)
 		if note.S != "" {
 			lg.Warn(note.S) // 非交互放行危险命令的留痕：闸门不持有日志，交上来由这里落盘
