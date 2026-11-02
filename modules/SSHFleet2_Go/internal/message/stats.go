@@ -30,6 +30,8 @@ const (
 	reportHeadline = "=============================执行结果统计报告============================="
 	// reportTimeLayout 报告里两个时间戳的写法：到微秒。
 	reportTimeLayout = "2006-01-02 15:04:05.000000"
+	// costLine 是「总耗时」那一行的版式：屏幕统计块与 `report.txt` 印的是同一句。
+	costLine = "  总耗时：%.2f 秒\n"
 )
 
 // exitCodeHints 常见退出码含义（Unix 通用语义，逐字照老版 EXIT_CODE_HINTS）。
@@ -59,7 +61,7 @@ func StatisticsLine(l contract.Ledger, showTips bool, keywordsPath string) Line 
 	bar := strings.Repeat("═", statsBarWidth)
 
 	b.WriteString(bar + "\n")
-	fmt.Fprintf(&b, "  总耗时：%.2f 秒\n", l.CostTime)
+	fmt.Fprintf(&b, costLine, l.CostTime)
 
 	switch {
 	case l.Verify == VerifyPassed:
@@ -143,7 +145,7 @@ func ReportText(l contract.Ledger, body contract.RunMetaBody, maskedArgv []strin
 	fmt.Fprintf(&b, "\n【执行命令】 \n  %s\n", DisplayCommand(maskedArgv))
 
 	b.WriteString("\n【执行参数】\n")
-	fmt.Fprintf(&b, "  执行模式： %s\n", modeTitle(body.Mode))
+	fmt.Fprintf(&b, "  %s： %s\n", modeRowLabel, modeTitle(body.Mode))
 	// 各模式自己的内容按模式分派——那是结构性差异，不是叫法（老版同一处也是分派）。
 	switch body.Mode {
 	case contract.ModeCommand:
@@ -165,7 +167,7 @@ func ReportText(l contract.Ledger, body contract.RunMetaBody, maskedArgv []strin
 	}
 
 	b.WriteString("\n【结果统计】\n")
-	fmt.Fprintf(&b, "  总耗时：%.2f 秒\n", l.CostTime)
+	fmt.Fprintf(&b, costLine, l.CostTime)
 	if l.Interrupted {
 		fmt.Fprintf(&b, "  节点总数：%d  完成总数：%d  未执行：%d（执行被中断）\n", l.Total, l.Done, l.NotRun)
 	} else {

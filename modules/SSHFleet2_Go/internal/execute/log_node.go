@@ -38,7 +38,7 @@ func logNode(lg *log.Logger, res contract.NodeResult, mode contract.Mode, termPa
 	if lg == nil {
 		return
 	}
-	ip := "【" + res.IP + "】"
+	ip := message.NodeTag(res.IP)
 
 	if message.IsSuccess(res, mode) {
 		lg.Success(ip + "成功：" + successDetail(res, mode))

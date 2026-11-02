@@ -88,7 +88,7 @@ func main() {
 		// 步骤 8 前半：建本次的归档目录。本次执行的产物全在它下面，四条落点由它发。
 		paths, aerr := archive.Create(contract.HistoryDir, string(plan.Mode), plan.Run.Remark, time.Now())
 		if aerr != nil {
-			fatal("output", aerr.Error(), toolPath)
+			fatal(contract.WhereOutput, aerr.Error(), toolPath)
 		}
 
 		// 步骤 8：执行站连上去跑，跑完交第二张纸。取消的响应随阶段 06，本包只把 context 递下去。
@@ -108,7 +108,7 @@ func main() {
 		}
 
 		if rerr := report.Run(ledger, paths.Report); rerr != nil {
-			fatal("output", rerr.Error(), toolPath)
+			fatal(contract.WhereOutput, rerr.Error(), toolPath)
 		}
 
 	default:

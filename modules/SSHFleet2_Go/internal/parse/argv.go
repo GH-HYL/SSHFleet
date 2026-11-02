@@ -197,7 +197,7 @@ func buildPlan(cfg *settings, s scanned) (*contract.Plan, *contract.CannotStart)
 	if sudoGiven && noSudoGiven {
 		p.Problems = append(p.Problems, contract.Problem{
 			Kind:   contract.ProblemFlagConflict,
-			Option: "--sudo --no-sudo",
+			Option: contract.FlagPairSudo,
 		})
 	}
 	if sudoGiven {

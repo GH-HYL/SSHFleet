@@ -46,7 +46,7 @@ func Run(ctx context.Context, p *contract.Plan, termPath, execLogPath string) (c
 
 	rep, err := newReporter(scr, termPath, execLogPath, p.Mode)
 	if err != nil {
-		return contract.ResultPaper{}, &contract.CannotStart{Where: "output", Body: err.Error()}
+		return contract.ResultPaper{}, &contract.CannotStart{Where: contract.WhereOutput, Body: err.Error()}
 	}
 	defer rep.close()
 

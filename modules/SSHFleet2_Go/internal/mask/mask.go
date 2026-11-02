@@ -8,6 +8,12 @@ package mask
 
 import "strings"
 
+// maskToken 是遮掉之后顶替那几个字符的东西。
+//
+// 屏幕、内联清单、`report.txt` 三处遮出来的样子必须是同一串，所以只许这一份：三处各写
+// 一次的话，改一处漏两处，同一个密码在屏上是一个样、在报告里是另一个样。
+const maskToken = "****"
+
 // Secret 把一个秘密遮成认得出形状、看不出内容的样子。
 //
 // 四个字符以内整个遮掉；再长的留前两个、后两个——既让人能对上「是哪一条」，
@@ -15,9 +21,9 @@ import "strings"
 func Secret(s string) string {
 	r := []rune(s)
 	if len(r) <= 4 {
-		return "****"
+		return maskToken
 	}
-	return string(r[:2]) + "****" + string(r[len(r)-2:])
+	return string(r[:2]) + maskToken + string(r[len(r)-2:])
 }
 
 // CommandLine 把整条命令行里带凭据的那几段遮掉，其余原样留着。
