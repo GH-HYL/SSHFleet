@@ -130,7 +130,9 @@ func oneNodePlan(node contract.Node) *contract.Plan {
 		Mode:  contract.ModeCommand,
 		Task:  contract.Task{Command: &contract.CommandTask{Text: "uptime"}},
 		Nodes: []contract.Node{node},
-		Run:   contract.RunParams{TimeoutConnect: 10},
+		// Interpreter、Env、English、TimeoutExecute 是下发行与超时那两段的材料：
+		// 解析站填、执行站用。这里按出厂配置填（bash、english = true）。
+		Run: contract.RunParams{TimeoutConnect: 10, TimeoutExecute: 30, Interpreter: "bash", English: true},
 	}
 }
 

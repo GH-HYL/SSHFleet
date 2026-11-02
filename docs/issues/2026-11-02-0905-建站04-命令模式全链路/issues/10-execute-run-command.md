@@ -4,7 +4,7 @@
 
 **Blocked by**：09。
 
-**Status**：ready-for-agent
+**Status**：done
 
 ## 要落的判断
 
@@ -31,3 +31,28 @@
 ## 做完之后
 
 11 号单拿这条结果去定分类。
+
+## Comments
+
+### 2026-11-02：交付
+
+**落了什么**：`execute/build.go`（下发行：外壳 + 环境段 + 执行身份 + 解释器；`--no-shell` 原样下发）、`execute/run_command.go`（开会话、stdin、超时、收输出、退出码、取消、输出整备）、`execute/stages.go`（本单用到的环节名）。`visit` 里「连上之后」那一段接上命令模式。
+
+**纸上加了三格**（`contract.RunParams.Interpreter` / `.Env` / `.English`）。理由只有一条：执行站不回头读配置（ADR-0014、ADR-0015），这三样只能由解析站带上纸。前两格是配置原值，`export …;` 的拼法仍全在执行站一处；`English` 只负责下发行里那句 `export LC_MESSAGES=C`——判据表按语言选哪一套、提示语说什么，仍随阶段 08。
+
+**推翻了原计划的一处**：原本打算 `english` 先固定 `false`，理由是「出厂配置本来就是 false」。动手后拿老版实测：`config/SSHFleet.conf` 第 52 行就是 `english = true`，老版下发行里恒有 `export LC_MESSAGES=C;`。按 false 拼，下发行立刻与发布版差一句，A/B 当场对不上。改成把配置原值带上纸。
+
+**与老版逐字对过**（现场 `build/建站04_10_2026-11-02_1245/ab/`）：老版二进制对 u1 跑四种组合，从 `history/<run>/SSHFleetExec.log` 的「命令行：」抓出实际下发行，与新代码拼的串逐字节比。
+
+| 组合 | 结果 |
+| --- | --- |
+| 默认（`sudo` + 出厂 `[env]` + `english`） | 相同 |
+| `--no-sudo` | 相同 |
+| `--no-shell` | 相同 |
+| `--no-sudo --no-shell` | 相同 |
+
+四条黄金串写进了 `build_test.go`，用的是老版打出来的那一行，不是照源码重写——照源码重写只能证明两份代码像，不能证明发出的串一样。
+
+**验收**：对 `u1` 四条路径各一次（退出 0、退出 3、命令不存在 127、`sleep 10` 配 1 秒超时）；取消那条用自造 context 验（500ms 后取消，`Cancelled` 真、`TimedOut` 假、`ExitCode` 空）；另加一条 `[env]` 真生效（`echo $FLEET_PROBE` → `ok`，这是下发行形状的硬证据）。`go build`／`go vet`／`gofmt -l`／`go test ./...` 全干净；集成用例带 `integration` 标签，缺变量整批 skip。
+
+**一处已知差别（记账）**：跑完命令时把服务端提示合进「错误原文」（`client.mergeBanner`），与老版「banner 单独一格、呈现时再合并」的观感一致——契约里只有一格承载它，不另立。取消时那句 `sshfleet.abort.*` 报文随 06 接信号，本单只置事实标志。

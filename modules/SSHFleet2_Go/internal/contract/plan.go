@@ -47,6 +47,27 @@ type RunParams struct {
 	Key     bool   // 用密钥登录
 	Answer  string // 代填的原值：改密与它互斥，04／05 还要拿它做材料检查
 	Remark  string
+
+	// Interpreter 是命令交给谁解释：配置 `interpreter.command` 的原值（例如 bash），
+	// 命令模式下恒有、脚本模式按后缀另取（随阶段 05）。
+	//
+	// 它是**原值**，不是拼好的下发行：拼法全在执行站一处（ADR-0015），纸只负责把配置
+	// 里的东西原样带到执行站——执行侧不回头读配置（ADR-0014、ADR-0015 的更新记录）。
+	Interpreter string
+
+	// Env 是要导入目标机的环境变量：配置 `[env]` 原样（名字 → 值），键名已由解析站校验过。
+	//
+	// 与 Interpreter 同一条理由：纸上是事实，`export …;` 那段怎么拼归执行站。
+	// 出厂配置带 PATH 与 TERM=dumb——少了它们，sudo 与解释器会 command not found，
+	// 远端程序还会上色出转义序列，与发布版的行为对不上。
+	Env map[string]string
+
+	// English 是配置 `[locale] english` 的原值：真则下发行里多一句 `export LC_MESSAGES=C`，
+	// 目标机上**命令自己**的提示语统一说英文。
+	//
+	// 它只负责下发行那一句。判据表按语言选哪一套、提示语说什么，是阶段 08 的事——
+	// 那一侧还没接，这一格先照配置原样带到执行站，免得下发行与发布版差一句。
+	English bool
 }
 
 // ProblemKind 是「解析时发现的问题」的种类。解析只发现、不下结论。

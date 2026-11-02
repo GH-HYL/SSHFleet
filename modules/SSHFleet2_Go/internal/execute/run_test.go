@@ -114,6 +114,7 @@ func plan(ip, port string) *contract.Plan {
 		Mode:  contract.ModeCommand,
 		Task:  contract.Task{Command: &contract.CommandTask{Text: "uptime"}},
 		Nodes: []contract.Node{{IP: ip, Port: port, User: "u", Password: "p"}},
+		Run:   contract.RunParams{TimeoutExecute: 30, Interpreter: "bash"},
 	}
 }
 
