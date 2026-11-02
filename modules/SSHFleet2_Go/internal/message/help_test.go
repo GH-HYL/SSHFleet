@@ -91,7 +91,7 @@ func fixtureEntries() []HelpEntry {
 const fixtureDescStart = 4 + 2 + 1 + 9 + 2 + 0 + 2
 
 func TestHelpScreenStructure(t *testing.T) {
-	screen := HelpScreen("PROG", "vTEST", 0, fixtureEntries()).S
+	screen := HelpScreen("PROG", "vTEST", 0, fixtureEntries()).Text()
 	lines := strings.Split(screen, "\n")
 
 	if lines[0] != "SSHFleet - 批量 SSH 运维工具（命令/脚本执行、文件上传下载）" {
@@ -118,7 +118,7 @@ func TestHelpScreenStructure(t *testing.T) {
 }
 
 func TestHelpScreenWrapsInOwnColumn(t *testing.T) {
-	screen := HelpScreen("PROG", "vTEST", 80, fixtureEntries()).S
+	screen := HelpScreen("PROG", "vTEST", 80, fixtureEntries()).Text()
 	for _, line := range strings.Split(screen, "\n") {
 		if w := displayWidth(line); w > 80 {
 			t.Errorf("宽度 80 下有行超宽（%d 列）：%q", w, line)
@@ -145,7 +145,7 @@ func TestHelpScreenWrapsInOwnColumn(t *testing.T) {
 
 func TestHelpScreenFloorsDescriptionWidth(t *testing.T) {
 	// 终端很窄：说明列仍按保底 24 列折，不挤成一列一个字（宁可整行超宽）
-	screen := HelpScreen("PROG", "vTEST", 20, fixtureEntries()).S
+	screen := HelpScreen("PROG", "vTEST", 20, fixtureEntries()).Text()
 	found := false
 	for _, line := range strings.Split(screen, "\n") {
 		if !strings.HasPrefix(line, "    -x") {
@@ -163,7 +163,7 @@ func TestHelpScreenFloorsDescriptionWidth(t *testing.T) {
 }
 
 func TestCannotStartLine(t *testing.T) {
-	got := CannotStartLine("加载失败", "原因那几行").S
+	got := CannotStartLine("加载失败", "原因那几行").Text()
 	if got != "加载失败：原因那几行\n" {
 		t.Errorf("起不来那句话的形态：%q", got)
 	}

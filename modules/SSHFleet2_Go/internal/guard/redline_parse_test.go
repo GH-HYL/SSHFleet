@@ -15,7 +15,7 @@ func TestRedlineParseSaysOrFail(t *testing.T) {
 	if fail != nil {
 		t.Errorf("配置在时不应是起不来")
 	}
-	if say.S == "" {
+	if say.Text() == "" {
 		t.Errorf("应有一句要打给使用者的话")
 	}
 
@@ -24,7 +24,7 @@ func TestRedlineParseSaysOrFail(t *testing.T) {
 	if fail == nil {
 		t.Errorf("配置不在应是起不来")
 	}
-	if fail != nil && fail.Say.S == "" {
-		t.Errorf("起不来也要有一句话")
+	if fail != nil && fail.Body == "" {
+		t.Errorf("起不来也要有一句话（Body 是塔尖拼那一屏的料）")
 	}
 }

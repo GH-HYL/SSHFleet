@@ -20,17 +20,17 @@ const (
 
 // 起不来那一屏：红 [ERROR]、黄环节标签、正文，末尾附日志路径。
 func TestFatalScreen(t *testing.T) {
-	got := Fatal("cli", ProblemHint("问题一", "提示一"), `D:\logs\tool.log`).S
+	got := Fatal("cli", ProblemHint("问题一", "提示一"), `D:\logs\tool.log`).Text()
 	want := escRed + "[ERROR]" + escReset + escYellow + " [function:cli]" + escReset +
 		" 问题一\n提示：提示一\n日志：D:\\logs\\tool.log\n"
 	if got != want {
 		t.Fatalf("起不来那一屏不对：\n got  %q\n want %q", got, want)
 	}
-	if !Fatal("cli", "x", "").ToErr {
+	if !Fatal("cli", "x", "").Stderr() {
 		t.Fatalf("起不来要写标准错误")
 	}
 	// 日志还没建起来时不出现「日志：」那一行。
-	if strings.Contains(Fatal("config", "x", "").S, "日志：") {
+	if strings.Contains(Fatal("config", "x", "").Text(), "日志：") {
 		t.Fatalf("没有日志句柄时不该有「日志：」行")
 	}
 }
@@ -73,13 +73,13 @@ func TestRefuseScreens(t *testing.T) {
 	report := contract.DangerReport{Matches: []contract.DangerMatch{{
 		RuleName: "递归删除根目录", Level: contract.RiskForbidden, Content: "rm -rf /", Lines: []int{1},
 	}}}
-	if DangerBox(report, true).ToErr {
+	if DangerBox(report, true).Stderr() {
 		t.Fatalf("禁止命令那张框走标准输出")
 	}
-	if CancelLine().ToErr || InputEndLine().ToErr || ConfirmPrompt().ToErr {
+	if CancelLine().Stderr() || InputEndLine().Stderr() || ConfirmPrompt().Stderr() {
 		t.Fatalf("喊停那几句走标准输出")
 	}
-	if !strings.Contains(CancelLine().S, "操作已取消") || !strings.Contains(InputEndLine().S, "输入结束") {
-		t.Fatalf("喊停的句子被改过了：%q / %q", CancelLine().S, InputEndLine().S)
+	if !strings.Contains(CancelLine().Text(), "操作已取消") || !strings.Contains(InputEndLine().Text(), "输入结束") {
+		t.Fatalf("喊停的句子被改过了：%q / %q", CancelLine().Text(), InputEndLine().Text())
 	}
 }

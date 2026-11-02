@@ -264,8 +264,8 @@ func buildPlan(cfg *settings, s scanned) (*contract.Plan, *contract.CannotStart)
 		if nfail != nil {
 			return nil, nfail
 		}
-		if m.notice.S != "" {
-			p.Notices = append(p.Notices, m.notice)
+		if m.headerDropped {
+			p.Notices = append(p.Notices, contract.Notice{Kind: contract.NoticeManifestHeader})
 		}
 		nodes, notices, nfail := buildNodes(m.rows, cfg, given["--key"])
 		if nfail != nil {

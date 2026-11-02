@@ -112,5 +112,5 @@ func TestUsageAndExamplesMatchOptionTable(t *testing.T) {
 func helpScreenText(name, num string, f execution) string {
 	rev, tm, dirty := buildInfo()
 	ver := versionString(num, rev, tm, dirty)
-	return message.HelpScreen(name, ver, 0, helpEntries(f)).S
+	return message.HelpScreen(name, ver, 0, helpEntries(f)).Text()
 }

@@ -1,6 +1,8 @@
 package gate
 
-import "sshfleet2/internal/contract"
+import (
+	"sshfleet2/internal/message"
+)
 
 // Refusal 是「拒绝」：计划已经成形，结论是不能跑。
 //
@@ -11,5 +13,5 @@ import "sshfleet2/internal/contract"
 // 判据见 ADR-0034 决定二、三；谁在哪儿造它，见 ADR-0032 第四条。
 type Refusal struct {
 	// Say 是那一屏话：含「写到哪条流」那一格，闸门填、塔尖搬、console 打。
-	Say contract.Text
+	Say message.Line
 }

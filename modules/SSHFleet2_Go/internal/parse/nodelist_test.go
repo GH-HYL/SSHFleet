@@ -1,6 +1,8 @@
 package parse
 
 import (
+	"sshfleet2/internal/contract"
+
 	"strings"
 	"testing"
 )
@@ -51,11 +53,8 @@ func TestReadManifestDropsHeader(t *testing.T) {
 	if len(m.rows) != 1 {
 		t.Fatalf("表头没被移除：%v", m.rows)
 	}
-	if m.notice.S == "" {
+	if !m.headerDropped {
 		t.Fatal("移除表头要留一句提示，否则使用者不知道少的那台去哪了")
-	}
-	if !strings.Contains(m.notice.S, "第一行不是IP格式，已移除表头行") {
-		t.Fatalf("提示原话不对：%q", m.notice.S)
 	}
 }
 
@@ -199,8 +198,12 @@ func TestBuildNodesWarnsUnusedKey(t *testing.T) {
 	if fail != nil {
 		t.Fatalf("加 -k 之外不该起不来：%s", fail.Body)
 	}
-	if len(notices) != 1 || !strings.Contains(notices[0].S, "本次没加 -k") {
+	// 纸上只装种类与事实：句子由 message 照 Kind 成形（`TestUnusedKeyNotice` 管那句话）。
+	if len(notices) != 1 || notices[0].Kind != contract.NoticeUnusedKey {
 		t.Fatalf("没提醒「配了私钥没用上」：%v", notices)
+	}
+	if len(notices[0].Rows) != 1 || notices[0].Rows[0] != 1 {
+		t.Fatalf("行号要给对：%v", notices[0].Rows)
 	}
 }
 

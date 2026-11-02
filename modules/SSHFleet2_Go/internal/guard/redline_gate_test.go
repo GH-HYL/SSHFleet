@@ -30,7 +30,7 @@ func TestRedlineGateRefusesBadCombination(t *testing.T) {
 	if refusal == nil {
 		t.Fatalf("给了多个模式应当返回一个拒绝")
 	}
-	if refusal.Say.S == "" {
+	if refusal.Say.Text() == "" {
 		t.Errorf("拒绝要带一屏话")
 	}
 }
@@ -38,6 +38,6 @@ func TestRedlineGateRefusesBadCombination(t *testing.T) {
 func TestRedlineGatePassesCleanPaper(t *testing.T) {
 	refusal, _ := gate.Run(redlinePaper())
 	if refusal != nil {
-		t.Fatalf("一张干净的纸不该被拒：%s", refusal.Say.S)
+		t.Fatalf("一张干净的纸不该被拒：%s", refusal.Say.Text())
 	}
 }

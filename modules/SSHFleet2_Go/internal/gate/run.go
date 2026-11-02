@@ -25,26 +25,26 @@ import (
 // 判的先后照老版 CheckArguments：解析层的错先报，模式其次，逐条搭配检查按老版顺序来，
 // 三个数值选项放在最后（老版把 -n／-t／-T 的取值检查放在整段末尾）。同一份命令里错两处时，
 // 使用者先看到哪一句由这个顺序定。
-func Run(p *contract.Plan) (*Refusal, contract.Text) {
+func Run(p *contract.Plan) (*Refusal, message.Line) {
 	if r := parseRefusal(p); r != nil {
-		return r, contract.Text{}
+		return r, message.Line{}
 	}
 	if r := modeRefusal(p); r != nil {
-		return r, contract.Text{}
+		return r, message.Line{}
 	}
 	if r := argumentRefusal(p); r != nil {
-		return r, contract.Text{}
+		return r, message.Line{}
 	}
 	if r := valueRefusal(p); r != nil {
-		return r, contract.Text{}
+		return r, message.Line{}
 	}
-	if r, note := dangerRefusal(p); r != nil || note.S != "" {
+	if r, note := dangerRefusal(p); r != nil || note.Text() != "" {
 		return r, note
 	}
 	// 信封合法性排在最后一道：前面几条判的都是「这次给的东西对不对」，
 	// 这一条判的是「纸本身有没有被造错」——它不该抢在人的毛病前面报。
 	if r := envelopeRefusal(p); r != nil {
-		return r, contract.Text{}
+		return r, message.Line{}
 	}
 	return confirmRefusal(p)
 }
@@ -101,7 +101,7 @@ func envelopeRefusal(p *contract.Plan) *Refusal {
 //
 // 屏与问句由 message 造，打屏与收行归 ask——闸门自己一行都不写（ADR-0032 第四条）。
 // 答否算当场喊停；读到输入结束算「没答完」，同样不放行。
-func confirmRefusal(p *contract.Plan) (*Refusal, contract.Text) {
+func confirmRefusal(p *contract.Plan) (*Refusal, message.Line) {
 	if p.Run.Yes {
 		// --yes 是替人回答了「y」，不是替人看了屏：老版此时不打参数屏，只打这一行。
 		ask.Ask(message.ConfirmSkippedLine(), true, true)
@@ -110,11 +110,11 @@ func confirmRefusal(p *contract.Plan) (*Refusal, contract.Text) {
 	switch ask.AskWith(message.ConfirmScreen(p, mask.InlineRecordIf(p.Resources.Manifest)), message.ExecConfirmPrompt(), true) {
 	case ask.NoInput:
 		// 屏幕上「输入结束，操作已取消」已经由 ask 打过，这里不再叠一句。
-		return &Refusal{Say: contract.Text{}}, contract.Text{}
+		return &Refusal{Say: message.Line{}}, message.Line{}
 	case ask.No:
 		return &Refusal{Say: message.CancelLine()}, message.CancelTrace()
 	}
-	return nil, contract.Text{}
+	return nil, message.Line{}
 }
 
 // refuse 把一句正文交给终端：走 stderr，老版那副 [ERROR] 外壳，末尾附日志路径。
@@ -261,16 +261,16 @@ func valueRefusal(p *contract.Plan) *Refusal {
 }
 
 // dangerRefusal 危险命令：禁止档直接拒，提醒档问人，答否算当场喊停。
-func dangerRefusal(p *contract.Plan) (*Refusal, contract.Text) {
+func dangerRefusal(p *contract.Plan) (*Refusal, message.Line) {
 	source, isScript, scriptPath := dangerSource(p)
 	if strings.TrimSpace(source) == "" {
-		return nil, contract.Text{}
+		return nil, message.Line{}
 	}
 	report := analyze(source, p.Tables.Danger)
 	report.IsScript = isScript
 	report.ScriptPath = scriptPath
 	if len(report.Matches) == 0 {
-		return nil, contract.Text{}
+		return nil, message.Line{}
 	}
 
 	if report.Matches[0].Level == contract.RiskForbidden {
@@ -282,15 +282,15 @@ func dangerRefusal(p *contract.Plan) (*Refusal, contract.Text) {
 	switch answer {
 	case ask.NoInput:
 		// 屏幕上「输入结束，操作已取消」已经由 ask 打过，这里不再叠一句。
-		return &Refusal{Say: contract.Text{}}, contract.Text{}
+		return &Refusal{Say: message.Line{}}, message.Line{}
 	case ask.No:
-		return &Refusal{Say: message.CancelLine()}, contract.Text{}
+		return &Refusal{Say: message.CancelLine()}, message.Line{}
 	}
 	if p.Run.Yes {
 		// 非交互跳过确认要留痕：老版由交互器顺手写，本版把这个事实交回塔尖，由塔尖落日志。
 		return nil, message.TraceDanger(report.Matches[0])
 	}
-	return nil, contract.Text{}
+	return nil, message.Line{}
 }
 
 // dangerSource 取出要判的原文：命令模式取 -c，脚本模式取脚本正文。

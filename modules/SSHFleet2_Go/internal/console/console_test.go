@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	"sshfleet2/internal/contract"
+	"sshfleet2/internal/message"
 )
 
 // 把标准输出接到管道再问：管道不是终端，宽度一律 0（「不折行」）。
@@ -36,7 +36,10 @@ func TestPrintWritesVerbatim(t *testing.T) {
 	}
 	old := os.Stdout
 	os.Stdout = w
-	Print(contract.Text{S: "一句话，不换行"})
+	// 话造不出来，只能向 message 要一句——这正是这次要的那道闸：console 的测试
+	// 也得走 message，绕不过去。
+	say := message.NotWiredLine()
+	Print(say)
 	_ = w.Close()
 	os.Stdout = old
 	data, rerr := io.ReadAll(r)
@@ -44,7 +47,7 @@ func TestPrintWritesVerbatim(t *testing.T) {
 	if rerr != nil {
 		t.Fatalf("读回失败：%v", rerr)
 	}
-	if string(data) != "一句话，不换行" {
-		t.Errorf("Print 应原样写出：got %q", string(data))
+	if string(data) != say.Text() {
+		t.Errorf("Print 应原样写出：want %q, got %q", say.Text(), string(data))
 	}
 }

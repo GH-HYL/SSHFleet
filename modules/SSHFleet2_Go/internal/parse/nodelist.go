@@ -20,9 +20,9 @@ import (
 
 // manifest 是读出来的清单：一行一台的原始字段，外加要打给使用者的那几句提示。
 type manifest struct {
-	rows   [][]string
-	inline bool
-	notice contract.Text // 「第一行不是 IP，已当表头移除」；零值表示没有这句话
+	rows          [][]string
+	inline        bool
+	headerDropped bool // 首行被当表头移除过（「第一行不是 IP，已当表头移除」那句提示）
 }
 
 // readManifest 读 `-f` 的值。
@@ -47,7 +47,7 @@ func readManifest(raw string) (manifest, *contract.CannotStart) {
 	if len(rows) > 0 && !isIPv4(strings.TrimSpace(rows[0][0])) {
 		if len(rows[0]) > 1 {
 			m.rows = rows[1:]
-			m.notice = message.ManifestHeaderDropped()
+			m.headerDropped = true
 			if len(m.rows) == 0 {
 				return manifest{}, cannotStart("nodelist", "", message.NoNodeParsed)
 			}

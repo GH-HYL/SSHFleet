@@ -58,9 +58,10 @@ var rules = []Rule{
 	// 契约
 	{"contract", KindContract, nil},
 
-	// 八个横切。console 那行带契约：Print 收的是 contract.Text（ADR-0032 第四条权限表
-	// 本就许它依赖契约；Text 落进契约是 2026-11-01 的事，见建站 02 的规格 Comments）。
-	{"console", KindCrosscut, crosscutDeps},
+	// 八个横切。console 那行多一条 message：Print 收的是 `message.Line`——那个类型的
+	// 字段不导出，「话只能由 message 造」才成立（2026-11-02 的这一笔，见 ADR-0032 末尾
+	// 追加的更新记录）。message 依赖契约，console 依赖 message，不成环。
+	{"console", KindCrosscut, []string{"contract", "message"}},
 	{"log", KindCrosscut, crosscutDeps},
 	{"ask", KindCrosscut, []string{"contract", "console", "message"}}, // 叶子之间唯一的边
 	{"archive", KindCrosscut, nil},

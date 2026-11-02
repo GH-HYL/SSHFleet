@@ -26,9 +26,9 @@ const (
 // DangerBox 排一张危险命令框。没有命中返回空串。
 //
 // forbidden 为真时是「发现禁止命令」（程序要立即退出），否则是「发现危险命令」（问人）。
-func DangerBox(report contract.DangerReport, forbidden bool) contract.Text {
+func DangerBox(report contract.DangerReport, forbidden bool) Line {
 	if len(report.Matches) == 0 {
-		return contract.Text{}
+		return Line{}
 	}
 
 	title := "⚠  发现危险命令  ⚠"
@@ -88,7 +88,7 @@ func DangerBox(report contract.DangerReport, forbidden bool) contract.Text {
 		line("╚"+bar+"╝"),
 	)
 	// 老版在框前补一个空行（fmt.Fprintln(os.Stdout, "\n"+box)）。
-	return contract.Text{S: "\n" + strings.Join(lines, "\n") + "\n"}
+	return Line{s: "\n" + strings.Join(lines, "\n") + "\n"}
 }
 
 // highestLevel 报命中的最高风险档；无命中返回空串。命中已由闸门按档排好序。

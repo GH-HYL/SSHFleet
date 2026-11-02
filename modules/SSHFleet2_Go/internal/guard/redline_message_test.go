@@ -15,11 +15,11 @@ func TestRedlineMessageRendersHelp(t *testing.T) {
 		{Kind: message.EntryOption, Short: "-x", Long: "--example", Desc: "说明"},
 	}
 	say := message.HelpScreen("PROG", "vTEST", 0, entries)
-	if say.S == "" {
+	if say.Text() == "" {
 		t.Fatalf("帮助屏不应是空的")
 	}
-	lines := strings.Split(say.S, "\n")
+	lines := strings.Split(say.Text(), "\n")
 	if len(lines) < 2 || !strings.HasPrefix(lines[1], "版本: vTEST") {
-		t.Errorf("首行下一行应以「版本: v」开头：\n%s", say.S)
+		t.Errorf("首行下一行应以「版本: v」开头：\n%s", say.Text())
 	}
 }

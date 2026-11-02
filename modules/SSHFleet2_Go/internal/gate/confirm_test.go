@@ -34,8 +34,8 @@ func TestEnvelopeRefusesMismatch(t *testing.T) {
 			if r == nil {
 				t.Fatal("对不上的信封应当被拒")
 			}
-			if !strings.Contains(r.Say.S, "这次要做什么与它的载荷对不上") {
-				t.Fatalf("话不对：%s", r.Say.S)
+			if !strings.Contains(r.Say.Text(), "这次要做什么与它的载荷对不上") {
+				t.Fatalf("话不对：%s", r.Say.Text())
 			}
 		})
 	}
@@ -48,8 +48,8 @@ func TestEnvelopePassesWellFormed(t *testing.T) {
 		Task: contract.Task{Command: &contract.CommandTask{Text: "uptime"}},
 		Run:  contract.RunParams{Yes: true},
 	}
-	if r, _ := Run(p); r != nil && strings.Contains(r.Say.S, "载荷对不上") {
-		t.Fatalf("合法的纸不该被信封那条拦：%s", r.Say.S)
+	if r, _ := Run(p); r != nil && strings.Contains(r.Say.Text(), "载荷对不上") {
+		t.Fatalf("合法的纸不该被信封那条拦：%s", r.Say.Text())
 	}
 }
 
@@ -65,10 +65,10 @@ func TestConfirmSkippedWhenYes(t *testing.T) {
 	}
 	r, trace := Run(p)
 	if r != nil {
-		t.Fatalf("--yes 不该拒：%s", r.Say.S)
+		t.Fatalf("--yes 不该拒：%s", r.Say.Text())
 	}
-	if trace.S != "非交互模式（--yes）跳过执行选项/参数确认，直接执行" {
-		t.Fatalf("留痕那句话不对：%q", trace.S)
+	if trace.Text() != "非交互模式（--yes）跳过执行选项/参数确认，直接执行" {
+		t.Fatalf("留痕那句话不对：%q", trace.Text())
 	}
 }
 
@@ -83,7 +83,7 @@ func TestConfirmNotReachedWhenEarlierCheckRefuses(t *testing.T) {
 	if r == nil {
 		t.Fatal("空命令应当被拒")
 	}
-	if strings.Contains(r.Say.S, "以上确认无误") {
+	if strings.Contains(r.Say.Text(), "以上确认无误") {
 		t.Fatal("被前一条拦下时不该出确认屏")
 	}
 }

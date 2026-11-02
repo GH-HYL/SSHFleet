@@ -43,35 +43,35 @@ func ProblemOrigin(problem, origin string) string {
 // Fatal 排一屏致命错误：红色 [ERROR] 头、黄色环节标签、正文，末尾附日志路径。
 //
 // 日志还没建起来时 logPath 传空串，那一行就不出现——老版同一判据。
-func Fatal(where, body, logPath string) contract.Text {
+func Fatal(where, body, logPath string) Line {
 	if logPath != "" {
 		body += "\n日志：" + logPath
 	}
 	s := ansiRed + "[ERROR]" + ansiReset + ansiYellow + " [function:" + where + "]" + ansiReset + " " + body + "\n"
-	return contract.Text{S: s, ToErr: true}
+	return Line{s: s, toErr: true}
 }
 
 // RefuseLine 排一屏走标准输出的拒绝：危险框已经由 DangerBox 排好，这里只补那一句取消。
-func RefuseLine(text string) contract.Text {
-	return contract.Text{S: text + "\n"}
+func RefuseLine(text string) Line {
+	return Line{s: text + "\n"}
 }
 
 // CancelLine 是危险提醒档答否时那一行。老版 fmt.Println 在它前面没有空行。
-func CancelLine() contract.Text {
-	return contract.Text{S: ansiYellow + "操作已取消" + ansiReset + "\n"}
+func CancelLine() Line {
+	return Line{s: ansiYellow + "操作已取消" + ansiReset + "\n"}
 }
 
 // InputEndLine 是交互读到输入结束时那一行（老版交互器自己印）。
-func InputEndLine() contract.Text {
-	return contract.Text{S: "\n" + ansiYellow + "输入结束，操作已取消" + ansiReset + "\n"}
+func InputEndLine() Line {
+	return Line{s: "\n" + ansiYellow + "输入结束，操作已取消" + ansiReset + "\n"}
 }
 
 // ConfirmPrompt 是危险提醒档的问句本身（前面留一个空行）。
 //
 // 方括号那半截由 AskHint 给：问句与「回车会怎样」是两件事，一个在哪儿问、一个缺省是什么，
 // 分开之后确认屏那句问句也能共用同一套方括号。
-func ConfirmPrompt() contract.Text {
-	return contract.Text{S: "\n" + ansiYellow + "确定继续？" + ansiReset}
+func ConfirmPrompt() Line {
+	return Line{s: "\n" + ansiYellow + "确定继续？" + ansiReset}
 }
 
 // AskHint 是问句后面那个红色方括号：缺省答是写 [Y/n]，缺省答否写 [y/N]。
@@ -83,13 +83,22 @@ func AskHint(defaultYes bool) string {
 	return ansiRed + "[y/N]" + ansiReset
 }
 
+// PromptWith 把一句问句拼成「问句 [Y/n]: 」——空格、方括号、结尾冒号只在这里成形。
+//
+// 单独开这个口子，是因为 `ask` 过去自己拿问句的字去接方括号（`contract.Text{S: question.S
+// + " " + AskHint(...) + ": "}`）——那是「横切包自己拼一句塞给屏幕」的活标本：它读得到字，
+// 是因为当时的载体字段是导出的。Line 之后它读不到字，只能走这里。
+func PromptWith(question Line, defaultYes bool) Line {
+	return Line{s: question.Text() + " " + AskHint(defaultYes) + ": "}
+}
+
 // notWiredHead 是过渡形态那一类话的开头：本阶段还没接上的用法都这么起头，随阶段 04／08 一起消失。
 const notWiredHead = "这条用法还没接上："
 
 // NotWiredLine 是过渡形态：流水线还没接上，放行之后无处可去。
 // 随阶段 04 消失，不许写进任何手册或帮助。
-func NotWiredLine() contract.Text {
-	return contract.Text{S: notWiredHead + "流水线随阶段 04 接线，本阶段只到闸门\n"}
+func NotWiredLine() Line {
+	return Line{s: notWiredHead + "流水线随阶段 04 接线，本阶段只到闸门\n"}
 }
 
 // NotWiredKeyTools 是过渡形态：三条密钥命令随阶段 08 接线。
@@ -101,7 +110,7 @@ func NotWiredKeyTools() string {
 // LogInitFailed 排「工具日志建不起来」那一屏。此时日志还没建起来，屏上不带「日志：」行。
 //
 // 这是塔尖唯一一处自己触发的造屏：它只把系统给的错交进来，字由这里拼。
-func LogInitFailed(err error) contract.Text {
+func LogInitFailed(err error) Line {
 	return Fatal("log", "初始化工具日志失败："+err.Error()+"\n请检查程序所在目录是否可写，然后重试", "")
 }
 
@@ -109,15 +118,15 @@ func LogInitFailed(err error) contract.Text {
 // 它是**记要给日志看的**，不是给使用者的句子——所以不加上色，也不走屏幕。
 //
 // 形态逐字照老版 `dangercheck.Match.Note()`：级别用英文枚举、带来源行、示例与说明不论空否都留着。
-func TraceDanger(m contract.DangerMatch) contract.Text {
+func TraceDanger(m contract.DangerMatch) Line {
 	note := m.RuleName + "（" + m.Level + "，来源行 " + linesText(m.Lines) + "）：" + m.Content +
 		"；示例：" + m.Example + "；说明：" + m.Reason
-	return contract.Text{S: "非交互模式放行危险命令：" + note}
+	return Line{s: "非交互模式放行危险命令：" + note}
 }
 
 // TraceForbidden 是禁止档退场时那一行日志留痕，逐字照老版 `main`：只记原文。
-func TraceForbidden(content string) contract.Text {
-	return contract.Text{S: "命中禁止命令，已退出：" + content}
+func TraceForbidden(content string) Line {
+	return Line{s: "命中禁止命令，已退出：" + content}
 }
 
 // linesText 把行号排成 `3, 7, 12`（日志用；框里那行要截到 46 列，另走 formatLines）。
