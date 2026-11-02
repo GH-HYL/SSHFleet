@@ -36,6 +36,7 @@ func Run(ctx context.Context, p *contract.Plan, termPath, execLogPath string) (c
 		Extra:     contract.Extra{Mode: p.Mode},
 		Tables:    p.Tables,
 		RunMeta:   p.RunMeta,
+		Resources: p.Resources,
 		StartedAt: time.Now(),
 	}
 

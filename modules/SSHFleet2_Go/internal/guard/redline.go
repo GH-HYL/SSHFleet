@@ -80,6 +80,8 @@ var redline = []RedLineEntry{
 	{"TestRedlineExecuteRecordsConnectFact", []string{"contract.CommandTask", "contract.ModeCommand", "contract.Node", "contract.Plan", "contract.Task", "execute.Run"}},
 	// 04 阶段 11 号单：第二张纸里没有「成败」（新增不算改）
 	{"TestRedlineResultHasNoVerdict", []string{"contract.NodeResult", "contract.ResultPaper"}},
+	// 04 阶段 14 号单：结算站交得出一张总账（新增不算改）
+	{"TestRedlineSettleFillsLedger", []string{"contract.Extra", "contract.ModeCommand", "contract.NodeResult", "contract.ResultPaper", "settle.Run"}},
 	// 04 阶段 12 号单：那一行真的落到盘上（新增不算改）
 	{"TestRedlineExecuteWritesResultLine", []string{"contract.CommandTask", "contract.ModeCommand", "contract.Node", "contract.Plan", "contract.Task", "execute.Run"}},
 }

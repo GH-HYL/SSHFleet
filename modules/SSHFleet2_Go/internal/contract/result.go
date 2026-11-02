@@ -74,4 +74,9 @@ type ResultPaper struct {
 
 	// RunMeta 是运行上下文的密文：收下、原样传给下一站，只有报告站解（ADR-0035 决定九）。
 	RunMeta RunMeta
+
+	// Resources 是执行资源（清单、脚本、代填的路径）：随行件，执行站原样带过去、
+	// 结算站一个字段都不开、报告站收尾时用——`report.txt` 第一段的「节点清单：」那一行
+	// 要它（ADR-0032 第四条；建站 04 规格第二节：那几条路径要跟到第三张纸）。
+	Resources Resources
 }
