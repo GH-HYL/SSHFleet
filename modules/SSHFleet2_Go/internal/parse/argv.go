@@ -120,6 +120,11 @@ func buildPlan(cfg *settings, s scanned) (*contract.Plan, *contract.CannotStart)
 			TimeoutExecute:  cfg.Execution.TimeoutExecute,
 			TimeoutTransfer: cfg.Execution.TimeoutTransfer,
 			Sudo:            cfg.Execution.Sudo,
+			// 下发行的材料：解释器与 `[env]` 原样带上，拼法归执行站。
+			// 拷一份，不与配置共用同一张表——纸往下走，谁都不该改到配置。
+			Interpreter: cfg.interpreter.Command,
+			Env:         copyEnv(cfg.Env),
+			English:     cfg.locale.English,
 		},
 		Problems: s.problems,
 	}
@@ -275,6 +280,21 @@ func buildPlan(cfg *settings, s scanned) (*contract.Plan, *contract.CannotStart)
 		p.Notices = append(p.Notices, notices...)
 	}
 	return p, nil
+}
+
+// copyEnv 把 `[env]` 拷进纸里那张表。
+//
+// 为什么不留同一个 map：纸要往执行站递，递过去的是「这次要导入哪些变量」这份事实，
+// 不是配置对象的一半。共用一张表等于让下游能改到配置，也等于两张纸之间互相串味。
+func copyEnv(env map[string]string) map[string]string {
+	if len(env) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(env))
+	for k, v := range env {
+		out[k] = v
+	}
+	return out
 }
 
 // modeOf 认出给了哪一种模式，以及一共给了几种。

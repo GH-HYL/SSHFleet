@@ -99,9 +99,20 @@ func (c *client) close() {
 // 这类原因；而屏幕上只在失败行显示它（正常行不显示）——与老版把 `Error` 与 `ServerBanner`
 // 合成显示的观感一致，只是两者从此只有一个载体。
 func (c *client) errorText(err error) string {
+	if err == nil {
+		return c.mergeBanner("")
+	}
+	return c.mergeBanner(err.Error())
+}
+
+// mergeBanner 把服务端提示接在一段文本后面，两者都空时给空串。
+//
+// 顺序固定为**原文在前、提示在后**：原文是权威原文，提示是目标机附带说的话。
+// 谁都不覆盖谁——盖掉就是吞信息（ADR-0021 决定第 6 条）。
+func (c *client) mergeBanner(text string) string {
 	parts := make([]string, 0, 2)
-	if err != nil {
-		parts = append(parts, err.Error())
+	if text != "" {
+		parts = append(parts, text)
 	}
 	if hint := strings.TrimSpace(c.banner); hint != "" {
 		parts = append(parts, hint)

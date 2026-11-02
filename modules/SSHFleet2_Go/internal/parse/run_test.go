@@ -167,3 +167,31 @@ func TestExtraArgsRecordedAsProblem(t *testing.T) {
 		t.Fatalf("多余段应当记一条 ProblemExtraArgs，实际 Problems=%v", p.Problems)
 	}
 }
+
+// 下发行的材料由解析站带上纸：解释器、`[env]`、语言开关。
+//
+// 执行站不回头读配置（ADR-0014 / ADR-0015），这三样不走这条路就到不了下发行；
+// 少了它们，`sudo` 与解释器会 command not found、远端提示语也不会钉成英文。
+func TestBuildPlanCarriesDownlinkMaterial(t *testing.T) {
+	writeTempConfig(t)
+	manifest := writeFile(t, t.TempDir(), "ok.csv", "10.0.0.1,22,root,pw\n")
+
+	cfg, err := load()
+	if err != nil {
+		t.Fatalf("临时配置读不通：%v", err)
+	}
+
+	p, fail := buildPlan(cfg, scan([]string{"sshfleet2", "-c", "uptime", "-f", manifest}))
+	if fail != nil {
+		t.Fatalf("不该走到「起不来」：%v", fail.Body)
+	}
+	if p.Run.Interpreter != "bash" {
+		t.Errorf("解释器应照配置带上纸，实际 %q", p.Run.Interpreter)
+	}
+	if got := p.Run.Env["PATH"]; got != "/usr/bin" {
+		t.Errorf("`[env]` 应照配置带上纸，PATH=%q", got)
+	}
+	if p.Run.English {
+		t.Errorf("临时配置写的是 english = false，纸上却成了 true")
+	}
+}
