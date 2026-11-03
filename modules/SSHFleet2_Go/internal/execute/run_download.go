@@ -43,10 +43,11 @@ func (c *client) download(ctx context.Context, p *contract.Plan, res *contract.N
 	}
 	if err := c.exec(checkCmd); err != nil {
 		// 预检查是中间步骤：它自己的退出码进 Steps，不顶成结果退出码。
-		res.Steps = append(res.Steps, contract.Step{Name: contract.StepPrecheck, ExitCode: extractExitCode(err)})
+		stepsOf(res, contract.StepPrecheck, err)
 		res.ErrorText = appendText(res.ErrorText, msg(envTransfer, transferRemoteMissing, "remote path not found: "+remotePath))
 		return
 	}
+	stepsOf(res, contract.StepPrecheck, nil)
 
 	fi, err := sftpClient.Stat(remotePath)
 	if err != nil {
@@ -81,10 +82,11 @@ func (c *client) download(ctx context.Context, p *contract.Plan, res *contract.N
 		}
 		output, err := c.execCapture(findCmd)
 		if err != nil {
-			res.Steps = append(res.Steps, contract.Step{Name: contract.StepEnumerate, ExitCode: extractExitCode(err)})
+			stepsOf(res, contract.StepEnumerate, err)
 			res.ErrorText = appendText(res.ErrorText, msg(envTransfer, transferListFailed, err.Error()))
 			return
 		}
+		stepsOf(res, contract.StepEnumerate, nil)
 		for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
 			line = strings.TrimSpace(line)
 			switch {

@@ -390,7 +390,17 @@ func pump(send <-chan string, stdin io.WriteCloser) {
 	}
 }
 
-// stepsOf 把一条辅助命令的错误记成中间步骤。
+// stepsOf 记一条中间步骤的退出码：跑通记 0，失败记它自己的码（拿不到时留 nil）。
+//
+// 成功那一次也要记：`nil` 的语义是「没拿到码」（超时、中断、压根没走到那一步），
+// 与「跑过、退出码 0」不是一回事，报告与日志要分得清。
 func stepsOf(res *contract.NodeResult, name string, err error) {
-	res.Steps = append(res.Steps, contract.Step{Name: name, ExitCode: extractExitCode(err)})
+	var code *int
+	if err == nil {
+		zero := 0
+		code = &zero
+	} else {
+		code = extractExitCode(err)
+	}
+	res.Steps = append(res.Steps, contract.Step{Name: name, ExitCode: code})
 }

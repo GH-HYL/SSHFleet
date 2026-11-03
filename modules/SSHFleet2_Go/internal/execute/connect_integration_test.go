@@ -20,7 +20,7 @@ import (
 func TestConnectSucceeds(t *testing.T) {
 	node, _ := integrationTarget(t)
 
-	paper, fail := runPlan(t, context.Background(), oneNodePlan(node))
+	paper, fail := runPlan(t, context.Background(), planFor(t, []contract.Node{node}, "-c", "uptime"))
 	if fail != nil {
 		t.Fatalf("不该起不来：%+v", fail)
 	}
@@ -37,7 +37,7 @@ func TestConnectWrongPasswordIsAuthFailed(t *testing.T) {
 	node, _ := integrationTarget(t)
 	node.Password = "definitely-not-the-password"
 
-	paper, _ := runPlan(t, context.Background(), oneNodePlan(node))
+	paper, _ := runPlan(t, context.Background(), planFor(t, []contract.Node{node}, "-c", "uptime"))
 	item := onlyItem(t, paper)
 	if item.Connected {
 		t.Fatal("密码错却记成连上了")
@@ -51,7 +51,7 @@ func TestConnectClosedPortIsRefused(t *testing.T) {
 	node, _ := integrationTarget(t)
 	node.Port = deadPort(t)
 
-	paper, _ := runPlan(t, context.Background(), oneNodePlan(node))
+	paper, _ := runPlan(t, context.Background(), planFor(t, []contract.Node{node}, "-c", "uptime"))
 	item := onlyItem(t, paper)
 	if item.Connected {
 		t.Fatal("端口没人听却记成连上了")
@@ -79,7 +79,7 @@ func TestConnectCarriesServerBanner(t *testing.T) {
 		Password: integrationEnv(t, "SSHFLEET_TEST_EXPIRED_PASSWORD"),
 	}
 
-	paper, _ := runPlan(t, context.Background(), oneNodePlan(node))
+	paper, _ := runPlan(t, context.Background(), planFor(t, []contract.Node{node}, "-c", "uptime"))
 	item := onlyItem(t, paper)
 
 	hints := []string{
@@ -123,17 +123,6 @@ func integrationEnv(t *testing.T, name string) string {
 		t.Skipf("集成测试的 %s 没有设置，跳过", name)
 	}
 	return v
-}
-
-func oneNodePlan(node contract.Node) *contract.Plan {
-	return &contract.Plan{
-		Mode:  contract.ModeCommand,
-		Task:  contract.Task{Command: &contract.CommandTask{Text: "uptime"}},
-		Nodes: []contract.Node{node},
-		// Interpreter、Env、English、TimeoutExecute 是下发行与超时那两段的材料：
-		// 解析站填、执行站用。这里按出厂配置填（bash、english = true）。
-		Run: contract.RunParams{TimeoutConnect: 10, TimeoutExecute: 30, Interpreter: "bash", English: true},
-	}
 }
 
 func onlyItem(t *testing.T, paper contract.ResultPaper) contract.NodeResult {
