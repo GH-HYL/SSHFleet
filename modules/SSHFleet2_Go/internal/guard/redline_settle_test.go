@@ -8,7 +8,7 @@ import (
 	"sshfleet2/internal/settle"
 )
 
-// 红线：结算站的那一件事——递一张第二张纸，回一张总账，字段有人填、附加格没被打开。
+// 红线：结算站的那一件事——递一张第二张纸，回一张总账，字段有人填、附加格原样往下传。
 //
 // 只判形状与流向：总账里该有值的地方有值、成败加起来等于跑完的台数、附加格原样传回。
 // 数对不对（分类排序、逐类 IP 的次序）是结算站自己那一片自定义区的事，这里一条都不判。
@@ -46,7 +46,8 @@ func TestRedlineSettleFillsLedger(t *testing.T) {
 	if ledger.CostTime <= 0 {
 		t.Fatalf("总耗时没人填：%v", ledger.CostTime)
 	}
-	// 附加格原样往下传：结算站一个字段都不打开（ADR-0035 决定九）。
+	// 附加格原样往下传：结算站可以读它，但不许把它消费掉——报告站还要贴明细
+	// （ADR-0035 决定九，2026-11-03 更新记录把「一个字段都不打开」那半句作废了）。
 	if ledger.Extra.Mode != contract.ModeCommand {
 		t.Fatalf("附加格没原样传：%+v", ledger.Extra)
 	}
