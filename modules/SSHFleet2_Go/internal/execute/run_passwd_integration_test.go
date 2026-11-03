@@ -90,6 +90,10 @@ func TestRunPasswdNotExpired(t *testing.T) {
 	if !strings.Contains(item.ErrorText, "sshfleet.passwd.not_expired: ") {
 		t.Fatalf("没过期的账号该说「没见到过期提示」，实际 %q", item.ErrorText)
 	}
+	// 分类名要认成改密那张表里的「密码未过期」，不是回落成上面那行报文。
+	if item.Category != "密码未过期" {
+		t.Fatalf("分类该是「密码未过期」，实际 %q", item.Category)
+	}
 	if item.TimedOut {
 		t.Fatalf("`:` 跑完就该收场，不该等到超时（耗时 %v）", item.Cost)
 	}

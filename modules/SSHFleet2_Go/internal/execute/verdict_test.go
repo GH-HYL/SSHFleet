@@ -155,3 +155,52 @@ func TestCategoryEmptyTables(t *testing.T) {
 		t.Fatalf("判据表空时该按退出码兜底，实际 %q", got)
 	}
 }
+
+// passwdTables 在通用表之上加一张改密专用表，形状照随包 `keywords_passwd.conf`。
+func passwdTables() contract.Tables {
+	t := classifyTables()
+	t.PasswdCategories = []contract.Category{
+		{Name: "密码未过期", Keywords: []string{"sshfleet.passwd.not_expired"}},
+		{Name: "改密未完成", Keywords: []string{"sshfleet.passwd.give_up"}},
+		{Name: "写不进密码文件", Keywords: []string{"Authentication token manipulation error"}},
+	}
+	return t
+}
+
+// TestCategoryOfPasswdUsesOwnTableFirst 改密：先认自己那张 15 条，认不出再退通用。
+//
+// 顺序有两处硬要求：专用表里那条「改密未完成」必须抢在通用表前面（早收场时工具自己那句
+// 报文就是在说这件事）；而连不上那类远程原文通用表照样接得住（专用表里没有那些措辞）。
+func TestCategoryOfPasswdUsesOwnTableFirst(t *testing.T) {
+	tables := passwdTables()
+
+	cases := []struct {
+		name string
+		text string
+		want string
+	}{
+		{"专用表命中", "sshfleet.passwd.not_expired: no password-expiry prompt seen", "密码未过期"},
+		{"工具报文落在专用表那一条", "sshfleet.passwd.give_up: no further prompts after answers used up", "改密未完成"},
+		{"远端原话落在专用表那一条", "passwd: Authentication token manipulation error", "写不进密码文件"},
+		{"专用表认不出就退通用", "sshfleet.connect.refused: dial tcp 127.0.0.1:2201: connect: connection refused", "连接失败"},
+	}
+	for _, c := range cases {
+		res := contract.NodeResult{Connected: true, ErrorText: c.text}
+		if got := categoryOf(contract.ModePasswd, tables, &res); got != c.want {
+			t.Fatalf("%s：期望 %q，实际 %q", c.name, c.want, got)
+		}
+	}
+}
+
+// TestCategoryOfCommandIgnoresPasswdTable 同一条原文，命令模式不该被改密那张表抢走。
+//
+// 那 15 条说的都是改密场景的话；命令模式下认它，等于把「改密没做成」的理由安到一次
+// 普通命令上。
+func TestCategoryOfCommandIgnoresPasswdTable(t *testing.T) {
+	const text = "sshfleet.passwd.not_expired: no password-expiry prompt seen"
+	res := contract.NodeResult{Connected: true, ErrorText: text}
+
+	if got := categoryOf(contract.ModeCommand, passwdTables(), &res); got != text {
+		t.Fatalf("命令模式该认不出、回落原文，实际 %q", got)
+	}
+}

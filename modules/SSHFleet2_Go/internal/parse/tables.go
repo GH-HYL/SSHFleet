@@ -200,6 +200,13 @@ func validRiskLevel(level string) bool {
 	return false
 }
 
+// 判据文件里两个数组标题的键名。单数，与 `keywords_passwd.conf` 的 `[[category]]` 同一套
+// 写法：一份表一个标题，名字对得上眼就少一次「这个 s 是哪个」的迟疑。
+const (
+	errorCategoriesKey = "category"
+	exitCategoriesKey  = "exit_code_category"
+)
+
 // loadErrorKeywords 读错误分类表：两块，第一组不可为空。
 func loadErrorKeywords() ([]contract.Category, []contract.Category, *contract.CannotStart) {
 	data, err := os.ReadFile(errorKeywordsPath)
@@ -212,21 +219,21 @@ func loadErrorKeywords() ([]contract.Category, []contract.Category, *contract.Ca
 		return nil, nil, cannotStart("verdict", "",
 			message.ProblemReason("错误分类关键词解析失败："+errorKeywordsPath, err.Error()))
 	}
-	if unknown := unknownCategoryKeys(lines, "categories"); len(unknown) > 0 {
+	if unknown := unknownCategoryKeys(lines, errorCategoriesKey); len(unknown) > 0 {
 		return nil, nil, cannotStart("verdict", "", unknownCategoryField+strings.Join(unknown, ", "))
 	}
-	if unknown := unknownCategoryKeys(lines, "exit_code_categories"); len(unknown) > 0 {
+	if unknown := unknownCategoryKeys(lines, exitCategoriesKey); len(unknown) > 0 {
 		return nil, nil, cannotStart("verdict", "", unknownCategoryField+strings.Join(unknown, ", "))
 	}
 
-	cats, err := buildCategories(lines, "categories")
+	cats, err := buildCategories(lines, errorCategoriesKey)
 	if err != nil {
 		return nil, nil, cannotStart("verdict", "", err.Error())
 	}
 	if len(cats) == 0 {
 		return nil, nil, cannotStart("verdict", "", "错误分类关键词为空："+errorKeywordsPath)
 	}
-	exitCats, err := buildCategories(lines, "exit_code_categories")
+	exitCats, err := buildCategories(lines, exitCategoriesKey)
 	if err != nil {
 		return nil, nil, cannotStart("verdict", "", err.Error())
 	}

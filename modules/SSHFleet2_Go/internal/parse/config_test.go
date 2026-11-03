@@ -45,14 +45,14 @@ func TestParseRawConfigShapes(t *testing.T) {
 
 	// 单引号字符串照老配置的写法
 	raw = sample(t, "single_quote.conf")
-	if raw["categories"]["name"] != "上传回滚未清干净" {
-		t.Errorf("单引号值：%q", raw["categories"]["name"])
+	if raw["category"]["name"] != "上传回滚未清干净" {
+		t.Errorf("单引号值：%q", raw["category"]["name"])
 	}
 
 	// 跨行数组整段收掉，键名照记
 	raw = sample(t, "multiline_array.conf")
-	if raw["categories"]["keywords"] == "" {
-		t.Errorf("跨行数组的键名应照记：%v", raw["categories"])
+	if raw["category"]["keywords"] == "" {
+		t.Errorf("跨行数组的键名应照记：%v", raw["category"])
 	}
 }
 

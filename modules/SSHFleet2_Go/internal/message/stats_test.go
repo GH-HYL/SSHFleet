@@ -307,3 +307,28 @@ func TestDisplayCommandQuotes(t *testing.T) {
 		}
 	}
 }
+
+// TestStatisticsBlockTipFromPasswdTable 改密那张表里的分类名：提示语取得到，也不算「未归类」。
+//
+// 分类名是全局的键，不因为登记在哪张表里而改变。漏掉第三张表，这句提示就没了，那一台还会
+// 被归进「未归类」，末尾那句引导又把人指向 keywords_error.conf——而它压根不在那儿。
+func TestStatisticsBlockTipFromPasswdTable(t *testing.T) {
+	l := ledgerFail()
+	l.FailCategories = []contract.CategoryCount{{Category: "密码未过期", Count: 1}}
+	l.CategoryIPs = []contract.CategoryIPs{{Category: "密码未过期", IPs: []string{"127.0.0.1"}}}
+	l.Tables = contract.Tables{PasswdCategories: []contract.Category{
+		{Name: "密码未过期", Tip: "本来就不用改——清单里只放要改的那几台最省事"},
+	}}
+
+	got := StatisticsLine(l, true, "config/keywords_error.conf").Text()
+
+	if !strings.Contains(got, "密码未过期 ×") {
+		t.Fatalf("分类名没进统计：%q", got)
+	}
+	if !strings.Contains(got, "密码未过期：本来就不用改——清单里只放要改的那几台最省事") {
+		t.Fatalf("那张表里写的提示语没取出来：%q", got)
+	}
+	if strings.Contains(got, "未归类") {
+		t.Fatalf("登记过的分类名不该被当成未归类：%q", got)
+	}
+}

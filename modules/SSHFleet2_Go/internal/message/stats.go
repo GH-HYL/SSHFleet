@@ -313,9 +313,12 @@ func exitCodeHintLine(categories []contract.CategoryCount) string {
 	return "常见退出码：" + strings.Join(parts, "  ")
 }
 
-// tipOf 按分类名取判据文件里写的那句提示：两组都找，取第一条有内容的。
+// tipOf 按分类名取判据文件里写的那句提示：三张表都找，取第一条有内容的。
+//
+// 改名不认模式：名字是全局唯一起作用的那个键，改密的失败分类名也可能来自它自己那张表
+// （`keywords_passwd.conf`）。这里只回答「这个名字登记过没有、写没写提示」。
 func tipOf(t contract.Tables, name string) string {
-	for _, list := range [][]contract.Category{t.Categories, t.ExitCategories} {
+	for _, list := range [][]contract.Category{t.Categories, t.ExitCategories, t.PasswdCategories} {
 		for _, c := range list {
 			if c.Name == name && c.Tip != "" {
 				return c.Tip
@@ -328,12 +331,15 @@ func tipOf(t contract.Tables, name string) string {
 // isFallbackCategory 这个分类名是不是「判据表里压根没有」——那种显示的是报错原文本身，
 // 归到「未归类」那一栏下面。
 //
+// 三张表都算「有」：改密的失败分类登记在它自己那张表里，登记过就不该再被当成未归类，
+// 更不该引导使用者去改 `keywords_error.conf`。
+//
 // 空名与「原因未知」不算：那是完全没信息，不是「有名字但没登记」。
 func isFallbackCategory(t contract.Tables, name string) bool {
 	if name == "" || name == CategoryUnknown {
 		return false
 	}
-	for _, list := range [][]contract.Category{t.Categories, t.ExitCategories} {
+	for _, list := range [][]contract.Category{t.Categories, t.ExitCategories, t.PasswdCategories} {
 		for _, c := range list {
 			if c.Name == name {
 				return false
