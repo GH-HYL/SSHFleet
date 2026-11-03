@@ -72,6 +72,9 @@ var redline = []RedLineEntry{
 
 	// 02 阶段：帮助与版本——三种接缝上长出来的头三条（新增不算改，ADR-0037 决定五）
 	{"TestRedlineTipRunsHelp", []string{}},
+	// 04 阶段收尾（2026-11-03）：塔尖的另外两个结局——起不来、拒绝（新增不算改）
+	{"TestRedlineTipCannotStart", []string{}},
+	{"TestRedlineTipRefused", []string{}},
 	{"TestRedlineParseSaysOrFail", []string{"parse.Run"}},
 	{"TestRedlineMessageRendersHelp", []string{"Kind", "message.EntryOption", "message.HelpEntry", "message.HelpScreen"}},
 
