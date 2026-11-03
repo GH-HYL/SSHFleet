@@ -120,11 +120,16 @@ func buildPlan(cfg *settings, s scanned) (*contract.Plan, *contract.CannotStart)
 			TimeoutExecute:  cfg.Execution.TimeoutExecute,
 			TimeoutTransfer: cfg.Execution.TimeoutTransfer,
 			Sudo:            cfg.Execution.Sudo,
-			// 下发行的材料：解释器与 `[env]` 原样带上，拼法归执行站。
+			// 下发行的材料：`[env]` 原样带上，拼装归解析站。
 			// 拷一份，不与配置共用同一张表——纸往下走，谁都不该改到配置。
-			Interpreter: cfg.interpreter.Command,
-			Env:         copyEnv(cfg.Env),
-			English:     cfg.locale.English,
+			//
+			// 解释器不在这里定：只有命令与脚本两种模式有它，见下面那一处（随模式定）。
+			Env: copyEnv(cfg.Env),
+
+			// 代填与改密认触发词的口径：执行站不读配置，只能从纸上来。
+			MatchRegex:         cfg.interactive.Regex,
+			MatchCaseSensitive: cfg.interactive.CaseSensitive,
+			English:            cfg.locale.English,
 		},
 		Problems: s.problems,
 	}
@@ -194,6 +199,9 @@ func buildPlan(cfg *settings, s scanned) (*contract.Plan, *contract.CannotStart)
 	// 「两个都给」不装进纸（一个布尔装不下两个事实），改成由解析站记一条 Problem：命令行
 	// 原样在这儿看得见，闸门照它拒。使用者看到的仍是一句话的拒绝，不会被静默覆盖。
 	sudoGiven, noSudoGiven := given["--sudo"], given["--no-sudo"]
+	// 「给没给」与「用不用」是两条事实：改密那两条互斥问的是前者（配置默认是 root 时，
+	// 没给开关也不该报错）。
+	p.Run.SudoGiven = sudoGiven || noSudoGiven
 	if sudoGiven && noSudoGiven {
 		p.Problems = append(p.Problems, contract.Problem{
 			Kind:   contract.ProblemFlagConflict,
@@ -211,7 +219,9 @@ func buildPlan(cfg *settings, s scanned) (*contract.Plan, *contract.CannotStart)
 	// -p 单独一格——命令与脚本模式下它不属于任何一种任务，却仍要判「不能搭配」。
 	mode, modes := modeOf(vals)
 	p.Mode = mode
-	p.Task.Path = vals["--path"]
+	// -p 与 -d 是远端路径：两端空白在这里就去掉（老版也在 Parse 里先 filter 过一次）。
+	// 纸上不留第二个形态——闸门拿到的就是要去判的那个值。
+	p.Task.Path = strings.TrimSpace(vals["--path"])
 	if len(modes) > 1 {
 		p.Problems = append(p.Problems, contract.Problem{
 			Kind:   contract.ProblemMultiMode,
@@ -226,9 +236,21 @@ func buildPlan(cfg *settings, s scanned) (*contract.Plan, *contract.CannotStart)
 	case contract.ModeUpload:
 		p.Task.Upload = &contract.UploadTask{Source: vals["--upload"]}
 	case contract.ModeDownload:
-		p.Task.Download = &contract.DownloadTask{RemotePath: vals["--download"]}
+		p.Task.Download = &contract.DownloadTask{RemotePath: strings.TrimSpace(vals["--download"])}
 	case contract.ModePasswd:
 		p.Task.Passwd = &contract.PasswdTask{Raw: vals["--change-password"]}
+	}
+
+	// 解释器（建站 05 的 04 号单）：命令模式取配置里的 command；脚本模式按后缀查表，
+	// 没命中回退并记下那个后缀（闸门据此问一句）；其余三支为空。
+	//
+	// 上传／下载／改密的中间命令另有固定形态，配置随意改会把那些写死的命令弄失效，
+	// 所以那三支一格都不填。
+	switch mode {
+	case contract.ModeCommand:
+		p.Run.Interpreter = cfg.interpreter.Command
+	case contract.ModeScript:
+		p.Run.Interpreter, p.Run.FallbackExt = interpreterFor(p.Task.Script.Path, cfg.interpreter.Command, cfg.interpreter.Script)
 	}
 
 	// 材料自检（-s／-u／-d／-f）：读不到、不能当文本用，都属于「起不来」。
@@ -278,7 +300,42 @@ func buildPlan(cfg *settings, s scanned) (*contract.Plan, *contract.CannotStart)
 		}
 		p.Nodes = nodes
 		p.Notices = append(p.Notices, notices...)
+
+		// 改密值（建站 05 的 07 号单）：按加密开关解释成明文，形态不对当场拦下。
+		if p.Task.Passwd != nil {
+			if fail := passwdValue(p, cfg.credentialCfg.Encrypt); fail != nil {
+				return nil, fail
+			}
+		}
+
+		// 上传源严格采集（建站 05 的 06 号单）：确认屏之前清点一遍。排在读清单之后，
+		// 与老版同一个次序（清单读不通先报清单）。
+		if p.Task.Upload != nil {
+			if fail := collect(p, cfg); fail != nil {
+				return nil, fail
+			}
+		}
 	}
+
+	// 代填表（建站 05 的 05 号单）：`-a` 的值读成一行一条的表，装进命令／脚本载荷。
+	//
+	// 只在两种模式里读：`-a` 与上传、下载互斥，那两种搭配先由闸门报「互斥」——
+	// 在解析站抢先报「代填文件读不到」会把真正要说的那句话顶掉。
+	if p.Run.Answer != "" && (p.Task.Command != nil || p.Task.Script != nil) {
+		answers, afail := answerTable(p.Run.Answer, p.Run.MatchRegex, p.Run.MatchCaseSensitive)
+		if afail != nil {
+			return nil, afail
+		}
+		if p.Task.Command != nil {
+			p.Task.Command.Answers = answers
+		} else {
+			p.Task.Script.Answers = answers
+		}
+	}
+
+	// 下发行（建站 05 的 02 号单）：拼装只这一处，拼完装进纸上那两格。
+	// 放在最后——脚本正文要先读出来、解释器要先定下来，两者都在前面。
+	sealDownlink(p)
 	return p, nil
 }
 

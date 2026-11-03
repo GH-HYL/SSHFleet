@@ -6,7 +6,6 @@ import (
 	"sshfleet2/internal/archive"
 	"sshfleet2/internal/ask"
 	"sshfleet2/internal/contract"
-	"sshfleet2/internal/mask"
 	"sshfleet2/internal/message"
 )
 
@@ -96,22 +95,10 @@ func envelopeRefusal(p *contract.Plan) Refusal {
 
 // confirmRefusal 是闸门的最后一道：把这次要做什么摊给使用者看，问一句。
 //
-// 屏与问句由 message 造，打屏与收行归 ask——闸门自己一行都不写（ADR-0032 第四条）。
-// 答否算当场喊停；读到输入结束算「没答完」，同样不放行。
+// 三道门与出屏的次序、以及「答了否算不算停」，全在 confirm.go 那一段里。这里只把结论
+// 接上闸门的出口：拒绝就是拒绝，放行就是放行。
 func confirmRefusal(p *contract.Plan) (Refusal, message.Line) {
-	if p.Run.Yes {
-		// --yes 是替人回答了「y」，不是替人看了屏：老版此时不打参数屏，只打这一行。
-		ask.Ask(message.ConfirmSkippedLine(), true, true)
-		return nil, message.ConfirmSkippedTrace()
-	}
-	switch ask.AskWith(message.ConfirmScreen(p, mask.InlineRecordIf(p.Resources.Manifest)), message.ExecConfirmPrompt(), true) {
-	case ask.NoInput:
-		// 屏幕上「输入结束，操作已取消」已经由 ask 打过，这里不再叠一句。
-		return newRefusal(message.Line{}), message.Line{}
-	case ask.No:
-		return newRefusal(message.CancelLine()), message.CancelTrace()
-	}
-	return nil, message.Line{}
+	return confirmFlow(p)
 }
 
 // refuse 把一句正文交给终端：走 stderr，老版那副 [ERROR] 外壳，末尾附日志路径。
@@ -164,7 +151,7 @@ func argumentRefusal(p *contract.Plan) Refusal {
 		return refuse(message.RefuseNoShellWithOtherMode())
 	}
 
-	// 改密与三个批量参数互斥：老版把这一段放在进任何模式分支之前。
+	// 改密与四个批量参数互斥：老版把这一段放在进任何模式分支之前（顺序也照它）。
 	if passwd != nil {
 		switch {
 		case p.Run.Answer != "":
@@ -173,6 +160,11 @@ func argumentRefusal(p *contract.Plan) Refusal {
 			return refuse(message.RefusePasswdWithPath())
 		case p.Run.Key:
 			return refuse(message.RefusePasswdWithKey())
+		case p.Run.NoShell:
+			return refuse(message.RefuseNoShellWithOtherMode())
+		case p.Run.SudoGiven:
+			// 只在命令行上**真的给了**身份开关时报：配置默认是 root 不算「给了」。
+			return refuse(message.RefusePasswdWithSudo())
 		}
 	}
 
@@ -213,11 +205,53 @@ func argumentRefusal(p *contract.Plan) Refusal {
 		return refuse(message.RefuseCommandEmpty())
 	}
 
-	// 改密的新密码只有空白（本阶段只判形态；解密随阶段 05）。
+	// 改密的新密码只有空白（形态与解密由解析站判，闸门只管这一句）。
 	if passwd != nil && strings.TrimSpace(passwd.Raw) == "" {
 		return refuse(message.RefusePasswdEmpty())
 	}
+
+	// 下面两条是 `-a` 的：老版把它们放在材料自检之后（`-s` 那一段读完才轮到代填），
+	// 所以位置也在这段末尾。
+	if p.Run.Answer != "" {
+		// 三条互斥：同一条会话该长什么样，冲突时明确报错、说明原因，不静默忽略。
+		switch {
+		case p.Run.NoShell:
+			return refuse(message.RefuseAnswerWithNoShell())
+		case upload != nil:
+			return refuse(message.RefuseAnswerWithUpload())
+		case download != nil:
+			return refuse(message.RefuseAnswerWithDownload())
+		}
+		// 表外解释器：解析站拼不出下发行，只记了一条事实，这里下结论。
+		for _, pr := range p.Problems {
+			if pr.Kind == contract.ProblemInterpreterUnsupported {
+				return refuse(message.RefuseAnswerUnsupportedInterpreter(pr.Detail))
+			}
+		}
+		// 长度：量的是**整条下发行**（老版上限 98304 字节，写死不开放配置）。
+		// 理由：整条远端命令行是 sshd 以 `$SHELL -c "<整条>"` 交给内核 execve 的单个 argv 串，
+		// 受 MAX_ARG_STRLEN 约束；留 25% 余量，不把线算死。
+		if line := len(p.Run.Downlink); line > answerLimit {
+			return refuse(message.RefuseAnswerTooLong(answerBody(p), line, answerLimit))
+		}
+	}
 	return nil
+}
+
+// answerLimit 是 `-a` 下发行的字节上限（写死，不开放配置）。
+const answerLimit = 98304
+
+// answerBody 是那一格「正文多少字节」：命令取命令原文，脚本取脚本体。
+//
+// 它只进报错那一句（让人知道限的是哪一头），判据量的是整条下发行。
+func answerBody(p *contract.Plan) int {
+	switch {
+	case p.Task.Script != nil:
+		return len(p.Task.Script.Body)
+	case p.Task.Command != nil:
+		return len(p.Task.Command.Text)
+	}
+	return 0
 }
 
 // flagConflict 报「这一对开关同时给了」。事实在解析站记着（那里看得见命令行原样），

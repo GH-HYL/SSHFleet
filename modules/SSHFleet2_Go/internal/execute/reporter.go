@@ -59,11 +59,20 @@ func (r *reporter) result(res contract.NodeResult, user string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	r.scr.above(line.Text())
+	// 传输类的明细不上屏（老版：上传下载的明细只进 terminal-output.txt 与进度面板）。
+	// 分一次流，不散在各个结果里——「哪几种模式上屏」是一件事，一处定。
+	if !isTransfer(r.mode) {
+		r.scr.above(line.Text())
+	}
 	if r.file != nil {
 		_, _ = r.file.WriteString(line.Text())
 	}
 	logNode(r.lg, res, r.mode, r.termPath, user)
+}
+
+// isTransfer 这个模式的结果明细上不上屏：传输类不上（它们有进度面板）。
+func isTransfer(mode contract.Mode) bool {
+	return mode == contract.ModeUpload || mode == contract.ModeDownload
 }
 
 // close 收掉两个句柄；幂等。

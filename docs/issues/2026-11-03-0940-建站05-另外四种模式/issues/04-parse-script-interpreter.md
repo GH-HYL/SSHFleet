@@ -4,7 +4,7 @@
 
 **Blocked by**：01（需要 `RunParams.FallbackExt` 那一格）。
 
-**Status**：ready-for-agent
+**Status**：已完成（done）
 
 - [ ] 后缀按**本机**规则取（`filepath.Ext`），比较忽略大小写：`.SH` 与 `.sh` 同命
 - [ ] 命中与未命中各一条用例，期望解释器写死；未命中时纸上 `FallbackExt` 有值，命中时为空串
@@ -13,3 +13,7 @@
 - [ ] `gofmt -l .` 空、四项检查绿
 
 **不在这单**：不发脚本、不摆确认屏那一眼（09、09 号单）。
+
+## Comments
+
+2026-11-03：已结。`parse/script.go`：`filepath.Ext`、忽略大小写、命中/未命中与 `FallbackExt`、正文整备一次（剥 BOM 去首尾空白）、其余三支解释器为空。用例齐。

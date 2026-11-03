@@ -10,7 +10,7 @@ import (
 
 // 这一串由 internal/parse 封出来（那边的 runmeta_test.go 拿同一串比「封出来是不是它」）。
 // 这一侧比的是「这串能不能开回同一份内容」——两处密钥或格式一漂，必有一侧红。
-const runMetaVector = "AclJG+3JQG8GfH2q0iziaoncki/R7bwU6fQIBeKznCOETaXZ9TA+MeI9pL/UYaUoVyYV27l2hfLWQEJxxwGJSJydb0euFkf6v1pDirfrjHr8M5uW/xIzVWs23/8I6sfli8JSs/TGQ14nkccAHYrPyoAYtBYDQBKaxCxwnOFO/L2C5xg3kqNskPYJUupp6PQGZWdhWSh0oOKrABGH1aPppHGVT5wrb7QE1x2hp6fvO00df9h7Anl9H0rfTg8y9WhQ00HEiF9pdlXj002DA4GA7IPssfjdv3amLymVlmHR0UHu2y6OP7E4mQi/3tFn"
+const runMetaVector = "ARMJAw/HpBLHcCrKV+2Ort1bx2JVFzHoxzPxvcAsHDbuZWaYygYM7daO1PKY7qCpyIT5bzmGnwt8Woj7tb1dA5PiQBnDbZtYcnR0kCJk8PX+26NanE6Kczq0MhAXBntIdg16zo4PqUV0LYkDKGGF+fLyrkJJqrp1EMPCHJnBhLn1DZ0g3tMeT/w0VX1F94HhOAqujA/lIczVMbQYhVaxlXrB1RKxSGvjDy37h1+jaRqEsc7foSuIaimHV3chsbydVbgmmxAGa5fmM5BzxTk7nOad+w6WYh8Oi5tCz9TmV+mEKYQpZugx2LrtyDIvSEcLT8XaEzcPg9mzEGcXd/jhS8gg8HNqMYlN4x1bVw8unCxQPXC5RKMyXco42f2pszA="
 
 func TestOpenRunMetaFromRecordedVector(t *testing.T) {
 	sealed, err := base64.StdEncoding.DecodeString(runMetaVector)
@@ -25,7 +25,7 @@ func TestOpenRunMetaFromRecordedVector(t *testing.T) {
 		Argv:              []string{"sshfleet2", "-f", "nodes.csv", "-c", "uptime"},
 		Mode:              contract.ModeCommand,
 		Command:           "uptime",
-		Concurrency:       0,
+		Answers:           []contract.Answer{{Value: "y", Triggers: []string{"continue"}}},
 		TimeoutConnect:    10,
 		TimeoutExecute:    60,
 		ShowCategoryTips:  true,

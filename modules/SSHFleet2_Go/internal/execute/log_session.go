@@ -57,7 +57,7 @@ func identityLabel(run contract.RunParams) string {
 // 说明那一句只讲做了什么：先导入 `[env]`（配了才提）、再判断目标机编码、语言开关开了
 // 才提「钉成英文」，最后说这条命令交给谁执行。
 func downBlock(p *contract.Plan) []string {
-	command, stdin := downCommand(*p.Task.Command, p.Run)
+	command, stdin := p.Run.Downlink, p.Run.Stdin
 
 	if p.Run.NoShell {
 		return indentLines("交给 SSH 执行：\n" +

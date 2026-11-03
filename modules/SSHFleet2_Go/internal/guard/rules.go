@@ -50,6 +50,8 @@ var thirdParty = []string{
 	"github.com/charmbracelet/bubbletea",
 	"github.com/charmbracelet/bubbles",
 	"github.com/charmbracelet/lipgloss",
+	// 阶段 05 的 12 号单：上传下载走 SFTP。与老版同版本，开发者 2026-11-03 点头。
+	"github.com/pkg/sftp",
 }
 
 // clockReaders 是「问现在几点」的那三个函数：谁在运行时读它们，谁就在决定「现在」。

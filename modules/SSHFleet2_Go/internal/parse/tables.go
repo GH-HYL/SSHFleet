@@ -29,7 +29,10 @@ const ruleTextLimit = 30
 const unknownCategoryField = "错误分类关键词含未识别字段："
 
 // maxMustBePositive 是改密 max 那一格的句子：算出来的值与非正数都走它。
-const maxMustBePositive = "max 必须是正整数，当前值：%s"
+// 取值那半句向 message 的构造点要，不在这里抄一份。
+func maxMustBePositive(raw string) string {
+	return message.CurrentValue("max 必须是正整数", raw)
+}
 
 // passwdIssue 给「改密提示词表第 N 条」的失败排一句：前缀只在这里拼，七条失败共用。
 func passwdIssue(kind string, i int, format string, args ...any) string {
@@ -147,8 +150,10 @@ func buildRule(item map[string]string) (contract.DangerRule, error) {
 		return rule, fmt.Errorf("缺少 name")
 	}
 	if !validRiskLevel(rule.Level) {
-		return rule, fmt.Errorf("risk_level 只能写 %s / %s / %s / %s，当前值：%s",
-			contract.RiskForbidden, contract.RiskHigh, contract.RiskMedium, contract.RiskLow, rule.Level)
+		return rule, fmt.Errorf("%s", message.CurrentValue(
+			fmt.Sprintf("risk_level 只能写 %s / %s / %s / %s",
+				contract.RiskForbidden, contract.RiskHigh, contract.RiskMedium, contract.RiskLow),
+			rule.Level))
 	}
 	if w := message.DisplayWidth(rule.Example); w > ruleTextLimit {
 		return rule, fmt.Errorf("%s 的 example 有 %d 列宽，超过上限 %d 列（一个汉字算两列）", rule.Name, w, ruleTextLimit)
@@ -315,18 +320,19 @@ func loadPasswdKeywords() ([]contract.PasswdStep, []contract.Category, *contract
 		case contract.PasswdValueCurrent, contract.PasswdValueNew:
 		default:
 			return nil, nil, cannotStart("config", "", passwdIssue("step", i+1,
-				"value 只能写 %s 或 %s，当前值：%s",
-				contract.PasswdValueCurrent, contract.PasswdValueNew, step.Value))
+				"%s",
+				message.CurrentValue(fmt.Sprintf("value 只能写 %s 或 %s",
+					contract.PasswdValueCurrent, contract.PasswdValueNew), step.Value)))
 		}
 		if maxRaw := strings.TrimSpace(unquote(item["max"])); maxRaw != "" {
 			n, err := atoi(maxRaw)
 			if err != nil || n < 1 {
-				return nil, nil, cannotStart("config", "", passwdIssue("step", i+1, maxMustBePositive, maxRaw))
+				return nil, nil, cannotStart("config", "", passwdIssue("step", i+1, "%s", maxMustBePositive(maxRaw)))
 			}
 			step.Max = n
 		}
 		if step.Max < 1 {
-			return nil, nil, cannotStart("config", "", passwdIssue("step", i+1, maxMustBePositive, "0"))
+			return nil, nil, cannotStart("config", "", passwdIssue("step", i+1, "%s", maxMustBePositive("0")))
 		}
 		steps = append(steps, step)
 	}

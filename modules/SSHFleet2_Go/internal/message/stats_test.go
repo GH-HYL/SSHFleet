@@ -52,6 +52,7 @@ func ledgerFail() contract.Ledger {
 		FailCategories:  []contract.CategoryCount{{Category: "执行失败(退出码3)", Count: 1, ExitCode: &code}},
 		CategoryIPs:     []contract.CategoryIPs{{Category: "执行失败(退出码3)", IPs: []string{"127.0.0.1"}}},
 		CostTime:        0.20,
+		Concurrency:     1,
 	}
 }
 
@@ -175,7 +176,6 @@ func reportBody() contract.RunMetaBody {
 		Argv:              []string{"./sshfleet", "-f", "u1.csv", "-c", "exit 3", "--yes"},
 		Mode:              contract.ModeCommand,
 		Command:           "exit 3",
-		Concurrency:       1,
 		TimeoutConnect:    10,
 		TimeoutExecute:    60,
 		ShowCategoryTips:  true,
@@ -220,7 +220,7 @@ func TestReportTextFail(t *testing.T) {
 127.0.0.1
 `
 
-	got := ReportText(l, reportBody(), reportBody().Argv, "u1.csv")
+	got := ReportText(l, reportBody(), reportBody().Argv, "u1.csv", "")
 	if got != want {
 		t.Fatalf("report.txt 与老版那一次对不上\n got=%q\nwant=%q", got, want)
 	}
@@ -268,7 +268,7 @@ func TestReportTextSuccess(t *testing.T) {
 127.0.0.1
 `
 
-	got := ReportText(l, body, body.Argv, "u1.csv")
+	got := ReportText(l, body, body.Argv, "u1.csv", "")
 	if got != want {
 		t.Fatalf("成功那一次的 report.txt 对不上\n got=%q\nwant=%q", got, want)
 	}
@@ -279,7 +279,7 @@ func TestReportTextTipsOff(t *testing.T) {
 	l := ledgerFail()
 	body := reportBody()
 	body.ShowCategoryTips = false
-	got := ReportText(l, body, body.Argv, "u1.csv")
+	got := ReportText(l, body, body.Argv, "u1.csv", "")
 	if strings.Contains(got, "提示：") {
 		t.Fatalf("开关关着，报告里不该有「提示：」那一段：%q", got)
 	}

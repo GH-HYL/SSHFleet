@@ -51,18 +51,35 @@ func logNode(lg *log.Logger, res contract.NodeResult, mode contract.Mode, termPa
 	// 老版记的是握手时实际用上的那一种，新版纸里没有这一格，凭「配了密钥没有」推会推错
 	// （两个都配时由库自己挑），宁缺不猜。
 	if res.Connected {
-		lg.Success(fmt.Sprintf("%s连接成功%s，耗时 %s", ip, userNote(user), seconds3(res.ConnectCost)))
+		lg.Success(fmt.Sprintf("%s连接成功%s，耗时 %s", ip, userNote(user)+authNote(res.AuthMethod), seconds3(res.ConnectCost)))
 	} else {
 		logMultiline(lg.Error, ip, "连接失败"+userNote(user)+"：", message.UnknownIfEmpty(res.ErrorText))
 	}
 
 	// 二级：执行结果。只写失败——成功在上面已经提前 return。
+	//
+	// 三种句式各表一件事：传输类报「传了几个、共多少字节」（它没有退出码）；改密报
+	// 「失败 + 耗时」（它也没有目的命令）；命令与脚本报「失败 + 退出码 + 耗时」。
 	if res.Connected {
-		code := "无"
-		if res.ExitCode != nil {
-			code = strconv.Itoa(*res.ExitCode)
+		switch mode {
+		case contract.ModeUpload, contract.ModeDownload:
+			note := ""
+			write := lg.Success
+			if res.Transfer.FailFiles > 0 {
+				note, write = fmt.Sprintf("（有失败项 %d 个）", res.Transfer.FailFiles), lg.Warn
+			}
+			write(fmt.Sprintf("%s%s完成：成功 %d/%d 个文件%s，共 %s，耗时 %s",
+				ip, message.ActionName(mode), res.Transfer.SuccessFiles, res.Transfer.TotalFiles,
+				note, message.Bytes(res.Transfer.TotalBytes), seconds3(res.Cost)))
+		case contract.ModePasswd:
+			lg.Error(fmt.Sprintf("%s%s失败，耗时 %s", ip, message.LogName(mode), seconds3(res.Cost)))
+		default:
+			code := "无"
+			if res.ExitCode != nil {
+				code = strconv.Itoa(*res.ExitCode)
+			}
+			lg.Error(fmt.Sprintf("%s%s失败，退出码 %s，耗时 %s", ip, message.LogLabel(mode), code, seconds3(res.Cost)))
 		}
-		lg.Error(fmt.Sprintf("%s%s失败，退出码 %s，耗时 %s", ip, message.LogLabel(mode), code, seconds3(res.Cost)))
 	}
 
 	// 三级：失败原因原文。连接失败那一步已经写过，这里补「连上了却没跑成」的原因。
@@ -87,9 +104,28 @@ func userNote(user string) string {
 	return "，用户 " + user
 }
 
-// successDetail 成功那一行的后半截：「连接 0.029s，执行 0.003s」。
+// successDetail 成功那一行的后半截。
+//
+// 命令与脚本、改密：「连接 0.029s，执行 0.003s」。传输类多两样——传了几个、共多少字节，
+// 因为「成了」对传输是「几个文件都到位了」，不是「一条命令退了 0」。
 func successDetail(res contract.NodeResult, mode contract.Mode) string {
-	return fmt.Sprintf("连接 %s，%s %s", seconds3(res.ConnectCost), message.ActionName(mode), seconds3(res.Cost))
+	conn := fmt.Sprintf("连接 %s，", seconds3(res.ConnectCost))
+	switch mode {
+	case contract.ModeUpload, contract.ModeDownload:
+		return fmt.Sprintf("%s%s %d/%d 个文件（%s），耗时 %s", conn,
+			message.ActionName(mode), res.Transfer.SuccessFiles, res.Transfer.TotalFiles,
+			message.Bytes(res.Transfer.TotalBytes), seconds3(res.Cost))
+	default:
+		return conn + message.ActionName(mode) + " " + seconds3(res.Cost)
+	}
+}
+
+// authNote 日志里「，登录方式 xxx」那一截；没有答案时给空串（不占位）。
+func authNote(authMethod string) string {
+	if authMethod == "" {
+		return ""
+	}
+	return "，登录方式 " + authMethod
 }
 
 // seconds3 耗时写成 `0.123s`（老版就是三位小数带单位）。

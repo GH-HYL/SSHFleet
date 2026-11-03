@@ -40,6 +40,21 @@ type NodeResult struct {
 
 	// Output 是这一台的原文：命令输出 / 传输明细。呈现层原样用。
 	Output string
+
+	// AuthMethod 是握手实际用上的登录方式（密码／密钥／密钥+密码）。
+	// 只给执行期日志那一句「登录方式：」用，不参与分类。
+	AuthMethod string
+
+	// Steps 是中间步骤的退出码（下载的 test -e 与 find、改密的 `:`）。
+	// 它们的退出码**不进 ExitCode**：那一格是目的命令的。
+	Steps []Step
+
+	// Transfer 是传输类的四个数；非传输模式是零值。
+	Transfer TransferStat
+
+	// Answer 是代填的收尾事实（未送出的序号、表已空仍超时、中止原文）。
+	// 代填只出现在命令与脚本模式下，其余模式是零值。
+	Answer AnswerResult
 }
 
 // Extra 是附加格：一个带标签的格子，按模式装各自多出来的东西。
@@ -68,6 +83,12 @@ type ResultPaper struct {
 	StartedAt   time.Time
 	StoppedAt   time.Time
 	Interrupted bool
+
+	// Concurrency 是这次**实际生效**的并发数（执行站开工时从纸上抄一格带下来）。
+	//
+	// 它不进运行上下文（密文）：闸门那一问可能把它改掉，而密文在解析站返回前就封好了。
+	// 报告印的是生效值，所以它走这张纸（ADR-0035 末尾更新记录）。
+	Concurrency int
 
 	// Tables 是判据表：结算要看分类规则，报告要贴提示语，所以跟着走（ADR-0035 决定五）。
 	Tables Tables

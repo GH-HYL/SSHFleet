@@ -38,6 +38,9 @@ func Run(paper contract.ResultPaper) contract.Ledger {
 		StoppedAt:       paper.StoppedAt,
 		CostTime:        paper.StoppedAt.Sub(paper.StartedAt).Seconds(),
 
+		// 并发数是执行站开工时抄下来的生效值，报告印它（密文里那份是闸门改之前的）。
+		Concurrency: paper.Concurrency,
+
 		// 原样往下传：结算不看这两样，报告要看。
 		Items:     paper.Items,
 		Extra:     paper.Extra,

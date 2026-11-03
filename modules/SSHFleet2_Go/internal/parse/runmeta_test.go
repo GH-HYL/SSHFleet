@@ -12,7 +12,7 @@ import (
 // 拿它比「这串能不能开回同一份内容」。谁把密钥或格式写歪了，两边各有一条会红。
 //
 // 期望值不是被测代码现算的：这串是格式定稿后录下来的固定样本。
-const runMetaVector = "AclJG+3JQG8GfH2q0iziaoncki/R7bwU6fQIBeKznCOETaXZ9TA+MeI9pL/UYaUoVyYV27l2hfLWQEJxxwGJSJydb0euFkf6v1pDirfrjHr8M5uW/xIzVWs23/8I6sfli8JSs/TGQ14nkccAHYrPyoAYtBYDQBKaxCxwnOFO/L2C5xg3kqNskPYJUupp6PQGZWdhWSh0oOKrABGH1aPppHGVT5wrb7QE1x2hp6fvO00df9h7Anl9H0rfTg8y9WhQ00HEiF9pdlXj002DA4GA7IPssfjdv3amLymVlmHR0UHu2y6OP7E4mQi/3tFn"
+const runMetaVector = "ARMJAw/HpBLHcCrKV+2Ort1bx2JVFzHoxzPxvcAsHDbuZWaYygYM7daO1PKY7qCpyIT5bzmGnwt8Woj7tb1dA5PiQBnDbZtYcnR0kCJk8PX+26NanE6Kczq0MhAXBntIdg16zo4PqUV0LYkDKGGF+fLyrkJJqrp1EMPCHJnBhLn1DZ0g3tMeT/w0VX1F94HhOAqujA/lIczVMbQYhVaxlXrB1RKxSGvjDy37h1+jaRqEsc7foSuIaimHV3chsbydVbgmmxAGa5fmM5BzxTk7nOad+w6WYh8Oi5tCz9TmV+mEKYQpZugx2LrtyDIvSEcLT8XaEzcPg9mzEGcXd/jhS8gg8HNqMYlN4x1bVw8unCxQPXC5RKMyXco42f2pszA="
 
 // runMetaSample 是两处固定样本共用的那份内容：命令行、模式、原值、执行参数，
 // 加两样呈现口径（提示开关、判据文件的展示路径）。
@@ -21,7 +21,7 @@ func runMetaSample() contract.RunMetaBody {
 		Argv:              []string{"sshfleet2", "-f", "nodes.csv", "-c", "uptime"},
 		Mode:              contract.ModeCommand,
 		Command:           "uptime",
-		Concurrency:       0,
+		Answers:           []contract.Answer{{Value: "y", Triggers: []string{"continue"}}},
 		TimeoutConnect:    10,
 		TimeoutExecute:    60,
 		ShowCategoryTips:  true,
@@ -110,8 +110,12 @@ func TestRunMetaBodyCarriesOriginals(t *testing.T) {
 	if body.Mode != contract.ModeCommand || body.Command != "uptime" {
 		t.Fatalf("模式或命令原文不对：%+v", body)
 	}
-	if body.Concurrency != 4 || body.TimeoutExecute != 60 || body.Answers != "y,continue" {
-		t.Fatalf("执行参数没带上：%+v", body)
+	// 并发数**不**在这段里：闸门那一问可能把它改掉，它走第三张纸（见 contract/runmeta.go）。
+	if body.TimeoutExecute != 60 || body.TimeoutConnect != 10 {
+		t.Fatalf("两个超时没带上：%+v", body)
+	}
+	if len(body.Answers) != 0 {
+		t.Fatalf("没给 -a 时不该有代填表：%+v", body.Answers)
 	}
 	// 报告站手上没有配置，这两样只能从这里过去。
 	if !body.ShowCategoryTips || body.ErrorKeywordsPath != "config/keywords_error.conf" {

@@ -35,11 +35,23 @@ type RunMetaBody struct {
 	Source     string `json:"source,omitempty"`
 	Target     string `json:"target,omitempty"`
 
-	// Answers 是 `-a` 的原值（内联那一条，或代填文件的路径）。
-	Answers string `json:"answers,omitempty"`
+	// Answers 是解析后的代填表（不是 `-a` 的原值：原值在 Argv 里）。
+	//
+	// 报告站印「代填 N：内容 → 触发词」那几行要的就是这张表，而 `-a` 的解析是解析站已经
+	// 做过的活——让报告站回源头重读一遍等于把同一件事做两次。
+	Answers []Answer `json:"answers,omitempty"`
+
+	// NewPassword 是改密的新密码**明文**（加密开着时由解析站从密文文件解出来）。
+	//
+	// 装明文而不是装遮好的形态：`mask` 那条结构决定是「谁要谁现算，不产生字段、不往下传」，
+	// 把已经遮好的值装进纸里等于凭空多一格。报告站印之前自己调 `mask` 算一次。
+	NewPassword string `json:"new_password,omitempty"`
 
 	// 执行参数：并发与三个超时。报告站印的是这次实际生效的值，不是命令行上写了什么。
-	Concurrency     int `json:"concurrency,omitempty"`
+	//
+	// **并发数不在这里**：它会被闸门改，而这段密文在解析站返回前就封好了，改之前的值印出来
+	// 就与老版对不上。它走第三张纸（`ResultPaper.Concurrency` → `Ledger.Concurrency`）。
+	// 三个超时不会被改，仍留在这里。
 	TimeoutConnect  int `json:"timeout_connect,omitempty"`
 	TimeoutExecute  int `json:"timeout_execute,omitempty"`
 	TimeoutTransfer int `json:"timeout_transfer,omitempty"`

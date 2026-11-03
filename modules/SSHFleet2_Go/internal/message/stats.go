@@ -136,7 +136,7 @@ func StatisticsLine(l contract.Ledger, showTips bool, keywordsPath string) Line 
 //
 // 输入全来自第三张纸与运行上下文那段密文：报告站是唯一解得开的地方，解出来的
 // 命令行与清单路径**已经遮过秘密**，这里只管排版。
-func ReportText(l contract.Ledger, body contract.RunMetaBody, maskedArgv []string, maskedManifest string) string {
+func ReportText(l contract.Ledger, body contract.RunMetaBody, maskedArgv []string, maskedManifest, maskedPassword string) string {
 	var b strings.Builder
 
 	b.WriteString(reportHeadline + "\n")
@@ -150,12 +150,30 @@ func ReportText(l contract.Ledger, body contract.RunMetaBody, maskedArgv []strin
 	switch body.Mode {
 	case contract.ModeCommand:
 		fmt.Fprintf(&b, "  执行命令： %s\n", body.Command)
+	case contract.ModeScript:
+		fmt.Fprintf(&b, "  脚本路径： %s\n", body.ScriptPath)
+	case contract.ModeUpload:
+		fmt.Fprintf(&b, "  本地路径： %s\n", body.Source)
+		fmt.Fprintf(&b, "  远程路径： %s\n", body.Target)
+	case contract.ModeDownload:
+		fmt.Fprintf(&b, "  远程路径： %s\n", body.Source)
+		fmt.Fprintf(&b, "  本地路径： %s\n", body.Target)
+	case contract.ModePasswd:
+		// 新密码是明确知道身份的凭据：报告属归档产物，只留脱敏形态。
+		// 印之前由报告站自己调 mask 现算——密文里装的是明文（遮不是一格字段）。
+		fmt.Fprintf(&b, "  新密码： %s\n", maskedPassword)
 	}
 	fmt.Fprintf(&b, "  节点清单： %s\n", maskedManifest)
 	fmt.Fprintf(&b, "  节点数量： %d\n", l.Total)
+	// `-a` 明细：每条一行、含全部触发词，顺序同命令行。全量明文——归档留痕优先。
+	for i, entry := range body.Answers {
+		fmt.Fprintf(&b, "  代填 %d： %s\n", i+1, AnswerDescribe(entry))
+	}
 	// 并发数与确认屏那一格同一条规则：没指定 -n 时（0）记「全部并行」，也就是节点数——
 	// 老版在确认之前就把这个数填成了节点数，report.txt 里写的因此是生效值，不是原值 0。
-	fmt.Fprintf(&b, "  并发数： %d\n", concurrencyValue(body.Concurrency, l.Total))
+	//
+	// 读**第三张纸**那一格，不读运行上下文：闸门那一问可能把它改过，而密文封在改之前。
+	fmt.Fprintf(&b, "  并发数： %d\n", concurrencyValue(l.Concurrency, l.Total))
 	if body.TimeoutConnect != 0 {
 		fmt.Fprintf(&b, "  连接超时： %ds\n", body.TimeoutConnect)
 	}
@@ -342,4 +360,16 @@ func modeTimeout(body contract.RunMetaBody) int {
 func ExecSummaryLog(l contract.Ledger) string {
 	return fmt.Sprintf("执行结束：成功 %d 台，失败 %d 台；连接成功 %d，连接失败 %d",
 		l.SuccessCounts, l.FailCounts, l.ConnectSuccessCounts, l.ConnectFailCounts)
+}
+
+// FormatSpeed 速度写成 `1.5MB/s`：面板上那格速度与报告里可能出现的速度共用这一种写法。
+func FormatSpeed(bytesPerSec float64) string {
+	switch {
+	case bytesPerSec >= 1024*1024:
+		return fmt.Sprintf("%.1fMB/s", bytesPerSec/1024/1024)
+	case bytesPerSec >= 1024:
+		return fmt.Sprintf("%.1fKB/s", bytesPerSec/1024)
+	default:
+		return fmt.Sprintf("%.0fB/s", bytesPerSec)
+	}
 }

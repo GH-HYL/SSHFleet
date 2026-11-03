@@ -3,6 +3,7 @@ package parse
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -74,7 +75,7 @@ medium_parallel = 4
 // 路上」。源路径必须在 chdir 之前算好——切到临时目录之后，相对路径就指到别处了。
 func copyKeywords(t *testing.T, dir string) {
 	t.Helper()
-	src := filepath.Join("..", "..", "config")
+	src := keywordsSourceDir(t)
 	for _, name := range []string{"keywords_dangerous.conf", "keywords_error.conf", "keywords_passwd.conf"} {
 		data, err := os.ReadFile(filepath.Join(src, name))
 		if err != nil {
@@ -84,6 +85,19 @@ func copyKeywords(t *testing.T, dir string) {
 			t.Fatalf("写临时判据表失败：%v", err)
 		}
 	}
+}
+
+// keywordsSourceDir 是随包判据表所在的目录，按**本文件的位置**算绝对路径。
+//
+// 不按当前工作目录算：一个用例里造两份临时配置很常见（第二份的 cwd 已经是第一份的临时
+// 目录），相对路径那时就指到别处了。
+func keywordsSourceDir(t *testing.T) string {
+	t.Helper()
+	_, self, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("拿不到本文件的位置")
+	}
+	return filepath.Join(filepath.Dir(self), "..", "..", "config")
 }
 
 // writeFile 在临时目录里造一个文件，交回它的路径。

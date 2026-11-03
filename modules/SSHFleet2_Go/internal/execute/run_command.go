@@ -47,6 +47,11 @@ func (w *lockedBuffer) String() string {
 // 会话开不起来、拿不到输入通道：两件事分开报（老版同口径）——前者是目标机不给开会话，
 // 后者是会话开了但 stdin 通道没拿到，排查方向不同。
 func (c *client) runCommand(ctx context.Context, p *contract.Plan, res *contract.NodeResult) {
+	// 给了 `-a` 就走交互分支：一次会话只有一条 stdin，代填要独占它（11 号单）。
+	if p.Run.Answer != "" {
+		c.runAnswer(ctx, p, res)
+		return
+	}
 	session, err := c.conn.NewSession()
 	if err != nil {
 		res.ErrorText = c.mergeBanner(msg(envSession, sessionCreateFailed, err.Error()))
@@ -58,7 +63,8 @@ func (c *client) runCommand(ctx context.Context, p *contract.Plan, res *contract
 	session.Stdout = out
 	session.Stderr = out
 
-	command, stdin := downCommand(*p.Task.Command, p.Run)
+	// 下发行与 stdin 正文都是纸上那一格（解析站拼好，本包只发不拼——建站 05 的 02 号单）。
+	command, stdin := p.Run.Downlink, p.Run.Stdin
 	if stdin != "" {
 		w, werr := session.StdinPipe()
 		if werr != nil {

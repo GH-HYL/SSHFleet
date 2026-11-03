@@ -108,3 +108,19 @@ func timeoutLabel(m contract.Mode) string {
 	}
 	return ""
 }
+
+// interpreterNames 是 `-a` 支持的解释器名单，**顺序即显示顺序**。
+//
+// 名字与属性（程序文本参数、是不是 shell 家族）那张表住解析站——那是机器要的东西；
+// 这一份只管「报错里怎么列给人看」。两处不许漂：解析站有一条用例按集合比对。
+var interpreterNames = []string{
+	"bash", "sh", "dash", "ksh", "zsh", "mksh", "ash",
+	"python", "luajit", "lua", "node", "nodejs", "perl", "ruby", "php",
+}
+
+// SupportedInterpreters 是面向使用者的支持范围，顺序与上面一致。
+func SupportedInterpreters() []string {
+	out := make([]string, len(interpreterNames))
+	copy(out, interpreterNames)
+	return out
+}

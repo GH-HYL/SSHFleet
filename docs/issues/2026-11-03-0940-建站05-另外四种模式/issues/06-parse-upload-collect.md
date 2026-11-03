@@ -4,7 +4,7 @@
 
 **Blocked by**：01（需要 `Task.Upload.Files`／`Skipped` 两格）。
 
-**Status**：ready-for-agent
+**Status**：已完成（done）
 
 - [ ] 五种条目各一条用例：普通文件、目录、软链接、FIFO、不可读文件
 - [ ] 软链接一律过滤、不报错、留名；FIFO／设备／套接字一律按错报（它们是「不是链接」的那一类）
@@ -15,3 +15,7 @@
 - [ ] `gofmt -l .` 空、四项检查绿
 
 **不在这单**：不传文件（11、13 号单）、不摆内容树（09 号单）。
+
+## Comments
+
+2026-11-03：已结。`parse/collect.go`：五类条目、过滤后不剩报错、相对路径 POSIX、总大小与建议并发一次算好放纸（`RootIsDir` 补一格，理由见工单 01 注）、TopEntries 含空目录与被滤链接。用例含 FIFO（unix tag）。

@@ -11,6 +11,7 @@ package execute
 const (
 	// session 会话与终端
 	sessionCreateFailed  = "create_failed"  // 目标机不给开会话
+	sessionPtyFailed     = "pty_failed"     // 目标机拒绝分配终端
 	sessionChannelFailed = "channel_failed" // 拿不到输入通道
 	sessionExitMissing   = "exit_missing"   // 会话结束了、没收到退出状态（库已分类）
 

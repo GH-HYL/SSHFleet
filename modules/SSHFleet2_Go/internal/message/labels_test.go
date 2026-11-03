@@ -64,3 +64,48 @@ func checkFile(t *testing.T, path string, labels, prefixes []string) error {
 	}
 	return nil
 }
+
+// 「当前值：」「取值非法：」两个取值标签同理：它们原先散在十来处 `fmt.Sprintf` 里，
+// 同一句话有多个写入点。判据比上面那条更紧——这两个词在 message 之外**一次都不许出现**，
+// 不论前面是引号还是换行（它们常落在句中）。
+func TestValueLabelsOnlyInConstructorPoint(t *testing.T) {
+	labels := []string{"当前值：", "取值非法："}
+
+	root := ".." // internal/
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if d.Name() == "message" && filepath.Dir(path) == root {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		return scanBare(t, path, labels)
+	})
+	if err != nil {
+		t.Fatalf("扫源码失败：%v", err)
+	}
+	if err := scanBare(t, "../../main.go", labels); err != nil {
+		t.Fatalf("扫塔尖失败：%v", err)
+	}
+}
+
+// scanBare 一份文件里不许出现这些词（不看前缀）。
+func scanBare(t *testing.T, path string, labels []string) error {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	for _, label := range labels {
+		if strings.Contains(string(data), label) {
+			t.Errorf("%s 里出现了取值标签 %q —— 它只许在 message 的构造点里成形", path, label)
+		}
+	}
+	return nil
+}

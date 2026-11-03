@@ -48,6 +48,25 @@ type RunParams struct {
 	Answer  string // 代填的原值：改密与它互斥，04／05 还要拿它做材料检查
 	Remark  string
 
+	// SudoGiven 是「命令行上到底给没给身份开关」（`--sudo` 或 `--no-sudo`）。
+	//
+	// Sudo 那一格只有结论（这次用不用），而改密那两条互斥问的是「给没给」——配置默认是
+	// root 时，没给开关也不该报错。两条事实，两格。
+	SudoGiven bool
+
+	// MatchRegex 与 MatchCaseSensitive 是配置 `[interactive]` 那两格的原值：
+	// 代填与改密认触发词时按不按正则、区不区分大小写。执行站不读配置，只能从纸上来。
+	MatchRegex         bool
+	MatchCaseSensitive bool
+
+	// ConcurrencyAdvice 是按上传总大小与配置阈值算出来的建议并发；0 表示没有建议。
+	// 闸门拿它问那一句（问的时候可能把 Concurrency 改掉，见 ADR-0040）。
+	ConcurrencyAdvice int
+
+	// FallbackExt 是脚本后缀没配到解释器时那个后缀；空串表示配到了。
+	// 闸门拿它问那句「继续用 bash 吗」——解析站只记事实，问与不问归闸门。
+	FallbackExt string
+
 	// Interpreter 是命令交给谁解释：配置 `interpreter.command` 的原值（例如 bash），
 	// 命令模式下恒有、脚本模式按后缀另取（随阶段 05）。
 	//
@@ -68,6 +87,17 @@ type RunParams struct {
 	// 它只负责下发行那一句。判据表按语言选哪一套、提示语说什么，是阶段 08 的事——
 	// 那一侧还没接，这一格先照配置原样带到执行站，免得下发行与发布版差一句。
 	English bool
+
+	// Downlink 是**成品**：这次要发给远端的那一条命令行，解析站拼好放上来。
+	//
+	// 拼装只此一处（ADR-0010 的补充、建站 05 规格第三节）：执行站只发不拼，量长度的那条串
+	// 与发出去的串因此是同一个值。四条支路（命令、--no-shell、脚本、`-a`）都在解析站成形。
+	Downlink string
+
+	// Stdin 是普通路径要沿标准输入送下去的正文；`-a` 时为空（正文已 base64 编进命令行）。
+	//
+	// 正文仍留在纸上：命令与脚本两种模式从它走 stdin，命令行里只有固定形态的外壳。
+	Stdin string
 }
 
 // ProblemKind 是「解析时发现的问题」的种类。解析只发现、不下结论。
@@ -80,6 +110,10 @@ const (
 	ProblemMultiMode     ProblemKind = "multi_mode"     // 同时给了多个模式
 	ProblemFlagConflict  ProblemKind = "flag_conflict"  // 一对互斥开关同时给了
 	ProblemExtraArgs     ProblemKind = "extra_args"     // 多出几段位置参数：值里的空格没加引号
+
+	// ProblemInterpreterUnsupported 是「`-a` 碰上表外的解释器」：解析站拼不出下发行，
+	// 只记这条事实交给闸门。判「不过」仍只归闸门，解析站自己不下结论。
+	ProblemInterpreterUnsupported ProblemKind = "interpreter_unsupported"
 )
 
 // Problem 一条事实：哪个选项、原值是什么、哪一处对不上。

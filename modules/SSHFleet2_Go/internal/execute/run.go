@@ -50,11 +50,21 @@ func Run(ctx context.Context, p *contract.Plan, termPath, execLogPath string) (c
 	}
 	defer rep.close()
 
+	// 传输类才有的那块逐节点面板：聚合器把各节点的字节与文件数汇成快照，
+	// 渲染交给屏幕那一路（非终端时面板不出，明细直接落流）。
+	var ag *aggregator
+	if isTransfer(p.Mode) {
+		ag = newAggregator(func(s snapshot) { scr.transfer(s, p.Mode, paper.Total, paper.StartedAt) })
+	}
+
 	// 实际生效的并发数：0 表示不填，按全部并行（老版同口径）。
 	limit := p.Run.Concurrency
 	if limit <= 0 || limit > len(p.Nodes) {
 		limit = len(p.Nodes)
 	}
+	// 生效值落到纸上：报告印的是它（闸门那一问可能把 Run.Concurrency 改过，
+	// 而运行上下文那段密文封在改之前）。
+	paper.Concurrency = limit
 
 	// 开工前先把「这一轮怎么跑、发下去的是什么」记进执行期日志：命令行里只剩固定形态的
 	// `sh -c`，事后没有这一段就查不出原始命令与执行身份（老版写在协程起来之前，同一处）。
@@ -97,7 +107,7 @@ func Run(ctx context.Context, p *contract.Plan, termPath, execLogPath string) (c
 					if !ok {
 						return
 					}
-					res := visit(ctx, p, idx)
+					res := visit(ctx, p, idx, ag)
 					slots[idx] = slot{res: res, filled: true}
 
 					// 先推进度、再出那一行：界面起来了，那一行才会经由它打到面板上方
@@ -149,7 +159,7 @@ func Run(ctx context.Context, p *contract.Plan, termPath, execLogPath string) (c
 //
 // 出那一行在 `Run` 里紧跟着做完（先推进度、再出行），不攒到最后一起打——中途被强杀时
 // 盘上已经有痕迹。
-func visit(ctx context.Context, p *contract.Plan, idx int) contract.NodeResult {
+func visit(ctx context.Context, p *contract.Plan, idx int, ag *aggregator) contract.NodeResult {
 	node := p.Nodes[idx]
 	res := contract.NodeResult{IP: node.IP}
 
@@ -167,10 +177,12 @@ func visit(ctx context.Context, p *contract.Plan, idx int) contract.NodeResult {
 		// 连上了也把服务端提示交出去（老版无条件写）：密码过期那类提示伴随的是成功的连接，
 		// 分类要靠它认出来。屏幕上正常行不显示这一格（呈现那一步的事）。
 		res.ErrorText = c.errorText(nil)
+		res.AuthMethod = c.authMethodDesc()
 
-		// 连上之后：本阶段只有命令模式有下一步（脚本、上传、下载随阶段 05）。
-		if p.Task.Command != nil {
-			c.runCommand(ctx, p, &res)
+		// 连上之后按模式分派（建站 05 的第五节）：每一支一个文件，不在这里堆 if。
+		// 建连、收尾、分类仍由本函数收口——那是 04 定的，不动。
+		if err := c.step(ctx, p, &res, ag); err != nil {
+			res.ErrorText = c.mergeBanner(err.Error())
 		}
 
 		c.close()
