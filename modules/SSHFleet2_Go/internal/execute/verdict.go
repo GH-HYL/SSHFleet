@@ -51,7 +51,7 @@ func categoryOf(mode contract.Mode, t contract.Tables, r *contract.NodeResult) s
 	}
 
 	if src != "" {
-		if hit := firstCategory(t.Categories, src); hit != "" {
+		if hit := firstCategory(failCategories(mode, t), src); hit != "" {
 			return hit
 		}
 		if trimmed := strings.TrimSpace(src); trimmed != "" {
@@ -115,6 +115,25 @@ func isMessage(text string) bool {
 		}
 	}
 	return false
+}
+
+// failCategories 这一模式按哪几张表认失败分类：顺序即优先级，命中即停。
+//
+// 改密的专用表排在最前。它说的是「改密对话跑了、没改成」的话（新密码不合规、写不进
+// shadow、早收场），本来就不该跟「连不上」「会话被拒」抢；排前面，早收场时工具自己那
+// 句报文才会先被「改密未完成」认领，而不是落到通用的「密码过期」上。
+//
+// 其余模式只用通用那一组：专用表里的措辞跟命令、传输无关，拿它来认只会认错。
+//
+// 两张表是两份文件、两个字段（`keywords_error.conf` 与 `keywords_passwd.conf`），
+// 在这里接成一条只是为了「谁先谁后」这一件事，不改变它们各自的归属。
+func failCategories(mode contract.Mode, t contract.Tables) []contract.Category {
+	if mode != contract.ModePasswd || len(t.PasswdCategories) == 0 {
+		return t.Categories
+	}
+	merged := make([]contract.Category, 0, len(t.PasswdCategories)+len(t.Categories))
+	merged = append(merged, t.PasswdCategories...)
+	return append(merged, t.Categories...)
 }
 
 // firstCategory 在一组分类里找第一条命中的，返回它的名字；一条都没命中返回空串。
