@@ -20,8 +20,7 @@ import (
 // TestRunCommandSucceeds 干净退出：退出码 0、输出是命令的输出、没有报错原文。
 func TestRunCommandSucceeds(t *testing.T) {
 	node, _ := integrationTarget(t)
-	p := oneNodePlan(node)
-	p.Task.Command.Text = "echo fleet-ok"
+	p := planFor(t, []contract.Node{node}, "-c", "echo fleet-ok")
 
 	item := runOne(t, context.Background(), p)
 	if !item.Connected {
@@ -52,8 +51,7 @@ func TestRunCommandSucceeds(t *testing.T) {
 // 「这一台算不算失败」由结算站按判据表说，执行站不下结论。
 func TestRunCommandNonZeroExit(t *testing.T) {
 	node, _ := integrationTarget(t)
-	p := oneNodePlan(node)
-	p.Task.Command.Text = "exit 3"
+	p := planFor(t, []contract.Node{node}, "-c", "exit 3")
 
 	item := runOne(t, context.Background(), p)
 	if item.ExitCode == nil || *item.ExitCode != 3 {
@@ -74,8 +72,7 @@ func TestRunCommandNonZeroExit(t *testing.T) {
 // TestRunCommandNotFound 命令不存在：远端解释器自己报 127，与「连不上」「会话被拒」都不是一回事。
 func TestRunCommandNotFound(t *testing.T) {
 	node, _ := integrationTarget(t)
-	p := oneNodePlan(node)
-	p.Task.Command.Text = "definitely-not-a-command-xyz"
+	p := planFor(t, []contract.Node{node}, "-c", "definitely-not-a-command-xyz")
 
 	item := runOne(t, context.Background(), p)
 	if item.ExitCode == nil || *item.ExitCode != 127 {
@@ -89,9 +86,7 @@ func TestRunCommandNotFound(t *testing.T) {
 // TestRunCommandTimesOut 长命令超时：超时是事实（标志 + 报文 + 没有退出码），不是结论。
 func TestRunCommandTimesOut(t *testing.T) {
 	node, _ := integrationTarget(t)
-	p := oneNodePlan(node)
-	p.Task.Command.Text = "sleep 10"
-	p.Run.TimeoutExecute = 1
+	p := planForTweaked(t, []contract.Node{node}, setExecuteTimeout(1), "-c", "sleep 10")
 
 	start := time.Now()
 	item := runOne(t, context.Background(), p)
@@ -115,8 +110,7 @@ func TestRunCommandTimesOut(t *testing.T) {
 // TestRunCommandCancelled 跑的过程中被喊停：那一格是「取消」，不是「超时」。
 func TestRunCommandCancelled(t *testing.T) {
 	node, _ := integrationTarget(t)
-	p := oneNodePlan(node)
-	p.Task.Command.Text = "sleep 30"
+	p := planFor(t, []contract.Node{node}, "-c", "sleep 30")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
@@ -143,9 +137,7 @@ func TestRunCommandCancelled(t *testing.T) {
 // 这里断言的是「远端真看得见」。
 func TestRunCommandAppliesEnv(t *testing.T) {
 	node, _ := integrationTarget(t)
-	p := oneNodePlan(node)
-	p.Run.Env = map[string]string{"FLEET_PROBE": "ok"}
-	p.Task.Command.Text = "echo $FLEET_PROBE"
+	p := planForTweaked(t, []contract.Node{node}, withEnvEntry(`FLEET_PROBE = "ok"`), "-c", "echo $FLEET_PROBE")
 
 	item := runOne(t, context.Background(), p)
 	if item.ExitCode == nil || *item.ExitCode != 0 {
@@ -181,8 +173,7 @@ func runOneInto(t *testing.T, ctx context.Context, p *contract.Plan) (contract.N
 // 给人看的那一段（屏幕与文件）是同一段字；日志是记录，成功那台只有一行。
 func TestRunCommandWritesResultLine(t *testing.T) {
 	node, _ := integrationTarget(t)
-	p := oneNodePlan(node)
-	p.Task.Command.Text = "echo fleet-ok"
+	p := planFor(t, []contract.Node{node}, "-c", "echo fleet-ok")
 
 	item, term, execLog := runOneInto(t, context.Background(), p)
 	if item.Category != "执行成功" {
@@ -206,18 +197,21 @@ func TestRunCommandWritesResultLine(t *testing.T) {
 
 // TestRunCommandLogsNodeDetail 真机跑一个失败节点：执行期日志是五级明细，不是给人看的那一段字。
 //
-// 与老版真跑产物（`build/建站04_12_2026-11-02_1440/ab_old/`，`-c "exit 3"`）对过：级别、
-// 节点前缀、行文一致；老版那句多一截「登录方式 密码」，纸里没有那一格，宁缺不猜。
+// 连接那一级带「用户」与「登录方式」：后者是握手实际用上的那一种（10 号单），纸上有这一格
+// 才敢写，凭「配了密钥没有」推会推错。
 func TestRunCommandLogsNodeDetail(t *testing.T) {
 	node, _ := integrationTarget(t)
-	p := oneNodePlan(node)
-	p.Task.Command.Text = "exit 3"
+	p := planFor(t, []contract.Node{node}, "-c", "exit 3")
 
 	item, term, execLog := runOneInto(t, context.Background(), p)
 
+	if item.AuthMethod == "" {
+		t.Fatal("建连那一步没填登录方式，日志里那一截就没了")
+	}
 	logged := readAll(t, execLog)
+	// 期望值写死「密码」：这一台是拿口令登的，不该拿结果本身回填期望。
 	for _, want := range []string{
-		"  -  [SUCCESS]  -  【" + item.IP + "】连接成功，用户 " + node.User + "，耗时 ",
+		"  -  [SUCCESS]  -  【" + item.IP + "】连接成功，用户 " + node.User + "，登录方式 密码，耗时 ",
 		"  -  [ERROR  ]  -  【" + item.IP + "】命令执行失败，退出码 3，耗时 ",
 		"  -  [INFO   ]  -  【" + item.IP + "】分类: 执行失败(退出码3)",
 	} {
@@ -239,12 +233,7 @@ func TestRunCommandLogsNodeDetail(t *testing.T) {
 // 同一台机器重复三遍（容器只有一个），要的是「多台并行 + 逐台出行」这条路。
 func TestRunCommandManyNodes(t *testing.T) {
 	node, _ := integrationTarget(t)
-	p := &contract.Plan{
-		Mode:  contract.ModeCommand,
-		Task:  contract.Task{Command: &contract.CommandTask{Text: "echo hi"}},
-		Nodes: []contract.Node{node, node, node},
-		Run:   contract.RunParams{TimeoutConnect: 10, TimeoutExecute: 30, Interpreter: "bash", English: true},
-	}
+	p := planFor(t, manyOneNode(node, 3), "-c", "echo hi")
 	dir := t.TempDir()
 	term := filepath.Join(dir, "terminal-output.txt")
 	execLog := filepath.Join(dir, "SSHFleetExec.log")

@@ -88,6 +88,17 @@ func (c *client) passwd(ctx context.Context, p *contract.Plan, res *contract.Nod
 		res.ErrorText = appendText(res.ErrorText, msg(envPasswd, "not_expired", "no password-expiry prompt seen"))
 	case clean:
 		// 干净收场且见过信号：一个字都不写。
+		//
+		// 「一个字都不写」也包括把进场那句服务端提示撤掉——`You are required to change your
+		// password immediately` 在改密里是**前提**（它就是入场信号），不是失败原因。留着它，
+		// 分类会按「密码过期」认领，干净成功也成了失败；判定那一条要求报错原文为空才算法干净
+		// （`ranClean`），两处对不上。
+		//
+		// 只撤那一句：`ErrorText` 里若还有别的东西（断连、EOF 那类 `:` 拿不到退出码的形态），
+		// 照旧留着——整格清空会把真失败抹成成功。
+		if res.ErrorText == strings.TrimSpace(c.banner) {
+			res.ErrorText = ""
+		}
 	default:
 		res.ErrorText = appendText(res.ErrorText, passwdStuckMessage(passwdShape{
 			FedAny:     hook.fedAny(),
@@ -258,9 +269,14 @@ func (h *passwdHook) fedAny() bool {
 
 // enterKeywords 入场信号的关键词：判据表里名为「密码过期」的那一类。
 //
+// 取的是**错误分类表**（`keywords_error.conf` 的第一组），不是改密那张判据表：
+// 那句「You are required to change your password immediately」是远端在认证阶段吐的服务端
+// 报文，归错误分类认领；代填的中止词也从同一张表、同一个分类名里取（`abortKeywords`）
+// ——判据只有一份，改表只改一处。
+//
 // 那张表为空时，03 已落成「启动即报」的行为例外——这里照旧取空，不另造一句话。
 func enterKeywords(p *contract.Plan) []string {
-	for _, cat := range p.Tables.PasswdCategories {
+	for _, cat := range p.Tables.Categories {
 		if cat.Name == message.CategoryPasswdExpired {
 			return cat.Keywords
 		}
