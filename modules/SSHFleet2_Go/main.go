@@ -81,7 +81,7 @@ func main() {
 			lg.Warn(note.Text()) // 非交互放行危险命令的留痕：闸门不持有日志，交上来由这里落盘
 		}
 		if refusal != nil {
-			console.Print(refusal.Say)
+			console.Print(refusal.Say())
 			finish(exitcode.Refused)
 		}
 

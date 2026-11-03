@@ -175,10 +175,10 @@ func TestRefuseArguments(t *testing.T) {
 			if note.Text() != "" {
 				t.Fatalf("拒绝时不该带回日志留痕：%q", note.Text())
 			}
-			if !r.Say.Stderr() {
+			if !r.Say().Stderr() {
 				t.Fatalf("参数不合规要写标准错误，实际写的是标准输出")
 			}
-			if got := firstLine(t, r.Say); got != c.want {
+			if got := firstLine(t, r.Say()); got != c.want {
 				t.Fatalf("问题句不对：\n got  %q\n want %q", got, c.want)
 			}
 		})
@@ -191,7 +191,7 @@ func TestPassesCleanPlan(t *testing.T) {
 		p.Task.Command = &contract.CommandTask{Text: "echo hi"}
 	})
 	if r, _ := Run(plan); r != nil {
-		t.Fatalf("干净的命令不该拒：%q", r.Say.Text())
+		t.Fatalf("干净的命令不该拒：%q", r.Say().Text())
 	}
 
 	plan = planOf(contract.ModeUpload, func(p *contract.Plan) {
@@ -199,7 +199,7 @@ func TestPassesCleanPlan(t *testing.T) {
 		p.Task.Path = "/tmp/"
 	})
 	if r, _ := Run(plan); r != nil {
-		t.Fatalf("干净的上传不该拒：%q", r.Say.Text())
+		t.Fatalf("干净的上传不该拒：%q", r.Say().Text())
 	}
 
 	plan = planOf(contract.ModeDownload, func(p *contract.Plan) {
@@ -207,6 +207,6 @@ func TestPassesCleanPlan(t *testing.T) {
 		p.Task.Path = "/tmp"
 	})
 	if r, _ := Run(plan); r != nil {
-		t.Fatalf("干净的下载不该拒：%q", r.Say.Text())
+		t.Fatalf("干净的下载不该拒：%q", r.Say().Text())
 	}
 }
