@@ -6,7 +6,7 @@
 
 **Status**：ready-for-agent
 
-- [ ] `contract` 补齐：`Task.Passwd.NewPassword`、`Task.Upload.Files`／`Skipped`／`TopEntries`／`TotalBytes`、命令与脚本载荷的 `Answers`、`Resources.Script`、`RunParams.SudoGiven`／`MatchRegex`／`MatchCaseSensitive`／`ConcurrencyAdvice`／`FallbackExt`、`NodeResult.AuthMethod`／`Steps`、`Extra.Transfer`／`Extra.Answer`、`ResultPaper` 与 `Ledger` 的 `Concurrency`——每个字段一句注释说清谁填、谁读
+- [ ] `contract` 补齐：`Task.Passwd.NewPassword`、`Task.Upload.Files`／`Skipped`／`TopEntries`／`TotalBytes`、命令与脚本载荷的 `Answers`、`RunParams.SudoGiven`／`MatchRegex`／`MatchCaseSensitive`／`ConcurrencyAdvice`／`FallbackExt`、`NodeResult.AuthMethod`／`Steps`／`Transfer`／`Answer`、`ResultPaper` 与 `Ledger` 的 `Concurrency`——每个字段一句注释说清谁填、谁读。**每台的事实住 `NodeResult`，不往 `Extra` 里塞**（`Extra` 是纸上一格，装不了逐台的东西）
 - [ ] 随行的两个新类型（可传文件条目、中间步骤）落契约，站里不另造一份
 - [ ] 运行上下文（密文）多装报告要印的那七样，**并发数不进去**（它会被闸门改，走第三张纸）；新密码装明文、遮由报告站现算。封与解两处固定密文样本重录，`parse`／`report` 两处 `runmeta_test.go` 跟着过
 - [ ] `credential` 交出一个入口：给「值 + 加密开关」，返回明文或一份问题清单；明文与密文两份 `testdata`、固定主密钥，**不读真环境变量**
