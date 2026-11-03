@@ -58,3 +58,29 @@ func UnusedKeyNotice(rows []int) Line {
 func keyRows(list string) string {
 	return "第 " + list + " 行配了私钥"
 }
+
+// UploadSkippedLine 与 `UploadSkippedText` 同一句话，给屏幕用（交互路径上老版在
+// 「开始执行」之后补这一行）。
+func UploadSkippedLine(names []string) Line {
+	return Line{s: UploadSkippedText(names) + "\n"}
+}
+
+// UploadSkippedText 是「上传源里有链接被过滤」那一句，进执行期日志（老版记在开头两行之前）。
+//
+// 名单最多列五个，多的写「等 N 个」——清单可能几百个，一句提示刷满日志没有意义
+// （与解析站 collect.summarize 同一条规矩，两处各拼一遍是因为一处给屏幕、一处给日志）。
+func UploadSkippedText(names []string) string {
+	const shown = 5
+	parts := make([]string, 0, shown)
+	for i, n := range names {
+		if i >= shown {
+			break
+		}
+		parts = append(parts, n)
+	}
+	list := strings.Join(parts, "、")
+	if len(names) > shown {
+		list += fmt.Sprintf(" 等 %d 个", len(names))
+	}
+	return fmt.Sprintf("[提示] 上传源中有 %d 个软链接/快捷方式被过滤（不上传）：%s", len(names), list)
+}

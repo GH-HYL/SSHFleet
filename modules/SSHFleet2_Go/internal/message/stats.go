@@ -177,7 +177,7 @@ func ReportText(l contract.Ledger, body contract.RunMetaBody, maskedArgv []strin
 	if body.TimeoutConnect != 0 {
 		fmt.Fprintf(&b, "  连接超时： %ds\n", body.TimeoutConnect)
 	}
-	if t := modeTimeout(body); t != 0 {
+	if t := TimeoutSeconds(body.Mode, body.TimeoutExecute, body.TimeoutTransfer); t != 0 {
 		// 措辞取自模式名字表（执行超时／传输超时／改密超时），与参数屏同一处来源。
 		if label := timeoutLabel(body.Mode); label != "" {
 			fmt.Fprintf(&b, "  %s： %ds\n", label, t)
@@ -347,16 +347,6 @@ func isFallbackCategory(t contract.Tables, name string) bool {
 		}
 	}
 	return !IsExitCodeCategory(name)
-}
-
-// modeTimeout 这一模式那个超时值：命令与脚本是执行超时，上传下载是传输超时，改密也是
-// 执行超时（老版同一个字段）。
-func modeTimeout(body contract.RunMetaBody) int {
-	switch body.Mode {
-	case contract.ModeUpload, contract.ModeDownload:
-		return body.TimeoutTransfer
-	}
-	return body.TimeoutExecute
 }
 
 // ExecSummaryLog 执行期日志的收尾那一行：这一轮成了几台、几台连上。

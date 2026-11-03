@@ -43,16 +43,17 @@ func confirmFlow(p *contract.Plan) (Refusal, message.Line) {
 	}
 
 	// 五、参数屏 → 上传内容树 → 并发建议（可能重显一次屏）→ 确认问句。
-	ask.Show(message.ConfirmScreen(p, mask.InlineRecordIf(p.Resources.Manifest), maskedNewPassword(p)))
+	ask.Show(message.ConfirmScreen(p, mask.InlineRecordIf(p.Resources.Manifest), maskedNewPassword(p), false))
 	if p.Task.Upload != nil {
 		ask.Show(message.UploadTree(p))
 	}
-	changed, r := askUploadConcurrency(p)
+	adopted, r := askUploadConcurrency(p)
 	if r != nil {
 		return r, message.Line{}
 	}
-	if changed.Text() != "" {
-		ask.Show(message.ConfirmScreen(p, mask.InlineRecordIf(p.Resources.Manifest), maskedNewPassword(p)))
+	if adopted.Text() != "" {
+		// 采纳了建议：参数屏重显一次，并发数那一行加粗并注明（ADR-0040 决定三）。
+		ask.Show(message.ConfirmScreen(p, mask.InlineRecordIf(p.Resources.Manifest), maskedNewPassword(p), true))
 	}
 
 	switch ask.AskWith(message.Line{}, message.ExecConfirmPrompt(), true) {
@@ -62,7 +63,12 @@ func confirmFlow(p *contract.Plan) (Refusal, message.Line) {
 	case ask.No:
 		return newRefusal(message.CancelLine()), message.CancelTrace()
 	}
-	return nil, message.Line{}
+	// 答是之后补一句「这次少传了什么」：--yes 那条路老版不印（它在跳过确认处就返回了），
+	// 所以这一句只挂在这里。执行期日志里另有一份（在开头两行之前）。
+	if p.Task.Upload != nil && len(p.Task.Upload.Skipped) > 0 {
+		ask.Show(message.UploadSkippedLine(p.Task.Upload.Skipped))
+	}
+	return nil, adopted
 }
 
 // maskedNewPassword 改密屏上那个新密码的形态：由闸门遮一次递过去（`message` 只许依赖契约）。
@@ -82,10 +88,12 @@ func fallbackConfirm(p *contract.Plan) (Refusal, message.Line) {
 		return nil, message.Line{}
 	}
 	if p.Run.Yes {
-		ask.Ask(message.FallbackPrompt(p.Run.FallbackExt, p.Run.Interpreter), true, false)
+		// 非交互下整屏不出：老版在 --yes 里跳过了这一问，屏上只剩「跳过确认」那一行，
+		// 回退到 bash 这件事只留痕。
+		ask.Ask(message.ConfirmSkippedLine(), true, true)
 		return nil, message.FallbackTrace(p.Run.FallbackExt, p.Run.Interpreter)
 	}
-	switch ask.Ask(message.FallbackPrompt(p.Run.FallbackExt, p.Run.Interpreter), false, false) {
+	switch ask.AskQuestion(message.FallbackHint(p.Run.FallbackExt), message.FallbackQuestion(p.Run.Interpreter), false) {
 	case ask.NoInput:
 		return newRefusal(message.Line{}), message.Line{}
 	case ask.No:
@@ -106,7 +114,7 @@ func noShellSudoGate(p *contract.Plan) (Refusal, message.Line) {
 		ask.Ask(message.NoShellDropsSudoNotice(), true, true)
 		return nil, message.NoShellDropsSudoTrace()
 	}
-	switch ask.AskWith(message.NoShellDropsSudoNotice(), message.NoShellDropsSudoPrompt(), true) {
+	switch ask.AskQuestion(message.NoShellDropsSudoNotice(), message.NoShellDropsSudoPrompt(), true) {
 	case ask.NoInput:
 		return newRefusal(message.Line{}), message.Line{}
 	case ask.No:
@@ -140,7 +148,7 @@ func chineseAnswerGate(p *contract.Plan) (Refusal, message.Line) {
 		return newRefusal(message.Line{}), message.ChineseAnswerTrace()
 	}
 	ask.Show(message.ChineseAnswerWarning(p, hit))
-	switch ask.AskWith(message.Line{}, message.ChineseAnswerPrompt(), false) {
+	switch ask.AskQuestion(message.Line{}, message.ChineseAnswerPrompt(), false) {
 	case ask.NoInput:
 		return newRefusal(message.Line{}), message.Line{}
 	case ask.No:
@@ -170,19 +178,23 @@ func askUploadConcurrency(p *contract.Plan) (message.Line, Refusal) {
 	}
 
 	if p.Run.Yes {
+		// 非交互下不问，但那一句「建议同时传 N 个」照印：老版 --yes 也把它打在屏上，
+		// 让人知道这次不是按原值跑的。
+		ask.Show(message.UploadAdvice(p.Task.Upload.TotalBytes, advice, current))
 		p.Run.Concurrency = advice
 		return message.UploadAdviceTrace(advice, current), nil
 	}
 
 	ask.Show(message.UploadAdvice(p.Task.Upload.TotalBytes, advice, current))
-	switch ask.AskWith(message.Line{}, message.UploadAdvicePrompt(advice), true) {
+	switch ask.AskQuestion(message.Line{}, message.UploadAdvicePrompt(advice), true) {
 	case ask.NoInput:
 		return message.Line{}, newRefusal(message.Line{})
 	case ask.No:
 		return message.Line{}, nil // 保留原值继续执行
 	}
 	p.Run.Concurrency = advice
-	return message.Line{}, nil
+	// 这一行既是「屏要重显」的信号，也是 ADR-0040 要的那条留痕（写进工具日志）。
+	return message.UploadAdviceAdopted(advice, current), nil
 }
 
 // applyConcurrencyAdvice 是非交互那条路的同一条判据（不出屏、不问，直接采纳）。

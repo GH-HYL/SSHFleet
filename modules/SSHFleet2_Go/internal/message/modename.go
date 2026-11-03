@@ -113,6 +113,17 @@ func timeoutLabel(m contract.Mode) string {
 	return ""
 }
 
+// TimeoutSeconds 这一模式那次生效的那个超时值：命令、脚本、改密取执行超时，上传下载取
+// 传输超时。纸上那两格都可能在（`-t` 一次写两格），用哪一格是模式说了算——确认屏、
+// `report.txt`、执行期日志三处都调这一个，别各自挑。
+func TimeoutSeconds(m contract.Mode, execute, transfer int) int {
+	switch m {
+	case contract.ModeUpload, contract.ModeDownload:
+		return transfer
+	}
+	return execute
+}
+
 // interpreterNames 是 `-a` 支持的解释器名单，**顺序即显示顺序**。
 //
 // 名字与属性（程序文本参数、是不是 shell 家族）那张表住解析站——那是机器要的东西；

@@ -22,22 +22,97 @@ import (
 //
 // limit 是**实际生效的并发数**（0 已经在调用方换成了节点数）——老版记的也是生效值，
 // 不是命令行上的原值：事后看日志要能直接答「这次几台一起跑」。
+//
+// 「执行超时」这个措辞五种模式都这么写（老版也这样），只是值按模式取：上传下载记的是
+// 传输超时那一格。三处（确认屏、报告、这里）取值都走 `message.TimeoutSeconds`。
 func logSessionHead(lg *log.Logger, p *contract.Plan, limit int) {
 	if lg == nil {
 		return
 	}
+	// 上传源里被过滤的链接排在最前：它说的是「这次少传了什么」，属于开跑前要交代的事实，
+	// 老版也记在这两行之前。
+	if skipped := uploadSkipped(p); len(skipped) > 0 {
+		lg.Info(message.UploadSkippedText(skipped))
+	}
 	lg.Info(fmt.Sprintf("执行参数：执行超时 %d 秒，连接超时 %d 秒，执行身份 %s",
-		p.Run.TimeoutExecute, p.Run.TimeoutConnect, identityLabel(p.Run)))
+		message.TimeoutSeconds(p.Mode, p.Run.TimeoutExecute, p.Run.TimeoutTransfer),
+		p.Run.TimeoutConnect, identityLabel(p.Run)))
 	lg.Info(fmt.Sprintf("开始执行任务：节点 %d 个，并发 %d，模式 %s",
 		len(p.Nodes), limit, message.LogName(p.Mode)))
 
-	// 上传下载与改密没有「下发给谁解释」这件事，那几支随阶段 05。
-	if p.Task.Command == nil {
-		return
-	}
-	for _, line := range downBlock(p) {
+	for _, line := range sendBlock(p) {
 		lg.Success(line)
 	}
+}
+
+// uploadSkipped 上传源里被过滤掉的链接；不是上传模式就是空。
+func uploadSkipped(p *contract.Plan) []string {
+	if p.Task.Upload == nil {
+		return nil
+	}
+	return p.Task.Upload.Skipped
+}
+
+// sendBlock 交代下发给远端的是什么。四种形态，各是各自的实际形态，不合并：
+//
+//	命令模式            → 命令行 / stdin / 说明
+//	脚本模式            → 命令行 / stdin（脚本体不进日志，只说明是哪份）/ 说明
+//	命令或脚本 + 代填   → 代填表 + 原始命令（脚本）/ 处理方式 / 最终命令
+//	上传、下载、改密    → 没有「交给谁解释」这件事，不记这一块
+func sendBlock(p *contract.Plan) []string {
+	if answers := answersOf(p); len(answers) > 0 {
+		return answersBlock(p, answers)
+	}
+	if p.Task.Script != nil {
+		return scriptBlock(p)
+	}
+	if p.Task.Command != nil {
+		return downBlock(p)
+	}
+	return nil
+}
+
+// answersBlock 代填那一支：先把表摆出来（谁答、答什么），再交代发下去的是什么。
+//
+// 这一支不写「命令行 / stdin」：代填时 stdin 整条让给了代填，命令行里也没有正文——
+// 正文被 base64 编进去了，所以记「原始命令（脚本）」与「最终命令」两头。
+func answersBlock(p *contract.Plan, answers []contract.Answer) []string {
+	lines := []string{fmt.Sprintf("代填表（%d 条）：", len(answers))}
+	for i, a := range answers {
+		lines = append(lines, fmt.Sprintf("  第 %d 条：%s", i+1, message.AnswerDescribe(a)))
+	}
+
+	var text string
+	if p.Task.Script != nil {
+		text = "交给 SSH 执行：\n" +
+			"  原始脚本： " + p.Task.Script.Path + "（正文经 base64 编入命令行，不落盘）\n" +
+			fmt.Sprintf("  处理方式： 会话 stdin 整条让给代填（%d 条）\n", len(answers)) +
+			"  最终命令： " + p.Run.Downlink
+	} else {
+		text = "交给 SSH 执行：\n" +
+			"  原始命令： " + p.Task.Command.Text + "\n" +
+			fmt.Sprintf("  处理方式： 正文经 base64 编入命令行（不落盘），会话 stdin 整条让给代填（%d 条）\n", len(answers)) +
+			"  最终命令： " + p.Run.Downlink
+	}
+	return append(lines, indentLines(text)...)
+}
+
+// scriptBlock 脚本模式（无代填）：正文走 stdin，所以 stdin 那一行只说是哪份脚本，
+// 不把正文贴进日志。
+func scriptBlock(p *contract.Plan) []string {
+	text := "交给 SSH 执行：\n" +
+		"  命令行： " + p.Run.Downlink + "\n" +
+		"  stdin：  脚本 " + p.Task.Script.Path + " 的内容（" + p.Run.Interpreter + " 解释）\n" +
+		"  说明：   " + envNote(p.Run) + scriptIdentity(p.Run) + "执行 stdin 送来的脚本"
+	return indentLines(text)
+}
+
+// scriptIdentity 脚本模式「说明」里那个身份：老版写「以 root 身份」或「以登录用户身份」。
+func scriptIdentity(run contract.RunParams) string {
+	if run.Sudo {
+		return "以 root 身份"
+	}
+	return "以登录用户身份"
 }
 
 // identityLabel 日志里「执行身份」那一格：要了 root 且没被 --no-shell 削掉才算 root。

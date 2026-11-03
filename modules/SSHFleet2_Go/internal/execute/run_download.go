@@ -17,6 +17,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/pkg/sftp"
 
@@ -25,6 +26,10 @@ import (
 
 // download 一台的下载。
 func (c *client) download(ctx context.Context, p *contract.Plan, res *contract.NodeResult, onProg onProgressN) {
+	// 与上传同一处口径：从开工到收场这一段，失败也算（屏幕明细与执行期日志都读它）。
+	start := time.Now()
+	defer func() { res.Cost = time.Since(start) }()
+
 	remotePath := p.Task.Download.RemotePath
 	localPath := p.Task.Path
 	useSudo := p.Run.Sudo && c.node.User != "root"

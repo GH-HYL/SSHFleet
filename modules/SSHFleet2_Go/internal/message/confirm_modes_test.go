@@ -27,7 +27,7 @@ func TestConfirmScreenScript(t *testing.T) {
 	p.Task.Script = &contract.ScriptTask{Path: "deploy.sh"}
 	p.Run.Interpreter = "bash"
 
-	got := stripANSI(ConfirmScreen(p, "ok.csv", "").Text())
+	got := stripANSI(ConfirmScreen(p, "ok.csv", "", false).Text())
 	if !strings.Contains(got, "▶ 脚本路径-→   deploy.sh") {
 		t.Fatalf("脚本屏没有脚本路径：\n%s", got)
 	}
@@ -36,7 +36,7 @@ func TestConfirmScreenScript(t *testing.T) {
 	}
 
 	p.Run.Interpreter = "python3"
-	got = stripANSI(ConfirmScreen(p, "ok.csv", "").Text())
+	got = stripANSI(ConfirmScreen(p, "ok.csv", "", false).Text())
 	if !strings.Contains(got, "▶ 解释器  -→   python3") {
 		t.Fatalf("解释器不是 bash 时要占一行：\n%s", got)
 	}
@@ -49,7 +49,7 @@ func TestConfirmScreenInterpreterLineForNoShell(t *testing.T) {
 	p.Run.Interpreter = "python3"
 	p.Run.NoShell = true
 
-	got := stripANSI(ConfirmScreen(p, "ok.csv", "").Text())
+	got := stripANSI(ConfirmScreen(p, "ok.csv", "", false).Text())
 	if !strings.Contains(got, "原样下发，本次不生效") {
 		t.Fatalf("--no-shell 时解释器行要换成提示：\n%s", got)
 	}
@@ -62,7 +62,7 @@ func TestConfirmScreenUpload(t *testing.T) {
 	p.Task.Path = "/opt/app/"
 	p.Run.Sudo = true // 出厂配置 sudo = true
 
-	got := stripANSI(ConfirmScreen(p, "ok.csv", "").Text())
+	got := stripANSI(ConfirmScreen(p, "ok.csv", "", false).Text())
 	for _, want := range []string{
 		"▶ 执行身份-→   root", // 出厂配置 sudo = true
 		"▶ 执行模式-→   上传模式",
@@ -81,7 +81,7 @@ func TestConfirmScreenDownload(t *testing.T) {
 	p.Task.Download = &contract.DownloadTask{RemotePath: "/var/log/app"}
 	p.Task.Path = "./logs"
 
-	got := stripANSI(ConfirmScreen(p, "ok.csv", "").Text())
+	got := stripANSI(ConfirmScreen(p, "ok.csv", "", false).Text())
 	remote := strings.Index(got, "▶ 远程路径-→   /var/log/app")
 	local := strings.Index(got, "▶ 本地路径-→   ./logs")
 	if remote < 0 || local < 0 || remote > local {
@@ -94,7 +94,7 @@ func TestConfirmScreenPasswd(t *testing.T) {
 	p := plainPlan(contract.ModePasswd)
 	p.Task.Passwd = &contract.PasswdTask{Raw: "NewPass#1", NewPassword: "NewPass#1"}
 
-	got := stripANSI(ConfirmScreen(p, "ok.csv", "N********").Text())
+	got := stripANSI(ConfirmScreen(p, "ok.csv", "N********", false).Text())
 	if !strings.Contains(got, "▶ 新密码  -→   N********") {
 		t.Fatalf("改密屏没有遮过的新密码：\n%s", got)
 	}
@@ -113,7 +113,7 @@ func TestConfirmScreenAnswerRows(t *testing.T) {
 			{Value: "", Triggers: []string{"按回车"}},
 		},
 	}
-	got := stripANSI(ConfirmScreen(p, "ok.csv", "").Text())
+	got := stripANSI(ConfirmScreen(p, "ok.csv", "", false).Text())
 	for _, want := range []string{
 		"代填 1", "→   y → 是否继续、continue",
 		"代填 2", "→   （回车） → 按回车",
@@ -165,5 +165,77 @@ func TestBytes(t *testing.T) {
 		if got := Bytes(n); got != want {
 			t.Errorf("Bytes(%d) = %q，want %q", n, got, want)
 		}
+	}
+}
+
+// 超时那一行：值按模式取，措辞也按模式取。上传下载印的是 `timeout_transfer` 那一格
+// （默认 300），命令/脚本/改密印 `timeout_execute`（默认 60）。
+//
+// 期望串照老版确认屏录：`build/建站05_18_2026-11-03_1445/out/confirm-*-old.txt`。
+// 这一行此前一律读 `TimeoutExecute`，上传下载屏因此印成 60s——09 号单的屏断言没盖到它，
+// 18 号单跑 A/B 才露出来。
+func TestConfirmScreenTimeoutRowPerMode(t *testing.T) {
+	cases := []struct {
+		mode contract.Mode
+		task func(*contract.Plan)
+		want string
+	}{
+		{
+			mode: contract.ModeCommand,
+			task: func(p *contract.Plan) { p.Task.Command = &contract.CommandTask{Text: "uptime"} },
+			want: "▶ 执行超时-→   60s",
+		},
+		{
+			mode: contract.ModeScript,
+			task: func(p *contract.Plan) { p.Task.Script = &contract.ScriptTask{Path: "deploy.sh"} },
+			want: "▶ 执行超时-→   60s",
+		},
+		{
+			mode: contract.ModeUpload,
+			task: func(p *contract.Plan) { p.Task.Upload = &contract.UploadTask{Source: "./dist"} },
+			want: "▶ 传输超时-→   300s",
+		},
+		{
+			mode: contract.ModeDownload,
+			task: func(p *contract.Plan) { p.Task.Download = &contract.DownloadTask{RemotePath: "/var/log/app"} },
+			want: "▶ 传输超时-→   300s",
+		},
+		{
+			mode: contract.ModePasswd,
+			task: func(p *contract.Plan) { p.Task.Passwd = &contract.PasswdTask{NewPassword: "NewPass#1"} },
+			want: "▶ 改密超时-→   60s",
+		},
+	}
+	for _, c := range cases {
+		p := plainPlan(c.mode)
+		p.Run.TimeoutExecute = 60
+		p.Run.TimeoutTransfer = 300
+		c.task(p)
+
+		got := stripANSI(ConfirmScreen(p, "ok.csv", "", false).Text())
+		if !strings.Contains(got, c.want) {
+			t.Fatalf("%s：超时那一行该是 %q\n整屏：\n%s", modeTitle(c.mode), c.want, got)
+		}
+	}
+}
+
+// 采纳并发建议之后重显的那一屏：并发数那行加粗并注明「已按建议修改」（ADR-0040 决定三）。
+//
+// 期望串照老版：`ESC[1m` + `ESC[38;5;214m` + 值 + `ESC[0m`——加粗在橙色之前，只一层，
+// 外面不再套表格那层橙（叠两层转义序列就与老版差一截）。
+func TestConfirmScreenConcurrencyAdopted(t *testing.T) {
+	p := plainPlan(contract.ModeUpload)
+	p.Task.Upload = &contract.UploadTask{Source: "./dist"}
+	p.Nodes = []contract.Node{{IP: "10.0.0.1"}, {IP: "10.0.0.2"}}
+	p.Run.Concurrency = 2
+
+	adopted := ConfirmScreen(p, "ok.csv", "", true).Text()
+	if want := "\x1b[1m\x1b[38;5;214m2（已按建议修改）\x1b[0m"; !strings.Contains(adopted, want) {
+		t.Fatalf("采纳之后并发数那行该是 %q\n整屏（带转义）：%q", want, adopted)
+	}
+
+	plain := ConfirmScreen(p, "ok.csv", "", false).Text()
+	if strings.Contains(plain, "已按建议修改") {
+		t.Fatalf("没采纳时不该有那句注：%q", plain)
 	}
 }
