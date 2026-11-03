@@ -32,7 +32,7 @@ func readManifest(raw string) (manifest, *contract.CannotStart) {
 		return manifest{}, fail
 	}
 
-	rows, err := csvRows(text)
+	rows, _, err := csvRows(text)
 	if err != nil {
 		return manifest{}, cannotStart("nodelist", "", manifestSyntaxError(raw, inline, err))
 	}
@@ -117,26 +117,34 @@ func readFailure(err error) string {
 
 // csvRows 把文本读成行：剥 BOM、`#` 注释行跳过、空行跳过、列数不限、引号成对时可含逗号与换行。
 //
-// 这套口径与 `-a` 代填共用（那张单随阶段 05 的其余模式），所以单独一处写清，
-// 两处不再各写一套。
-func csvRows(text string) ([][]string, error) {
+// 这套口径与 `-a` 代填共用：清单与代填不再各写一套规则。
+//
+// 第二个返回值是每一行在**文本里的行号**（1 起，空行与注释行照样占号）：报错要说清
+// 「第几行」，而跳过空行之后下标与行号就对不上了。行号取自读入器自己的记录位置，
+// 不靠事后回溯（重复行会回溯到第一个，报错就指到别处）。
+func csvRows(text string) ([][]string, []int, error) {
 	src := strings.TrimPrefix(text, "\ufeff")
 	r := csv.NewReader(strings.NewReader(src))
 	r.FieldsPerRecord = -1
 	r.Comment = '#'
 
-	var rows [][]string
+	var (
+		rows  [][]string
+		lines []int
+	)
 	for {
 		rec, err := r.Read()
 		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
+		line, _ := r.FieldPos(0)
 		rows = append(rows, rec)
+		lines = append(lines, line)
 	}
-	return rows, nil
+	return rows, lines, nil
 }
 
 // manifestSyntaxError 是 CSV 语法错的那句话：说清哪一行、引号要成对。
@@ -159,7 +167,7 @@ func manifestSyntaxError(raw string, inline bool, err error) string {
 //
 // 用 CSV 读法而不是自己按逗号切：手切看不出引号里包着的逗号，也认不出引号没闭合。
 func looksLikeInlineNode(raw string) bool {
-	rows, err := csvRows(raw)
+	rows, _, err := csvRows(raw)
 	if err != nil || len(rows) != 1 || len(rows[0]) == 0 {
 		return false
 	}

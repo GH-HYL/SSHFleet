@@ -164,6 +164,20 @@ func (c *client) authMethods() ([]ssh.AuthMethod, error) {
 	return methods, nil
 }
 
+// authMethodDesc 握手实际会用上的登录方式（给执行期日志留痕，不参与分类）。
+//
+// 「配了密钥没有」是纸上的事实：两个都配时由库自己挑，而库挑的顺序是先密钥后密码——
+// 所以有密钥就记「密钥」。这一段只回答「怎么登的」，不回答「为什么没登上去」。
+func (c *client) authMethodDesc() string {
+	switch {
+	case c.node.Key != "":
+		return "密钥"
+	case c.node.Password != "":
+		return "密码"
+	}
+	return "未配置"
+}
+
 // isTimeout 判一个错误是不是「到点了」。
 func isTimeout(err error) bool {
 	var netErr net.Error

@@ -32,10 +32,12 @@ func Run(l contract.Ledger, reportPath string) error {
 	// 遮在报告站这一侧做，两处产出共用同一份已遮的值：贴出去的命令行与清单只有一个版。
 	maskedArgv := mask.CommandLine(body.Argv)
 	maskedManifest := mask.InlineRecordIf(l.Resources.Manifest)
+	// 新密码印之前自己遮：密文里装的是明文（遮秘密不产生字段，谁要谁现算）。
+	maskedPassword := mask.Secret(body.NewPassword)
 
 	console.Print(message.StatisticsLine(l, body.ShowCategoryTips, body.ErrorKeywordsPath))
 
-	if err := os.WriteFile(reportPath, []byte(message.ReportText(l, body, maskedArgv, maskedManifest)), 0o644); err != nil {
+	if err := os.WriteFile(reportPath, []byte(message.ReportText(l, body, maskedArgv, maskedManifest, maskedPassword)), 0o644); err != nil {
 		return fmt.Errorf("写报告文件失败（%s）：%w", reportPath, err)
 	}
 	return nil

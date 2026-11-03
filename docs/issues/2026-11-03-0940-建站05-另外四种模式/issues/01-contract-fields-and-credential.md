@@ -4,7 +4,7 @@
 
 **Blocked by**：无，可立即开工。
 
-**Status**：ready-for-agent
+**Status**：已完成（done）
 
 - [ ] `contract` 补齐：`Task.Passwd.NewPassword`、`Task.Upload.Files`／`Skipped`／`TopEntries`／`TotalBytes`、命令与脚本载荷的 `Answers`、`RunParams.SudoGiven`／`MatchRegex`／`MatchCaseSensitive`／`ConcurrencyAdvice`／`FallbackExt`、`NodeResult.AuthMethod`／`Steps`／`Transfer`／`Answer`、`ResultPaper` 与 `Ledger` 的 `Concurrency`——每个字段一句注释说清谁填、谁读。**每台的事实住 `NodeResult`，不往 `Extra` 里塞**（`Extra` 是纸上一格，装不了逐台的东西）
 - [ ] 随行的两个新类型（可传文件条目、中间步骤）落契约，站里不另造一份
@@ -14,3 +14,7 @@
 - [ ] `gofmt -l .` 空、`go build`／`go vet`／`go test ./...` 绿；真工程仍 17 包零违规、红线 39 条未动
 
 **不在这单**：不改任何站的行为；不写新红线；不动红线名单。
+
+## Comments
+
+2026-11-03：已结。契约补齐（含随行类型 `UploadFile`／`UploadEntry`／`Step`／`Answer`／`AnswerResult`／`TransferStat`，另补 `Upload.RootIsDir`——单文件与空目录的确认屏长得不一样，光看 TopEntries 分不出）；凭据入口 `credential.PlainValue`（值+开关 → 明文或问题清单，致命错误与「值有问题」分开）；运行上下文只补 `NewPassword`、`Answers` 换口径、并发数不进去，两处固定密文样本重录；明文样本 `testdata/password.txt`。四项检查绿。

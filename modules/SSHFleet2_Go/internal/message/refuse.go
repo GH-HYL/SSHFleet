@@ -1,5 +1,10 @@
 package message
 
+import (
+	"fmt"
+	"strings"
+)
+
 // 闸门那几类拒绝的话：闸门只交事实（哪一条没过、哪个选项、哪段原文），句子在这里成形。
 //
 // 判据是 ADR-0034 决定八（出判断的地方不写话）与 ADR-0028 决定一、五（标签与新行只许在
@@ -8,6 +13,12 @@ package message
 //
 // 文案逐字照老工程：`internal/cli/check.go` 的 CheckArguments 与 `internal/cli/args.go` 的
 // 解析失败那两句。这里是使用者看得见的面，改一个字都是改行为。
+
+// ConfigShownPath 是面向使用者的配置文件路径：不带 `./`，它不是路径的一部分。
+//
+// 它出现在给使用者看的话里（例如「请改 xxx 的 [interpreter]」），所以归这里；
+// 解析站要展示同一处路径时也向这里要，两处不许各写一份。
+const ConfigShownPath = "config/SSHFleet.conf"
 
 // 三句外壳，对位老版 main.go 的两处 wrapFatal 与危险规则表那一处。
 //
@@ -76,7 +87,7 @@ const (
 // subject 是这一格怎么称呼自己（上面那三个常量之一）。
 func RefuseBadPositiveInt(flag, subject, raw string) string {
 	return Shell(HeadCompliance, ProblemHint(
-		flag+" 参数格式错误，"+subject+"必须是正整数，当前值："+raw,
+		CurrentValue(flag+" 参数格式错误，"+subject+"必须是正整数", raw),
 		"给一个正整数（单位见该选项的说明）"))
 }
 
@@ -127,7 +138,7 @@ func RefusePasswdWithKey() string {
 // RefuseRemotePathNotAbsolute 远端路径（上传目录、下载源）不以 / 开头。
 func RefuseRemotePathNotAbsolute(flag, what, value string) string {
 	return Shell(HeadCompliance, ProblemHint(
-		flag+" 参数指定的"+what+"必须是绝对路径，当前值："+value,
+		CurrentValue(flag+" 参数指定的"+what+"必须是绝对路径", value),
 		"服务器上的路径要从 / 写起，例如 /opt/app/"))
 }
 
@@ -141,7 +152,7 @@ func RefuseRemotePathHasNewline(flag, what, value string) string {
 // RefuseUploadDirNeedsSlash 上传的 -p 必须以 / 收尾（ADR-0002 的消歧义约束）。
 func RefuseUploadDirNeedsSlash(value string) string {
 	return Shell(HeadCompliance, ProblemHint(
-		"上传模式：-p 必须是以 / 结尾的目录，当前值："+value,
+		CurrentValue("上传模式：-p 必须是以 / 结尾的目录", value),
 		"-p 只表示\"放到哪个目录\"，工具不会替你改文件名，所以要以 / 收尾"))
 }
 
@@ -183,4 +194,57 @@ func RefusePasswdEmpty() string {
 	return Shell(HeadCompliance, ProblemHint(
 		"--change-password 的新密码不能为空",
 		"后面跟这次要统一改成的新密码"))
+}
+
+// —— 阶段 05 的五条互斥、两条 `-a` 判据 ——
+//
+// 文案逐字照老版 `cli/check.go` 的 CheckArguments 与 `cli/answer.go` 的 checkAnswer*：
+// 哪一句带「提示：」、哪一句另起一行不带上标签，都照原样——使用者照着做的那一步不一样。
+
+// RefuseAnswerWithUpload `-a` 不能和 `-u` 一起用。
+func RefuseAnswerWithUpload() string {
+	return Shell(HeadCompliance, ProblemHint(
+		"-a 不能和 -u 一起用",
+		"代填是给命令、脚本的交互用的，上传时没有命令在跑"))
+}
+
+// RefuseAnswerWithDownload `-a` 不能和 `-d` 一起用。
+func RefuseAnswerWithDownload() string {
+	return Shell(HeadCompliance, ProblemHint(
+		"-a 不能和 -d 一起用",
+		"代填是给命令、脚本的交互用的，下载时没有命令在跑"))
+}
+
+// RefuseAnswerWithNoShell `--no-shell` 不能和 `-a` 一起用。
+func RefuseAnswerWithNoShell() string {
+	return Shell(HeadCompliance, ProblemHint(
+		"--no-shell 不能和 -a 一起使用",
+		"请去掉其中一个"))
+}
+
+// RefusePasswdWithSudo 改密不能和身份开关一起用：第二行不带上标签（老版就那样）。
+func RefusePasswdWithSudo() string {
+	return Shell(HeadCompliance, "--change-password 不能和 --sudo / --no-sudo 一起用\n"+
+		"改的是登录账号自己的密码，与执行身份无关")
+}
+
+// RefuseAnswerTooLong `-a` 下发的命令太长：量的是**整条下发行**，不是正文。
+//
+// body 是正文的字节数（老版那一格还在，是要让人知道限的是哪一头），line 是量出来的
+// 下发行字节数，limit 是写的上限。
+func RefuseAnswerTooLong(body, line, limit int) string {
+	return Shell(HeadCompliance, fmt.Sprintf(
+		"-a 参数下发的命令太长：正文 %d 字节，下发 %d 字节，上限 %d 字节\n"+
+			"提示：请把正文控制在 7 万字节以内（代填要把正文编进命令行，长度受它限制）",
+		body, line, limit))
+}
+
+// RefuseAnswerUnsupportedInterpreter `-a` 不支持这个解释器：表外的名字没有统一的
+// 「一段程序文本」入口，硬跑只会静默不跑（perl 用 -c 甚至只做语法检查）。
+func RefuseAnswerUnsupportedInterpreter(interpreter string) string {
+	return Shell(HeadCompliance, fmt.Sprintf(
+		"-a 代填不支持解释器 %q\n"+
+			"目前支持：%s\n"+
+			"提示：请改 %s 的 [interpreter]，换成上面这些；或去掉 -a 后重跑",
+		interpreter, strings.Join(SupportedInterpreters(), "、"), ConfigShownPath))
 }

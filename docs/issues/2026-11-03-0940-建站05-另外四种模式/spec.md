@@ -1,6 +1,6 @@
 # 规格：阶段 05——另外四种模式
 
-**Status**：ready-for-agent
+**Status**：进行中（in progress）
 
 ## 边界（照抄母规格三条）
 
@@ -338,3 +338,18 @@
 **落法**：新增 02 号单（拼装连同解释器表搬回解析站，纸上一格成品串，执行站只发不拼）；`-a` 的长度判据回到老版那条（整条下发行 ≤ 98304，判在闸门、归拒绝、位置在确认屏之前），常量 70000 撤掉；表外解释器由解析站记事实、闸门拒，报错也回到确认屏之前。
 
 **结果**：本阶段不再有已知差异。代价是 04 的 `execute/build.go`（127 行）搬家、两个调用点改读纸、命令模式 A/B 重跑一轮——都记在 02 号单里。
+
+### 2026-11-03：断点一、二过（01–09 号单已结），10–16 代码就位
+
+**已结并验过**（单测覆盖，四项检查与 `-race` 全绿、17 包零违规、放行 0 条、红线 39 条未动）：
+
+- 01 纸上补格与凭据入口（`credential.PlainValue`；另补 `Upload.RootIsDir` 一格——单文件与空目录的确认屏分不开，理由在 01 号单 `## Comments`）；运行上下文只补 `NewPassword`、`Answers` 换口径、并发数挪第三张纸，两处固定密文样本重录。
+- 02 拼装连同解释器表搬回解析站（`parse/downlink.go`），执行站改读纸上两格（`Downlink`／`Stdin`），`execute/build.go` 删除；表外解释器记 `ProblemInterpreterUnsupported` 交闸门。**命令模式 A/B 重跑未做，归 18**。
+- 03 两批文案标签收进 `message/labels.go`，`labels_test.go` 加扫描判据。
+- 04／05／06／07 四路落解析站（解释器、代填表、严格采集、改密值），用例齐（含 FIFO、正则预编译、密文贴错两种开关）。
+- 08 五条互斥、`-a` 超长（量整条下发行 98304）、表外解释器拒绝；远端路径两端空白改在解析站去。
+- 09 四支确认屏（逐字断言）、上传内容树、并发建议（`--yes` 自动采纳并留痕）、回退确认、`--sudo` 撞 `--no-shell` 那道门（04 漏下的）、english 撞中文代填值。**交互路径未在真机验，归 18**。
+
+**代码就位、未验**（10–16 号单，`Status` 仍 `ready-for-agent`）：执行站按模式分派（`execute/step.go` + `run_upload.go`／`run_download.go`／`run_passwd.go`＋代填分支 `run_answer.go`）、SFTP 上传下载与回滚、空间预检、改密会话、传输逐节点进度面板（`transfer_progress.go`／`transfer_view.go`）、报告四支与代填明细、`FormatSpeed` 收进 `message`。**u1 容器在跑，集成用例与 A/B 都还没跑**——下一步是从 `-tags integration` 那几条开始，跑通一条验一支。
+
+**顺带记录**：`message` 加 `CategoryPasswdExpired`（「密码过期」这一类的名字，代填的中止词与改密的入场信号同取一份）；`csvRows` 现在带行号（清单与代填共用）；`pkg/sftp` 加名记一行（12 号单），`thirdParty`／`go.mod` 跟上。

@@ -30,24 +30,45 @@ const confirmTitle = "           SSHFleet - 执行选项/参数确认           
 
 // ConfirmScreen 是确认那一屏：横幅 + 一张两列表。
 //
-// manifest 是**已经遮过**的节点清单：内联清单里就写着密码，不能原样上屏。遮法住 mask，
-// 由调用方（闸门）取一次递进来——`message` 的依赖白名单里只有契约，不新开一条叶子之间的边。
-func ConfirmScreen(p *contract.Plan, manifest string) Line {
+// manifest 与 maskedPassword 都是**已经遮过**的：内联清单里就写着密码、新密码更是凭据本身，
+// 都不能原样上屏。遮法住 mask，由调用方（闸门）取一次递进来——`message` 的依赖白名单里
+// 只有契约，不新开一条叶子之间的边。
+func ConfirmScreen(p *contract.Plan, manifest, maskedPassword string) Line {
 	border := strings.Repeat("═", len([]rune(confirmTitle))+10)
 
 	var b strings.Builder
 	b.WriteString("\n" + ansiCyan + "╔" + border + "╗" + ansiReset + "\n")
 	b.WriteString(ansiCyan + "║  " + confirmTitle + "  ║" + ansiReset + "\n")
 	b.WriteString(ansiCyan + "╚" + border + "╝" + ansiReset + "\n\n")
-	b.WriteString(infoTable(confirmRows(p, manifest)))
+	b.WriteString(infoTable(confirmRows(p, manifest, maskedPassword)))
 	return Line{s: b.String()}
 }
 
 // confirmRows 是那张表的行，次序照老版：模式与内容 → 清单与台数 → 执行参数。
 //
 // 空的一行（两列都空）在排版里落成一个换行，用来把表分块。
-func confirmRows(p *contract.Plan, manifest string) [][2]string {
+func confirmRows(p *contract.Plan, manifest, maskedPassword string) [][2]string {
 	var t [][2]string
+
+	// 执行身份行只在上传／下载／改密出现：命令与脚本的身份要么与登录用户一致、要么被
+	// --no-shell 剥掉，不生效的身份摆一行没有信息量（老版 2026-10-28 定）。
+	switch p.Mode {
+	case contract.ModeUpload, contract.ModeDownload, contract.ModePasswd:
+		t = append(t, [2]string{"执行身份", identityLabel(p.Run)})
+	}
+
+	// 解释器行只在命令／脚本模式出现，且只在解释器不是 bash 时占一行——默认值不必提醒。
+	// --no-shell 时解释器配置不参与执行，这一行改放提示。
+	switch p.Mode {
+	case contract.ModeCommand, contract.ModeScript:
+		if p.Run.Interpreter != "" && !isBashInterpreter(p.Run.Interpreter) {
+			value := p.Run.Interpreter
+			if p.Run.NoShell {
+				value = "原样下发，本次不生效"
+			}
+			t = append(t, [2]string{"解释器", value})
+		}
+	}
 
 	switch p.Mode {
 	case contract.ModeCommand:
@@ -56,8 +77,25 @@ func confirmRows(p *contract.Plan, manifest string) [][2]string {
 		t = append(t, [2]string{modeRowLabel, modeTitle(p.Mode)}, [2]string{"命令内容", p.Task.Command.Text}, [2]string{"", ""})
 	case contract.ModeScript:
 		t = append(t, [2]string{modeRowLabel, modeTitle(p.Mode)}, [2]string{"脚本路径", p.Task.Script.Path}, [2]string{"", ""})
+	case contract.ModeUpload:
+		t = append(t, [2]string{modeRowLabel, modeTitle(p.Mode)},
+			[2]string{"本地路径", p.Task.Upload.Source},
+			[2]string{"远程路径", p.Task.Path},
+			[2]string{"", ""})
+	case contract.ModeDownload:
+		t = append(t, [2]string{modeRowLabel, modeTitle(p.Mode)},
+			[2]string{"远程路径", p.Task.Download.RemotePath},
+			[2]string{"本地路径", p.Task.Path},
+			[2]string{"", ""})
+	case contract.ModePasswd:
+		// 新密码是明确知道身份的凭据：按下确认之前看得见形态，但只看得到脱敏形态。
+		// 取解析后那份明文去遮（加密模式下原值是一份密文文件的路径，遮出来是一串路径，
+		// 屏上核不到这次到底要设什么）。
+		t = append(t, [2]string{modeRowLabel, modeTitle(p.Mode)},
+			[2]string{"新密码", maskedPassword})
 	}
 
+	t = append(t, answerRows(p)...)
 	t = append(t,
 		[2]string{"节点清单", manifest},
 		[2]string{"节点数量", strconv.Itoa(len(p.Nodes))},
@@ -74,6 +112,49 @@ func confirmRows(p *contract.Plan, manifest string) [][2]string {
 		t = append(t, [2]string{"备注", strings.TrimSpace(p.Run.Remark)})
 	}
 	return t
+}
+
+// answerRows 参数屏里的代填行：每条一行，含内容与它的全部触发词（顺序同命令行）。
+//
+// 代填会直接改远端行为，按下确认之前得看得见这次配了什么。
+func answerRows(p *contract.Plan) [][2]string {
+	var answers []contract.Answer
+	switch {
+	case p.Task.Command != nil:
+		answers = p.Task.Command.Answers
+	case p.Task.Script != nil:
+		answers = p.Task.Script.Answers
+	}
+	rows := make([][2]string, 0, len(answers))
+	for i, entry := range answers {
+		rows = append(rows, [2]string{"代填 " + strconv.Itoa(i+1), AnswerDescribe(entry)})
+	}
+	return rows
+}
+
+// identityLabel 「执行身份」那一行的值：取**实际生效**的那一个，不是使用者要的那一个。
+func identityLabel(run contract.RunParams) string {
+	if run.Sudo && !run.NoShell {
+		return "root"
+	}
+	return "登录用户"
+}
+
+// isBashInterpreter 解释器是不是 bash：归一后认名（`/bin/bash`、`bash5` 都算）。
+//
+// 归一规则与解析站那张解释器表同源（取第一个词、去目录、转小写、去尾部版本号），
+// 这里只为一个显示门槛服务——配置就是默认的 bash 时不占行、不提示。
+func isBashInterpreter(interpreter string) bool {
+	fields := strings.Fields(interpreter)
+	if len(fields) == 0 {
+		return false
+	}
+	name := fields[0]
+	if i := strings.LastIndexAny(name, `/\\`); i >= 0 {
+		name = name[i+1:]
+	}
+	name = strings.ToLower(name)
+	return strings.TrimRight(name, "0123456789.") == "bash"
 }
 
 // concurrencyText 是并发数那一格：没指定 -n 时补一句「全部并行」，让人知道这个数从哪来。

@@ -49,6 +49,12 @@ func readLine() (string, bool) {
 	return sc.Text(), true
 }
 
+// Show 只打一屏、不问。用在「先说一段、后面还有别的屏」的场合：
+// 确认屏之后紧跟上传内容树与并发建议，中间没有要收的回答。
+func Show(screen message.Line) {
+	console.Print(screen)
+}
+
 // AskWith 与 Ask 同，但**屏与问句都由调用方给**。
 //
 // 危险提醒那句问句与确认屏那句不是一句话；屏幕也一样——确认屏是一整张表。

@@ -60,8 +60,6 @@ func runMetaBodyOf(p *contract.Plan, argv []string, cfg *settings) contract.RunM
 	body := contract.RunMetaBody{
 		Argv:            append([]string(nil), argv...),
 		Mode:            p.Mode,
-		Answers:         p.Run.Answer,
-		Concurrency:     p.Run.Concurrency,
 		TimeoutConnect:  p.Run.TimeoutConnect,
 		TimeoutExecute:  p.Run.TimeoutExecute,
 		TimeoutTransfer: p.Run.TimeoutTransfer,
@@ -72,14 +70,18 @@ func runMetaBodyOf(p *contract.Plan, argv []string, cfg *settings) contract.RunM
 	switch {
 	case p.Task.Command != nil:
 		body.Command = p.Task.Command.Text
+		body.Answers = p.Task.Command.Answers
 	case p.Task.Script != nil:
 		body.ScriptPath = p.Task.Script.Path
+		body.Answers = p.Task.Script.Answers
 	case p.Task.Upload != nil:
 		body.Source = p.Task.Upload.Source
 		body.Target = p.Task.Path
 	case p.Task.Download != nil:
 		body.Source = p.Task.Download.RemotePath
 		body.Target = p.Task.Path
+	case p.Task.Passwd != nil:
+		body.NewPassword = p.Task.Passwd.NewPassword
 	}
 	return body
 }

@@ -11,6 +11,12 @@ import (
 	"strings"
 )
 
+// CategoryPasswdExpired 是判据表里名为「密码过期」的那一类。
+//
+// 代填拿它的关键词当**中止词**（碰上就地收手）；改密拿它当**入场信号**（出现才开始喂）。
+// 同一份关键词，方向相反——两处都从这里取，改名只改这一处。
+const CategoryPasswdExpired = "密码过期"
+
 // CategoryUnknown 完全无信息时的兜底分类（老版 `verdict.Unclassified`，一字不改）。
 const CategoryUnknown = "原因未知"
 

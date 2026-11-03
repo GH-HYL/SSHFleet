@@ -58,7 +58,9 @@ func categoryOf(mode contract.Mode, t contract.Tables, r *contract.NodeResult) s
 			return truncateCategory(trimmed)
 		}
 	}
-	if r.Output != "" {
+	// 改密不拿输出原文匹配：「密码过期」那句提示本身就是它的前提，把提示当失败原因
+	// 会把干净成功也归到失败类里（老版同口径：改密且已见过入场信号时只拿报错原文匹配）。
+	if mode != contract.ModePasswd && r.Output != "" {
 		if hit := firstCategory(t.Categories, r.Output); hit != "" {
 			return hit
 		}
@@ -75,13 +77,29 @@ func categoryOf(mode contract.Mode, t contract.Tables, r *contract.NodeResult) s
 // 最后那一条不是多余的：报文只在非成功形态下写，而「代填没送完但命令退出 0」这类情形
 // 退出码是 0——没有它就会被判成成功。
 //
-// 其余三种模式（上传、下载、改密）随阶段 05：它们各有各的成功规则，本阶段执行站也只实现
-// 命令那一支，落到这里的别的模式一律不算干净走完。
+// 上传与下载共用一条：连上了、失败文件数为 0、成功文件数 > 0、没超时没取消。
+//
+// 改密单列一条：干净收场（没超时没取消、报错原文为空、下发的 `:` 不是非 0）**且**整场
+// 出现过入场信号——没见过信号的那些台，收尾时已经写了一句「密码未过期」，报错原文不为空，
+// 于是自然落不进成功那一类。
 func ranClean(mode contract.Mode, r *contract.NodeResult) bool {
 	switch mode {
 	case contract.ModeCommand, contract.ModeScript:
 		return r.ExitCode != nil && *r.ExitCode == 0 && !r.TimedOut && !r.Cancelled &&
 			!isMessage(r.ErrorText)
+	case contract.ModeUpload, contract.ModeDownload:
+		return r.Connected && r.Transfer.FailFiles == 0 && r.Transfer.SuccessFiles > 0 &&
+			!r.TimedOut && !r.Cancelled
+	case contract.ModePasswd:
+		if !r.Connected || r.TimedOut || r.Cancelled || r.ErrorText != "" {
+			return false
+		}
+		for _, s := range r.Steps {
+			if s.Name == contract.StepPasswd && s.ExitCode != nil && *s.ExitCode != 0 {
+				return false
+			}
+		}
+		return true
 	}
 	return false
 }

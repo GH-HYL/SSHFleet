@@ -4,7 +4,7 @@
 
 **Blocked by**：01（纸要先装得下）、04（脚本的解释器要先定出来）。
 
-**Status**：ready-for-agent
+**Status**：已完成（done）
 
 - [ ] `execute/build.go` 整体搬进解析站（`downCommand`、`envHead`、`exportPrefix`、`localeFragment`、`sudoPrefix`、`shellQuote`、`quoteEnvValue` 一并搬），执行站不再有拼装；原文件与它的单测一起走
 - [ ] 纸上多一格成品：一条下发行 + 一份要沿 stdin 送的正文（普通路径两者都有；`-a` 的正文已 base64 进命令行，stdin 为空）
@@ -16,3 +16,7 @@
 - [ ] `gofmt -l .` 空、四项检查与 `go test -race` 绿；17 包零违规、红线 39 条不动
 
 **不在这单**：`-a` 的长度闸门（08 号单，量纸上那条成品串）、代填会话（11 号单）、脚本执行（10 号单）。
+
+## Comments
+
+2026-11-03：已结。拼装整份搬进 `parse/downlink.go`（含解释器表、`$0`、zsh 适配、`-a` 的 base64）；纸上多两格 `RunParams.Downlink`／`Stdin`；表外解释器记 `ProblemInterpreterUnsupported` 交闸门；四种情形用例齐（含脚本、`-a`、zsh）。**命令模式 A/B 重跑未做**（归 18 号单一起跑）。

@@ -21,7 +21,7 @@ import (
 
 const (
 	configPath      = "./config/SSHFleet.conf"
-	shownConfigPath = "config/SSHFleet.conf"
+	shownConfigPath = message.ConfigShownPath
 )
 
 // account 登录账号。
@@ -315,7 +315,7 @@ func intOf(raw rawConfig, section, key string) (int, error) {
 	v := raw[section][key]
 	n, err := strconv.Atoi(strings.TrimSpace(v))
 	if err != nil {
-		return 0, fmt.Errorf("%s.%s 取值非法：%s（须为整数）", section, key, v)
+		return 0, fmt.Errorf("%s（须为整数）", message.ValueInvalid(section+"."+key, v))
 	}
 	return n, nil
 }
@@ -329,13 +329,13 @@ func boolOf(raw rawConfig, section, key string) (bool, error) {
 	case "false":
 		return false, nil
 	}
-	return false, fmt.Errorf("%s.%s 取值非法：%s（只认 true / false）", section, key, v)
+	return false, fmt.Errorf("%s（只认 true / false）", message.ValueInvalid(section+"."+key, v))
 }
 
 // validateValues 取值合规性：端口、三个超时、上传阈值、[env]、[interpreter]。
 func validateValues(cfg *settings) error {
 	if cfg.account.Port < 1 || cfg.account.Port > 65535 {
-		return fmt.Errorf("account.port 取值非法：%d（须为 1-65535）", cfg.account.Port)
+		return fmt.Errorf("%s（须为 1-65535）", message.ValueInvalid("account.port", strconv.Itoa(cfg.account.Port)))
 	}
 	for _, x := range []struct {
 		name string
@@ -346,20 +346,21 @@ func validateValues(cfg *settings) error {
 		{"execution.timeout_transfer", cfg.Execution.TimeoutTransfer},
 	} {
 		if x.val < 1 {
-			return fmt.Errorf("%s 取值非法：%d（须为正整数，单位秒）", x.name, x.val)
+			return fmt.Errorf("%s（须为正整数，单位秒）", message.ValueInvalid(x.name, strconv.Itoa(x.val)))
 		}
 	}
 	if cfg.upload.SmallFile < 1 {
-		return fmt.Errorf("upload.small_file 取值非法：%d（须为正整数，单位字节）", cfg.upload.SmallFile)
+		return fmt.Errorf("%s（须为正整数，单位字节）", message.ValueInvalid("upload.small_file", strconv.Itoa(cfg.upload.SmallFile)))
 	}
 	if cfg.upload.LargeFile < 1 {
-		return fmt.Errorf("upload.large_file 取值非法：%d（须为正整数，单位字节）", cfg.upload.LargeFile)
+		return fmt.Errorf("%s（须为正整数，单位字节）", message.ValueInvalid("upload.large_file", strconv.Itoa(cfg.upload.LargeFile)))
 	}
 	if cfg.upload.LargeFile < cfg.upload.SmallFile {
-		return fmt.Errorf("上传阈值取值非法：large_file(%d) 不能小于 small_file(%d)", cfg.upload.LargeFile, cfg.upload.SmallFile)
+		return fmt.Errorf("%s", message.ValueInvalidTight("上传阈值",
+			fmt.Sprintf("large_file(%d) 不能小于 small_file(%d)", cfg.upload.LargeFile, cfg.upload.SmallFile)))
 	}
 	if cfg.upload.MediumParallel < 1 {
-		return fmt.Errorf("upload.medium_parallel 取值非法：%d（须为正整数）", cfg.upload.MediumParallel)
+		return fmt.Errorf("%s（须为正整数）", message.ValueInvalid("upload.medium_parallel", strconv.Itoa(cfg.upload.MediumParallel)))
 	}
 	if err := validateEnv(cfg.Env); err != nil {
 		return err
@@ -385,7 +386,7 @@ func validateEnv(env map[string]string) error {
 		}
 		if trailingBackslashes(value)%2 == 1 {
 			return fmt.Errorf("%s", message.Problem(
-				fmt.Sprintf("env 里的 %q 取值不能以反斜杠结尾，当前值：%q", name, value),
+				message.CurrentValue(fmt.Sprintf("env 里的 %q 取值不能以反斜杠结尾", name), fmt.Sprintf("%q", value)),
 				"值会被包进双引号下发，结尾的反斜杠会吃掉那个收尾引号，远端整条命令变成语法错",
 				"要一个反斜杠就写两个"))
 		}
@@ -411,7 +412,7 @@ func validateInterpreter(it *interpreter) error {
 			"写命令模式（-c）要用的解释器，例如 bash"))
 	}
 	if strings.ContainsAny(it.Command, "\r\n") {
-		return fmt.Errorf("interpreter.command 不能含换行，当前值：%q", it.Command)
+		return fmt.Errorf("%s", message.CurrentValue("interpreter.command 不能含换行", fmt.Sprintf("%q", it.Command)))
 	}
 	if len(it.Script) == 0 {
 		return fmt.Errorf("%s", message.ProblemHint(
@@ -430,7 +431,7 @@ func validateInterpreter(it *interpreter) error {
 		}
 		if !strings.HasPrefix(key, ".") {
 			return fmt.Errorf("%s", message.ProblemHint(
-				fmt.Sprintf("interpreter.script 的后缀要以点开头，当前值：%q", key),
+				message.CurrentValue("interpreter.script 的后缀要以点开头", fmt.Sprintf("%q", key)),
 				"写成 \".sh\"，不要写成 \"sh\""))
 		}
 		if val == "" {
@@ -439,7 +440,7 @@ func validateInterpreter(it *interpreter) error {
 				"等号右边要写解释器，例如 \".sh\" = \"bash\""))
 		}
 		if strings.ContainsAny(val, "\r\n") {
-			return fmt.Errorf("interpreter.script 里 %q 的解释器不能含换行，当前值：%q", key, val)
+			return fmt.Errorf("%s", message.CurrentValue(fmt.Sprintf("interpreter.script 里 %q 的解释器不能含换行", key), fmt.Sprintf("%q", val)))
 		}
 		lower := strings.ToLower(key)
 		if prev, dup := seen[lower]; dup {
@@ -497,7 +498,7 @@ func normalizeConfigPath(name, raw string) (string, error) {
 	}
 	pathErr := func(head, reason string) error {
 		return fmt.Errorf("%s", message.Problem(
-			fmt.Sprintf("%s %s，当前值：%s", name, head, raw),
+			message.CurrentValue(name+" "+head, raw),
 			reason,
 			fmt.Sprintf("%s，例如 %s", absHint, example)))
 	}

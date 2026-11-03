@@ -3,9 +3,7 @@ package parse
 import (
 	"bytes"
 	"fmt"
-	"io/fs"
 	"os"
-	"path/filepath"
 	"unicode/utf8"
 
 	"sshfleet2/internal/contract"
@@ -55,28 +53,9 @@ func checkMaterial(p *contract.Plan, given map[string]bool, vals map[string]stri
 				"请把脚本转成 UTF-8 后再执行"))
 		}
 		if p.Task.Script != nil {
-			p.Task.Script.Body = string(data)
-		}
-	}
-
-	// -u：上传源存在、不是符号链接、目录里至少有一个真文件。
-	if upload := vals["--upload"]; upload != "" {
-		info, err := os.Lstat(upload)
-		if err != nil {
-			return materialFail(message.Problem(
-				fmt.Sprintf("-u 参数指定的上传文件或目录读不到：%s", upload),
-				message.SystemReason(err),
-				"-u 后面要写本机上真实存在的文件或目录"))
-		}
-		if info.Mode()&os.ModeSymlink != 0 {
-			return materialFail(message.ProblemHint(
-				fmt.Sprintf("-u 参数指定的上传文件或目录是符号链接，不能上传：%s", upload),
-				"请直接写它指向的真实文件或目录"))
-		}
-		if info.IsDir() && !dirHasRealFile(upload) {
-			return materialFail(message.ProblemHint(
-				fmt.Sprintf("-u 参数指定的上传目录及其所有子目录中都没有真正的文件（只有符号链接）：%s", upload),
-				"请改上传真实文件所在的目录"))
+			// 正文整备只此一处（剥 BOM、去首尾空白）：危险检测、长度判据与实际下发
+			// 读的都是这一份。
+			p.Task.Script.Body = scriptBody(data)
 		}
 	}
 
@@ -128,22 +107,6 @@ func checkMaterial(p *contract.Plan, given map[string]bool, vals map[string]stri
 // materialFail 套上老版那句外壳，再按「起不来」排屏。外壳句住在 `message`，不在这里抄一份。
 func materialFail(body string) *contract.CannotStart {
 	return cannotStart("cli", message.HeadCompliance, body)
-}
-
-// dirHasRealFile 目录树里有没有真实文件（不是符号链接）。
-func dirHasRealFile(root string) bool {
-	found := false
-	_ = filepath.WalkDir(root, func(_ string, d fs.DirEntry, err error) error {
-		if err != nil || found {
-			return fs.SkipAll
-		}
-		if d.Type().IsRegular() {
-			found = true
-			return fs.SkipAll
-		}
-		return nil
-	})
-	return found
 }
 
 // utf8ValidExceptBOM 判内容为合法 UTF-8（允许带 BOM）。

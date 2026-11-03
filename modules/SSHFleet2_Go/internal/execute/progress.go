@@ -23,6 +23,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"sshfleet2/internal/console"
+	"sshfleet2/internal/contract"
 )
 
 const (
@@ -38,6 +39,7 @@ var (
 	styleDim     = lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
 	styleOK      = lipgloss.NewStyle().Foreground(lipgloss.Color("42"))
 	styleFail    = lipgloss.NewStyle().Foreground(lipgloss.Color("203"))
+	styleSep     = lipgloss.NewStyle().Foreground(lipgloss.Color("238"))
 	stylePercent = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#F8F8F2"))
 )
 
@@ -69,18 +71,25 @@ type progressModel struct {
 }
 
 func newProgressModel(total int, start time.Time) progressModel {
-	// 细线字符 ━/─、scaled 渐变（颜色随已填充宽度走）、暗空档色、百分比一位小数且加粗。
-	// 不挂弹簧动画：批量执行时快照比动画帧还密，弹簧会被一次次重设目标饿死（老版 2026-10-08
-	// 真机实测：几百台跑完仍显示 0.0%）。按目标值直出，数字永远等于真实进度。
+	return progressModel{total: total, start: start, bar: newBar(barWidth)}
+}
+
+// newBar 造一条进度条：细线字符 ━/─、scaled 渐变（颜色随已填充宽度走）、暗空档色、
+// 百分比一位小数且加粗。
+//
+// 不挂弹簧动画：批量执行时快照比动画帧还密，弹簧会被一次次重设目标饿死（老版真机实测：
+// 几百台跑完仍显示 0.0%）。按目标值直出（ViewAs），数字永远等于真实进度。
+func newBar(w int) progress.Model {
 	m := progress.New(
-		progress.WithWidth(barWidth),
+		progress.WithWidth(w),
 		progress.WithFillCharacters('━', '─'),
+		// 渐变两端：#C05050（暗红）→ #FFB454（亮橙）。低色彩终端降色后仍分得出两端。
 		progress.WithScaledGradient("#C05050", "#FFB454"),
 	)
 	m.EmptyColor = "#3C3C50"
 	m.PercentFormat = " %5.1f%%"
 	m.PercentageStyle = stylePercent
-	return progressModel{total: total, start: start, bar: m}
+	return m
 }
 
 func (m progressModel) Init() tea.Cmd { return nil }
@@ -136,7 +145,8 @@ func elapsedText(d time.Duration) string {
 type screen struct {
 	mu    sync.Mutex
 	w     io.Writer
-	prog  *tea.Program
+	prog  *tea.Program // 命令／脚本／改密那块单行面板
+	tprog *tea.Program // 传输类那块逐节点面板（两种模式一执行期只会起一种）
 	plain bool
 }
 
@@ -158,6 +168,28 @@ func (s *screen) above(text string) {
 	}
 	// Println 自己补一个换行，正文末尾那个就不必再带。
 	prog.Println(strings.TrimSuffix(text, "\n"))
+}
+
+// transfer 一份传输快照：懒起那块逐节点面板（与命令那行同一套懒法）。
+func (s *screen) transfer(snap snapshot, mode contract.Mode, total int, start time.Time) {
+	if s.plain {
+		return
+	}
+
+	s.mu.Lock()
+	if s.tprog == nil {
+		p := tea.NewProgram(newTransferModel(mode, total, start),
+			tea.WithOutput(s.w),
+			tea.WithInput(nil),
+			tea.WithoutSignalHandler(),
+		)
+		go func() { _, _ = p.Run() }()
+		s.tprog = p
+	}
+	prog := s.tprog
+	s.mu.Unlock()
+
+	prog.Send(transferSnapshotMsg{snap: snap, mode: mode})
 }
 
 // progress 一份进度快照。非终端不画界面（与老版同一判据）。
@@ -186,12 +218,14 @@ func (s *screen) progress(completed, succeeded, failed, total int, start time.Ti
 // stop 收工：让界面把最后那几帧与结果行渲染完再退，光标落回界面下方。幂等。
 func (s *screen) stop() {
 	s.mu.Lock()
-	prog := s.prog
-	s.prog = nil
+	prog, tprog := s.prog, s.tprog
+	s.prog, s.tprog = nil, nil
 	s.mu.Unlock()
-	if prog == nil {
-		return
+	for _, p := range []*tea.Program{prog, tprog} {
+		if p == nil {
+			continue
+		}
+		p.Send(finalMsg{})
+		p.Wait()
 	}
-	prog.Send(finalMsg{})
-	prog.Wait()
 }

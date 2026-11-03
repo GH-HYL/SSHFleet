@@ -4,7 +4,7 @@
 
 **Blocked by**：无，可立即开工。
 
-**Status**：ready-for-agent
+**Status**：已完成（done）
 
 - [ ] 20 处逐条改成 `message` 的构造点；`parse` 现有的配置用例一条不改、全过
 - [ ] 同一句文案不再有两个写入点：同一串只在 `message` 里出现一次
@@ -12,3 +12,7 @@
 - [ ] `gofmt -l .` 空、四项检查绿；真工程 17 包零违规、红线 39 条未动
 
 **不在这单**：不改配置字段、不改报错措辞、不动 `ask` 与 `console` 那两处推后项。
+
+## Comments
+
+2026-11-03：已结。「当前值：」「取值非法：」全部收进 `message/labels.go` 三个构造点，`labels_test.go` 加一条扫描判据（这两个词在 message 之外一次都不许出现）。

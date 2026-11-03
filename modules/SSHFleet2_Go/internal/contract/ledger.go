@@ -56,6 +56,10 @@ type Ledger struct {
 	StoppedAt time.Time
 	CostTime  float64 // 总耗时（秒），报告里印两位小数
 
+	// Concurrency 是这次实际生效的并发数：报告「并发数」那一行读它，不读运行上下文——
+	// 闸门可能把它改过，密文里那份是改之前的（ADR-0035 末尾更新记录）。
+	Concurrency int
+
 	// —— 跟着走的 ——
 	Items     []NodeResult // 逐台明细：报告要贴原文
 	Extra     Extra        // 附加格：结算一个字段都没打开
