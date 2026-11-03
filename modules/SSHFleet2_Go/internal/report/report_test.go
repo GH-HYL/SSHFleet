@@ -63,6 +63,46 @@ func TestRunWritesReport(t *testing.T) {
 	}
 }
 
+// runMetaPasswdVector 由 internal/parse 封出来的一段改密运行上下文：argv 里写着新密码明文、
+// 纸上「新密码」那一格也装的是明文（`Fleet#New2026`）。
+const runMetaPasswdVector = "ARJMOSlA116ow4kWGkIc/qyuKWyVcI5CgXXQzw+SIzhxQEkby27/JSUibqGBvjqUX8uWxP39RlF4prbyvhxNNWRC9QSrSVNzFDKCYZyuoGMLh7WdEAA41X2dQli9VRbDp4qCwW+/pW6n894EC6jVZeWJxMtNGb+TibxLdpQTn/t372p9SLiN+wUTUZpMi/zmZW1UtjNgSgHx7ceilSZa0CuxcYPF+OfniE/+NnVbVg9nUUpoL/SRR+cez1dPnynUzhk35BGu"
+
+// TestRunMasksNewPassword 改密模式：密文里装的是**明文**新密码，报告站印之前自己调
+// `mask` 现算一次。遮不是一格字段——纸上不带遮好的形态，谁要印谁算。
+//
+// 那一串同样由 internal/parse 封出来（改密模式、新密码 `Fleet#New2026`），本用例不自己封：
+// 自己封等于把被封的东西也验一遍，验不到报告站这一侧。
+func TestRunMasksNewPassword(t *testing.T) {
+	sealed, err := base64.StdEncoding.DecodeString(runMetaPasswdVector)
+	if err != nil {
+		t.Fatalf("样本本身解不开：%v", err)
+	}
+	l := contract.Ledger{
+		Total: 1, Done: 1, Verify: "通过",
+		SuccessCounts: 1, SuccessCategory: "改密成功",
+		CategoryIPs: []contract.CategoryIPs{{Category: "改密成功", IPs: []string{"127.0.0.1"}}},
+		Resources:   contract.Resources{Manifest: "t1.csv"},
+		RunMeta:     contract.RunMeta(sealed),
+	}
+
+	path := filepath.Join(t.TempDir(), "report.txt")
+	if err := Run(l, path); err != nil {
+		t.Fatalf("写报告失败：%v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("报告没落下：%v", err)
+	}
+	text := string(data)
+
+	if !strings.Contains(text, "  新密码： Fl****26\n") {
+		t.Fatalf("新密码那一行没遮：%s", text)
+	}
+	if strings.Contains(text, "Fleet#New2026") {
+		t.Fatalf("报告里出现了新密码明文：%s", text)
+	}
+}
+
 // TestRunRejectsBrokenRunMeta 运行上下文解不开就报出来：不猜、不拿别处的值顶，
 // 也不留一份「看着对」的报告（15 号单「运行上下文的用法」）。
 func TestRunRejectsBrokenRunMeta(t *testing.T) {
