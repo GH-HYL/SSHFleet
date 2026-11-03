@@ -39,14 +39,20 @@ func Ask(screen message.Line, assumeYes bool, defaultYes bool) Answer {
 	return readAnswer(message.ConfirmPrompt(), defaultYes)
 }
 
-// readLine 从标准输入读一行；流结束时 ok 为假。
+// stdinReader 整个进程共用一条。
+//
+// 不能每次提问新建一个 `bufio.Scanner`：它会把后续输入提前读进自己的缓冲，用完随它一起
+// 丢掉——一次交互里问两三句（回退确认 → 并发建议 → 确认屏）时，第二句就永远读不到，
+// 屏幕上表现为「输入结束，操作已取消」。老版共用一条 reader，这里对齐。
+var stdinReader = bufio.NewReaderSize(os.Stdin, 64*1024)
+
+// readLine 读一行；流结束时 ok 为假。最后一行没有换行符也算读到了。
 func readLine() (string, bool) {
-	sc := bufio.NewScanner(os.Stdin)
-	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-	if !sc.Scan() {
+	line, err := stdinReader.ReadString('\n')
+	if err != nil && line == "" {
 		return "", false
 	}
-	return sc.Text(), true
+	return strings.TrimRight(line, "\r\n"), true
 }
 
 // Show 只打一屏、不问。用在「先说一段、后面还有别的屏」的场合：
@@ -64,12 +70,20 @@ func Show(screen message.Line) {
 // 它是这次交互的收尾，不是开工那一侧的话——所以住 ask，随这一屏一起出去。危险提醒档走
 // `Ask`，没有这一笔。
 func AskWith(screen, question message.Line, defaultYes bool) Answer {
-	console.Print(screen)
-	answer := readAnswer(question, defaultYes)
+	answer := AskQuestion(screen, question, defaultYes)
 	if answer == Yes {
 		console.Print(message.StartLine())
 	}
 	return answer
+}
+
+// AskQuestion 与 AskWith 同，只是答是之后**不打**那两行「开始执行」。
+//
+// 那两行属于确认屏那一问（它是这次交互的收尾）；回退确认这类问句答完还有参数屏要摆，
+// 在这儿打就等于提前宣布开工。
+func AskQuestion(screen, question message.Line, defaultYes bool) Answer {
+	console.Print(screen)
+	return readAnswer(question, defaultYes)
 }
 
 // readAnswer 打问句与方括号提示，再收一行。

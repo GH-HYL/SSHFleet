@@ -33,21 +33,21 @@ const confirmTitle = "           SSHFleet - 执行选项/参数确认           
 // manifest 与 maskedPassword 都是**已经遮过**的：内联清单里就写着密码、新密码更是凭据本身，
 // 都不能原样上屏。遮法住 mask，由调用方（闸门）取一次递进来——`message` 的依赖白名单里
 // 只有契约，不新开一条叶子之间的边。
-func ConfirmScreen(p *contract.Plan, manifest, maskedPassword string) Line {
+func ConfirmScreen(p *contract.Plan, manifest, maskedPassword string, concurrencyAdopted bool) Line {
 	border := strings.Repeat("═", len([]rune(confirmTitle))+10)
 
 	var b strings.Builder
 	b.WriteString("\n" + ansiCyan + "╔" + border + "╗" + ansiReset + "\n")
 	b.WriteString(ansiCyan + "║  " + confirmTitle + "  ║" + ansiReset + "\n")
 	b.WriteString(ansiCyan + "╚" + border + "╝" + ansiReset + "\n\n")
-	b.WriteString(infoTable(confirmRows(p, manifest, maskedPassword)))
+	b.WriteString(infoTable(confirmRows(p, manifest, maskedPassword, concurrencyAdopted)))
 	return Line{s: b.String()}
 }
 
 // confirmRows 是那张表的行，次序照老版：模式与内容 → 清单与台数 → 执行参数。
 //
 // 空的一行（两列都空）在排版里落成一个换行，用来把表分块。
-func confirmRows(p *contract.Plan, manifest, maskedPassword string) [][2]string {
+func confirmRows(p *contract.Plan, manifest, maskedPassword string, concurrencyAdopted bool) [][2]string {
 	var t [][2]string
 
 	// 执行身份行只在上传／下载／改密出现：命令与脚本的身份要么与登录用户一致、要么被
@@ -99,14 +99,15 @@ func confirmRows(p *contract.Plan, manifest, maskedPassword string) [][2]string 
 	t = append(t,
 		[2]string{"节点清单", manifest},
 		[2]string{"节点数量", strconv.Itoa(len(p.Nodes))},
-		[2]string{"并发数", concurrencyText(p)},
+		[2]string{"并发数", concurrencyText(p, concurrencyAdopted)},
 		[2]string{"", ""},
 	)
 	if p.Run.TimeoutConnect != 0 {
 		t = append(t, [2]string{"连接超时", strconv.Itoa(p.Run.TimeoutConnect) + "s"})
 	}
-	if p.Run.TimeoutExecute != 0 {
-		t = append(t, [2]string{timeoutLabel(p.Mode), strconv.Itoa(p.Run.TimeoutExecute) + "s"})
+	// 值按模式取：上传下载印的是传输超时那一格，命令/脚本/改密印执行超时那一格。
+	if secs := TimeoutSeconds(p.Mode, p.Run.TimeoutExecute, p.Run.TimeoutTransfer); secs != 0 {
+		t = append(t, [2]string{timeoutLabel(p.Mode), strconv.Itoa(secs) + "s"})
 	}
 	if p.Run.Remark != "" {
 		t = append(t, [2]string{"备注", strings.TrimSpace(p.Run.Remark)})
@@ -160,8 +161,13 @@ func isBashInterpreter(interpreter string) bool {
 // concurrencyText 是并发数那一格：没指定 -n 时补一句「全部并行」，让人知道这个数从哪来。
 //
 // 老版在出屏之前就把 args.Number 填成节点数，所以屏上写的是个数、外加一句解释。
-func concurrencyText(p *contract.Plan) string {
-	return strconv.Itoa(concurrencyValue(p.Run.Concurrency, len(p.Nodes))) + suffixForUnset(p.Run.Concurrency)
+func concurrencyText(p *contract.Plan, adopted bool) string {
+	v := concurrencyValue(p.Run.Concurrency, len(p.Nodes))
+	// 采纳了并发建议：这一行加粗并注明，别让人以为原值本来就是这个数（ADR-0040 决定三）。
+	if adopted {
+		return ansiBold + ansiBrightOrange + strconv.Itoa(v) + "（已按建议修改）" + ansiReset
+	}
+	return strconv.Itoa(v) + suffixForUnset(p.Run.Concurrency)
 }
 
 // concurrencyValue 把「没指定 -n」那一格（0）换成它实际生效的值：全部并行 = 节点数。
@@ -199,8 +205,13 @@ func infoTable(rows [][2]string) string {
 			continue
 		}
 		label := r[0] + strings.Repeat(" ", maxLabel-DisplayWidth(r[0]))
-		b.WriteString(ansiBrightCyan + "▶ " + label + "-→" + ansiReset + "   " +
-			ansiBrightOrange + r[1] + ansiReset + "\n")
+		// 值默认套橙色；自带样式的（以加粗开头，如「已按建议修改」那一行）原样输出，
+		// 免得外面再套一层——两层叠起来转义序列就与老版对不上。
+		value := ansiBrightOrange + r[1] + ansiReset
+		if strings.HasPrefix(r[1], ansiBold) {
+			value = r[1]
+		}
+		b.WriteString(ansiBrightCyan + "▶ " + label + "-→" + ansiReset + "   " + value + "\n")
 	}
 	return b.String()
 }

@@ -86,18 +86,31 @@ func UploadAdvicePrompt(advice int) Line {
 	return Line{s: fmt.Sprintf("改成 %d 个？", advice)}
 }
 
+// UploadAdviceAdopted 是采纳建议之后写进工具日志的那一行（ADR-0040 决定三：
+// 「改完要让人看见」，交互那条路也一样留痕）。
+func UploadAdviceAdopted(advice, current int) Line {
+	return Line{s: fmt.Sprintf("按建议把并发数改成 %d（原 %d）", advice, current)}
+}
+
 // UploadAdviceTrace 是非交互（--yes）自动采纳建议时的留痕。
 func UploadAdviceTrace(advice, current int) Line {
 	return Line{s: fmt.Sprintf("非交互模式（--yes）自动采纳上传并发建议：%d 个（当前 %d 个）", advice, current)}
 }
 
-// FallbackPrompt 是脚本后缀没配到解释器时那一问。
-func FallbackPrompt(ext, interpreter string) Line {
+// FallbackHint 是脚本后缀没配到解释器时先说清的两行（问句在 `FallbackQuestion`）。
+//
+// 说明与问句分两处：问句要跟 `[y/N]: ` 接在同一行上（老版就是这样），
+// 所以它不能混在说明块里——混进去屏幕上会多出一行「确定继续？」。
+func FallbackHint(ext string) Line {
 	return Line{s: fmt.Sprintf(
 		"脚本后缀 %q 没有配置解释器\n"+
-			"  想换别的解释器：在 %s 的 [interpreter.script] 里加一行，如 %q = \"解释器名\"\n"+
-			"  继续用 %s 作为解释器吗？",
-		ext, ConfigShownPath, ext, interpreter)}
+			"  想换别的解释器：在 %s 的 [interpreter.script] 里加一行，如 %q = \"解释器名\"\n",
+		ext, ConfigShownPath, ext)}
+}
+
+// FallbackQuestion 是那一问的问句本身。
+func FallbackQuestion(interpreter string) Line {
+	return Line{s: "  继续用 " + interpreter + " 作为解释器吗？"}
 }
 
 // FallbackTrace 是非交互（--yes）下跳过这一问时的留痕。
@@ -106,8 +119,10 @@ func FallbackTrace(ext, interpreter string) Line {
 }
 
 // FallbackDeclined 是答否之后那一行，随后当场退出。
+//
+// 不带颜色：老版这一句是纯文本（旁边那句「操作已取消」才上黄），加色就与它差一截。
 func FallbackDeclined(ext string) Line {
-	return Line{s: fmt.Sprintf("%s已取消：脚本后缀 %q 没有配置解释器，本次执行终止%s\n", ansiYellow, ext, ansiReset)}
+	return Line{s: fmt.Sprintf("已取消：脚本后缀 %q 没有配置解释器，本次执行终止\n", ext)}
 }
 
 // NoShellDropsSudoNotice 是 `--sudo` 与 `--no-shell` 同给时的说明：先说清 sudo 不生效，

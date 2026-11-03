@@ -179,12 +179,16 @@ func sameAsError(res contract.NodeResult) bool {
 }
 
 // splitLines 按行拆分并去掉空行：日志每行都已带前缀与时间戳，空行只会把版面拉稀。
+//
+// 传输明细首行那条 `total_files=…` 统计头也在这里剔掉——执行结果那一行已经报过同一组数，
+// 而它属于 `terminal-output.txt` 与 xlsx，不该占日志的版面（老版 `splitLines` 同一处口径：
+// 不分模式、不分位置，见到这个前缀就丢）。
 func splitLines(text string) []string {
 	raw := strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n")
 	out := make([]string, 0, len(raw))
 	for _, ln := range raw {
 		ln = strings.TrimRight(ln, " \t\r")
-		if strings.TrimSpace(ln) == "" {
+		if strings.TrimSpace(ln) == "" || strings.HasPrefix(ln, "total_files=") {
 			continue
 		}
 		out = append(out, ln)

@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"time"
 
 	"github.com/pkg/sftp"
 
@@ -25,6 +26,11 @@ import (
 
 // upload 一台的上传。
 func (c *client) upload(ctx context.Context, p *contract.Plan, res *contract.NodeResult, onProg onProgressN) {
+	// 传输那一段的耗时：老版记的是「从开工到收场」这一段，失败也算——屏幕明细与执行期
+	// 日志都读它（`res.Cost`），命令与改密各自在入口处记，这里与下载同一处口径。
+	start := time.Now()
+	defer func() { res.Cost = time.Since(start) }()
+
 	task := p.Task.Upload
 	files := make([]fileEntry, 0, len(task.Files))
 	for _, f := range task.Files {
