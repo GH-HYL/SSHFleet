@@ -101,10 +101,14 @@ func modeTitle(m contract.Mode) string {
 // 改密是改密超时（老版 `TimeoutLabel`）。
 func timeoutLabel(m contract.Mode) string {
 	switch m {
-	case contract.ModeCommand, contract.ModeScript, contract.ModePasswd:
+	case contract.ModeCommand, contract.ModeScript:
 		return "执行超时"
 	case contract.ModeUpload, contract.ModeDownload:
 		return "传输超时"
+	case contract.ModePasswd:
+		// 改密的超时值取自 `timeout_execute` 那一格，但叫法不是「执行超时」：
+		// 老版名字表就是「改密超时」，报告与参数屏两处同一处来源。
+		return "改密超时"
 	}
 	return ""
 }
