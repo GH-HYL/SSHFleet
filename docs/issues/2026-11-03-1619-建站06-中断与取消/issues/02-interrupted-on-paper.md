@@ -18,3 +18,11 @@
 **不在这单**：被中断的机器归哪一类（03）；六条通道各自的收尾（04、05）。
 
 ## Comments
+
+**2026-11-05（已授权开工，代码就位）**
+
+- 执行站：`Run` 收尾写 `paper.Interrupted = ctx.Err() != nil`；零台那条早返回同样写。
+- `message`：`InterruptLine()`（屏幕那句，逐字照老版、末尾带换行）、`InterruptLog()`（日志那句）。
+- 塔尖：结算与执行期日志收尾行之后、`report.Run` 之前，纸上那一格为真就打屏幕那句、再 `lg.Warn` 日志那句——「被中断」读纸，塔尖不看上下文。
+- 验：`TestRunMarksInterrupted` / `TestRunNotInterrupted` 先红后绿；`message` 逐字断言绿；结算站原有那条 `TestRunInterrupted` 未动仍绿。
+- **未验**：真机三台那条、A/B（缺容器）。

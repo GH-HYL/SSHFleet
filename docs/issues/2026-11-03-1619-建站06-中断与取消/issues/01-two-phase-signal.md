@@ -18,3 +18,11 @@
 **不在这单**：纸上那格 `Interrupted`、屏幕那句提示（02）；两条通道的报文（03）。
 
 ## Comments
+
+**2026-11-05（已授权开工，代码就位）**
+
+- `internal/interrupt`：`Begin(onEarly)` 登记 `SIGINT`／`SIGTERM` 一次，`Context()` 交出的始终是同一个取消通知，`Handoff()` 只翻一个状态位；执行段的重复信号只取消、一次都不收场（收场用 CAS 保「只走一次」）。
+- 检查本体两处：规则表加 `interrupt`（横切，只依赖标准库）；`tipSymbols` 的 `os/signal` 改成**空列表**——那一格留着、符号一个不给（删掉这格会变成整包放行，方向正好相反）。
+- 塔尖：`console.Prepare()` 之后立刻登记；`lg` 改成先声明后赋值，好让 `finish` 在日志建起来之前就能当收场回调（`Close` 对 `nil` 是空动作）；`Handoff()` 落在建归档目录之前；`execute.Run` 改收 `intr.Context()`，`context` 这个 import 随之删掉。
+- 验：`internal/interrupt` 三条用例绿（启动段只收场一次、执行段连按五次只取消、翻位不换上下文）；`guard` 全绿（18 包零违规、放行 0 条、红线 39 条）；`gofmt -l .` 空。
+- **未验**：真机两条（确认屏 130／不建归档、`sleep 30` 中途 0／归档齐全）与连按五次。这台机器没有 podman（WSL 里也没有），`u1` 起不来。

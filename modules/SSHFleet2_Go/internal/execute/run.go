@@ -71,6 +71,7 @@ func Run(ctx context.Context, p *contract.Plan, termPath, execLogPath string) (c
 	logSessionHead(rep.lg, p, limit)
 
 	if len(p.Nodes) == 0 {
+		paper.Interrupted = ctx.Err() != nil
 		paper.StoppedAt = paper.StartedAt
 		return paper, nil
 	}
@@ -148,6 +149,9 @@ func Run(ctx context.Context, p *contract.Plan, termPath, execLogPath string) (c
 		}
 	}
 	paper.Items = items
+	// 这次是不是被按停：事实由本站在收尾时写一格，塔尖读纸（ADR-0042 决定二）。
+	// 两处各算一次就是同一个事实两个产出地——塔尖不再自己看 ctx。
+	paper.Interrupted = ctx.Err() != nil
 	paper.StoppedAt = time.Now()
 	return paper, nil
 }
@@ -171,7 +175,11 @@ func visit(ctx context.Context, p *contract.Plan, idx int, ag *aggregator) contr
 	if err != nil {
 		res.ErrorText = c.errorText(err)
 		// 被取消与「目标机自己的毛病」是两件事：前者是外部喊停，记成事实标志。
+		// 这时它还没被连上过，报文说「连接还没建成就被中断」——与跑到一半那一档分开。
 		res.Cancelled = ctx.Err() != nil
+		if res.Cancelled {
+			res.ErrorText = appendText(res.ErrorText, abortMessage(false))
+		}
 	} else {
 		res.Connected = true
 		// 连上了也把服务端提示交出去（老版无条件写）：密码过期那类提示伴随的是成功的连接，

@@ -151,7 +151,7 @@ func (c *client) download(ctx context.Context, p *contract.Plan, res *contract.N
 			res.Transfer.SuccessFiles, res.Transfer.FailFiles = success, failed
 			res.Transfer.TotalBytes, res.Transfer.TotalFiles = downloadedBytes, totalFiles
 			res.Output = buildTransferOutput(totalFiles, success, failed, lines)
-			res.ErrorText = appendText(res.ErrorText, msg(envAbort, abortCanceled, "interrupted after session established"))
+			res.ErrorText = appendText(res.ErrorText, abortMessage(true))
 			return
 		}
 

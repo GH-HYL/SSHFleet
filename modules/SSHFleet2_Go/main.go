@@ -5,7 +5,6 @@
 package main
 
 import (
-	"context"
 	"os"
 	"time"
 
@@ -15,6 +14,7 @@ import (
 	"sshfleet2/internal/execute"
 	"sshfleet2/internal/exitcode"
 	"sshfleet2/internal/gate"
+	"sshfleet2/internal/interrupt"
 	"sshfleet2/internal/log"
 	"sshfleet2/internal/message"
 	"sshfleet2/internal/parse"
@@ -31,11 +31,9 @@ func main() {
 	// 退出前一定要还回去——os.Exit 不跑 defer，所以每一条退出路径自己收尾。
 	console.Prepare()
 
-	// 步骤 2：建工具日志。建不起来就是「起不来」，此时连日志都没有，那屏不带日志行。
-	// 两格落点由归档包发（本包不拼路径），本包只把这两格递给日志包。
-	toolDir, toolFile := archive.ToolLog(contract.HistoryDir)
-	toolPath := archive.ToolLogPath(contract.HistoryDir)
-	lg, err := log.Init(toolDir, toolFile)
+	// 日志句柄先声明、后赋值：中断的登记要在「日志还没建起来」那一段就有人管，
+	// 而那两个收场口（finish／fatal）都要关它。Close 对 nil 是空动作。
+	var lg *log.Logger
 
 	// finish 是唯一的退场收尾：关日志、还码页、查表退出。os.Exit 不跑 defer，每条路径都得显式收，
 	// 所以只写这一处（lg 为 nil 时 Close 自己是空动作）。
@@ -44,6 +42,17 @@ func main() {
 		console.Restore()
 		os.Exit(exitcode.Code(kind))
 	}
+
+	// 中断：控制台摆正之后立刻登记，覆盖解析、闸门、确认屏那一段——那一段最容易按，
+	// 而且那时还没改过任何东西，收场就是「还码页、关日志、退 130」（ADR-0042）。
+	// 登记一直活到进程结束，中途不撤；执行段的信号由同一条通道进来，只取消。
+	intr := interrupt.Begin(func() { finish(exitcode.Interrupted) })
+
+	// 步骤 2：建工具日志。建不起来就是「起不来」，此时连日志都没有，那屏不带日志行。
+	// 两格落点由归档包发（本包不拼路径），本包只把这两格递给日志包。
+	toolDir, toolFile := archive.ToolLog(contract.HistoryDir)
+	toolPath := archive.ToolLogPath(contract.HistoryDir)
+	lg, err := log.Init(toolDir, toolFile)
 
 	// fatal 是「起不来」的唯一收尾：落日志、打那一屏、按种类退。
 	// 那一屏向 message 要——纸上只装事实（哪一环、哪句话、带不带日志行），成品的话只在
@@ -85,14 +94,19 @@ func main() {
 			finish(exitcode.Refused)
 		}
 
+		// 交棒：从这一刻起信号只取消、不再收场。位置在建归档目录之前——所以
+		// 「确认屏上按 Ctrl+C」归启动段，连归档目录都不建（ADR-0042）。
+		intr.Handoff()
+
 		// 步骤 8 前半：建本次的归档目录。本次执行的产物全在它下面，四条落点由它发。
 		paths, aerr := archive.Create(contract.HistoryDir, string(plan.Mode), plan.Run.Remark, time.Now())
 		if aerr != nil {
 			fatal(contract.WhereOutput, aerr.Error(), toolPath)
 		}
 
-		// 步骤 8：执行站连上去跑，跑完交第二张纸。取消的响应随阶段 06，本包只把 context 递下去。
-		paper, cannot := execute.Run(context.Background(), plan, paths.Terminal, paths.ExecLog)
+		// 步骤 8：执行站连上去跑，跑完交第二张纸。取消经上下文递下去——同一个上下文，
+		// 启动段就建好了，执行站不必另造一个。
+		paper, cannot := execute.Run(intr.Context(), plan, paths.Terminal, paths.ExecLog)
 		if cannot != nil {
 			fatal(cannot.Where, cannot.Body, toolPath)
 		}
@@ -105,6 +119,13 @@ func main() {
 		if execLog, lerr := log.InitExec(paths.ExecLog); lerr == nil {
 			execLog.Info(message.ExecSummaryLog(ledger))
 			_ = execLog.Close()
+		}
+
+		// 被中断那次要多两句，次序照老版：屏幕那句在前、日志那句在后，都排在统计块之前。
+		// 「被中断」这件事读纸，不由本包自己看上下文——事实只有一个产出地（ADR-0042 决定二）。
+		if paper.Interrupted {
+			console.Print(message.InterruptLine())
+			lg.Warn(message.InterruptLog().Text())
 		}
 
 		if rerr := report.Run(ledger, paths.Report); rerr != nil {

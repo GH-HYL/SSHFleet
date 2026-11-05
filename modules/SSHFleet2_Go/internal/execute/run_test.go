@@ -95,6 +95,33 @@ func TestRunCanceledContextStopsAtOnce(t *testing.T) {
 	}
 }
 
+// TestRunMarksInterrupted 被取消的上下文：纸上「被中断」那一格为真。
+//
+// 结算站靠这一格把缺额记成「未执行」而不是「异常」，所以它是事实，不是汇总。
+func TestRunMarksInterrupted(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	paper, fail := runPlan(t, ctx, plan("127.0.0.1", deadPort(t)))
+	if fail != nil {
+		t.Fatalf("取消不该变成「起不来」：%+v", fail)
+	}
+	if !paper.Interrupted {
+		t.Fatal("上下文已取消，纸上却没记「被中断」——结算站会把缺额算成异常")
+	}
+}
+
+// TestRunNotInterrupted 没取消的上下文：同一格为假。连不上不是被按停，两件事别混。
+func TestRunNotInterrupted(t *testing.T) {
+	paper, fail := runPlan(t, context.Background(), plan("127.0.0.1", deadPort(t)))
+	if fail != nil {
+		t.Fatalf("连不上不该是「起不来」：%+v", fail)
+	}
+	if paper.Interrupted {
+		t.Fatal("没人按停，纸上却记了「被中断」")
+	}
+}
+
 // TestRunWithoutNodes 没节点：交回零条的纸，不是「起不来」。
 func TestRunWithoutNodes(t *testing.T) {
 	paper, fail := runPlan(t, context.Background(), &contract.Plan{Mode: contract.ModeCommand})

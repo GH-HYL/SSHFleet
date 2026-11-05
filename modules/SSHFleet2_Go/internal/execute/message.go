@@ -52,3 +52,15 @@ func knownEnv(env string) bool {
 	}
 	return false
 }
+
+// abortMessage 是外部中断（Ctrl+C / 上级取消）那句，按「中断在哪一步」分两档。
+//
+// 还没连上的机器压根没被执行到，跟「跑到一半被打断」混为一谈，会让人以为它跑过——
+// 两档的差别正是排查时先要分清的那件事。五条通道共用这一处（建连、命令与脚本、
+// 代填、改密、传输入口各自的调用点），所以它比别的报文更该只有一份。
+func abortMessage(connected bool) string {
+	if connected {
+		return msg(envAbort, abortCanceled, "interrupted after session established")
+	}
+	return msg(envAbort, abortConnectCanceled, "interrupted while connecting")
+}

@@ -108,7 +108,7 @@ func (c *client) upload(ctx context.Context, p *contract.Plan, res *contract.Nod
 			res.Transfer.TotalBytes = uploadedBytes
 			res.Output = buildTransferOutput(len(files), success, failed, lines)
 			res.ErrorText = appendText(res.ErrorText, c.rollback(sftpClient, written, useSudo))
-			res.ErrorText = appendText(res.ErrorText, msg(envAbort, abortCanceled, "interrupted after session established"))
+			res.ErrorText = appendText(res.ErrorText, abortMessage(true))
 			return
 		}
 

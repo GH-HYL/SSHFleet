@@ -77,7 +77,7 @@ func (c *client) runAnswer(ctx context.Context, p *contract.Plan, res *contract.
 
 	// 收尾时说清这一摊是怎么结束的：代填没送完 / 表空了还在等 / 被中断。
 	if outcome.canceled {
-		res.ErrorText = appendText(res.ErrorText, msg(envAbort, abortCanceled, "interrupted after session established"))
+		res.ErrorText = appendText(res.ErrorText, abortMessage(true))
 		return
 	}
 	res.ErrorText = appendText(res.ErrorText,

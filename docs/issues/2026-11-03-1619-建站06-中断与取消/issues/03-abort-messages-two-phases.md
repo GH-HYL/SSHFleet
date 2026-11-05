@@ -16,3 +16,11 @@
 **不在这单**：传输与改密通道自身的收尾行为（04、05）。
 
 ## Comments
+
+**2026-11-05（已授权开工，代码就位）**
+
+- 报文收口成一个函数 `abortMessage(connected bool)`：两档各一句，五条通道共用。
+- 补上缺的两处：建连失败且当时已被取消 → `connect_canceled`；命令与脚本跑到一半被喊停（`endFacts.cancelled`）→ `canceled`。
+- 顺带复核 05 那四条（代填、改密、上传、下载）：改用同一处 `abortMessage(true)`，次序仍是「原文在前、报文在后」，字一个没变。
+- 验：`TestAbortMessage` 两条逐字（期望抄老版 `shape_test.go` 的字面量）、`TestCategoryOfAbort` 两条分类（喂固定原文、名字写死）绿。
+- **未验**：真机两条（三台 `sleep 30` 中途按、连不上的地址触发建连中断）。
