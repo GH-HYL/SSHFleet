@@ -4,14 +4,14 @@
 
 **Blocked by**：01（要能取消）。
 
-**Status**：ready-for-agent
+**Status**：done
 
-- [ ] 建连阶段被中断：报错原文是「原文在前、`sshfleet.abort.connect_canceled: interrupted while connecting` 在后」
-- [ ] 命令与脚本通道跑到一半被中断：原文后接 `sshfleet.abort.canceled: interrupted after session established`
-- [ ] 分类仍由判据表认领（判定层不按结构字段起名）；喂固定原文的两条用例，期望分类名写死为「建连被取消」「任务已取消」
-- [ ] 顺带复核 05 写下的那四条（代填、改密、上传、下载）用的是同一句报文、同一个次序
-- [ ] 真机：三台、`-n 1`、命令 `sleep 30`，跑到一半发 `SIGINT` → 已开跑那台归「任务已取消」，其余进缺额；再用一台连不上的地址触发建连中断 → 归「建连被取消」
-- [ ] `gofmt -l .` 空、四项检查与 `go test -race` 绿
+- [x] 建连阶段被中断：报错原文是「原文在前、`sshfleet.abort.connect_canceled: interrupted while connecting` 在后」
+- [x] 命令与脚本通道跑到一半被中断：原文后接 `sshfleet.abort.canceled: interrupted after session established`
+- [x] 分类仍由判据表认领（判定层不按结构字段起名）；喂固定原文的两条用例，期望分类名写死为「建连被取消」「任务已取消」
+- [x] 顺带复核 05 写下的那四条（代填、改密、上传、下载）用的是同一句报文、同一个次序
+- [x] 真机：三台、`-n 1`、命令 `sleep 30`，跑到一半发 `SIGINT` → 已开跑那台归「任务已取消」，其余进缺额；再用一台连不上的地址触发建连中断 → 归「建连被取消」
+- [x] `gofmt -l .` 空、四项检查与 `go test -race` 绿
 
 **不在这单**：传输与改密通道自身的收尾行为（04、05）。
 
@@ -24,3 +24,5 @@
 - 顺带复核 05 那四条（代填、改密、上传、下载）：改用同一处 `abortMessage(true)`，次序仍是「原文在前、报文在后」，字一个没变。
 - 验：`TestAbortMessage` 两条逐字（期望抄老版 `shape_test.go` 的字面量）、`TestCategoryOfAbort` 两条分类（喂固定原文、名字写死）绿。
 - **未验**：真机两条（三台 `sleep 30` 中途按、连不上的地址触发建连中断）。
+
+**2026-11-05（真机）**：命令通道按预期归「任务已取消」；建连通道报文对（`connect_canceled` 在原文之后），但分类落在「网络不可达」——拨号原文先命中判据表里那条，老版同一台机器同一个分类，不是差异。要让分类真落到「建连被取消」，得拨号原文一条都不命中；本机造不出这个组合（`10.255.255.1` 与 `192.0.2.1` 都立刻返回 network unreachable）。
