@@ -15,9 +15,11 @@ const consolePkg = "console"
 // os.Args 是 2026-11-01 补的：argv 是塔尖「把命令行递给解析站」那件事的输入，
 // 没有它塔尖连第一格都搬不动；详见 ADR-0032 末尾的更新记录。
 var tipSymbols = map[string][]string{
-	"os":        {"Exit", "Args"},
-	"os/signal": {"Notify"},
-	"errors":    {"As", "Is"},
+	"os":     {"Exit", "Args"},
+	"errors": {"As", "Is"},
+	// 这一格留着、但是空的：塔尖不再订阅信号，信号的登记与处置住 interrupt 包（ADR-0042）。
+	// 空列表＝一个符号都不许用；把这一格删掉反而会变成「整包放行」，方向正好相反。
+	"os/signal": {},
 }
 
 // CheckDeps 是类二：谁 import 谁。
@@ -111,7 +113,7 @@ func checkImports(m *Module, p *Package, f *SourceFile) []Violation {
 func whyNotAllowed(r *Rule, what string) string {
 	switch r.Kind {
 	case KindStation:
-		return fmt.Sprintf("站之间单向：一站只许依赖契约与八个横切包，不许依赖别的站（依赖 %s 就是往回走）", what)
+		return fmt.Sprintf("站之间单向：一站只许依赖契约与九个横切包，不许依赖别的站（依赖 %s 就是往回走）", what)
 	case KindCrosscut:
 		if r.Package == "ask" {
 			return "横切包是叶子：只许依赖标准库与契约，叶子之间的例外只有 ask → console、ask → message 两条"
@@ -124,7 +126,7 @@ func whyNotAllowed(r *Rule, what string) string {
 	case KindCheck:
 		return "结构检查只读源码：它一旦 import 站或契约，就把被检查的东西变成了自己的依赖"
 	case KindTip:
-		return "塔尖只许依赖五站、八个横切包、契约与密钥管理包——它的薄厚看依赖清单，不看行数"
+		return "塔尖只许依赖五站、九个横切包、契约与密钥管理包——它的薄厚看依赖清单，不看行数"
 	}
 	return "这一行不在规则表允许的依赖范围内"
 }

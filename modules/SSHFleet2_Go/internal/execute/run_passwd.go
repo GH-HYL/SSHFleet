@@ -80,7 +80,7 @@ func (c *client) passwd(ctx context.Context, p *contract.Plan, res *contract.Nod
 	clean := isCleanStop(res)
 	switch {
 	case res.Cancelled:
-		res.ErrorText = appendText(res.ErrorText, msg(envAbort, abortCanceled, "interrupted after session established"))
+		res.ErrorText = appendText(res.ErrorText, abortMessage(true))
 	case outcome.err == nil && f.exitCode == nil:
 		// 连接层就失败了：connect.* 报文已在上一步写好，这里没有可补充的事实。
 	case clean && !hook.sawEnter():

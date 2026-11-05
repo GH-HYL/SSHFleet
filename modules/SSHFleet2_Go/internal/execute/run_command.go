@@ -89,6 +89,10 @@ func (c *client) runCommand(ctx context.Context, p *contract.Plan, res *contract
 	res.Cancelled = f.cancelled
 	// 服务端提示无条件附上：密码过期那类提示伴随的是成功的连接，分类要靠它认出来。
 	res.ErrorText = c.mergeBanner(deref(f.errText))
+	// 跑到一半被喊停：说清「会话已经建立之后才断的」，与还没连上那一档分开。
+	if f.cancelled {
+		res.ErrorText = appendText(res.ErrorText, abortMessage(true))
+	}
 }
 
 // runWithTimeout 执行超时与外部取消两条路，后两个返回值把「到点收场 / 被喊停」

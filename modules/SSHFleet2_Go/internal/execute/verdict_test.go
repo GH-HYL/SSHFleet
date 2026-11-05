@@ -204,3 +204,40 @@ func TestCategoryOfCommandIgnoresPasswdTable(t *testing.T) {
 		t.Fatalf("命令模式该认不出、回落原文，实际 %q", got)
 	}
 }
+
+// TestCategoryOfAbort 中断两档：各认自己那句报文，名字写死（照随包配置那两类的次序）。
+//
+// 判据表的次序就是随包的次序——「建连被取消」在前，「任务已取消」在后；两句话不互相
+// 包含，所以谁在前都不该串味，这里仍按配置原序摆。
+func TestCategoryOfAbort(t *testing.T) {
+	tables := contract.Tables{Categories: []contract.Category{
+		{Name: "建连被取消", Keywords: []string{"sshfleet.abort.connect_canceled", "operation was canceled"}},
+		{Name: "任务已取消", Keywords: []string{"sshfleet.abort.canceled", "context canceled"}},
+	}}
+
+	cases := []struct {
+		name string
+		res  contract.NodeResult
+		want string
+	}{
+		{
+			name: "还没连上就被打断",
+			res: contract.NodeResult{ErrorText: "dial tcp 10.0.0.1:22: i/o timeout\n" +
+				"sshfleet.abort.connect_canceled: interrupted while connecting"},
+			want: "建连被取消",
+		},
+		{
+			name: "已连上、跑在命令中途",
+			res: contract.NodeResult{Connected: true, ErrorText: "context canceled\n" +
+				"sshfleet.abort.canceled: interrupted after session established"},
+			want: "任务已取消",
+		},
+	}
+
+	for _, c := range cases {
+		res := c.res
+		if got := categoryOf(contract.ModeCommand, tables, &res); got != c.want {
+			t.Fatalf("%s：期望 %q，实际 %q", c.name, c.want, got)
+		}
+	}
+}

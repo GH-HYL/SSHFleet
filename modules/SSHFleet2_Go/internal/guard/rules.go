@@ -7,7 +7,7 @@ type Kind string
 
 const (
 	KindStation  Kind = "站"    // 五站：解析、闸门、执行、结算、报告
-	KindCrosscut Kind = "横切"   // 八个叶子包：不产业务数据，人人可依赖
+	KindCrosscut Kind = "横切"   // 九个叶子包：不产业务数据，人人可依赖
 	KindContract Kind = "契约"   // 只放类型与常量
 	KindKeyTool  Kind = "密钥管理" // 三条不进流水线的小命令
 	KindCheck    Kind = "检查"   // 结构检查本体与红线区
@@ -17,7 +17,7 @@ const (
 // Rule 是规则表的一行：这个包属于哪一类、能依赖哪些内部包。
 //
 // Package 写这个包在 go list 里的身份：
-//   - 十六个包在 internal/ 下，写短名（parse、gate…），完整路径是 模块名 + "/internal/" + 短名；
+//   - 十七个包在 internal/ 下，写短名（parse、gate…），完整路径是 模块名 + "/internal/" + 短名；
 //   - 塔尖在模块根上，写模块名本身（sshfleet2）——它的包名是 main，但 main 不是路径，拿它对不上 go list。
 //
 // 标准库默认可依赖，不列。塔尖对 os／os/signal／errors 的符号级限制不在这一格里表达，
@@ -28,11 +28,11 @@ type Rule struct {
 	Deps    []string
 }
 
-// contractAndCrosscut 是契约加八个横切包：五站与密钥管理包共用的那份清单。
+// contractAndCrosscut 是契约加九个横切包：五站与密钥管理包共用的那份清单。
 // 站之间不许互相依赖，所以站的那几行里没有别的站。
 var contractAndCrosscut = []string{
 	"contract",
-	"console", "log", "ask", "archive", "exitcode", "credential", "message", "mask",
+	"console", "log", "ask", "archive", "exitcode", "credential", "message", "mask", "interrupt",
 }
 
 // crosscutDeps 是横切包允许的那一条：只许契约。
@@ -66,15 +66,15 @@ var clockReaders = []string{"Now", "Since", "Until"}
 // 因为塔尖在表里写的是模块名 `sshfleet2`，不是 `main`（见 checkClock、clockHome）。
 var clockHomes = []string{"execute", "log"}
 
-// tipDeps 是塔尖的整张清单：五站、八个横切包、契约、密钥管理包。
+// tipDeps 是塔尖的整张清单：五站、九个横切包、契约、密钥管理包。
 var tipDeps = []string{
 	"parse", "gate", "execute", "settle", "report",
 	"contract",
-	"console", "log", "ask", "archive", "exitcode", "credential", "message", "mask",
+	"console", "log", "ask", "archive", "exitcode", "credential", "message", "mask", "interrupt",
 	"keytool",
 }
 
-// rules 是包清单规则表本体，十七条，一条不少。
+// rules 是包清单规则表本体，十八条，一条不少。
 var rules = []Rule{
 	// 五站
 	{"parse", KindStation, contractAndCrosscut},
@@ -86,7 +86,7 @@ var rules = []Rule{
 	// 契约
 	{"contract", KindContract, nil},
 
-	// 八个横切。console 那行多一条 message：Print 收的是 `message.Line`——那个类型的
+	// 九个横切。console 那行多一条 message：Print 收的是 `message.Line`——那个类型的
 	// 字段不导出，「话只能由 message 造」才成立（2026-11-02 的这一笔，见 ADR-0032 末尾
 	// 追加的更新记录）。message 依赖契约，console 依赖 message，不成环。
 	{"console", KindCrosscut, []string{"contract", "message"}},
@@ -97,6 +97,8 @@ var rules = []Rule{
 	{"credential", KindCrosscut, crosscutDeps},
 	{"message", KindCrosscut, crosscutDeps},
 	{"mask", KindCrosscut, crosscutDeps},
+	// interrupt 只碰标准库：它不产数据、不造话，只把信号变成取消通知（ADR-0042）。
+	{"interrupt", KindCrosscut, nil},
 
 	// 密钥管理：只许契约与横切包，站不许依赖它
 	{"keytool", KindKeyTool, contractAndCrosscut},
