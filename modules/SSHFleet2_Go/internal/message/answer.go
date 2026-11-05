@@ -1,6 +1,11 @@
 package message
 
-import "strconv"
+import (
+	"strconv"
+	"strings"
+
+	"sshfleet2/internal/contract"
+)
 
 // 代填（`-a`）那一路的话：来源判定、读文件、读成行、每行合规、整表合规。
 //
@@ -87,4 +92,27 @@ func AnswerBadRegex(n int, keyword, reason string) string {
 // itoa 只给上面这几句拼行号用（数字进句子也算成形，所以不放到调用方去）。
 func itoa(n int) string {
 	return strconv.Itoa(n)
+}
+
+// AnswerMissedNote 是失败详情里那一段「未送出的代填」：逐条列序号与触发词、顿号相连。
+//
+// 措辞照老版 `internal/output/reporter.go` 的 missedNote：序号对着命令行给的顺序排序，
+// 触发词原样加直引号；取不到触发词时只写序号——宁可少说，也不编一个出来。
+func AnswerMissedNote(answers []contract.Answer, missed []int) string {
+	if len(missed) == 0 {
+		return ""
+	}
+	items := make([]string, 0, len(missed))
+	for _, n := range missed {
+		if n < 1 || n > len(answers) || len(answers[n-1].Triggers) == 0 {
+			items = append(items, "第 "+strconv.Itoa(n)+" 条")
+			continue
+		}
+		quoted := make([]string, 0, len(answers[n-1].Triggers))
+		for _, t := range answers[n-1].Triggers {
+			quoted = append(quoted, `"`+t+`"`)
+		}
+		items = append(items, "第 "+strconv.Itoa(n)+" 条（触发词 "+strings.Join(quoted, "、")+"）")
+	}
+	return "未送出的代填：" + strings.Join(items, "、")
 }

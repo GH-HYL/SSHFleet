@@ -78,10 +78,12 @@ func (c *client) runAnswer(ctx context.Context, p *contract.Plan, res *contract.
 	// 收尾时说清这一摊是怎么结束的：代填没送完 / 表空了还在等 / 被中断。
 	if outcome.canceled {
 		res.ErrorText = appendText(res.ErrorText, abortMessage(true))
-		return
+	} else {
+		res.ErrorText = appendText(res.ErrorText,
+			answerMessage(len(missed), res.Answer.Exhausted, res.TimedOut))
 	}
-	res.ErrorText = appendText(res.ErrorText,
-		answerMessage(len(missed), res.Answer.Exhausted, res.TimedOut))
+	// 末尾这一段逐条列出没送出去的：被按停不等于那些条已经送出去了，中断时照列（老版同）。
+	res.ErrorText = appendText(res.ErrorText, message.AnswerMissedNote(answers, missed))
 }
 
 // answerMessage 代填收尾那句报文。
