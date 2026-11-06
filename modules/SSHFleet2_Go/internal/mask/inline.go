@@ -1,9 +1,6 @@
 package mask
 
-import (
-	"encoding/csv"
-	"strings"
-)
+import "strings"
 
 // 内联清单（`-f 10.0.0.1,22,root,密码,私钥路径,口令`）的遮法。
 //
@@ -23,16 +20,11 @@ func InlineRecord(s string) string {
 		return s
 	}
 	maskCredentialFields(fields)
-	var b strings.Builder
-	w := csv.NewWriter(&b)
-	if err := w.Write(fields); err != nil {
+	out, err := joinCSV(fields)
+	if err != nil {
 		return s
 	}
-	w.Flush()
-	if err := w.Error(); err != nil {
-		return s
-	}
-	return strings.TrimSuffix(b.String(), "\n")
+	return out
 }
 
 // InlineRecordIf 是内联清单就遮，否则原样返回（调用方不必自己判形状）。
@@ -50,7 +42,7 @@ func looksLikeInlineList(s string) bool {
 	if !ok || len(fields) == 0 || !isIPv4(strings.TrimSpace(fields[0])) {
 		return false
 	}
-	for _, idx := range []int{3, 5} {
+	for _, idx := range credentialColumns {
 		if idx < len(fields) && strings.TrimSpace(fields[idx]) != "" {
 			return true
 		}
@@ -60,9 +52,7 @@ func looksLikeInlineList(s string) bool {
 
 // singleRecord 把文本读成唯一的一条记录；读不出、或不止一条时返回 false。
 func singleRecord(text string) ([]string, bool) {
-	r := csv.NewReader(strings.NewReader(strings.TrimPrefix(text, "\ufeff")))
-	r.FieldsPerRecord = -1
-	r.Comment = '#'
+	r := newCSVReader(text, true)
 	rec, err := r.Read()
 	if err != nil {
 		return nil, false

@@ -59,14 +59,14 @@ func ResultRows(res contract.NodeResult, mode contract.Mode) []ResultRow {
 	}
 
 	// 输出逐行：空行照样占一行（空行可能是输出自身的分段，`ls -l`／`df -h` 都靠它）。
-	if res.Connected && res.Output != "" {
+	if hasOutput(res) {
 		for _, line := range strings.Split(strings.ReplaceAll(res.Output, "\r\n", "\n"), "\n") {
 			rows = append(rows, ResultRow{Event: RowEventOutput, Detail: line, Output: true})
 		}
 	}
 
 	rows = append(rows,
-		ResultRow{Event: "分类: " + res.Category},
+		ResultRow{Event: categoryLine(res)},
 		ResultRow{Separator: true},
 	)
 	return rows

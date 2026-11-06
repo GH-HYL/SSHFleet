@@ -8,7 +8,6 @@ package mask
 // 遮法与别处同一条（`Secret`）——整个工程只有一种遮出来的样子。
 
 import (
-	"encoding/csv"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -59,27 +58,14 @@ func maskManifestLine(line string) string {
 		return line
 	}
 	maskCredentialFields(fields)
-	return joinFields(fields)
+	out, err := joinCSV(fields)
+	if err != nil {
+		return line // 拼不出来就留原文，宁可原样也不写成半截
+	}
+	return out
 }
 
 // csvFields 按 CSV 规则拆一行（容忍引号里的逗号、变长列）。
 func csvFields(line string) ([]string, error) {
-	r := csv.NewReader(strings.NewReader(line))
-	r.FieldsPerRecord = -1
-	r.LazyQuotes = true
-	return r.Read()
-}
-
-// joinFields 按 CSV 规则拼回一行；拼不出来时原样交回，宁可留原文也不写成半截。
-func joinFields(fields []string) string {
-	var b strings.Builder
-	w := csv.NewWriter(&b)
-	if err := w.Write(fields); err != nil {
-		return strings.Join(fields, ",")
-	}
-	w.Flush()
-	if err := w.Error(); err != nil {
-		return strings.Join(fields, ",")
-	}
-	return strings.TrimSuffix(b.String(), "\n")
+	return newCSVReader(line, false).Read()
 }

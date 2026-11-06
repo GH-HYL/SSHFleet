@@ -47,7 +47,7 @@ func Fatal(where, body, logPath string) Line {
 	if logPath != "" {
 		body += "\n日志：" + logPath
 	}
-	s := ansiRed + "[ERROR]" + ansiReset + ansiYellow + " [function:" + where + "]" + ansiReset + " " + body + "\n"
+	s := tagLabel(ansiRed, "ERROR") + ansiYellow + " [function:" + where + "]" + ansiReset + " " + body + "\n"
 	return Line{s: s, toErr: true}
 }
 

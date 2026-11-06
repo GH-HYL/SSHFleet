@@ -154,8 +154,9 @@ func writeTerminalXlsx(path string, l contract.Ledger, mode contract.Mode) error
 		for _, r := range message.ResultRows(item, mode) {
 			row++
 			if r.Separator {
-				if err := f.SetCellStyle(sheet,
-					fmt.Sprintf("A%d", row), fmt.Sprintf("C%d", row), st.separator); err != nil {
+				first, _ := excelize.CoordinatesToCellName(1, row)
+				last, _ := excelize.CoordinatesToCellName(len(message.TerminalHeaders()), row)
+				if err := f.SetCellStyle(sheet, first, last, st.separator); err != nil {
 					return err
 				}
 				continue
@@ -179,7 +180,8 @@ func writeTerminalXlsx(path string, l contract.Ledger, mode contract.Mode) error
 			return err
 		}
 	}
-	if err := f.AutoFilter(sheet, fmt.Sprintf("A1:C%d", row), nil); err != nil {
+	last, _ := excelize.CoordinatesToCellName(len(message.TerminalHeaders()), row)
+	if err := f.AutoFilter(sheet, "A1:"+last, nil); err != nil {
 		return err
 	}
 	// 冻结首行
