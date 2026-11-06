@@ -114,6 +114,37 @@ func TestKeyRunStaysOnPaperWhenLexicalError(t *testing.T) {
 	}
 }
 
+// 多余的位置参数：老版在解析命令行那一步就报「出现多余的参数」，比密钥命令那两条互斥更早。
+// 密钥命令不进闸门，这条不在这儿拦就没人拦了（批量执行那条路仍交纸给闸门）。
+func TestKeyRunRefusesExtraArgs(t *testing.T) {
+	t.Chdir(writeTempConfig(t))
+	cfg, err := load()
+	if err != nil {
+		t.Fatalf("配置读不通：%v", err)
+	}
+
+	for _, argv := range [][]string{
+		{"sshfleet2", "--key-status", "extra"},
+		{"sshfleet2", "--gen-key", "--key-status", "extra"}, // 多余段比互斥更早，与老版同序
+	} {
+		plan, krun, fail := buildPlan(cfg, scan(argv))
+		if plan != nil || krun != nil {
+			t.Fatalf("%v：多余参数时不该递回纸或小命令", argv)
+		}
+		if fail == nil || fail.Where != "cli" {
+			t.Fatalf("%v：应当是 cli 环的起不来，实际 %+v", argv, fail)
+		}
+		for _, want := range []string{
+			"选项/参数解析失败：出现多余的参数（未被使用）：extra",
+			"常见原因：",
+		} {
+			if !strings.Contains(fail.Body, want) {
+				t.Fatalf("%v：那一屏缺「%s」：%q", argv, want, fail.Body)
+			}
+		}
+	}
+}
+
 // --convert-secret 给一个空串等于没给：仍按批量那一路走（老版 a.ConvertSecret != ""）。
 func TestKeyConvertEmptyValueIsNotAKeyRun(t *testing.T) {
 	t.Chdir(writeTempConfig(t))

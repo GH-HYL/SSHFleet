@@ -20,3 +20,7 @@
 **A/B**（`t2.sh`）：答否／回车／EOF／`--yes`／答是五档，随机密钥那几行按八位指纹归一之后两侧逐字相同；`--yes` 那一档连「日志：」行之外一字不差。
 
 **Windows 那一步没做，原因记清楚**：spec 第十二节那三步要 `reg query` 与 `setx`，本机把 `reg.exe` 列进了沙箱的禁止启动名单（`reg query HKCU\Environment` 直接被拒），`setx` 属同一类系统程序，没有绕过它去查注册表的道理。已做的替代验证只有一半：`GOOS=windows` 交叉编译过（`persist_windows.go` 的注册表读与 `setx` 写都能编译）。**三步留给开发者在自己的终端里走**：先 `reg query HKCU\Environment /v SSHFLEET_KEY` 记原值（可能不存在）→ 跑一次 `sshfleet2 --gen-key` 比屏上三句与指纹 → 原本有值就 `setx SSHFLEET_KEY "<原值>"` 写回，原本没有就 `reg delete HKCU\Environment /v SSHFLEET_KEY /f`。这条路径一旦抄错，症状是「密钥写进去了、新终端读不到」，所以不验就等于发布平台上留一个洞。
+
+**交付后审计（2026-11-06 下午）**：一条 1.2 **已补收**——keytool 的流程用例原本用运行期来源（`DefaultKeySource`）、文件也没有平台标签，在 Windows 上会真走到 `persist_windows.go:52` 的 `setx`、改使用者的环境变量。现改成注入假件（`run_test.go` 的 `fakeSource`）：环境变量与持久值由用例给，写出去的那把只记在内存，写到哪只是临时目录里的一个路径。
+
+未处置两条：覆盖确认只测了 `--yes` 一档，是／否／EOF 三档只有 A/B 覆盖；`message/keytool.go:222` 与 `credential/persist_windows.go:24` 两处各写一遍注册表位置，且写法不同（一处带「注册表」三个字）。

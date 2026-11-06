@@ -23,3 +23,5 @@
 **加密开关由密钥包自己读**（spec 第三节）：「读不到／读不出」按起不来收场，句子专门有一句（`message.KeyConfigUnreadable`）——实际走不到，解析站已经先读通过一遍整份配置。
 
 **「封」的边界**：`credential.Encrypt` 只吃明文与主密钥、只交回密文串；读盘、写盘、定方向、一致性保护全在 `keytool`。
+
+**交付后审计（2026-11-06 下午）**：未处置四条。「已是明文」那一档没有流程用例（只测了已是密文），`toPlain` 的早退没有测试；`keytool/run.go:23` 的 `configPath` 与 `parse/config.go:23` 同值同形，而 `message.ConfigShownPath` 是第三种写法（不带 `./`）；`credential.SystemReason` 与 `message.SystemReason` 两份同名实现，后者多处理 `os.LinkError`，keytool 屏上用的是弱的那份；`keytool/run.go:171` 的「配置里没有 [credential] encrypt 这一格」是中文句子，仍在密钥包里，`message` 只当「原因：」收到片段。
