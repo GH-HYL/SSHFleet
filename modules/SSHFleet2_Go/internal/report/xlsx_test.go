@@ -58,8 +58,13 @@ func tablesPaths(t *testing.T) archive.Paths {
 	if err := os.MkdirAll(filepath.Join(dir, contract.HistoryDir), 0o755); err != nil {
 		t.Fatalf("建历史根失败：%v", err)
 	}
+	assets := filepath.Join(dir, "assets")
+	if err := os.MkdirAll(assets, 0o755); err != nil {
+		t.Fatalf("建 assets 失败：%v", err)
+	}
 	return archive.Paths{
 		Dir:         dir,
+		Assets:      assets,
 		Report:      filepath.Join(dir, "report.txt"),
 		OutputXlsx:  filepath.Join(dir, archive.NameOutputXlsx),
 		ResultsXlsx: filepath.Join(dir, archive.NameResultsXlsx),
@@ -161,5 +166,29 @@ func TestRunKeepsGoingWhenTableCannotBeWritten(t *testing.T) {
 	}
 	if _, err := os.Stat(paths.Report); err != nil {
 		t.Fatalf("报告仍该写出来：%v", err)
+	}
+}
+
+// 备份原料：清单以脱敏副本落进 assets/，文件名不变（脚本与代填由归档包原样复制，
+// 各自那三条用例在 archive／mask 里）。
+func TestRunBacksUpManifestCopy(t *testing.T) {
+	paths := tablesPaths(t)
+	manifest := filepath.Join(paths.Dir, "nodes.csv")
+	if err := os.WriteFile(manifest, []byte("10.0.0.1,22,root,hunter2\n"), 0o644); err != nil {
+		t.Fatalf("造清单失败：%v", err)
+	}
+	l := ledgerForTables(t)
+	l.Resources.Manifest = manifest
+
+	if _, err := Run(l, paths); err != nil {
+		t.Fatalf("跑报告站失败：%v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(paths.Assets, "nodes.csv"))
+	if err != nil {
+		t.Fatalf("清单副本没落进 assets：%v", err)
+	}
+	if string(data) != "10.0.0.1,22,root,hu****r2\n\n" {
+		t.Fatalf("副本内容不对：%q", data)
 	}
 }

@@ -45,6 +45,16 @@ func Run(l contract.Ledger, paths archive.Paths) (warnings []message.Line, err e
 		return nil, fmt.Errorf("写报告文件失败（%s）：%w", paths.Report, err)
 	}
 
+	// 备份原料：脚本与代填原样复制（归档包的事），清单存脱敏副本（mask 的事）。
+	// 这一步失败算「起不来」——老版就是把它当失败收场的：归档里缺原料，事后没人说得清
+	// 那次到底用了什么。
+	if err := archive.Backup(paths.Assets, body.ScriptPath, body.AnswerRaw); err != nil {
+		return warnings, fmt.Errorf("保存执行资源文件失败：%w", err)
+	}
+	if err := mask.WriteManifestCopy(l.Resources.Manifest, paths.Assets); err != nil {
+		return warnings, fmt.Errorf("保存清单副本失败：%w", err)
+	}
+
 	// 两张表格：开关在密文里（报告站读不到配置），关掉就不生成。失败只留痕、不中断——
 	// 老版注释写得很清楚：终端一关，只有工具日志能说明这次的表格为什么没生成。
 	for _, one := range []struct {
