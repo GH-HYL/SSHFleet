@@ -22,11 +22,7 @@ func InlineRecord(s string) string {
 	if !ok {
 		return s
 	}
-	for _, idx := range []int{3, 5} {
-		if idx < len(fields) && strings.TrimSpace(fields[idx]) != "" {
-			fields[idx] = Secret(fields[idx])
-		}
-	}
+	maskCredentialFields(fields)
 	var b strings.Builder
 	w := csv.NewWriter(&b)
 	if err := w.Write(fields); err != nil {

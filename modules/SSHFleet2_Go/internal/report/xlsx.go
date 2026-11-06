@@ -139,7 +139,7 @@ func writeTerminalXlsx(path string, l contract.Ledger, mode contract.Mode) error
 		return err
 	}
 
-	for i, h := range []string{"IP地址", "事件类型", "内容详情"} {
+	for i, h := range message.TerminalHeaders() {
 		at, _ := excelize.CoordinatesToCellName(i+1, 1)
 		if err := cell(f, sheet, at, h); err != nil {
 			return err
@@ -191,12 +191,6 @@ func writeTerminalXlsx(path string, l contract.Ledger, mode contract.Mode) error
 	return f.SaveAs(path)
 }
 
-// resultsHeaders 是结果明细的十五列，一字不改（使用者按列名找东西）。
-var resultsHeaders = []string{
-	"序号", "IP", "端口", "用户名", "连接成功", "退出码", "连接耗时",
-	"执行耗时", "传输字节", "文件总数", "成功文件数", "失败文件数", "分类", "报错原文", "输出内容",
-}
-
 // 两列自由文本的固定列宽：不参与自适应——按内容撑宽会被最长的错误串拉出几百字符。
 const (
 	resultsErrorWidth  = 30.0
@@ -225,8 +219,9 @@ func writeResultsXlsx(path string, l contract.Ledger, mode contract.Mode) error 
 		return err
 	}
 
-	maxWidths := make([]int, len(resultsHeaders))
-	for i, h := range resultsHeaders {
+	headers := message.ResultsHeaders()
+	maxWidths := make([]int, len(headers))
+	for i, h := range headers {
 		at, _ := excelize.CoordinatesToCellName(i+1, 1)
 		if err := cell(f, sheet, at, h); err != nil {
 			return err
@@ -268,7 +263,7 @@ func writeResultsXlsx(path string, l contract.Ledger, mode contract.Mode) error 
 		}
 	}
 
-	for i := range resultsHeaders {
+	for i := range headers {
 		width := float64(maxWidths[i] + 2)
 		switch i {
 		case resultsAutoColumns:
@@ -281,7 +276,7 @@ func writeResultsXlsx(path string, l contract.Ledger, mode contract.Mode) error 
 		}
 	}
 
-	last, _ := excelize.CoordinatesToCellName(len(resultsHeaders), len(l.Items)+1)
+	last, _ := excelize.CoordinatesToCellName(len(headers), len(l.Items)+1)
 	if err := f.AutoFilter(sheet, fmt.Sprintf("A1:%s", last), nil); err != nil {
 		return err
 	}
