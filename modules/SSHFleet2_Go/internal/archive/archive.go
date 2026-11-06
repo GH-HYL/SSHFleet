@@ -23,6 +23,10 @@ const (
 	nameTerminal = "terminal-output.txt"
 	nameExecLog  = "SSHFleetExec.log"
 
+	// 两张表格：与终端文本、报告同族，都在本次目录里。名字照老版（用户认这两个名字）。
+	nameOutputXlsx  = "terminal-output.xlsx"
+	nameResultsXlsx = "results.xlsx"
+
 	// 工具日志是**整个历史根共用的一份**滚动文件，不进本次目录——老版横跨所有运行、
 	// 到 50MB 才换名留档，所以它与上面四个不同族：那四个在本次目录里，这一个在根上。
 	nameToolLog = "SSHFleetTools.log"
@@ -35,6 +39,10 @@ type Paths struct {
 	Report   string // report.txt
 	Terminal string // terminal-output.txt（执行站边跑边写）
 	ExecLog  string // SSHFleetExec.log（执行期日志）
+
+	// 两张表格的落点（阶段 07）：报告站收尾时写，开关关掉就不写。
+	OutputXlsx  string
+	ResultsXlsx string
 }
 
 // Create 建本次的根与 assets/，交回那一组路径。
@@ -66,6 +74,9 @@ func Create(root, mode, remark string, now time.Time) (Paths, error) {
 		Report:   filepath.Join(dir, nameReport),
 		Terminal: filepath.Join(dir, nameTerminal),
 		ExecLog:  filepath.Join(dir, nameExecLog),
+
+		OutputXlsx:  filepath.Join(dir, nameOutputXlsx),
+		ResultsXlsx: filepath.Join(dir, nameResultsXlsx),
 	}, nil
 }
 

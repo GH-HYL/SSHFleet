@@ -51,7 +51,7 @@ func TestCreateIgnoresBlankRemark(t *testing.T) {
 	}
 }
 
-// 四个落点都在同一个目录里，名字与老版一致。
+// 落点都在同一个目录里，名字与老版一致。
 func TestCreateHandsOutFourPaths(t *testing.T) {
 	root := t.TempDir()
 
@@ -60,10 +60,12 @@ func TestCreateHandsOutFourPaths(t *testing.T) {
 		t.Fatalf("建目录失败：%v", err)
 	}
 	cases := map[string]string{
-		"assets":              got.Assets,
-		"report.txt":          got.Report,
-		"terminal-output.txt": got.Terminal,
-		"SSHFleetExec.log":    got.ExecLog,
+		"assets":               got.Assets,
+		"report.txt":           got.Report,
+		"terminal-output.txt":  got.Terminal,
+		"SSHFleetExec.log":     got.ExecLog,
+		"terminal-output.xlsx": got.OutputXlsx,
+		"results.xlsx":         got.ResultsXlsx,
 	}
 	for base, path := range cases {
 		if filepath.Base(path) != base {

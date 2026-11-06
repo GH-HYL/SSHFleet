@@ -16,6 +16,12 @@ import "time"
 type NodeResult struct {
 	IP string
 
+	// Port 与 User 是这一台的连接要素里，归档表格要印的两格（`results.xlsx` 的「端口」
+	// 「用户名」两列）。执行站建行时从纸一的节点上抄下来——**不是重算**，是同一件事
+	// 跟着这一行走：报告站手上只有第三张纸，纸三又不许比纸二宽，所以只能随行带。
+	Port string
+	User string
+
 	// Connected 是连接与认证都过了没有。没过的那一台，后面几格基本是零值。
 	Connected bool
 

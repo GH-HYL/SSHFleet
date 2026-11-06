@@ -69,6 +69,18 @@ type RunMetaBody struct {
 	// 存的是**已经按展示形态算好**的值（老版 `config.DisplayPath` 去掉开头的 `./`），
 	// 报告站只管印——它不该为了印一行路径去认路径怎么归一。
 	ErrorKeywordsPath string `json:"error_keywords_path,omitempty"`
+
+	// OutputToXlsx 与 ResultsToXlsx 是配置 `[enable]` 那两个开关的原值：报告站出两张
+	// 表格时按它决定做不做。它们**不进纸一的数据格**——执行站不读它们，装了就是同一份
+	// 原值两个来源；也不由塔尖单递（ADR-0035 决定八）。与上面那两格同族、同一条理由。
+	OutputToXlsx  bool `json:"output_to_xlsx,omitempty"`
+	ResultsToXlsx bool `json:"results_to_xlsx,omitempty"`
+
+	// AnswerRaw 是 `-a` 的原值：一份代填文件的路径，或一条内联代填。
+	//
+	// 备份原料时报告站要它（代填文件的原件要进 `assets/`），而「是不是一个存在的普通文件」
+	// 由报告站备份时现判——与清单那份同一处判据（空值、目录、找不到，一律跳过）。
+	AnswerRaw string `json:"answer_raw,omitempty"`
 }
 
 // 封法常量：两处（封与解）共用，改格式只改这里一处。

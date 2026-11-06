@@ -28,6 +28,8 @@ func TestRedlineArchiveHandsOutPaths(t *testing.T) {
 		"terminal": paths.Terminal,
 		"exec":     paths.ExecLog,
 		"assets":   paths.Assets,
+		"xlsx":     paths.OutputXlsx,
+		"results":  paths.ResultsXlsx,
 	} {
 		if p == "" {
 			t.Fatalf("%s 的落点空着", name)

@@ -38,6 +38,30 @@ func TestRunRecordsConnectFailure(t *testing.T) {
 	}
 }
 
+// TestRunCarriesPortAndUser 每一行带着纸上的端口与用户名——归档表格要印这两列，
+// 而报告站手上只有第三张纸（07 的 01 号单）。
+func TestRunCarriesPortAndUser(t *testing.T) {
+	port := deadPort(t)
+	p := &contract.Plan{
+		Mode: contract.ModeCommand,
+		Task: contract.Task{Command: &contract.CommandTask{Text: "uptime"}},
+		Nodes: []contract.Node{
+			{IP: "127.0.0.1", Port: port, User: "ops", Password: "p"},
+		},
+	}
+	paper, fail := runPlan(t, context.Background(), p)
+	if fail != nil {
+		t.Fatalf("不该起不来：%+v", fail)
+	}
+	if len(paper.Items) != 1 {
+		t.Fatalf("应造一条事实，实际 %d 条", len(paper.Items))
+	}
+	item := paper.Items[0]
+	if item.Port != port || item.User != "ops" {
+		t.Fatalf("端口与用户名没跟着这一行走：port=%q user=%q", item.Port, item.User)
+	}
+}
+
 // TestRunKeepsNodeOrder 并发跑完，交回的顺序仍是纸上那个顺序（不按完成先后）。
 func TestRunKeepsNodeOrder(t *testing.T) {
 	ports := []string{deadPort(t), deadPort(t), deadPort(t)}
