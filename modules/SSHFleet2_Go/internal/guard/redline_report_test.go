@@ -28,13 +28,19 @@ func TestRedlineReportScreenAndPath(t *testing.T) {
 		t.Fatalf("统计块交回的不是 message.Line：%v", stats)
 	}
 
-	// 二、入口形状：第三张纸进，一条落点字符串进；不返回路径，也不返回「写好的文件」。
+	// 二、入口形状：第三张纸进、一组落点进（ADR-0043）；交回「要留痕的话」与 error，不返回
+	// 路径，也不返回「写好的文件」。落点组按类型名判，不为它 import 归档包（红线只许 import
+	// 标准库、契约与被它钉的那一个包）。
 	run := reflect.TypeOf(report.Run)
-	if run.NumIn() != 2 || run.In(0) != reflect.TypeOf(contract.Ledger{}) || run.In(1).Kind() != reflect.String {
-		t.Fatalf("报告站入口该是 (第三张纸, 落点字符串)：%v", run)
+	if run.NumIn() != 2 || run.In(0) != reflect.TypeOf(contract.Ledger{}) || run.In(1).String() != "archive.Paths" {
+		t.Fatalf("报告站入口该是 (第三张纸, 落点组)：%v", run)
 	}
-	if run.NumOut() != 1 || run.Out(0) != reflect.TypeOf((*error)(nil)).Elem() {
-		t.Fatalf("报告站入口只该交回一个 error：%v", run)
+	wantOut := []reflect.Type{
+		reflect.TypeOf([]message.Line(nil)),
+		reflect.TypeOf((*error)(nil)).Elem(),
+	}
+	if run.NumOut() != len(wantOut) || run.Out(0) != wantOut[0] || run.Out(1) != wantOut[1] {
+		t.Fatalf("报告站入口该交回 (要留痕的话, error)：%v", run)
 	}
 
 	// 三、路径与终端出口都不许自己开：扫本包源码（不含测试）。

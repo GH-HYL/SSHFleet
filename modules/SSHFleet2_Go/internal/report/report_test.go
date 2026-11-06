@@ -12,8 +12,21 @@ import (
 	"strings"
 	"testing"
 
+	"sshfleet2/internal/archive"
 	"sshfleet2/internal/contract"
 )
+
+// runPaths 造一份落点并把当前目录挪到临时目录：收尾那条 `latest_history` 建在当前目录，
+// 挪过去才不会往仓库里落链接。历史根建一个空的，链接那一步就什么都不做。
+func runPaths(t *testing.T) archive.Paths {
+	t.Helper()
+	dir := t.TempDir()
+	t.Chdir(dir)
+	if err := os.MkdirAll(contract.HistoryDir, 0o755); err != nil {
+		t.Fatalf("建历史根失败：%v", err)
+	}
+	return archive.Paths{Report: filepath.Join(dir, "report.txt")}
+}
 
 // ledgerForRun 造一张与 runMetaVector 那段密文配套的第三张纸：那份密文里装的是
 // `sshfleet2 -f nodes.csv -c uptime`，一次成功、1 台。
@@ -35,12 +48,12 @@ func ledgerForRun(t *testing.T) contract.Ledger {
 // TestRunWritesReport 报告落在给的那条路径上，第一段吃的是解出来的原值，
 // 节点清单那一行是遮过的内联记录。
 func TestRunWritesReport(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "report.txt")
-	if err := Run(ledgerForRun(t), path); err != nil {
+	paths := runPaths(t)
+	if _, err := Run(ledgerForRun(t), paths); err != nil {
 		t.Fatalf("写报告失败：%v", err)
 	}
 
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(paths.Report)
 	if err != nil {
 		t.Fatalf("报告没落下：%v", err)
 	}
@@ -85,11 +98,11 @@ func TestRunMasksNewPassword(t *testing.T) {
 		RunMeta:     contract.RunMeta(sealed),
 	}
 
-	path := filepath.Join(t.TempDir(), "report.txt")
-	if err := Run(l, path); err != nil {
+	paths := runPaths(t)
+	if _, err := Run(l, paths); err != nil {
 		t.Fatalf("写报告失败：%v", err)
 	}
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(paths.Report)
 	if err != nil {
 		t.Fatalf("报告没落下：%v", err)
 	}
@@ -109,19 +122,20 @@ func TestRunRejectsBrokenRunMeta(t *testing.T) {
 	l := ledgerForRun(t)
 	l.RunMeta = contract.RunMeta{1, 2, 3}
 
-	path := filepath.Join(t.TempDir(), "report.txt")
-	if err := Run(l, path); err == nil {
+	paths := runPaths(t)
+	if _, err := Run(l, paths); err == nil {
 		t.Fatal("解不开的运行上下文应当报错")
 	}
-	if _, err := os.Stat(path); err == nil {
+	if _, err := os.Stat(paths.Report); err == nil {
 		t.Fatal("解不开时不该落下一份报告：那是「拿别处的值顶」的另一种写法")
 	}
 }
 
 // TestRunFailsWhenPathIsNotWritable 落点写不进去时把路径带回话里——报告站不自己找地方重写。
 func TestRunFailsWhenPathIsNotWritable(t *testing.T) {
-	dir := t.TempDir()
-	if err := Run(ledgerForRun(t), filepath.Join(dir, "no-such-dir", "report.txt")); err == nil {
+	paths := runPaths(t)
+	paths.Report = filepath.Join(t.TempDir(), "no-such-dir", "report.txt")
+	if _, err := Run(ledgerForRun(t), paths); err == nil {
 		t.Fatal("父目录不存在时应当报错")
 	} else if !strings.Contains(err.Error(), "report.txt") {
 		t.Fatalf("报错里没带上落点：%v", err)

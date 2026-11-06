@@ -128,8 +128,13 @@ func main() {
 			lg.Warn(message.InterruptLog().Text())
 		}
 
-		if rerr := report.Run(ledger, paths.Report); rerr != nil {
+		warns, rerr := report.Run(ledger, paths)
+		if rerr != nil {
 			fatal(contract.WhereOutput, rerr.Error(), toolPath)
+		}
+		// 报告站已经把这几句打上屏了；这里只管留痕——它不持日志句柄。
+		for _, w := range warns {
+			lg.Warn(w.Text())
 		}
 
 	default:
