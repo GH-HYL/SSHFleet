@@ -245,16 +245,9 @@ func decode(raw rawConfig) (*settings, error) {
 	if cfg.account.Port, err = intOf(raw, "account", "port"); err != nil {
 		return nil, err
 	}
-	cfg.account.User = raw["account"]["user"]
-	cfg.account.Password = raw["account"]["password"]
-
 	if cfg.credentialCfg.Encrypt, err = boolOf(raw, "credential", "encrypt"); err != nil {
 		return nil, err
 	}
-	cfg.credentialCfg.Key = raw["credential"]["key"]
-	cfg.credentialCfg.KeyPassword = raw["credential"]["key_password"]
-	cfg.credentialCfg.SecretDir = raw["credential"]["secret_dir"]
-
 	if cfg.Execution.Sudo, err = boolOf(raw, "execution", "sudo"); err != nil {
 		return nil, err
 	}
@@ -299,15 +292,41 @@ func decode(raw rawConfig) (*settings, error) {
 		return nil, err
 	}
 
-	cfg.Env = map[string]string{}
-	for k, v := range raw["env"] {
-		cfg.Env[k] = v
+	// 字符串那一批：值必须写成带引号的字符串（见 stringOf）。
+	for _, f := range []struct {
+		section, key string
+		dst          *string
+	}{
+		{"account", "user", &cfg.account.User},
+		{"account", "password", &cfg.account.Password},
+		{"credential", "key", &cfg.credentialCfg.Key},
+		{"credential", "key_password", &cfg.credentialCfg.KeyPassword},
+		{"credential", "secret_dir", &cfg.credentialCfg.SecretDir},
+		{"interpreter", "command", &cfg.interpreter.Command},
+	} {
+		v, err := stringOf(raw, f.section, f.key)
+		if err != nil {
+			return nil, err
+		}
+		*f.dst = v
 	}
 
-	cfg.interpreter.Command = raw["interpreter"]["command"]
+	cfg.Env = map[string]string{}
+	for k := range raw["env"] {
+		s, err := stringOf(raw, "env", k)
+		if err != nil {
+			return nil, err
+		}
+		cfg.Env[k] = s
+	}
+
 	cfg.interpreter.Script = map[string]string{}
-	for k, v := range raw["interpreter.script"] {
-		cfg.interpreter.Script[k] = v
+	for k := range raw["interpreter.script"] {
+		s, err := stringOf(raw, "interpreter.script", k)
+		if err != nil {
+			return nil, err
+		}
+		cfg.interpreter.Script[k] = s
 	}
 	return cfg, nil
 }
@@ -332,6 +351,20 @@ func boolOf(raw rawConfig, section, key string) (bool, error) {
 		return false, nil
 	}
 	return false, fmt.Errorf("%s（只认 true / false）", message.ValueInvalid(section+"."+key, v))
+}
+
+// stringOf 取一个字符串键：值必须写成带引号的字符串（'…' 或 "…"）。
+//
+// 「要不要引号」看值的类型——数字、布尔不带，字符串一律带。老版用 TOML 库，
+// `password = /tmp/x` 这种裸值当场就是语法错；这里补上同一道判，口径不能松。
+func stringOf(raw rawConfig, section, key string) (string, error) {
+	v := strings.TrimSpace(raw[section][key])
+	if isQuoted(v) {
+		return unquote(v), nil
+	}
+	return "", fmt.Errorf("%s", message.ProblemHint(
+		fmt.Sprintf("%s（字符串值要带引号）", message.ValueInvalid(section+"."+key, v)),
+		"给这一格的值加上成对的引号（'…' 或 \"…\"）即可；数字与布尔不用加"))
 }
 
 // validateValues 取值合规性：端口、三个超时、上传阈值、[env]、[interpreter]。
