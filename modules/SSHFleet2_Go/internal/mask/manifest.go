@@ -46,26 +46,41 @@ func WriteManifestCopy(src, destDir string) error {
 	return nil
 }
 
-// maskManifestLine 遮一行：数据行的第 3、5 段（第 4 列密码、第 6 列口令）走 `Secret`，
-// 其余原样。表头、注释、认不出是节点的行一律不动——那是取值判定那头的事，不在这里猜。
+// maskManifestLine 遮一行：只替换凭据那两段（第 4 列密码、第 6 列口令）在**原行**里占的那几个
+// 字符，其余字节一个都不动——副本要像 `cp` 出来的一样，BOM、引号、空白、列序统统照原样。
+//
+// 为什么不再按 CSV 读出来再拼回去：`encoding/csv` 读的时候会吃掉 BOM，写的时候按它自己的
+// 规矩决定加不加引号，拼出来那一行跟原件对不上（BOM 没了、原本带引号的变成不带）。
+// 遮罩不该改一个字的其余部分，所以这里改成定位区间、就地替换。
+//
+// 表头、注释、认不出是节点的行一律不动——那是取值判定那头的事，不在这里猜。
 func maskManifestLine(line string) string {
 	trimmed := strings.TrimSpace(line)
 	if trimmed == "" || strings.HasPrefix(trimmed, "#") {
 		return line
 	}
-	fields, err := csvFields(line)
-	if err != nil || len(fields) < 4 || !isIPv4(strings.TrimSpace(fields[0])) {
+	spans, ok := fieldSpans(line)
+	if !ok || len(spans) < 4 {
 		return line
 	}
-	maskCredentialFields(fields)
-	out, err := joinCSV(fields)
-	if err != nil {
-		return line // 拼不出来就留原文，宁可原样也不写成半截
+	// 首列是不是 IP：BOM 不算内容，只在判断时剥掉，输出里照旧留着。
+	first := strings.TrimSpace(strings.TrimPrefix(line[spans[0].start:spans[0].end], "\ufeff"))
+	if !isIPv4(first) {
+		return line
+	}
+
+	out := line
+	// 从右往左替换：先动后面的段，前面那些段的偏移才不会被前一次替换搅乱。
+	for i := len(spans) - 1; i >= 0; i-- {
+		if i != credentialPassword && i != credentialPassphrase {
+			continue
+		}
+		sp := spans[i]
+		raw := out[sp.start:sp.end]
+		if strings.TrimSpace(raw) == "" {
+			continue
+		}
+		out = out[:sp.start] + Secret(raw) + out[sp.end:]
 	}
 	return out
-}
-
-// csvFields 按 CSV 规则拆一行（容忍引号里的逗号、变长列）。
-func csvFields(line string) ([]string, error) {
-	return newCSVReader(line, false).Read()
 }

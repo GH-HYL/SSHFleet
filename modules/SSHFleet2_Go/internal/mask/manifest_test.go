@@ -45,6 +45,36 @@ func TestWriteManifestCopyMasksCredentialColumns(t *testing.T) {
 	}
 }
 
+// 副本 = 原件的 `cp` 加遮罩：除了凭据那两段，BOM、引号、空白一个字节都不许动。
+func TestWriteManifestCopyKeepsEveryOtherByte(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "nodes.csv")
+	// 第一行带 BOM（记事本、Excel 另存的 CSV 就带），第二行的用户名整段带引号且引号里有逗号。
+	body := "\ufeff10.0.0.1,22,root,hunter2,/k/id_rsa,sekretpass\n" +
+		"10.0.0.2,22,\"root,ops\",pw12345,,pass99\n"
+	if err := os.WriteFile(src, []byte(body), 0o644); err != nil {
+		t.Fatalf("造清单失败：%v", err)
+	}
+	assets := filepath.Join(dir, "assets")
+	if err := os.MkdirAll(assets, 0o755); err != nil {
+		t.Fatalf("建 assets 失败：%v", err)
+	}
+	if err := WriteManifestCopy(src, assets); err != nil {
+		t.Fatalf("写副本失败：%v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(assets, "nodes.csv"))
+	if err != nil {
+		t.Fatalf("副本没落下：%v", err)
+	}
+	want := "\ufeff10.0.0.1,22,root,hu****r2,/k/id_rsa,se****ss\n" +
+		"10.0.0.2,22,\"root,ops\",pw****45,,pa****99\n" +
+		"\n"
+	if string(data) != want {
+		t.Fatalf("副本该等于原件、只换掉凭据那两段：\n got=%q\nwant=%q", data, want)
+	}
+}
+
 // 内联记录没有文件可备份；路径空着、指向目录、指向不存在的文件，都安静跳过。
 func TestWriteManifestCopySkipsNonFiles(t *testing.T) {
 	dir := t.TempDir()

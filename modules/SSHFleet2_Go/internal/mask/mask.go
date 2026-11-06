@@ -34,7 +34,12 @@ func Secret(s string) string {
 // credentialColumns 是凭据在一条节点记录里的段号（0 起）：第 4 段密码、第 6 段口令。
 //
 // 只在这里定义一次：内联清单、清单副本、「这算不算带凭据的记录」三处都读它。
-var credentialColumns = []int{3, 5}
+const (
+	credentialPassword   = 3
+	credentialPassphrase = 5
+)
+
+var credentialColumns = []int{credentialPassword, credentialPassphrase}
 
 // maskCredentialFields 把一条节点记录里的两个凭据段遮掉。
 //
