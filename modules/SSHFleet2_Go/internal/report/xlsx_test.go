@@ -113,7 +113,7 @@ func TestRunWritesBothTables(t *testing.T) {
 	// 端口那一格是数字：老版那张表里它就是个数，写成文本会被 Excel 按字符串排
 	// （10022 排到 22 前面）且改成左对齐。数字格不带 `t` 属性，excelize 读成
 	// CellTypeUnset；文本格读成 CellTypeSharedString。
-	if typ, err := results.GetCellType("Results", "C2"); err != nil || typ == excelize.CellTypeSharedString {
+	if typ, err := results.GetCellType("Results", "C2"); err != nil || typ != excelize.CellTypeUnset {
 		t.Fatalf("端口那一格该是数字，实际 %v（%v）", typ, err)
 	}
 
