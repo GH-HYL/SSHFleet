@@ -21,7 +21,7 @@ func TestInterpreterBySuffixHit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("临时配置读不通：%v", err)
 	}
-	p, fail := buildPlan(cfg, scan([]string{"sshfleet2", "-f", manifest, "-s", script}))
+	p, _, fail := buildPlan(cfg, scan([]string{"sshfleet2", "-f", manifest, "-s", script}))
 	if fail != nil {
 		t.Fatalf("不该走到「起不来」：%v", fail.Body)
 	}
@@ -43,7 +43,7 @@ func TestInterpreterSuffixIsCaseInsensitive(t *testing.T) {
 	if err != nil {
 		t.Fatalf("临时配置读不通：%v", err)
 	}
-	p, fail := buildPlan(cfg, scan([]string{"sshfleet2", "-f", manifest, "-s", script}))
+	p, _, fail := buildPlan(cfg, scan([]string{"sshfleet2", "-f", manifest, "-s", script}))
 	if fail != nil {
 		t.Fatalf("不该走到「起不来」：%v", fail.Body)
 	}
@@ -62,7 +62,7 @@ func TestInterpreterFallsBackAndRecordsSuffix(t *testing.T) {
 	if err != nil {
 		t.Fatalf("临时配置读不通：%v", err)
 	}
-	p, fail := buildPlan(cfg, scan([]string{"sshfleet2", "-f", manifest, "-s", script}))
+	p, _, fail := buildPlan(cfg, scan([]string{"sshfleet2", "-f", manifest, "-s", script}))
 	if fail != nil {
 		t.Fatalf("不该走到「起不来」：%v", fail.Body)
 	}
@@ -89,7 +89,7 @@ func TestScriptBodyTrimmedOnce(t *testing.T) {
 	if err != nil {
 		t.Fatalf("临时配置读不通：%v", err)
 	}
-	p, fail := buildPlan(cfg, scan([]string{"sshfleet2", "-f", manifest, "-s", script}))
+	p, _, fail := buildPlan(cfg, scan([]string{"sshfleet2", "-f", manifest, "-s", script}))
 	if fail != nil {
 		t.Fatalf("不该走到「起不来」：%v", fail.Body)
 	}
@@ -126,7 +126,7 @@ func TestInterpreterOnlyForCommandAndScript(t *testing.T) {
 		{"改密", []string{"--change-password", "pw"}, ""},
 	}
 	for _, c := range cases {
-		p, fail := buildPlan(cfg, scan(append([]string{"sshfleet2", "-f", manifest}, c.argv...)))
+		p, _, fail := buildPlan(cfg, scan(append([]string{"sshfleet2", "-f", manifest}, c.argv...)))
 		if fail != nil {
 			t.Fatalf("%s 不该走到「起不来」：%v", c.name, fail.Body)
 		}

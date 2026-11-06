@@ -113,7 +113,13 @@ func (s scanned) withExtraOwner(argv []string) scanned {
 }
 
 // buildPlan 把扫出来的事实认成一张纸。认不了的照样记在纸上的 Problems 里。
-func buildPlan(cfg *settings, s scanned) (*contract.Plan, *contract.CannotStart) {
+func buildPlan(cfg *settings, s scanned) (*contract.Plan, *contract.KeyRun, *contract.CannotStart) {
+	// 三条密钥命令先认一次：它们是独立功能，不进流水线（开发者 2026-11-06 裁定）。
+	// 词法有问题时不进这一支——未知选项、缺值仍归闸门拒，与 0x 定的先后一致。
+	if krun, fail := keyRunOf(s); fail != nil || krun != nil {
+		return nil, krun, fail
+	}
+
 	p := &contract.Plan{
 		Run: contract.RunParams{
 			TimeoutConnect:  cfg.Execution.TimeoutConnect,
@@ -130,6 +136,7 @@ func buildPlan(cfg *settings, s scanned) (*contract.Plan, *contract.CannotStart)
 			MatchRegex:         cfg.interactive.Regex,
 			MatchCaseSensitive: cfg.interactive.CaseSensitive,
 			English:            cfg.locale.English,
+			Encrypted:          cfg.credentialCfg.Encrypt,
 		},
 		Problems: s.problems,
 	}
@@ -147,13 +154,6 @@ func buildPlan(cfg *settings, s scanned) (*contract.Plan, *contract.CannotStart)
 			Option: s.extraOwner,
 			Raw:    strings.Join(s.extras, " "),
 		})
-	}
-
-	// 三条密钥命令本阶段不接（随阶段 08）：先按「还没接上」报，别让它落进「没指定模式」。
-	for _, k := range []string{"--gen-key", "--key-status", "--convert-secret"} {
-		if given[k] {
-			return nil, cannotStart("cli", "", message.NotWiredKeyTools())
-		}
 	}
 
 	// 三个数值选项：空值与 0 都算「不填」（老版 checkPositiveInt 的第一条），
@@ -262,7 +262,7 @@ func buildPlan(cfg *settings, s scanned) (*contract.Plan, *contract.CannotStart)
 	proceed := len(modes) == 1 && len(p.Problems) == 0
 	if proceed {
 		if fail := checkMaterial(p, given, vals); fail != nil {
-			return nil, fail
+			return nil, nil, fail
 		}
 	}
 
@@ -279,7 +279,7 @@ func buildPlan(cfg *settings, s scanned) (*contract.Plan, *contract.CannotStart)
 	// 判据表：解析读一次、校验一次，随纸交给闸门。
 	tables, fail := loadTables(mode)
 	if fail != nil {
-		return nil, fail
+		return nil, nil, fail
 	}
 	p.Tables = tables
 
@@ -289,14 +289,14 @@ func buildPlan(cfg *settings, s scanned) (*contract.Plan, *contract.CannotStart)
 	if proceed {
 		m, nfail := readManifest(p.Resources.Manifest)
 		if nfail != nil {
-			return nil, nfail
+			return nil, nil, nfail
 		}
 		if m.headerDropped {
 			p.Notices = append(p.Notices, contract.Notice{Kind: contract.NoticeManifestHeader})
 		}
 		nodes, notices, nfail := buildNodes(m.rows, cfg, given["--key"])
 		if nfail != nil {
-			return nil, nfail
+			return nil, nil, nfail
 		}
 		p.Nodes = nodes
 		p.Notices = append(p.Notices, notices...)
@@ -304,7 +304,7 @@ func buildPlan(cfg *settings, s scanned) (*contract.Plan, *contract.CannotStart)
 		// 改密值（建站 05 的 07 号单）：按加密开关解释成明文，形态不对当场拦下。
 		if p.Task.Passwd != nil {
 			if fail := passwdValue(p, cfg.credentialCfg.Encrypt); fail != nil {
-				return nil, fail
+				return nil, nil, fail
 			}
 		}
 
@@ -312,7 +312,7 @@ func buildPlan(cfg *settings, s scanned) (*contract.Plan, *contract.CannotStart)
 		// 与老版同一个次序（清单读不通先报清单）。
 		if p.Task.Upload != nil {
 			if fail := collect(p, cfg); fail != nil {
-				return nil, fail
+				return nil, nil, fail
 			}
 		}
 	}
@@ -324,7 +324,7 @@ func buildPlan(cfg *settings, s scanned) (*contract.Plan, *contract.CannotStart)
 	if p.Run.Answer != "" && (p.Task.Command != nil || p.Task.Script != nil) {
 		answers, afail := answerTable(p.Run.Answer, p.Run.MatchRegex, p.Run.MatchCaseSensitive)
 		if afail != nil {
-			return nil, afail
+			return nil, nil, afail
 		}
 		if p.Task.Command != nil {
 			p.Task.Command.Answers = answers
@@ -336,7 +336,7 @@ func buildPlan(cfg *settings, s scanned) (*contract.Plan, *contract.CannotStart)
 	// 下发行（建站 05 的 02 号单）：拼装只这一处，拼完装进纸上那两格。
 	// 放在最后——脚本正文要先读出来、解释器要先定下来，两者都在前面。
 	sealDownlink(p)
-	return p, nil
+	return p, nil, nil
 }
 
 // copyEnv 把 `[env]` 拷进纸里那张表。
@@ -443,4 +443,101 @@ func lookupOption(name string) (option, bool) {
 		}
 	}
 	return option{}, false
+}
+
+// headCLI 是选项/参数合规那几句的外壳：老版 wrapFatal 的那一层。
+const headCLI = "选项/参数合规性检查未通过"
+
+// keyRunOf 认出「这次是不是一条密钥命令」。
+//
+// 两条纪律：
+//   - 词法有问题时不进这一支（解析站只把问题记在纸上，判不过归闸门——与 0x 定的先后一致）；
+//   - 两条命令一起给、或与批量参数一起给，当场是「起不来」，不走闸门。三条命令是独立功能，
+//     不掺和流水线那套合规判定（开发者 2026-11-06 裁定）。
+func keyRunOf(s scanned) (*contract.KeyRun, *contract.CannotStart) {
+	if len(s.problems) > 0 {
+		return nil, nil
+	}
+	tools := keyToolsOf(s)
+	if len(tools) == 0 {
+		return nil, nil
+	}
+	if len(tools) > 1 {
+		return nil, cannotStart("cli", headCLI, message.KeyToolNeedAlone(strings.Join(tools, "、")))
+	}
+	if given := batchParamsOf(s); len(given) > 0 {
+		return nil, cannotStart("cli", headCLI, message.KeyToolWithBatch(tools[0], strings.Join(given, "、")))
+	}
+	which := contract.KeyToolGen
+	switch tools[0] {
+	case "--key-status":
+		which = contract.KeyToolStatus
+	case "--convert-secret":
+		which = contract.KeyToolConvert
+	}
+	return &contract.KeyRun{Which: which, Path: s.vals["--convert-secret"], Yes: s.given["--yes"]}, nil
+}
+
+// keyToolsOf 是这次给了哪几条密钥命令（用使用者看到的名字）。
+//
+// `--convert-secret` 按**值**认，不按「出现过没有」认：老版 `a.ConvertSecret != ""`，
+// 给一个空串等于没给。
+func keyToolsOf(s scanned) []string {
+	var names []string
+	if s.given["--gen-key"] {
+		names = append(names, "--gen-key")
+	}
+	if s.given["--key-status"] {
+		names = append(names, "--key-status")
+	}
+	if s.vals["--convert-secret"] != "" {
+		names = append(names, "--convert-secret")
+	}
+	return names
+}
+
+// batchParamsOf 是这次给了哪些批量执行参数（用使用者看到的名字）。
+//
+// 顺序与老版 `batchParamsGiven` 逐项相同：值类按原值非空认，开关类按给没给认。
+// `--yes` 不算批量参数：它对密钥命令也有意义（跳过覆盖确认），且不指向任何节点。
+func batchParamsOf(s scanned) []string {
+	// 老版在解析命令行那一步就把「没给 -r 时的自动备注」填好了，所以那条检查会把它当成交了 -r。
+	// 这里照同一笔账：四种模式任一给了值、而 -r 没给时，自动备注已经生成。
+	autoRemark := s.vals["--remark"] == "" &&
+		(s.vals["--command"] != "" || s.vals["--script"] != "" ||
+			s.vals["--upload"] != "" || s.vals["--download"] != "")
+
+	var given []string
+	for _, p := range [][2]string{
+		{"--command", "-c"},
+		{"--script", "-s"},
+		{"--upload", "-u"},
+		{"--download", "-d"},
+		{"--change-password", "--change-password"},
+		{"--csv-file", "-f"},
+		{"--path", "-p"},
+		{"--number", "-n"},
+		{"--remark", "-r"},
+		{"--timeout", "-t"},
+		{"--connect-timeout", "-T"},
+	} {
+		hit := s.vals[p[0]] != ""
+		if p[0] == "--remark" {
+			hit = hit || autoRemark
+		}
+		if hit {
+			given = append(given, p[1])
+		}
+	}
+	for _, p := range [][2]string{
+		{"--key", "-k"},
+		{"--no-shell", "--no-shell"},
+		{"--sudo", "--sudo"},
+		{"--no-sudo", "--no-sudo"},
+	} {
+		if s.given[p[0]] {
+			given = append(given, p[1])
+		}
+	}
+	return given
 }

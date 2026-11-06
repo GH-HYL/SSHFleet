@@ -1,9 +1,11 @@
-// Package credential 是横切叶子包：读主密钥、解密码、报它齐不齐。
+// Package credential 是横切叶子包：凭据与主密钥那一路。
 //
-// 它只做三件事，一件都不多做：从环境变量读主密钥、按本工具的密文格式解一段字节、
-// 报「齐不齐」这个状态。它不造屏、不退出、不判断该不该跑——那是站与塔尖的事。
+// 它管四件事：从环境变量读主密钥、按本工具的密文格式解一段字节与封一段字节、
+// 报「这次读到哪把、本机存着哪把、齐不齐」、把明文凭据值读出来。它不造屏、不退出、
+// 不判断该不该跑——那是站与塔尖的事。
 //
-// 三条密钥命令（生成、看状态、转换）不在本包，随阶段 08 落 keytool。
+// 三条密钥命令（生成、看状态、转换）的**流程**不在这里，住 keytool；但那三条命令要的
+// 主密钥读写与加解密都在这里——主密钥是一件事，两处来源一致不一致只有住同一个包才判得出来。
 //
 // 判据见 ADR-0032 第四条、ADR-0036 决定三。
 package credential
@@ -21,8 +23,8 @@ import (
 	"strings"
 )
 
-// envName 是主密钥的唯一定居点：运行期只从它读（老版同一处，spec D15 统一名）。
-const envName = "SSHFLEET_KEY"
+// EnvName 是主密钥的唯一定居点：运行期只从它读（老版同一处，spec D15 统一名）。
+const EnvName = "SSHFLEET_KEY"
 
 // 密文格式（0x02，老版当前唯一支持的那一版）：
 // base64( 版本 1B || nonce 12B || 密文||认证标签 )，密钥由主密钥经 HKDF-SHA256 派生。
@@ -61,7 +63,7 @@ var (
 
 // Status 报主密钥的现状。它只读环境变量，不碰磁盘、不碰终端。
 func Status() KeyStatus {
-	if strings.TrimSpace(os.Getenv(envName)) == "" {
+	if strings.TrimSpace(os.Getenv(EnvName)) == "" {
 		return KeyMissing
 	}
 	return KeyReady
@@ -71,7 +73,7 @@ func Status() KeyStatus {
 //
 // 首尾空白照老版去掉：主密钥是从 shell 的 rc 文件里 export 出来的，粘贴时常常带空格。
 func MasterKey() (string, error) {
-	key := strings.TrimSpace(os.Getenv(envName))
+	key := strings.TrimSpace(os.Getenv(EnvName))
 	if key == "" {
 		return "", ErrKeyMissing
 	}

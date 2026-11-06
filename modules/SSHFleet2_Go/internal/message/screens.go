@@ -87,15 +87,6 @@ func PromptWith(question Line, defaultYes bool) Line {
 	return Line{s: question.Text() + " " + AskHint(defaultYes) + ": "}
 }
 
-// notWiredHead 是过渡形态那一类话的开头：本阶段还没接上的用法都这么起头，随阶段 08 一起消失。
-const notWiredHead = "这条用法还没接上："
-
-// NotWiredKeyTools 是过渡形态：三条密钥命令随阶段 08 接线。
-// 随阶段 08 消失，不许写进任何手册或帮助。
-func NotWiredKeyTools() string {
-	return notWiredHead + "三条密钥命令随阶段 08 接线"
-}
-
 // LogInitFailed 排「工具日志建不起来」那一屏。此时日志还没建起来，屏上不带「日志：」行。
 //
 // 这是塔尖唯一一处自己触发的造屏：它只把系统给的错交进来，字由这里拼。

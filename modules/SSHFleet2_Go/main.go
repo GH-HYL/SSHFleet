@@ -11,10 +11,12 @@ import (
 	"sshfleet2/internal/archive"
 	"sshfleet2/internal/console"
 	"sshfleet2/internal/contract"
+	"sshfleet2/internal/credential"
 	"sshfleet2/internal/execute"
 	"sshfleet2/internal/exitcode"
 	"sshfleet2/internal/gate"
 	"sshfleet2/internal/interrupt"
+	"sshfleet2/internal/keytool"
 	"sshfleet2/internal/log"
 	"sshfleet2/internal/message"
 	"sshfleet2/internal/parse"
@@ -70,7 +72,7 @@ func main() {
 	lg.Startup(toolDir, toolFile)
 
 	// 步骤 3 起：解析站给结局，闸门判放不放行。
-	say, plan, fail := parse.Run(os.Args, appVersion)
+	say, plan, krun, fail := parse.Run(os.Args, appVersion)
 	switch {
 	case fail != nil:
 		logPath := toolPath
@@ -79,7 +81,22 @@ func main() {
 		}
 		fatal(fail.Where, fail.Body, logPath)
 
+	case krun != nil:
+		// 第四种结局：一条不进流水线的小命令。塔尖只把命令交给密钥包、按它交回的结局收场，
+		// 不判断「该不该跑」——那三条命令自己读自己那一小块配置（ADR-0032 第五条）。
+		lg.Info(message.KeyModeEntered(krun.Which).Plain())
+		if cannot := keytool.Run(*krun, credential.DefaultKeySource()); cannot != nil {
+			fatal(cannot.Where, cannot.Body, toolPath)
+		}
+
 	case plan != nil:
+		// 开工前那一问：加密开着才问主密钥齐不齐。不归拒绝——问完照跑（ADR-0034 决定六）。
+		// 排在清单提示之前：老版这一步在清单读出来之前。
+		if facts, need := credential.Precheck(plan.Run.Encrypted); need {
+			console.Print(message.KeyPrecheckNote(facts))
+			lg.Warn(message.KeyPrecheckTrace(facts.State).Plain())
+		}
+
 		// 解析站路上攒下的提示先打出去：老版的次序也是「读清单的提示在前、确认屏在后」。
 		// 纸上是种类与事实，句子向 message 要。
 		for _, n := range plan.Notices {

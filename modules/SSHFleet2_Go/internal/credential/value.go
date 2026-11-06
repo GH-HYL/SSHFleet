@@ -71,11 +71,11 @@ func PlainValue(value string, encrypted bool, requireNonempty bool) (string, []V
 	path := value
 	if _, err := os.Stat(path); err != nil {
 		// 系统那句原因要带上：只说「不存在」会把「没权限」也说成不存在。
-		return "", []ValueProblem{{Code: ValuePathMissing, Shown: path, Detail: systemReason(err)}}, nil
+		return "", []ValueProblem{{Code: ValuePathMissing, Shown: path, Detail: SystemReason(err)}}, nil
 	}
 	content, err := os.ReadFile(path)
 	if err != nil {
-		return "", []ValueProblem{{Code: ValueReadError, Shown: path, Detail: systemReason(err)}}, nil
+		return "", []ValueProblem{{Code: ValueReadError, Shown: path, Detail: SystemReason(err)}}, nil
 	}
 	text := strings.TrimSpace(string(content))
 	if !IsEncrypted(text) {
@@ -106,11 +106,11 @@ func IsEncrypted(text string) bool {
 	return len(raw) >= 1+v2NonceSize+v2TagSize && raw[0] == cipherV2
 }
 
-// systemReason 取系统那一句，去掉「open <路径>:」这类前缀（口径同 message.SystemReason）。
+// SystemReason 取系统那一句，去掉「open <路径>:」这类前缀（口径同 message.SystemReason）。
 //
 // 本包不 import message（横切包之间没有边），所以这一句自己剥：路径在第一行已经说过一遍，
 // 原因栏里不该再出现一次。
-func systemReason(err error) string {
+func SystemReason(err error) string {
 	var pe *os.PathError
 	if errors.As(err, &pe) {
 		return pe.Err.Error()

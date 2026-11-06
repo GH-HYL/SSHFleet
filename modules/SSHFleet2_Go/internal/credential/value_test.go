@@ -32,7 +32,7 @@ func TestPlainValuePassesPlaintextUntouched(t *testing.T) {
 
 // 开加密时读的是密文文件；文件末尾那个换行不该影响结果。
 func TestPlainValueDecodesCipherFile(t *testing.T) {
-	t.Setenv(envName, testMaster)
+	t.Setenv(EnvName, testMaster)
 	got, problems, err := PlainValue("testdata/password.enc", true, true)
 	if err != nil || len(problems) > 0 {
 		t.Fatalf("这份密文该解得开：err=%v problems=%v", err, problems)
@@ -45,7 +45,7 @@ func TestPlainValueDecodesCipherFile(t *testing.T) {
 // 开了加密、文件不在：这是一条「值这一侧」的问题，不是致命错误——
 // 使用者的下一步是去看那个路径，不是去看主密钥。
 func TestPlainValueReportsMissingFile(t *testing.T) {
-	t.Setenv(envName, testMaster)
+	t.Setenv(EnvName, testMaster)
 	_, problems, err := PlainValue("testdata/根本没有这个文件.enc", true, true)
 	if err != nil {
 		t.Fatalf("文件不在不该归到致命错误：%v", err)
@@ -60,7 +60,7 @@ func TestPlainValueReportsMissingFile(t *testing.T) {
 
 // 开了加密、内容却是明文密码：形状不是密文，报 ValueNotCiphertext。
 func TestPlainValueReportsNotCiphertext(t *testing.T) {
-	t.Setenv(envName, testMaster)
+	t.Setenv(EnvName, testMaster)
 	_, problems, err := PlainValue("testdata/password.txt", true, true)
 	if err != nil {
 		t.Fatalf("不该归到致命错误：%v", err)
@@ -84,12 +84,12 @@ func TestPlainValueReportsSwitchMismatch(t *testing.T) {
 // 主密钥没读到、密文校验不过：两条都归致命错误，各自可认——
 // 它们与「值有问题」是两件事，混成一句会让使用者去修错的那一头。
 func TestPlainValueFatalErrorsStayDistinct(t *testing.T) {
-	t.Setenv(envName, "")
+	t.Setenv(EnvName, "")
 	if _, _, err := PlainValue("testdata/password.enc", true, true); !errors.Is(err, ErrKeyMissing) {
 		t.Fatalf("没有主密钥时应当是 ErrKeyMissing，got %v", err)
 	}
 
-	t.Setenv(envName, "另一把主密钥")
+	t.Setenv(EnvName, "另一把主密钥")
 	if _, _, err := PlainValue("testdata/password.enc", true, true); !errors.Is(err, ErrBadCipher) {
 		t.Fatalf("主密钥不对时应当是 ErrBadCipher，got %v", err)
 	}
