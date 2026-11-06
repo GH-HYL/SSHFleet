@@ -205,3 +205,22 @@ func TestConvertReportsMissingFile(t *testing.T) {
 		t.Fatalf("不该把读不到说成密钥不对：%q", cannot.Body)
 	}
 }
+
+// 已经是明文（配置里加密关着）：不覆盖、不报错——与「已是密文」那一档对称。
+func TestConvertLeavesPlainAlone(t *testing.T) {
+	fake := newFake(t)
+	writeConfig(t, false)
+
+	path := filepath.Join(t.TempDir(), "sec.txt")
+	const plain = "P@ssw0rd"
+	if err := os.WriteFile(path, []byte(plain), 0o644); err != nil {
+		t.Fatalf("写凭据文件失败：%v", err)
+	}
+
+	if cannot := Run(contract.KeyRun{Which: contract.KeyToolConvert, Path: path}, fake.source()); cannot != nil {
+		t.Fatalf("已是明文不该起不来：%+v", cannot)
+	}
+	if got := readFile(t, path); got != plain {
+		t.Fatalf("已是明文时不该动它：%q", got)
+	}
+}

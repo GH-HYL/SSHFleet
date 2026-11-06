@@ -236,6 +236,9 @@ func KeyGenSaved(regenerated bool, f contract.KeyFacts, res contract.PersistResu
 	}
 	var b strings.Builder
 	if f.Host == contract.KeyHostWindows {
+		// 这一串与凭据包 `persist_windows.go` 的 `registryWhere`（「注册表 HKCU\Environment」）
+		// 不是一个写法：这句是「写入本机（…）」，括号里只放位置本身。两处各自成形是认下的
+		// （横切包之间没有边），改一处要看另一处。
 		b.WriteString(fmt.Sprintf("主密钥已%s，并写入本机（HKCU\\Environment）\n", action))
 		b.WriteString("请重新打开终端后再使用：当前终端的环境变量仍是旧密钥\n")
 	} else {
