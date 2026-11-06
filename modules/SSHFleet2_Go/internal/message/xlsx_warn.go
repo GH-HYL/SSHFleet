@@ -7,6 +7,6 @@ package message
 
 // XlsxFailed 生成某张表失败时的错误句（红色 [ERROR]，走标准错误）。
 func XlsxFailed(name string, err error) Line {
-	s := ansiRed + "[ERROR]" + ansiReset + " 生成 " + name + " 失败：" + err.Error() + "（本次跳过，不影响执行结果）\n"
+	s := tagLabel(ansiRed, "ERROR") + " 生成 " + name + " 失败：" + err.Error() + "（本次跳过，不影响执行结果）\n"
 	return Line{s: s, toErr: true}
 }

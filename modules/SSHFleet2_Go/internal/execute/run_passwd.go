@@ -53,8 +53,9 @@ func (c *client) passwd(ctx context.Context, p *contract.Plan, res *contract.Nod
 
 	// 采集全文与「最后一次喂入之后」那一段都要脱敏：远端关回显的时机不由我们定，
 	// 密码回显可能落在任意一处。
-	res.Output = mask.Scrub(trimOuterBlankLines(out.String()), c.node.Password, p.Task.Passwd.NewPassword)
-	note := mask.Scrub(hook.replyTail(), c.node.Password, p.Task.Passwd.NewPassword)
+	secrets := c.secrets(p)
+	res.Output = mask.Scrub(trimOuterBlankLines(out.String()), secrets...)
+	note := mask.Scrub(hook.replyTail(), secrets...)
 
 	f := endFactsOf(outcome.err, outcome.timedOut, outcome.canceled)
 	res.TimedOut = f.timedOut
@@ -174,6 +175,13 @@ func passwdReason(note string) string {
 		kept[i], kept[j] = kept[j], kept[i]
 	}
 	return strings.Join(kept, "\n")
+}
+
+// secrets 是这次喂进去、不该留在采集文本里的那两样：登录密码与新密码。
+//
+// 两处调用（整段输出、回显尾巴）读同一份清单——各列一次，将来多一样就得记着改两处。
+func (c *client) secrets(p *contract.Plan) []string {
+	return []string{c.node.Password, p.Task.Passwd.NewPassword}
 }
 
 // passwdHook 改密的写侧钩子：采集整备交给 outputTap，匹配交给 passwdMatcher。

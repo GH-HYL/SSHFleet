@@ -64,6 +64,7 @@ func tablesPaths(t *testing.T) archive.Paths {
 	}
 	return archive.Paths{
 		Dir:         dir,
+		Root:        filepath.Join(dir, contract.HistoryDir),
 		Assets:      assets,
 		Report:      filepath.Join(dir, "report.txt"),
 		OutputXlsx:  filepath.Join(dir, archive.NameOutputXlsx),

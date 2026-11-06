@@ -36,6 +36,7 @@ const (
 // Paths 是本次运行的落点。**只有字符串**：目录还是文件、建没建，由要写的人自己管。
 type Paths struct {
 	Dir      string // 本次归档目录
+	Root     string // 历史记录根（本次目录的上一级）：收尾建「最新一次」链接时要它
 	Assets   string // 目录里的 assets/（备份原料用，落地随阶段 07）
 	Report   string // report.txt
 	Terminal string // terminal-output.txt（执行站边跑边写）
@@ -71,6 +72,7 @@ func Create(root, mode, remark string, now time.Time) (Paths, error) {
 
 	return Paths{
 		Dir:      dir,
+		Root:     root,
 		Assets:   assets,
 		Report:   filepath.Join(dir, nameReport),
 		Terminal: filepath.Join(dir, nameTerminal),

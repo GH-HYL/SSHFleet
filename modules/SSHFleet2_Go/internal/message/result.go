@@ -58,15 +58,22 @@ func ResultLineText(res contract.NodeResult, mode contract.Mode) string {
 		lines = append(lines, tagged(ip, "错误: "+showControlChars(UnknownIfEmpty(res.ErrorText))))
 	}
 
-	lines = append(lines, tagged(ip, "分类: "+res.Category))
+	lines = append(lines, tagged(ip, categoryLine(res)))
 
 	// 只有连上了才有原文可说：连都连不上时那一格是空的，印一行空白只会让人以为「有输出但看不见」。
-	if res.Connected && res.Output != "" {
+	if hasOutput(res) {
 		lines = append(lines, showControlChars(res.Output))
 	}
 	lines = append(lines, strings.Repeat("=", resultRuleWidth))
 	return strings.Join(lines, "\n")
 }
+
+// categoryLine 是「分类: 名字」那半句：终端那一段与表格那一行共用，改说法只改这里。
+func categoryLine(res contract.NodeResult) string { return "分类: " + res.Category }
+
+// hasOutput 这一台有没有原文可说：连上了才有——连不上时那一格是空的，
+// 印一行空白只会让人以为「有输出但看不见」。
+func hasOutput(res contract.NodeResult) bool { return res.Connected && res.Output != "" }
 
 // connStatus 连接状态那半截：「连接: 成功 - 0.123s」。
 func connStatus(res contract.NodeResult) string {

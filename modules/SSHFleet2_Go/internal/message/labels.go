@@ -28,3 +28,9 @@ func ValueInvalid(name, value string) string {
 func ValueInvalidTight(subject, value string) string {
 	return subject + "取值非法：" + value
 }
+
+// tagLabel 是那句话开头那个方括号标签（`[ERROR]` / `[警告]`）唯一的成形处：
+// 配色与方括号只在这里写一次，别处把标签名递进来。
+func tagLabel(color, label string) string {
+	return color + "[" + label + "]" + ansiReset
+}
