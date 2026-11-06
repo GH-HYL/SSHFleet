@@ -164,3 +164,32 @@ func TestLogNodeTruncatesLongLine(t *testing.T) {
 		t.Fatalf("应截到 500 字加省略号：\n%s", got)
 	}
 }
+
+// 中间步骤：日志里记真实事实（哪一步、命令原文、退出码几）；没有一步失败时这一行不出现。
+func TestLogNodeWritesFailedSteps(t *testing.T) {
+	code1, code0 := 1, 0
+	res := contract.NodeResult{
+		IP:        "10.0.0.1",
+		Connected: true,
+		Category:  "预处理失败",
+		ErrorText: "sshfleet.transfer.remote_missing: remote path not found: /nope",
+		Steps: []contract.Step{
+			{Name: contract.StepPrecheck, ExitCode: &code1},
+			{Name: contract.StepEnumerate, ExitCode: &code0},
+		},
+	}
+	got := captureNodeLog(t, res, contract.ModeDownload)
+	want := "【10.0.0.1】中间步骤：预检（test -e） 退出码 1、枚举（find） 退出码 0"
+	if !strings.Contains(got, want) {
+		t.Fatalf("中间步骤那一行不对，缺 %q：\n%s", want, got)
+	}
+
+	// 全 0：这一行不该出现。
+	clean := contract.NodeResult{
+		IP: "10.0.0.2", Connected: true, Category: "下载成功",
+		Steps: []contract.Step{{Name: contract.StepPrecheck, ExitCode: &code0}},
+	}
+	if got := captureNodeLog(t, clean, contract.ModeDownload); strings.Contains(got, "中间步骤") {
+		t.Fatalf("干净跑完不该写中间步骤：\n%s", got)
+	}
+}
