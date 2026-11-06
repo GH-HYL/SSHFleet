@@ -109,7 +109,8 @@ func IsEncrypted(text string) bool {
 // SystemReason 取系统那一句，去掉「open <路径>:」这类前缀（口径同 message.SystemReason）。
 //
 // 本包不 import message（横切包之间没有边），所以这一句自己剥：路径在第一行已经说过一遍，
-// 原因栏里不该再出现一次。
+// 原因栏里不该再出现一次。`message` 里那份同名的与这份认下不合并（开发者 2026-11-06 定）：
+// **改这里要一起改那边**。
 func SystemReason(err error) string {
 	var pe *os.PathError
 	if errors.As(err, &pe) {
