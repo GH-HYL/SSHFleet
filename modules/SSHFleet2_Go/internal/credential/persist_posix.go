@@ -18,8 +18,14 @@ import (
 // hostPlatform 说持久值落在哪一侧：拼话按它挑「source 一下」还是「重开终端」。
 const hostPlatform = contract.KeyHostPOSIX
 
+// 两个候选 rc 文件的名字只写这一处：列表、当前 shell 的挑选、另一侧的跟随都从它取。
+const (
+	rcZsh  = ".zshrc"
+	rcBash = ".bashrc"
+)
+
 // rcFiles 是两个候选：第一个有主密钥的就是「本机已保存」，两个不同就是「另一处持久值」。
-var rcFiles = []string{".zshrc", ".bashrc"}
+var rcFiles = []string{rcZsh, rcBash}
 
 // homeDir 取主目录；取不到就交回空串（那时所有路径都算不出来，读写都不会发生）。
 func homeDir() string {
@@ -33,9 +39,9 @@ func homeDir() string {
 // currentRCFile 是当前登录 shell 对应的 rc 文件名。
 func currentRCFile() string {
 	if strings.Contains(os.Getenv("SHELL"), "zsh") {
-		return ".zshrc"
+		return rcZsh
 	}
-	return ".bashrc"
+	return rcBash
 }
 
 // rcFilePath 是当前 shell 的 rc 文件绝对路径；取不到主目录时退回文件名。
@@ -84,7 +90,7 @@ func persistKey(key string) (contract.PersistResult, error) {
 		return contract.PersistResult{}, os.ErrNotExist
 	}
 	rc := currentRCFile()
-	target := filepath.Join(home, rc)
+	target := rcFilePath()
 	if err := writeKeyToRC(target, key); err != nil {
 		return contract.PersistResult{Where: target}, err
 	}
