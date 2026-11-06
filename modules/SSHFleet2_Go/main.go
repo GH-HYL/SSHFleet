@@ -134,7 +134,7 @@ func main() {
 		}
 		// 报告站已经把这几句打上屏了；这里只管留痕——它不持日志句柄。
 		for _, w := range warns {
-			lg.Warn(w.Text())
+			lg.Warn(w.Plain())
 		}
 
 	default:

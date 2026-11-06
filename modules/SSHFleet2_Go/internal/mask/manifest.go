@@ -58,11 +58,7 @@ func maskManifestLine(line string) string {
 	if err != nil || len(fields) < 4 || !isIPv4(strings.TrimSpace(fields[0])) {
 		return line
 	}
-	for _, idx := range []int{3, 5} {
-		if idx < len(fields) && strings.TrimSpace(fields[idx]) != "" {
-			fields[idx] = Secret(fields[idx])
-		}
-	}
+	maskCredentialFields(fields)
 	return joinFields(fields)
 }
 

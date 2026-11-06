@@ -31,6 +31,17 @@ const (
 	RowEventOutput = "标准输出和错误输出"
 )
 
+// TerminalHeaders 是终端那张表的三列列名。
+func TerminalHeaders() []string { return []string{"IP地址", "事件类型", "内容详情"} }
+
+// ResultsHeaders 是结果明细那张表的十五列列名。列序与列名一字不改——使用者按列名找东西。
+func ResultsHeaders() []string {
+	return []string{
+		"序号", "IP", "端口", "用户名", "连接成功", "退出码", "连接耗时",
+		"执行耗时", "传输字节", "文件总数", "成功文件数", "失败文件数", "分类", "报错原文", "输出内容",
+	}
+}
+
 // ResultRows 把一台结果摊成表格要的那几行。
 //
 // 次序照老版：连接 → 执行 → 错误（只有失败那台有）→ 输出逐行 → 分类 → 分隔行。

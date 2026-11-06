@@ -80,11 +80,11 @@ func Run(l contract.Ledger, paths archive.Paths) (warnings []message.Line, err e
 
 	// 收尾：当前目录下那条入口指到这一次。建不起来与「撞上同名文件」都不算失败。
 	if skipped, lerr := archive.CreateLatestLink(contract.HistoryDir); lerr != nil {
-		w := message.LatestLinkFailed(lerr)
+		w := message.LatestLinkFailed(archive.LatestName, lerr)
 		console.Print(w)
 		warnings = append(warnings, w)
 	} else if skipped {
-		w := message.LatestLinkSkipped()
+		w := message.LatestLinkSkipped(archive.LatestName)
 		console.Print(w)
 		warnings = append(warnings, w)
 	}

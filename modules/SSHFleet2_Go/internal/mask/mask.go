@@ -28,6 +28,18 @@ func Secret(s string) string {
 	return string(r[:2]) + maskToken + string(r[len(r)-2:])
 }
 
+// maskCredentialFields 把一条节点记录里的两个凭据段（第 4 段密码、第 6 段口令）遮掉。
+//
+// 内联清单与清单副本共用这一处：段号只在这里写一次，两处各判各的空（空段不动），
+// 遮法仍是 `Secret`。
+func maskCredentialFields(fields []string) {
+	for _, idx := range []int{3, 5} {
+		if idx < len(fields) && strings.TrimSpace(fields[idx]) != "" {
+			fields[idx] = Secret(fields[idx])
+		}
+	}
+}
+
 // Scrub 把本次喂进去的凭据从一段采集文本里擦掉。
 //
 // 改密时远端 PTY 什么时候关回显由 passwd 说了算：我们写进去的字节可能正好落在它关回显
