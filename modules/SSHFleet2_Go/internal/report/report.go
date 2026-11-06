@@ -45,6 +45,29 @@ func Run(l contract.Ledger, paths archive.Paths) (warnings []message.Line, err e
 		return nil, fmt.Errorf("写报告文件失败（%s）：%w", paths.Report, err)
 	}
 
+	// 两张表格：开关在密文里（报告站读不到配置），关掉就不生成。失败只留痕、不中断——
+	// 老版注释写得很清楚：终端一关，只有工具日志能说明这次的表格为什么没生成。
+	for _, one := range []struct {
+		on    bool
+		path  string
+		name  string
+		write func() error
+	}{
+		{body.OutputToXlsx, paths.OutputXlsx, archive.NameOutputXlsx,
+			func() error { return writeTerminalXlsx(paths.OutputXlsx, l, body.Mode) }},
+		{body.ResultsToXlsx, paths.ResultsXlsx, archive.NameResultsXlsx,
+			func() error { return writeResultsXlsx(paths.ResultsXlsx, l, body.Mode) }},
+	} {
+		if !one.on {
+			continue
+		}
+		if werr := one.write(); werr != nil {
+			w := message.XlsxFailed(one.name, werr)
+			console.Print(w)
+			warnings = append(warnings, w)
+		}
+	}
+
 	// 收尾：当前目录下那条入口指到这一次。建不起来与「撞上同名文件」都不算失败。
 	if skipped, lerr := archive.CreateLatestLink(contract.HistoryDir); lerr != nil {
 		w := message.LatestLinkFailed(lerr)

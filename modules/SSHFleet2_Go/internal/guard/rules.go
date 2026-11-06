@@ -55,6 +55,8 @@ var thirdParty = []string{
 	// 阶段 07 的 05 号单：Windows 的目录联接（latest_history）要 win32 调用。
 	// 开发者 2026-11-06 选「加一个名」而不是用标准库手写 unsafe。
 	"golang.org/x/sys",
+	// 阶段 07 的 03 号单：两张表格。与老版同版本（建站 04 规格第八节已点名预告）。
+	"github.com/xuri/excelize/v2",
 }
 
 // clockReaders 是「问现在几点」的那三个函数：谁在运行时读它们，谁就在决定「现在」。

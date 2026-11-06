@@ -24,8 +24,9 @@ const (
 	nameExecLog  = "SSHFleetExec.log"
 
 	// 两张表格：与终端文本、报告同族，都在本次目录里。名字照老版（用户认这两个名字）。
-	nameOutputXlsx  = "terminal-output.xlsx"
-	nameResultsXlsx = "results.xlsx"
+	// 导出给报告站：「生成哪张表失败了」那句话要印文件名，名字只许有这一处出处。
+	NameOutputXlsx  = "terminal-output.xlsx"
+	NameResultsXlsx = "results.xlsx"
 
 	// 工具日志是**整个历史根共用的一份**滚动文件，不进本次目录——老版横跨所有运行、
 	// 到 50MB 才换名留档，所以它与上面四个不同族：那四个在本次目录里，这一个在根上。
@@ -75,8 +76,8 @@ func Create(root, mode, remark string, now time.Time) (Paths, error) {
 		Terminal: filepath.Join(dir, nameTerminal),
 		ExecLog:  filepath.Join(dir, nameExecLog),
 
-		OutputXlsx:  filepath.Join(dir, nameOutputXlsx),
-		ResultsXlsx: filepath.Join(dir, nameResultsXlsx),
+		OutputXlsx:  filepath.Join(dir, NameOutputXlsx),
+		ResultsXlsx: filepath.Join(dir, NameResultsXlsx),
 	}, nil
 }
 
