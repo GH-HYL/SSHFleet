@@ -11,8 +11,8 @@ import (
 // ——那正好把闸门拆了（07 号工单答案第十条）。
 const FenceNote = "这是结构约束，不是功能测试：红了说明有人绕开了架构边界，不是代码算错了。"
 
-// 六类的名字。台账「规则」一栏、报错里的方括号、map.md 的阶段表都用同一套写法，
-// 类号不动（ADR-0032 第四条、ADR-0037）。
+// 七类的名字。台账「规则」一栏、报错里的方括号、map.md 的阶段表都用同一套写法，
+// 类号不动（ADR-0032 第四条、ADR-0037；类七见建站 07 规格第六节）。
 const (
 	ClassTerminal = "类一 写终端"
 	ClassDeps     = "类二 依赖方向"
@@ -21,13 +21,14 @@ const (
 	ClassFailure  = "类五 失败类型的构造点"
 	ClassTestSite = "类六 测试站位"
 	ClassHandoff  = "类六 交接件更窄"
+	ClassMask     = "类七 遮的构造点"
 	ClassRedline  = "红线名单与指纹"
 )
 
 // allClasses 是跑全的时候的次序，与类号一致。
 var allClasses = []string{
 	ClassTerminal, ClassDeps, ClassExit, ClassContract,
-	ClassFailure, ClassTestSite, ClassHandoff, ClassRedline,
+	ClassFailure, ClassTestSite, ClassHandoff, ClassMask, ClassRedline,
 }
 
 // skipTestFiles 说清每一类对 _test.go 的态度。
@@ -39,6 +40,8 @@ var skipTestFiles = map[string]bool{
 	ClassTerminal: true,
 	ClassDeps:     true,
 	ClassFailure:  true,
+	// 类七也不扫测试：测试里造一句带星号的样本是在断言形状，不是生产路径上自己遮。
+	ClassMask: true,
 }
 
 // scans 判一条判据要不要看这份文件。

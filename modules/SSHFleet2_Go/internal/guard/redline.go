@@ -91,6 +91,8 @@ var redline = []RedLineEntry{
 	{"TestRedlineExecuteWritesResultLine", []string{"contract.CommandTask", "contract.ModeCommand", "contract.Node", "contract.Plan", "contract.Task", "execute.Run"}},
 	// 04 阶段 15 号单：报告站的屏幕那一段是「话」，落点由别人给（新增不算改）
 	{"TestRedlineReportScreenAndPath", []string{"Kind", "contract.Ledger", "message.Line", "message.StatisticsLine", "report.Run"}},
+	// 07 阶段 02 号单：遮的构造点只有一个（新增一条，不算改名单）
+	{"TestCheckMask", []string{"ClassMask", "CheckMask", "Report"}},
 }
 
 // RedLine 返回名单的一份拷贝。检查读它；改返回值影响不到名单本身。

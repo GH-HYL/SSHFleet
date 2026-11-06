@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"sshfleet2/internal/contract"
+	"sshfleet2/internal/mask"
 	"sshfleet2/internal/message"
 )
 
@@ -52,8 +53,8 @@ func (c *client) passwd(ctx context.Context, p *contract.Plan, res *contract.Nod
 
 	// 采集全文与「最后一次喂入之后」那一段都要脱敏：远端关回显的时机不由我们定，
 	// 密码回显可能落在任意一处。
-	res.Output = scrubSecrets(trimOuterBlankLines(out.String()), c.node.Password, p.Task.Passwd.NewPassword)
-	note := scrubSecrets(hook.replyTail(), c.node.Password, p.Task.Passwd.NewPassword)
+	res.Output = mask.Scrub(trimOuterBlankLines(out.String()), c.node.Password, p.Task.Passwd.NewPassword)
+	note := mask.Scrub(hook.replyTail(), c.node.Password, p.Task.Passwd.NewPassword)
 
 	f := endFactsOf(outcome.err, outcome.timedOut, outcome.canceled)
 	res.TimedOut = f.timedOut
@@ -173,21 +174,6 @@ func passwdReason(note string) string {
 		kept[i], kept[j] = kept[j], kept[i]
 	}
 	return strings.Join(kept, "\n")
-}
-
-// scrubSecrets 把本次喂进去的凭据从采集输出里抹掉。
-//
-// 远端 PTY 什么时候关回显由 passwd 说了算：我们写进去的字节可能正好落在它关回显之前那一瞬，
-// 被终端原样回显出来。这份输出会跟着 Output 进归档、报告与明细表，所以在这里自己擦掉，
-// 不指望远端。短密码可能与输出里的无关文字重合——两害相权，宁可看到 `****`。
-func scrubSecrets(text string, secrets ...string) string {
-	for _, s := range secrets {
-		if s == "" {
-			continue
-		}
-		text = strings.ReplaceAll(text, s, "****")
-	}
-	return text
 }
 
 // passwdHook 改密的写侧钩子：采集整备交给 outputTap，匹配交给 passwdMatcher。

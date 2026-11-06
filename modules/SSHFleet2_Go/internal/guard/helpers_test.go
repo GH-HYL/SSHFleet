@@ -68,6 +68,13 @@ func fixtureRules(name string) []Rule {
 			{"log", KindCrosscut, nil},
 			{"fixture", KindTip, []string{"parse", "execute", "log"}},
 		}
+	case "mask":
+		// 类七的样本：mask 自己写星号不红，解析站自己替换明文红。
+		return []Rule{
+			{"parse", KindStation, []string{"contract"}},
+			{"mask", KindCrosscut, nil},
+			{"fixture", KindTip, nil},
+		}
 	default: // clean
 		return []Rule{
 			{"parse", KindStation, []string{"contract", "console", "message"}},
