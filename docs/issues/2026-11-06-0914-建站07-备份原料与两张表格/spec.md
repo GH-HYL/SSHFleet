@@ -1,6 +1,6 @@
 # 规格：阶段 07——备份原料、脱敏副本与两张表格
 
-**Status**：ready-for-agent
+**Status**：done
 
 ## 边界（照抄母规格三条）
 
