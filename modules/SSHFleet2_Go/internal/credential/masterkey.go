@@ -1,13 +1,10 @@
 package credential
 
 import (
-	"crypto/aes"
-	"crypto/cipher"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
-	"fmt"
 	"strings"
 )
 
@@ -54,19 +51,15 @@ func GenerateMasterKey() (string, error) {
 func Encrypt(plain, masterKey string) (string, error) {
 	key, err := deriveKey(masterKey)
 	if err != nil {
-		return "", fmt.Errorf("%w：%v", ErrBadCipher, err)
+		return "", err
 	}
-	block, err := aes.NewCipher(key)
+	gcm, err := gcmOf(key)
 	if err != nil {
-		return "", fmt.Errorf("%w：建不出密码器：%v", ErrBadCipher, err)
-	}
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return "", fmt.Errorf("%w：建不出 GCM：%v", ErrBadCipher, err)
+		return "", err
 	}
 	nonce := make([]byte, v2NonceSize)
 	if _, err := rand.Read(nonce); err != nil {
-		return "", fmt.Errorf("%w：取不到随机数：%v", ErrBadCipher, err)
+		return "", cipherErr("取不到随机数：%v", err)
 	}
 	sealed := gcm.Seal(nil, nonce, []byte(plain), nil)
 

@@ -13,12 +13,17 @@ import (
 // keyComment 是本工具在 rc 文件里写下的分组注释（重写时一并清理，免得越堆越多）。
 const keyComment = "# SSHFleet 主密钥"
 
+// exportPrefix 是主密钥赋值行的前缀：认行、取值、写行三处都从它拼。
+//
+// 一处拼错另一处就对不上，症状是「生成成功、下条命令仍缺密钥」，所以只留这一份。
+const exportPrefix = "export " + EnvName + "="
+
 // isKeyExportLine 判一行是不是本工具格式的主密钥赋值行。
 //
 // 只认规范形态（trim 后以 `export SSHFLEET_KEY=` 开头）：注释掉的行不算，免得把使用者
 // 备注里的示例当成生效值。
 func isKeyExportLine(line string) bool {
-	return strings.HasPrefix(strings.TrimSpace(line), "export "+EnvName+"=")
+	return strings.HasPrefix(strings.TrimSpace(line), exportPrefix)
 }
 
 // isKeyGapComment 判一行是不是本工具写下的分组注释。
@@ -50,7 +55,7 @@ func hasKeyLine(path string) bool {
 // 取最后一条是硬要求：shell 以最后一条赋值生效，取第一条会与终端实际生效值分叉，
 // 症状就是「凭据解密报主密钥不匹配」。
 func findExportInFile(path string) string {
-	needle := "export " + EnvName + "="
+	needle := exportPrefix
 	value := ""
 	for _, line := range readLines(path) {
 		if !isKeyExportLine(line) {
@@ -84,6 +89,6 @@ func writeKeyToRC(path, key string) error {
 	if len(kept) > 0 {
 		kept = append(kept, "")
 	}
-	kept = append(kept, keyComment, "export "+EnvName+"='"+key+"'")
+	kept = append(kept, keyComment, exportPrefix+"'"+key+"'")
 	return os.WriteFile(path, []byte(strings.Join(kept, "\n")+"\n"), 0o644)
 }

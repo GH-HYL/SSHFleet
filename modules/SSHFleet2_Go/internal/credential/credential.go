@@ -105,33 +105,49 @@ func Secret(value string, encrypted bool) (string, error) {
 	return Decrypt(strings.TrimSpace(string(content)), key)
 }
 
+// cipherErr 是「这段内容不是本工具的密文格式」那一族的唯一成形处。
+//
+// 封、解、派生三处共十一次包装都从它出——换那句话、给这族错误补一样东西，只改这一处。
+func cipherErr(detail string, args ...any) error {
+	return fmt.Errorf("%w：%s", ErrBadCipher, fmt.Sprintf(detail, args...))
+}
+
+// gcmOf 由派生出的 AES 密钥建出 GCM。封与解各走一次，两处的失败口径只写这一遍。
+func gcmOf(key []byte) (cipher.AEAD, error) {
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, cipherErr("建不出密码器：%v", err)
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, cipherErr("建不出 GCM：%v", err)
+	}
+	return gcm, nil
+}
+
 // Decrypt 解一段 0x02 密文。解密失败一律归到 ErrBadCipher，具体哪一步不对写在话里。
 func Decrypt(token, masterKey string) (string, error) {
 	raw, err := decodeStrictB64(token)
 	if err != nil {
-		return "", fmt.Errorf("%w：%v", ErrBadCipher, err)
+		return "", cipherErr("%v", err)
 	}
 	if len(raw) < 1+v2NonceSize+v2TagSize {
-		return "", fmt.Errorf("%w：内容长度不足，文件可能被截断", ErrBadCipher)
+		return "", cipherErr("内容长度不足，文件可能被截断")
 	}
 	if raw[0] != cipherV2 {
-		return "", fmt.Errorf("%w：版本号 %d 认不出", ErrBadCipher, raw[0])
+		return "", cipherErr("版本号 %d 认不出", raw[0])
 	}
 	key, err := deriveKey(masterKey)
 	if err != nil {
 		return "", err
 	}
-	block, err := aes.NewCipher(key)
+	gcm, err := gcmOf(key)
 	if err != nil {
-		return "", fmt.Errorf("%w：建不出密码器：%v", ErrBadCipher, err)
-	}
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return "", fmt.Errorf("%w：建不出 GCM：%v", ErrBadCipher, err)
+		return "", err
 	}
 	plain, err := gcm.Open(nil, raw[1:1+v2NonceSize], raw[1+v2NonceSize:], nil)
 	if err != nil {
-		return "", fmt.Errorf("%w：完整性校验不过——主密钥不匹配，或文件已损坏", ErrBadCipher)
+		return "", cipherErr("完整性校验不过——主密钥不匹配，或文件已损坏")
 	}
 	return string(plain), nil
 }
@@ -140,7 +156,7 @@ func Decrypt(token, masterKey string) (string, error) {
 func deriveKey(masterKey string) ([]byte, error) {
 	key, err := hkdf.Key(sha256.New, []byte(masterKey), nil, v2Info, 32)
 	if err != nil {
-		return nil, fmt.Errorf("%w：密钥派生失败：%v", ErrBadCipher, err)
+		return nil, cipherErr("密钥派生失败：%v", err)
 	}
 	return key, nil
 }
