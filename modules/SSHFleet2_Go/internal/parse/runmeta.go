@@ -66,6 +66,13 @@ func runMetaBodyOf(p *contract.Plan, argv []string, cfg *settings) contract.RunM
 
 		ShowCategoryTips:  cfg.enable.ShowCategoryTips,
 		ErrorKeywordsPath: displayPath(errorKeywordsPath),
+
+		// 两张表格的开关：报告站要，执行站不要，所以只封进这一段（建站 07 的 01 号单）。
+		OutputToXlsx:  cfg.enable.OutputToXlsx,
+		ResultsToXlsx: cfg.enable.ResultsToXlsx,
+
+		// 代填的原值：备份原料时报告站要拿它判「是不是一份文件」。
+		AnswerRaw: p.Run.Answer,
 	}
 	switch {
 	case p.Task.Command != nil:

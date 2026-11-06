@@ -165,7 +165,7 @@ func Run(ctx context.Context, p *contract.Plan, termPath, execLogPath string) (c
 // 盘上已经有痕迹。
 func visit(ctx context.Context, p *contract.Plan, idx int, ag *aggregator) contract.NodeResult {
 	node := p.Nodes[idx]
-	res := contract.NodeResult{IP: node.IP}
+	res := contract.NodeResult{IP: node.IP, Port: node.Port, User: node.User}
 
 	c := &client{node: node, timeout: seconds(p.Run.TimeoutConnect)}
 	start := time.Now()
