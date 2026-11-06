@@ -108,7 +108,22 @@ func (c *client) passwd(ctx context.Context, p *contract.Plan, res *contract.Nod
 			TimedOut:   res.TimedOut,
 			RemoteSaid: res.ErrorText != "",
 		}))
+		// 唯一「说不出原因」的形态：收尾那条 `:` 自己没跑通，而远端一个字都没说。
+		// 别处都由远端原话或上面那几种报文兜住，这一格空着，使用者只会看到「失败」两个字。
+		if res.ErrorText == "" && failedStep(res.Steps, contract.StepPasswd) {
+			res.ErrorText = appendText(res.ErrorText, msg(envPasswd, "finish_failed", "finish command failed"))
+		}
 	}
+}
+
+// failedStep 这一步有没有没跑成（拿到码且非 0）。
+func failedStep(steps []contract.Step, name string) bool {
+	for _, st := range steps {
+		if st.Name == name && st.ExitCode != nil && *st.ExitCode != 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // isCleanStop 这次改密是不是「干净收场」：没超时、没中断、没早收场、`:` 也是 0 收场。

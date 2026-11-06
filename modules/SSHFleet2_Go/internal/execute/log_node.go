@@ -87,6 +87,12 @@ func logNode(lg *log.Logger, res contract.NodeResult, mode contract.Mode, termPa
 		logMultiline(lg.Error, ip, "错误详情：", res.ErrorText)
 	}
 
+	// 三级半：中间步骤。日志要的是真实事实——哪一步、那条命令原文、退出码几；给人看的那一面
+	// 不摊这些内部名（失败原因由报文说人话，见 `message.StepNote` 的头注释）。
+	if note := message.StepNote(res.Steps); note != "" {
+		lg.Warn(ip + note)
+	}
+
 	// 四级：输出明细。与「错误详情」逐字相同的输出不再重复写一遍。
 	if res.Output != "" && !sameAsError(res) {
 		logOutputBlock(lg.Warn, ip, res.Output, termPath)
