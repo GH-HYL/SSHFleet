@@ -9,6 +9,7 @@ package report
 import (
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/xuri/excelize/v2"
@@ -61,6 +62,15 @@ func cell(f *excelize.File, sheet, at string, v any) error {
 		v = cleanForExcel(s)
 	}
 	return f.SetCellValue(sheet, at, v)
+}
+
+// portValue 端口那一格按数字写：老版那张表里它就是个数，写成文本会被 Excel 按字符串
+// 排序（10022 排到 22 前面）并改成左对齐。端口在纸上由解析站整成十进制串，这里只还原类型。
+func portValue(s string) any {
+	if n, err := strconv.Atoi(s); err == nil {
+		return n
+	}
+	return s
 }
 
 // sheetStyles 一张表的三个样式：表头、输出明细格、分隔行。
@@ -245,7 +255,7 @@ func writeResultsXlsx(path string, l contract.Ledger, mode contract.Mode) error 
 		}
 		values := []any{
 			// 序号从 0 起——老版那张表就是这样（`Seq` 是下标），A/B 逐格对得上才叫一致。
-			idx, item.IP, item.Port, item.User, item.Connected, exit,
+			idx, item.IP, portValue(item.Port), item.User, item.Connected, exit,
 			item.ConnectCost.Seconds(), item.Cost.Seconds(),
 			item.Transfer.TotalBytes, item.Transfer.TotalFiles,
 			item.Transfer.SuccessFiles, item.Transfer.FailFiles,
