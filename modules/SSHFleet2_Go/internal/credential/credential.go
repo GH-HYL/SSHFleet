@@ -56,9 +56,9 @@ const (
 // 主密钥没读到要他去 source 一下，密文不对要他去看那个文件。
 var (
 	// ErrKeyMissing 环境变量里没有主密钥。
-	ErrKeyMissing = errors.New("主密钥没读到")
+	ErrKeyMissing = errors.New(wordKeyMissing)
 	// ErrBadCipher 这段内容不是本工具的密文格式（长度不对、版本认不出、或校验不过）。
-	ErrBadCipher = errors.New("不是本工具的密文格式")
+	ErrBadCipher = errors.New(wordBadCipher)
 )
 
 // Status 报主密钥的现状。它只读环境变量，不碰磁盘、不碰终端。
@@ -96,7 +96,7 @@ func Secret(value string, encrypted bool) (string, error) {
 	path := strings.TrimSpace(value)
 	content, err := os.ReadFile(path)
 	if err != nil {
-		return "", fmt.Errorf("读不到凭据文件 %s：%w", path, err)
+		return "", fmt.Errorf(wordReadFailed, path, err)
 	}
 	key, err := MasterKey()
 	if err != nil {
@@ -116,11 +116,11 @@ func cipherErr(detail string, args ...any) error {
 func gcmOf(key []byte) (cipher.AEAD, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
-		return nil, cipherErr("建不出密码器：%v", err)
+		return nil, cipherErr(wordNoCipherBuild, err)
 	}
 	gcm, err := cipher.NewGCM(block)
 	if err != nil {
-		return nil, cipherErr("建不出 GCM：%v", err)
+		return nil, cipherErr(wordNoGCM, err)
 	}
 	return gcm, nil
 }
@@ -132,10 +132,10 @@ func Decrypt(token, masterKey string) (string, error) {
 		return "", cipherErr("%v", err)
 	}
 	if len(raw) < 1+v2NonceSize+v2TagSize {
-		return "", cipherErr("内容长度不足，文件可能被截断")
+		return "", cipherErr(wordTooShort)
 	}
 	if raw[0] != cipherV2 {
-		return "", cipherErr("版本号 %d 认不出", raw[0])
+		return "", cipherErr(wordBadVersion, raw[0])
 	}
 	key, err := deriveKey(masterKey)
 	if err != nil {
@@ -147,7 +147,7 @@ func Decrypt(token, masterKey string) (string, error) {
 	}
 	plain, err := gcm.Open(nil, raw[1:1+v2NonceSize], raw[1+v2NonceSize:], nil)
 	if err != nil {
-		return "", cipherErr("完整性校验不过——主密钥不匹配，或文件已损坏")
+		return "", cipherErr(wordBadTag)
 	}
 	return string(plain), nil
 }
@@ -156,7 +156,7 @@ func Decrypt(token, masterKey string) (string, error) {
 func deriveKey(masterKey string) ([]byte, error) {
 	key, err := hkdf.Key(sha256.New, []byte(masterKey), nil, v2Info, 32)
 	if err != nil {
-		return nil, cipherErr("密钥派生失败：%v", err)
+		return nil, cipherErr(wordDeriveFailed, err)
 	}
 	return key, nil
 }
@@ -168,10 +168,10 @@ var b64CharsetRe = regexp.MustCompile(`^[A-Za-z0-9+/]+={0,2}$`)
 func decodeStrictB64(text string) ([]byte, error) {
 	compact := compactB64(text)
 	if len(compact)%4 != 0 {
-		return nil, errors.New("base64 长度不合法")
+		return nil, errors.New(wordB64Length)
 	}
 	if !b64CharsetRe.MatchString(compact) {
-		return nil, errors.New("含 base64 字符集之外的字符")
+		return nil, errors.New(wordB64Charset)
 	}
 	return base64.StdEncoding.DecodeString(compact)
 }
