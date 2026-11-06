@@ -20,3 +20,7 @@
 **`--convert-secret` 按值认**：给一个空串等于没给（老版 `a.ConvertSecret != ""`），于是它仍走批量那一路。
 
 **A/B**（`build/建站08_AB_2026-11-06_1300/`）：`t1.sh` 跑三档状态、`t6.sh` 跑两种不合规与词法错那条路，两侧逐字相同；只有「日志：」那一行的路径（两侧二进制不在一个目录）与本机随机生成的密钥不同。
+
+**交付后审计（2026-11-06 下午）**：一条 1.2 **已补收**——老版在解析命令行那一步就拦多余的位置参数，`--key-status extra` 新版原本静默跑掉（实跑两版对过）。现由 `keyRunOf` 先判，排在两条互斥之前（与老版同序），句子仍走 `message.RefuseExtraArgs`；`t7.sh` 三档（单命令、两命令一起、`--convert-secret x extra`）与老版逐字相同，`TestKeyRunRefusesExtraArgs` 钉住。
+
+未处置两条：`argv.go:449` 的 `headCLI` 与 `message.HeadCompliance` 同值同形（同包的 `material.go:109` 用的是符号）；`batchParamsOf` 手抄十五组长短名，而 `options` 表就是它的来源——`options.go:45` 的注释正说「两边各写一串名字迟早漂移」。

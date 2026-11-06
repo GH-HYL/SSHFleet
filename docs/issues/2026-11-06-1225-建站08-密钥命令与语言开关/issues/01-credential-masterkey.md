@@ -20,3 +20,5 @@
 **形状**：`KeySource` 是那一格可注入的值（`EnvLookup`／`PersistedLookup`／`Persist`／`RCFile`／`Host`），平台实现在 `persist_posix.go` 与 `persist_windows.go`；rc 文件的文本原语不挂平台标签，两侧单测都能跑。`Fingerprint`／`GenerateMasterKey`／`Encrypt` 与 `Decrypt` 同住 `masterkey.go`：密文格式的两面不拆包。
 
 **一处顺手改名**：`envName` 改成导出的 `EnvName`——密钥命令的错误屏里要点名那一格变量，句子在 `message`，名字得从凭据包递过去，不能各写一份字面量。
+
+**交付后审计（2026-11-06 下午）**：命中六条，本轮都不处置，等 09 之前统一收。五条属「同一形式多处拼」：`rcfile.go:21`／`:53`／`:87` 三处各拼 `export SSHFLEET_KEY=` 前缀；`persist_posix.go:22` 的 `rcFiles` 与 `:36`／`:38` 的字面量是两套写法；`masterkey.go:57`／`:61`／`:65`／`:69` 四个 `ErrBadCipher` 包装与 `credential.go` 里七个同形（老版有 `cipherErr` 构造点，这次没搬）；`masterkey.go:59-66` 与 `credential.go:124-131` 那八行逐字相同；`persist_posix.go:87` 重算了一次当前 rc 路径，`rcFilePath` 就是干这个的。第六条是 1.2：「建不出密码器」「建不出 GCM」「取不到随机数」三句中文从本包经 `err.Error()` 上屏（`keytool/run.go:105` 收走），与「中文句子一律住 `message`」不符。
