@@ -122,12 +122,22 @@ func stripComment(line string) string {
 
 // unquote 去掉成对的外层引号（'…' 或 "…"），内部原样留着。
 func unquote(v string) string {
-	if len(v) >= 2 {
-		if (v[0] == '\'' && v[len(v)-1] == '\'') || (v[0] == '"' && v[len(v)-1] == '"') {
-			return v[1 : len(v)-1]
-		}
+	if isQuoted(v) {
+		return v[1 : len(v)-1]
 	}
 	return v
+}
+
+// isQuoted 判一段原文是不是成对的引号字符串。
+//
+// 「要不要引号」看值的类型：数字、布尔不带，字符串一律带。取字符串的地方靠这一条判，
+// 免得 `password = /tmp/x` 这种裸值被当成字符串收下（老版的 TOML 库当场就报语法错）。
+func isQuoted(v string) bool {
+	if len(v) < 2 {
+		return false
+	}
+	c := v[0]
+	return (c == '\'' || c == '"') && v[len(v)-1] == c
 }
 
 // splitArray 把 `[ "a", "b" ]` 拆成元素。只处理字符串数组——判据表里只有这一种。
@@ -167,19 +177,19 @@ func splitArray(raw string) []string {
 type rawConfig map[string]map[string]string
 
 // rawView 把行摊成原文表：同名节的单值键后值盖前值（出厂配置里没有重复键）。
+//
+// 值存**原文**（引号留在里面）：字符串要不要引号是取值时按类型判的事（`stringOf`），
+// 这里提前剥掉就把「写没写引号」这个事实抹了。
 func rawView(lines []tomlLine) rawConfig {
 	raw := rawConfig{}
 	for _, ln := range lines {
-		if ln.key == "" {
-			if raw[ln.section] == nil {
-				raw[ln.section] = map[string]string{}
-			}
-			continue
-		}
 		if raw[ln.section] == nil {
 			raw[ln.section] = map[string]string{}
 		}
-		raw[ln.section][unquote(ln.key)] = unquote(ln.value)
+		if ln.key == "" {
+			continue
+		}
+		raw[ln.section][unquote(ln.key)] = ln.value
 	}
 	return raw
 }

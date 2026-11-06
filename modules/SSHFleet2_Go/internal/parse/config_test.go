@@ -28,9 +28,10 @@ func TestParseRawConfigShapes(t *testing.T) {
 		t.Errorf("整数原文：%q", raw["execution"]["timeout_transfer"])
 	}
 
-	// 引号里的 # 不是注释：密码不能被截短
+	// 引号里的 # 不是注释：密码不能被截短。原文表存的是**原文**，引号留在里面
+	// （字符串要不要引号是 stringOf 按类型判的事）。
 	raw = sample(t, "hash_in_value.conf")
-	if got := raw["account"]["password"]; got != "pw#123" {
+	if got := raw["account"]["password"]; got != "\"pw#123\"" {
 		t.Errorf("值里的 # 被当注释截断了：got %q", got)
 	}
 
@@ -39,13 +40,13 @@ func TestParseRawConfigShapes(t *testing.T) {
 	if raw["interpreter.script"][".sh"] == "" {
 		t.Errorf("点号节的键应原样收下（外层引号去掉）：%v", raw["interpreter.script"])
 	}
-	if raw["interpreter"]["command"] != "bash" {
+	if raw["interpreter"]["command"] != "\"bash\"" {
 		t.Errorf("点号节不碍着普通节：%v", raw["interpreter"])
 	}
 
 	// 单引号字符串照老配置的写法
 	raw = sample(t, "single_quote.conf")
-	if raw["category"]["name"] != "上传回滚未清干净" {
+	if raw["category"]["name"] != "'上传回滚未清干净'" {
 		t.Errorf("单引号值：%q", raw["category"]["name"])
 	}
 
@@ -65,6 +66,20 @@ func TestParseRawConfigRejects(t *testing.T) {
 	}
 	if _, err := tokenize([]byte("[   ]\n")); err == nil {
 		t.Errorf("空节名应报错")
+	}
+}
+
+// 字符串键必须带引号：裸值（password = /tmp/x）该被拒，带引号的原样取出。
+// 老版用 TOML 库，裸值当场是语法错——这条口径不能松。
+func TestStringOfRequiresQuotes(t *testing.T) {
+	raw := rawConfig{"account": {"password": "/tmp/pw"}}
+	if _, err := stringOf(raw, "account", "password"); err == nil {
+		t.Errorf("裸字符串值该被拒")
+	}
+	raw = rawConfig{"account": {"password": "\"/tmp/pw\""}}
+	v, err := stringOf(raw, "account", "password")
+	if err != nil || v != "/tmp/pw" {
+		t.Errorf("带引号的值该取出引号里的内容：got %q, err %v", v, err)
 	}
 }
 
