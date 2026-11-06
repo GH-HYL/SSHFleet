@@ -57,7 +57,7 @@ func TestSecretPlainPassesThroughUntouched(t *testing.T) {
 
 // 加密开着时读的是**装了密文的文件**，文件末尾那个换行不该影响结果。
 func TestSecretReadsCipherFile(t *testing.T) {
-	t.Setenv(envName, testMaster)
+	t.Setenv(EnvName, testMaster)
 	got, err := Secret("testdata/password.enc", true)
 	if err != nil {
 		t.Fatalf("读密文文件失败：%v", err)
@@ -68,14 +68,14 @@ func TestSecretReadsCipherFile(t *testing.T) {
 }
 
 func TestSecretNeedsMasterKeyWhenEncrypted(t *testing.T) {
-	t.Setenv(envName, "")
+	t.Setenv(EnvName, "")
 	if _, err := Secret("testdata/password.enc", true); !errors.Is(err, ErrKeyMissing) {
 		t.Fatalf("没有主密钥时应当交 ErrKeyMissing，got %v", err)
 	}
 }
 
 func TestSecretReportsMissingFile(t *testing.T) {
-	t.Setenv(envName, testMaster)
+	t.Setenv(EnvName, testMaster)
 	_, err := Secret("testdata/根本没有这个文件.enc", true)
 	if err == nil || errors.Is(err, ErrKeyMissing) {
 		t.Fatalf("文件读不到应当报「读不到」，不是「主密钥没读到」：%v", err)
@@ -83,18 +83,18 @@ func TestSecretReportsMissingFile(t *testing.T) {
 }
 
 func TestStatusTracksEnv(t *testing.T) {
-	t.Setenv(envName, "")
+	t.Setenv(EnvName, "")
 	if Status() != KeyMissing {
 		t.Fatal("没有主密钥时状态应当是 missing")
 	}
-	t.Setenv(envName, "  "+testMaster+"  ")
+	t.Setenv(EnvName, "  "+testMaster+"  ")
 	if Status() != KeyReady {
 		t.Fatal("有主密钥时状态应当是 ready（首尾空白不算）")
 	}
 }
 
 func TestMasterKeyTrimsWhitespace(t *testing.T) {
-	t.Setenv(envName, "  "+testMaster+"\n")
+	t.Setenv(EnvName, "  "+testMaster+"\n")
 	got, err := MasterKey()
 	if err != nil {
 		t.Fatalf("应当读得到：%v", err)

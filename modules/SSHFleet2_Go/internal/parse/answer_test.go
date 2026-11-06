@@ -137,7 +137,7 @@ func TestAnswerTableLandsOnPaper(t *testing.T) {
 		t.Fatalf("临时配置读不通：%v", err)
 	}
 
-	cmd, fail := buildPlan(cfg, scan([]string{"sshfleet2", "-f", manifest, "-c", "install.sh", "-a", "y,继续"}))
+	cmd, _, fail := buildPlan(cfg, scan([]string{"sshfleet2", "-f", manifest, "-c", "install.sh", "-a", "y,继续"}))
 	if fail != nil {
 		t.Fatalf("命令模式不该走到「起不来」：%v", fail.Body)
 	}
@@ -145,7 +145,7 @@ func TestAnswerTableLandsOnPaper(t *testing.T) {
 		t.Fatalf("命令载荷上没带代填表：%+v", cmd.Task.Command)
 	}
 
-	sh, fail := buildPlan(cfg, scan([]string{"sshfleet2", "-f", manifest, "-s", script, "-a", "y,继续"}))
+	sh, _, fail := buildPlan(cfg, scan([]string{"sshfleet2", "-f", manifest, "-s", script, "-a", "y,继续"}))
 	if fail != nil {
 		t.Fatalf("脚本模式不该走到「起不来」：%v", fail.Body)
 	}
@@ -177,7 +177,7 @@ func TestAnswerWithUnsupportedInterpreterRecordsProblem(t *testing.T) {
 	// 让 `.tcl` 回退到表外的解释器：配置里 command 仍配 bash，这里改成 echo 之外的 tclsh
 	// 不在表里——直接把配置的 command 换掉。
 	cfg.interpreter.Command = "tclsh"
-	p, fail := buildPlan(cfg, scan([]string{"sshfleet2", "-f", manifest, "-s", script, "-a", "y,继续"}))
+	p, _, fail := buildPlan(cfg, scan([]string{"sshfleet2", "-f", manifest, "-s", script, "-a", "y,继续"}))
 	if fail != nil {
 		t.Fatalf("解析站不该自己报错：%v", fail.Body)
 	}

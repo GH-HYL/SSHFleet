@@ -213,7 +213,7 @@ func TestRunFillsNodesAndNotices(t *testing.T) {
 	dir := writeTempConfig(t)
 	writeFile(t, dir, "nodes.csv", "ip,port,user,password\n10.0.0.1,22,root,pw\n")
 
-	_, plan, fail := Run([]string{"sshfleet2", "-f", "nodes.csv", "-c", "uptime"}, "9.9.9")
+	_, plan, _, fail := Run([]string{"sshfleet2", "-f", "nodes.csv", "-c", "uptime"}, "9.9.9")
 	if fail != nil {
 		t.Fatalf("不该起不来：%s", fail.Body)
 	}

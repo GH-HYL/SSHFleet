@@ -72,7 +72,7 @@ func TestSudoConflictRecordedAsProblem(t *testing.T) {
 	}
 
 	both := scan([]string{"sshfleet2", "--sudo", "--no-sudo", "-c", "uptime", "-f", manifest})
-	p, fail := buildPlan(cfg, both)
+	p, _, fail := buildPlan(cfg, both)
 	if fail != nil {
 		t.Fatalf("两个开关同给不该走到「起不来」：%v", fail.Body)
 	}
@@ -90,7 +90,7 @@ func TestSudoConflictRecordedAsProblem(t *testing.T) {
 	}
 
 	onlyNo := scan([]string{"sshfleet2", "--no-sudo", "-c", "uptime", "-f", manifest})
-	p, fail = buildPlan(cfg, onlyNo)
+	p, _, fail = buildPlan(cfg, onlyNo)
 	if fail != nil {
 		t.Fatalf("只给 --no-sudo 不该走到「起不来」：%v", fail.Body)
 	}
@@ -150,7 +150,7 @@ func TestExtraArgsRecordedAsProblem(t *testing.T) {
 		t.Fatalf("临时配置读不通：%v", err)
 	}
 
-	p, fail := buildPlan(cfg, scan([]string{"sshfleet2", "-c", "echo hi", "extra"}))
+	p, _, fail := buildPlan(cfg, scan([]string{"sshfleet2", "-c", "echo hi", "extra"}))
 	if fail != nil {
 		t.Fatalf("有多余段时不该走到「起不来」（应当交给闸门拒）：%v", fail.Body)
 	}
@@ -181,7 +181,7 @@ func TestBuildPlanCarriesDownlinkMaterial(t *testing.T) {
 		t.Fatalf("临时配置读不通：%v", err)
 	}
 
-	p, fail := buildPlan(cfg, scan([]string{"sshfleet2", "-c", "uptime", "-f", manifest}))
+	p, _, fail := buildPlan(cfg, scan([]string{"sshfleet2", "-c", "uptime", "-f", manifest}))
 	if fail != nil {
 		t.Fatalf("不该走到「起不来」：%v", fail.Body)
 	}
