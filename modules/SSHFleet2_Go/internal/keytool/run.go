@@ -171,7 +171,7 @@ func encryptFlag() (bool, error) {
 		}
 		return strings.Trim(stripComment(value), "\"'") == "true", nil
 	}
-	return false, errors.New("配置里没有 [credential] encrypt 这一格")
+	return false, errors.New(message.ConfigNoEncrypt)
 }
 
 // stripComment 去掉行内注释：`encrypt = true   # …` 里那一截。

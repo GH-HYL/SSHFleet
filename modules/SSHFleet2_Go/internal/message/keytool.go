@@ -80,7 +80,7 @@ func KeyPrecheckNote(f contract.KeyFacts) Line {
 	if body == "" {
 		return Line{}
 	}
-	return Line{s: "\n" + ansiYellow + "[警告]" + ansiReset + " " + body, toErr: true}
+	return Line{s: "\n" + tagLabel(ansiYellow, "警告") + " " + body, toErr: true}
 }
 
 // KeyPrecheckTrace 是预检查没通过时落到工具日志的那一行（纯文本，不上色）。
@@ -100,11 +100,11 @@ func keyPrecheckText(f contract.KeyFacts) string {
 			"  让两处一致：" + keyReloadHint(f) + "\n"
 	case contract.KeyStateStaleShell:
 		return "当前终端没读到已保存的主密钥（凭据解密/加密会失败）：\n" +
-			fmt.Sprintf("  本机已保存：      指纹 %s（%s）\n", f.PersistPrint, f.PersistWhere) +
+			persistSourceLine(f) +
 			"  不需要重新生成（--gen-key 会换成另一把，旧密文就解不开了），让它生效即可：" + keyReloadHint(f) + "\n"
 	case contract.KeyStateUnpersisted:
 		return "当前主密钥没有持久化（只活在这个终端里）：\n" +
-			fmt.Sprintf("  本次运行实际使用：指纹 %s（进程环境变量 %s）\n", f.EnvPrint, f.EnvName) +
+			envSourceLine(f) +
 			"  影响：关掉终端后密钥就没了，用它加密的凭据文件将解不开\n" +
 			"  保持这把密钥不变并持久化：" + keyPersistHint(f) + "\n"
 	}
@@ -123,23 +123,32 @@ func KeyNoMasterKey(f contract.KeyFacts) string {
 	return body + "请先生成主密钥：SSHFleet --gen-key"
 }
 
+// 两处来源那三行各自的成形处：状态屏一次要三行，预检查那两档各只要其中一行，
+// 分开写才不致于两处各拼一遍（同一句话拼两份，改一处漏一处）。
+func envSourceLine(f contract.KeyFacts) string {
+	if f.EnvSet {
+		return fmt.Sprintf("  本次运行实际使用：指纹 %s（进程环境变量 %s）\n", f.EnvPrint, f.EnvName)
+	}
+	return fmt.Sprintf("  本次运行实际使用：未读到（进程环境变量 %s 为空）\n", f.EnvName)
+}
+
+func persistSourceLine(f contract.KeyFacts) string {
+	if f.Persisted {
+		return fmt.Sprintf("  本机已保存：      指纹 %s（%s）\n", f.PersistPrint, f.PersistWhere)
+	}
+	return "  本机已保存：      无\n"
+}
+
+func otherSourceLine(f contract.KeyFacts) string {
+	if f.OtherPrint == "" {
+		return ""
+	}
+	return fmt.Sprintf("  另一处持久值：    指纹 %s（%s）\n", f.OtherPrint, f.OtherWhere)
+}
+
 // keySourceLines 是两处来源那三行：本次运行、本机已保存、另一处持久值（有才写）。
 func keySourceLines(f contract.KeyFacts) string {
-	var b strings.Builder
-	if f.EnvSet {
-		b.WriteString(fmt.Sprintf("  本次运行实际使用：指纹 %s（进程环境变量 %s）\n", f.EnvPrint, f.EnvName))
-	} else {
-		b.WriteString(fmt.Sprintf("  本次运行实际使用：未读到（进程环境变量 %s 为空）\n", f.EnvName))
-	}
-	if f.Persisted {
-		b.WriteString(fmt.Sprintf("  本机已保存：      指纹 %s（%s）\n", f.PersistPrint, f.PersistWhere))
-	} else {
-		b.WriteString("  本机已保存：      无\n")
-	}
-	if f.OtherPrint != "" {
-		b.WriteString(fmt.Sprintf("  另一处持久值：    指纹 %s（%s）\n", f.OtherPrint, f.OtherWhere))
-	}
-	return b.String()
+	return envSourceLine(f) + persistSourceLine(f) + otherSourceLine(f)
 }
 
 // keyReloadHint 是「怎么让本次运行读到已保存那把」的做法。
@@ -165,6 +174,10 @@ func keyPersistHint(f contract.KeyFacts) string {
 //
 // 这条路径实际上走不到：进密钥分支之前，解析站已经把整份配置读通一遍。留着是为了
 // 「读不到就说清读不到哪一格」，而不是让它掉进一句「主密钥不匹配」。
+// ConfigNoEncrypt 是「配置里压根没有那一格」的原因片段：密钥包只把它当原因传进来，
+// 句子本身住这里（密钥包不自己拼字）。
+const ConfigNoEncrypt = "配置里没有 [credential] encrypt 这一格"
+
 func KeyConfigUnreadable(reason string) string {
 	return ProblemReason("读不到配置文件里的加密开关（[credential] encrypt）："+ConfigShownPath, reason)
 }
