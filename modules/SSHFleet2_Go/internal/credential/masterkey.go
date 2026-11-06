@@ -29,7 +29,7 @@ const masterKeyBytes = 36
 // 屏幕与日志里只许出现它，不许出现密钥本体（老版那条纪律：日志和截图都会流出去）。
 func Fingerprint(key string) string {
 	if strings.TrimSpace(key) == "" {
-		return "（未设置）"
+		return wordFingerprintEmpty
 	}
 	sum := sha256.Sum256([]byte(strings.TrimSpace(key)))
 	return hex.EncodeToString(sum[:fingerprintWidth])
@@ -59,7 +59,7 @@ func Encrypt(plain, masterKey string) (string, error) {
 	}
 	nonce := make([]byte, v2NonceSize)
 	if _, err := rand.Read(nonce); err != nil {
-		return "", cipherErr("取不到随机数：%v", err)
+		return "", cipherErr(wordNoRandom, err)
 	}
 	sealed := gcm.Seal(nil, nonce, []byte(plain), nil)
 
