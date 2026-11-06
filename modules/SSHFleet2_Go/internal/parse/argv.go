@@ -445,9 +445,6 @@ func lookupOption(name string) (option, bool) {
 	return option{}, false
 }
 
-// headCLI 是选项/参数合规那几句的外壳：老版 wrapFatal 的那一层。
-const headCLI = "选项/参数合规性检查未通过"
-
 // keyRunOf 认出「这次是不是一条密钥命令」。
 //
 // 两条纪律：
@@ -468,10 +465,10 @@ func keyRunOf(s scanned) (*contract.KeyRun, *contract.CannotStart) {
 		return nil, cannotStart("cli", "", message.RefuseExtraArgs(s.extraOwner, strings.Join(s.extras, " ")))
 	}
 	if len(tools) > 1 {
-		return nil, cannotStart("cli", headCLI, message.KeyToolNeedAlone(strings.Join(tools, "、")))
+		return nil, cannotStart("cli", message.HeadCompliance, message.KeyToolNeedAlone(strings.Join(tools, "、")))
 	}
 	if given := batchParamsOf(s); len(given) > 0 {
-		return nil, cannotStart("cli", headCLI, message.KeyToolWithBatch(tools[0], strings.Join(given, "、")))
+		return nil, cannotStart("cli", message.HeadCompliance, message.KeyToolWithBatch(tools[0], strings.Join(given, "、")))
 	}
 	which := contract.KeyToolGen
 	switch tools[0] {
@@ -505,6 +502,25 @@ func keyToolsOf(s scanned) []string {
 //
 // 顺序与老版 `batchParamsGiven` 逐项相同：值类按原值非空认，开关类按给没给认。
 // `--yes` 不算批量参数：它对密钥命令也有意义（跳过覆盖确认），且不指向任何节点。
+// batchParamLongs 是「不能和密钥命令一起给」的那批参数，按报错里出现的次序排。
+//
+// 名字不另抄一串，按长名回选项表查（新增一个选项只改选项表那一处）。
+var batchParamLongs = []string{
+	"--command", "--script", "--upload", "--download", "--change-password",
+	"--csv-file", "--path", "--number", "--remark", "--timeout", "--connect-timeout",
+}
+
+// flagParamLongs 是那四个只看「给没给」的开关。
+var flagParamLongs = []string{"--key", "--no-shell", "--sudo", "--no-sudo"}
+
+// paramName 是报错里怎么写这个参数：有短名写短名，没有就写长名（与帮助里的写法同源）。
+func paramName(long string) string {
+	if o, ok := lookupOption(long); ok && o.short != "" {
+		return o.short
+	}
+	return long
+}
+
 func batchParamsOf(s scanned) []string {
 	// 老版在解析命令行那一步就把「没给 -r 时的自动备注」填好了，所以那条检查会把它当成交了 -r。
 	// 这里照同一笔账：四种模式任一给了值、而 -r 没给时，自动备注已经生成。
@@ -513,35 +529,18 @@ func batchParamsOf(s scanned) []string {
 			s.vals["--upload"] != "" || s.vals["--download"] != "")
 
 	var given []string
-	for _, p := range [][2]string{
-		{"--command", "-c"},
-		{"--script", "-s"},
-		{"--upload", "-u"},
-		{"--download", "-d"},
-		{"--change-password", "--change-password"},
-		{"--csv-file", "-f"},
-		{"--path", "-p"},
-		{"--number", "-n"},
-		{"--remark", "-r"},
-		{"--timeout", "-t"},
-		{"--connect-timeout", "-T"},
-	} {
-		hit := s.vals[p[0]] != ""
-		if p[0] == "--remark" {
+	for _, long := range batchParamLongs {
+		hit := s.vals[long] != ""
+		if long == "--remark" {
 			hit = hit || autoRemark
 		}
 		if hit {
-			given = append(given, p[1])
+			given = append(given, paramName(long))
 		}
 	}
-	for _, p := range [][2]string{
-		{"--key", "-k"},
-		{"--no-shell", "--no-shell"},
-		{"--sudo", "--sudo"},
-		{"--no-sudo", "--no-sudo"},
-	} {
-		if s.given[p[0]] {
-			given = append(given, p[1])
+	for _, long := range flagParamLongs {
+		if s.given[long] {
+			given = append(given, paramName(long))
 		}
 	}
 	return given

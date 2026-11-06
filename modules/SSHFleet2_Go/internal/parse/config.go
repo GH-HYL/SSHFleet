@@ -19,6 +19,8 @@ import (
 //
 // 报错文案逐字照老版 config.go——它是使用者看得见的面，09 的逐字比对要过。
 
+// 配置路径这串在密钥包里也写了一份（它只读自己那一格加密开关，不掺和主流程）。
+// 两边不许互相 import，所以认下这两份（开发者 2026-11-06 定）：**改这里要一起改那边**。
 const (
 	configPath      = "./config/SSHFleet.conf"
 	shownConfigPath = message.ConfigShownPath
