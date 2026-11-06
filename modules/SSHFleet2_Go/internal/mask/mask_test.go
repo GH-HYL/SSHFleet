@@ -29,6 +29,7 @@ func TestInlineRecordMasksCredentialColumns(t *testing.T) {
 	cases := []struct{ in, want string }{
 		{"10.0.0.1,22,root,pw", "10.0.0.1,22,root,****"},
 		{"10.0.0.1,22,root,pw,/k/id_rsa,pass", "10.0.0.1,22,root,****,/k/id_rsa,****"},
+		{"10.0.0.1,22,root,hunter2", "10.0.0.1,22,root,hu****r2"},
 		{"10.0.0.1", "10.0.0.1"},                                            // 没有凭据段，不遮
 		{"这不是一条记录", "这不是一条记录"},                                              // 读不成，原样
 		{"10.0.0.1,22,root,\"p,w\",/k,kp", "10.0.0.1,22,root,****,/k,****"}, // 引号里的逗号不算分列
@@ -56,7 +57,7 @@ func TestInlineRecordHidesPassword(t *testing.T) {
 
 // 命令行脱敏：三个位置会带秘密，其余段一个字都不许动。
 //
-// 期望值照老版 common.MaskCommandLine 的口径写成字面量（前二后二、内联记录整段抹）。
+// 期望值写成字面量：遮只有一种形态（前二后二），内联记录那两段也一样（建站 07 第六节）。
 func TestCommandLineMasksCredentialPositions(t *testing.T) {
 	cases := []struct {
 		name string
@@ -66,12 +67,12 @@ func TestCommandLineMasksCredentialPositions(t *testing.T) {
 		{
 			name: "内联清单",
 			argv: []string{"sshfleet2", "-f", "10.0.0.1,22,root,hunter2", "-c", "uptime"},
-			want: []string{"sshfleet2", "-f", "10.0.0.1,22,root,****", "-c", "uptime"},
+			want: []string{"sshfleet2", "-f", "10.0.0.1,22,root,hu****r2", "-c", "uptime"},
 		},
 		{
 			name: "等号写法的内联清单",
 			argv: []string{"sshfleet2", "-f=10.0.0.1,22,root,hunter2", "-c", "uptime"},
-			want: []string{"sshfleet2", "-f=10.0.0.1,22,root,****", "-c", "uptime"},
+			want: []string{"sshfleet2", "-f=10.0.0.1,22,root,hu****r2", "-c", "uptime"},
 		},
 		{
 			name: "改密的新密码（空格写法）",
@@ -108,5 +109,24 @@ func TestCommandLineDoesNotTouchCallerSlice(t *testing.T) {
 	_ = CommandLine(argv)
 	if argv[2] != "10.0.0.1,22,root,hunter2" {
 		t.Fatalf("原切片被改了：%v", argv)
+	}
+}
+
+// 从采集文本里擦掉明文，擦出来与遮一个值同一个形态——整个工程只有一种遮法。
+func TestScrubUsesSameForm(t *testing.T) {
+	cases := []struct{ name, in, want string }{
+		{"长密码留前二后二", "远端回显：pw=hunter2 完", "远端回显：pw=hu****r2 完"},
+		{"短密码整段抹", "pw: abc", "pw: ****"},
+		{"多处出现都擦掉", "hunter2 与 hunter2", "hu****r2 与 hu****r2"},
+		{"空秘密不参与", "原样", "原样"},
+	}
+	for _, c := range cases {
+		secrets := []string{"hunter2", ""}
+		if c.name == "短密码整段抹" {
+			secrets = []string{"abc"}
+		}
+		if got := Scrub(c.in, secrets...); got != c.want {
+			t.Fatalf("%s：got=%q want=%q", c.name, got, c.want)
+		}
 	}
 }
