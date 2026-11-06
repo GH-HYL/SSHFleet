@@ -247,7 +247,8 @@ func writeResultsXlsx(path string, l contract.Ledger, mode contract.Mode) error 
 			errColumn = item.ErrorText
 		}
 		values := []any{
-			idx + 1, item.IP, item.Port, item.User, item.Connected, exit,
+			// 序号从 0 起——老版那张表就是这样（`Seq` 是下标），A/B 逐格对得上才叫一致。
+			idx, item.IP, item.Port, item.User, item.Connected, exit,
 			item.ConnectCost.Seconds(), item.Cost.Seconds(),
 			item.Transfer.TotalBytes, item.Transfer.TotalFiles,
 			item.Transfer.SuccessFiles, item.Transfer.FailFiles,

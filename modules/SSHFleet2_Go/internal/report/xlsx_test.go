@@ -97,7 +97,7 @@ func TestRunWritesBothTables(t *testing.T) {
 			t.Fatalf("第 %d 列表头是 %q，该是 %q", i+1, rows[0][i], h)
 		}
 	}
-	if rows[1][0] != "1" || rows[1][1] != "10.0.0.1" || rows[1][2] != "22" || rows[1][3] != "ops" {
+	if rows[1][0] != "0" || rows[1][1] != "10.0.0.1" || rows[1][2] != "22" || rows[1][3] != "ops" {
 		t.Fatalf("第一台那行不对：%v", rows[1])
 	}
 	if rows[1][4] != "TRUE" || rows[1][5] != "1" || rows[1][12] != "执行成功" {
