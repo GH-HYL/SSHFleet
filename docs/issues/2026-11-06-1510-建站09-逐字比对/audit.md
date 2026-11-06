@@ -25,7 +25,10 @@ wsl -d Ubuntu-26.04 -- su - ubuntu -c 'bash <沙盒>/run.sh --all'    # 连要�
 | a4-missing-value | A 哨兵 | 一致（逐字节） |
 | a5-two-keycmds | A 哨兵 | 一致（逐字节） |
 | a6-key-extra | A 哨兵 | 一致（逐字节） |
+| a7-key-with-batch | A 哨兵 | 一致（逐字节）——「同时给了 -c、-f、-r」那串两面一字不差 |
 | d1-key-empty | D 密钥 | 一致（逐字节） |
+
+**版本行**：两版都是 `v1.0.0`，后面 `+e943029-dirty (…)` 是构建标识，按口径只比前缀。
 
 其余场次的结论由 07、08、09 号单跑出来之后逐行补进本表。
 
