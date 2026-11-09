@@ -79,14 +79,14 @@ func main() {
 		if fail.NoLog {
 			logPath = "" // 配置那一步日志还没建起来，老版那一屏也不带「日志：」行
 		}
-		fatal(fail.Where, fail.Body, logPath)
+		fatal(fail.Where, message.CannotStartText(*fail), logPath)
 
 	case krun != nil:
 		// 第四种结局：一条不进流水线的小命令。塔尖只把命令交给密钥包、按它交回的结局收场，
 		// 不判断「该不该跑」——那三条命令自己读自己那一小块配置（ADR-0032 第五条）。
 		lg.Info(message.KeyModeEntered(krun.Which).Plain())
 		if cannot := keytool.Run(*krun, credential.DefaultKeySource()); cannot != nil {
-			fatal(cannot.Where, cannot.Body, toolPath)
+			fatal(cannot.Where, message.CannotStartText(*cannot), toolPath)
 		}
 
 	case plan != nil:
@@ -125,7 +125,7 @@ func main() {
 		// 启动段就建好了，执行站不必另造一个。
 		paper, cannot := execute.Run(intr.Context(), plan, paths.Terminal, paths.ExecLog)
 		if cannot != nil {
-			fatal(cannot.Where, cannot.Body, toolPath)
+			fatal(cannot.Where, message.CannotStartText(*cannot), toolPath)
 		}
 
 		// 步骤 9、10：结算站算总账，报告站出屏幕统计块与 `report.txt`。

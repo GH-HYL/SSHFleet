@@ -40,6 +40,23 @@ func ProblemOrigin(problem, origin string) string {
 	return problem + "\n出处：" + origin
 }
 
+// CannotStartText 是「起不来」那一屏的正文：按原因类别取模板成形。
+//
+// 日志与屏幕共用这一份（老版那两处本来同一个字符串），不各拼一遍——ADR-0028 第五节讲的
+// 「屏给使用者看、日志留现场」讲的是形态，不是让两处各说一句（ADR-0044）。
+//
+// 迁移期（01／02 号单）：纸上有类别就走模板，没有就把 `Body` 原样交回；03 号单删掉
+// `Body` 之后，前一条是唯一的路。
+func CannotStartText(c contract.CannotStart) string {
+	switch c.Reason.Kind {
+	case "":
+		return c.Body
+	case contract.CannotStartConfigLoad:
+		return "加载配置文件失败（" + c.Reason.Place + "）：" + c.Reason.Origin
+	}
+	panic("起不来：类别 " + string(c.Reason.Kind) + " 在 message.CannotStartText 里没有模板")
+}
+
 // Fatal 排一屏致命错误：红色 [ERROR] 头、黄色环节标签、正文，末尾附日志路径。
 //
 // 日志还没建起来时 logPath 传空串，那一行就不出现——老版同一判据。
