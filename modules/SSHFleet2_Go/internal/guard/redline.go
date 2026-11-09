@@ -78,7 +78,7 @@ var redline = []RedLineEntry{
 	// 04 阶段收尾（2026-11-03）：塔尖的另外两个结局——起不来、拒绝（新增不算改）
 	{"TestRedlineTipCannotStart", []string{}, 2},
 	{"TestRedlineTipRefused", []string{}, 4},
-	{"TestRedlineParseSaysOrFail", []string{"parse.Run"}, 4},
+	{"TestRedlineParseSaysOrFail", []string{"Kind", "parse.Run"}, 4},
 	{"TestRedlineMessageRendersHelp", []string{"Kind", "message.EntryOption", "message.HelpEntry", "message.HelpScreen"}, 2},
 
 	// 04 阶段：凭据包的那一件事（新增不算改）

@@ -23,8 +23,11 @@ func Run(argv []string, version string) (message.Line, *contract.Plan, *contract
 	cfg, err := load()
 	if err != nil {
 		// 配置这一步失败时日志还没建起来（老版步骤 1 在步骤 2 之前），所以那一屏不带「日志：」行。
-		return message.Line{}, nil, nil, cannotStartBeforeLog("config",
-			"加载配置文件失败（"+shownConfigPath+"）", err.Error())
+		return message.Line{}, nil, nil, cannotStartReasonBeforeLog("config", contract.CannotStartReason{
+			Kind:   contract.CannotStartConfigLoad,
+			Place:  shownConfigPath,
+			Origin: err.Error(),
+		})
 	}
 
 	name := "sshfleet2"
@@ -69,6 +72,12 @@ func cannotStart(where, head, body string) *contract.CannotStart {
 // 所以那一屏不带「日志：」行。两个具名入口各表一件事，调用点不许拿空串自己表达。
 func cannotStartBeforeLog(where, head, body string) *contract.CannotStart {
 	return cannotStartScreen(where, head, body, true)
+}
+
+// cannotStartReasonBeforeLog 同上，但原因按「类别 ＋ 参数」交上去：句子由 message 按类别
+// 成形，站里不拼（ADR-0044）。01 号单起，配置这一步走这条；02／03 号单把其余填点也搬过来。
+func cannotStartReasonBeforeLog(where string, reason contract.CannotStartReason) *contract.CannotStart {
+	return &contract.CannotStart{Where: where, NoLog: true, Reason: reason}
 }
 
 // cannotStartScreen 是「起不来」屏的唯一拼装处：外壳句由 message 加（ADR-0028 决定一）。
