@@ -93,6 +93,10 @@ var redline = []RedLineEntry{
 	{"TestRedlineReportScreenAndPath", []string{"contract.Ledger", "message.Line", "message.StatisticsLine", "report.Run"}},
 	// 07 阶段 02 号单：遮的构造点只有一个（新增一条，不算改名单）
 	{"TestCheckMask", []string{"ClassMask", "CheckMask", "Report"}},
+	// 检查器自反补硬 01 号单：入口登记（新增不算改）
+	{"TestCheckRegistry", []string{"CheckAll", "CheckRegistry", "DefaultFailures", "EntryFiles", "Kind", "KindCheck", "Load", "LoadLedger", "Module", "Package", "RedLine", "Report", "Rule", "Rules", "Target"}},
+	// 检查器自反补硬 03 号单：台账四格必填（新增不算改）
+	{"TestCheckLedgerRequiresFourCells", []string{"CheckLedger", "Exception", "Rule"}},
 }
 
 // RedLine 返回名单的一份拷贝。检查读它；改返回值影响不到名单本身。

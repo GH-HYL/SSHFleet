@@ -10,6 +10,10 @@ import (
 //
 // 台账能让检查闭嘴，权力与 .gitignore 同级：改它等同改约束类文件，要开发者单独点头
 // （07 号工单答案第七条）。
+//
+// 读者是审计与下一个接手的人，不是检查器：检查器只拿「规则 ＋ 位置」去配违规，
+// 后两格（为什么放、谁批的）对人负责——一条说不出理由的放行，就是把越界永久化。
+// 四格缺一，见 CheckLedger。
 type Exception struct {
 	Rule  string // 类名，与报错方括号里那一串同写法
 	Where string // 模块内相对路径；写目录就当整个目录放行
@@ -28,6 +32,9 @@ func (e Exception) Match(v Violation) bool {
 
 // ledgerCols 是台账的四列。列序以文件里那一行表头为准：md 里调列，代码跟着走。
 var ledgerCols = []string{"规则", "位置", "为什么放", "谁批的"}
+
+// ledgerPath 是台账文件在模块内的位置：报错要指到它，自反登记也拿它当入口之一。
+const ledgerPath = "internal/guard/exceptions.md"
 
 // LoadLedger 读放行台账。文件不在、或没有表头就报错——台账读不到时静默放过，
 // 等于整套检查都可能没在跑。
