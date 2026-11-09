@@ -11,12 +11,15 @@ import (
 
 // RedLineEntry 是红线名单的一行：一条测试，加它的指纹。
 //
-// 指纹钉两样、不钉字节（ADR-0037 决定五）：测试名，加这条测试**直接**引用到的生产符号。
-// gofmt、改注释、重排语句、经 helper 间接引用的都不算改。
-// 新增一条不算改；删掉、改名、缩窄引用面算改。
+// 指纹钉三样、不钉字节（ADR-0037 决定五、ADR-0045 决定二）：测试名、这条测试**直接**引用到的
+// 生产符号、它喊失败的次数。gofmt、改注释、重排语句都不算改。
+// 新增一条不算改；删掉、改名、缩窄引用面、掏空断言都算改。
 type RedLineEntry struct {
 	Test    string
 	Symbols []string
+	// Assertions 是这条测试里「喊失败」的调用点个数：t.Fatal／Fatalf／FailNow／Error／Errorf／Fail。
+	// 只数调用点，不数条件表达式——否则改实现就会动这个数，红得莫名其妙。
+	Assertions int
 }
 
 // redline 是红线名单本体。
@@ -25,85 +28,85 @@ type RedLineEntry struct {
 // 测试都要留痕——删掉其中一条，正是「把闸门拆了」最省事的那个动作。
 var redline = []RedLineEntry{
 	// 01 号工单：地基（扫描器、报错说法、包数）
-	{"TestLoadCountsPackages", []string{"Load", "Rules", "Target"}},
-	{"TestLoadSkipsDirs", []string{}},
-	{"TestCommentAndStringAreNotViolations", []string{"CheckAll", "Report"}},
-	{"TestReportKeepsFourParts", []string{"ClassExit", "FenceNote", "Report", "Violation"}},
+	{"TestLoadCountsPackages", []string{"Load", "Rules", "Target"}, 4},
+	{"TestLoadSkipsDirs", []string{}, 2},
+	{"TestCommentAndStringAreNotViolations", []string{"CheckAll", "Report"}, 1},
+	{"TestReportKeepsFourParts", []string{"ClassExit", "FenceNote", "Report", "Violation"}, 2},
 
 	// 02 号工单：写终端与退出动作
-	{"TestCheckTerminal", []string{"CheckTerminal", "ClassTerminal"}},
+	{"TestCheckTerminal", []string{"CheckTerminal", "ClassTerminal"}, 5},
 	// 04 阶段 13 号单：writer 只许执行站拿（新增不算改）
-	{"TestCheckTerminalWriterHome", []string{"CheckTerminal"}},
-	{"TestCheckTerminalExemptsTestFiles", []string{"CheckTerminal"}},
-	{"TestCheckExit", []string{"CheckExit", "ClassExit", "Report"}},
+	{"TestCheckTerminalWriterHome", []string{"CheckTerminal"}, 3},
+	{"TestCheckTerminalExemptsTestFiles", []string{"CheckTerminal"}, 1},
+	{"TestCheckExit", []string{"CheckExit", "ClassExit", "Report"}, 5},
 
 	// 03 号工单：依赖方向与包清单对账
-	{"TestCheckDeps", []string{"CheckDeps", "Report"}},
-	{"TestCheckDepsClean", []string{"CheckDeps", "Report"}},
+	{"TestCheckDeps", []string{"CheckDeps", "Report"}, 2},
+	{"TestCheckDepsClean", []string{"CheckDeps", "Report"}, 1},
 	// 04 阶段质量审计命中二：谁许读当前时刻（新增不算改）
-	{"TestCheckDepsClock", []string{"CheckDeps", "ClassDeps"}},
+	{"TestCheckDepsClock", []string{"CheckDeps", "ClassDeps"}, 0},
 
 	// 04 号工单：契约纯净与失败类型的构造点
-	{"TestCheckContract", []string{"CheckContract", "ClassContract"}},
-	{"TestCheckFailure", []string{"CheckFailure", "Report"}},
-	{"TestCheckFailureDetectsMissingType", []string{"CheckFailure", "FailureSite"}},
+	{"TestCheckContract", []string{"CheckContract", "ClassContract"}, 1},
+	{"TestCheckFailure", []string{"CheckFailure", "Report"}, 3},
+	{"TestCheckFailureDetectsMissingType", []string{"CheckFailure", "FailureSite"}, 1},
 
 	// 05 号工单：测试站位
-	{"TestCheckTestSite", []string{"CheckTestSite", "Report"}},
-	{"TestCheckTestSiteClean", []string{"CheckTestSite", "Report"}},
+	{"TestCheckTestSite", []string{"CheckTestSite", "Report"}, 3},
+	{"TestCheckTestSiteClean", []string{"CheckTestSite", "Report"}, 1},
 
 	// 06 号工单：交接件宽窄
-	{"TestCheckHandoff", []string{"CheckHandoff", "PaperPair", "Report"}},
-	{"TestCheckHandoffMissingPaper", []string{"CheckHandoff", "PaperPair"}},
+	{"TestCheckHandoff", []string{"CheckHandoff", "PaperPair", "Report"}, 2},
+	{"TestCheckHandoffMissingPaper", []string{"CheckHandoff", "PaperPair"}, 1},
 
 	// 07 号工单：名单与台账本身
-	{"TestCheckRedline", []string{"CheckRedline", "RedLineEntry", "Report"}},
-	{"TestLoadLedger", []string{"LoadLedger"}},
-	{"TestLoadLedgerHonoursHeader", []string{"ClassTerminal", "Exception", "LoadLedger", "Rule"}},
-	{"TestApply", []string{"Apply", "ClassExit", "ClassTerminal", "Exception", "Rule", "Violation"}},
+	{"TestCheckRedline", []string{"CheckRedline", "RedLineEntry", "Report"}, 3},
+	{"TestLoadLedger", []string{"LoadLedger"}, 2},
+	{"TestLoadLedgerHonoursHeader", []string{"ClassTerminal", "Exception", "LoadLedger", "Rule"}, 3},
+	{"TestApply", []string{"Apply", "ClassExit", "ClassTerminal", "Exception", "Rule", "Violation"}, 3},
 	// 建站 03：闸门的入口、ask 的那一件事、exitcode 的那一件事
-	{"TestRedlineGateRefusesBadCombination", []string{"Kind", "contract.Problem", "contract.ProblemMultiMode", "gate.Run"}},
-	{"TestRedlineGatePassesCleanPaper", []string{"gate.Run"}},
-	{"TestRedlineAskNonInteractive", []string{"ask.Ask", "ask.Yes", "message.ConfirmPrompt"}},
-	{"TestRedlineExitCodeTable", []string{"Kind", "exitcode.CannotStart", "exitcode.Code", "exitcode.Interrupted", "exitcode.Kind", "exitcode.Refused", "exitcode.Success"}},
+	{"TestRedlineGateRefusesBadCombination", []string{"Kind", "contract.Problem", "contract.ProblemMultiMode", "gate.Run"}, 2},
+	{"TestRedlineGatePassesCleanPaper", []string{"gate.Run"}, 1},
+	{"TestRedlineAskNonInteractive", []string{"ask.Ask", "ask.Yes", "message.ConfirmPrompt"}, 1},
+	{"TestRedlineExitCodeTable", []string{"Kind", "exitcode.CannotStart", "exitcode.Code", "exitcode.Interrupted", "exitcode.Kind", "exitcode.Refused", "exitcode.Success"}, 1},
 
 	// 真工程整跑
-	{"TestProjectIsClean", []string{"CheckAll", "DefaultFailures", "Load", "LoadLedger", "RedLine", "Report", "Rules", "Target"}},
+	{"TestProjectIsClean", []string{"CheckAll", "DefaultFailures", "Load", "LoadLedger", "RedLine", "Report", "Rules", "Target"}, 4},
 
 	// 02 阶段：帮助与版本——三种接缝上长出来的头三条（新增不算改，ADR-0037 决定五）
-	{"TestRedlineTipRunsHelp", []string{}},
+	{"TestRedlineTipRunsHelp", []string{}, 8},
 	// 04 阶段收尾（2026-11-03）：塔尖的另外两个结局——起不来、拒绝（新增不算改）
-	{"TestRedlineTipCannotStart", []string{}},
-	{"TestRedlineTipRefused", []string{}},
-	{"TestRedlineParseSaysOrFail", []string{"parse.Run"}},
-	{"TestRedlineMessageRendersHelp", []string{"Kind", "message.EntryOption", "message.HelpEntry", "message.HelpScreen"}},
+	{"TestRedlineTipCannotStart", []string{}, 2},
+	{"TestRedlineTipRefused", []string{}, 4},
+	{"TestRedlineParseSaysOrFail", []string{"parse.Run"}, 4},
+	{"TestRedlineMessageRendersHelp", []string{"Kind", "message.EntryOption", "message.HelpEntry", "message.HelpScreen"}, 2},
 
 	// 04 阶段：凭据包的那一件事（新增不算改）
-	{"TestRedlineCredentialReportsState", []string{"credential.KeyMissing", "credential.KeyReady", "credential.Secret", "credential.Status"}},
-	{"TestRedlineArchiveHandsOutPaths", []string{"archive.Create"}},
+	{"TestRedlineCredentialReportsState", []string{"credential.KeyMissing", "credential.KeyReady", "credential.Secret", "credential.Status"}, 2},
+	{"TestRedlineArchiveHandsOutPaths", []string{"archive.Create"}, 4},
 	// 04 阶段 09 号单：执行站入口（新增不算改）
-	{"TestRedlineExecuteRecordsConnectFact", []string{"contract.CommandTask", "contract.ModeCommand", "contract.Node", "contract.Plan", "contract.Task", "execute.Run"}},
+	{"TestRedlineExecuteRecordsConnectFact", []string{"contract.CommandTask", "contract.ModeCommand", "contract.Node", "contract.Plan", "contract.Task", "execute.Run"}, 3},
 	// 04 阶段 11 号单：第二张纸里没有「成败」（新增不算改）
-	{"TestRedlineResultHasNoVerdict", []string{"contract.NodeResult", "contract.ResultPaper"}},
+	{"TestRedlineResultHasNoVerdict", []string{"contract.NodeResult", "contract.ResultPaper"}, 1},
 	// 04 阶段 14 号单：结算站交得出一张总账（新增不算改）
-	{"TestRedlineSettleFillsLedger", []string{"contract.Extra", "contract.ModeCommand", "contract.NodeResult", "contract.ResultPaper", "settle.Run"}},
+	{"TestRedlineSettleFillsLedger", []string{"contract.Extra", "contract.ModeCommand", "contract.NodeResult", "contract.ResultPaper", "settle.Run"}, 7},
 	// 04 阶段 12 号单：那一行真的落到盘上（新增不算改）
-	{"TestRedlineExecuteWritesResultLine", []string{"contract.CommandTask", "contract.ModeCommand", "contract.Node", "contract.Plan", "contract.Task", "execute.Run"}},
+	{"TestRedlineExecuteWritesResultLine", []string{"contract.CommandTask", "contract.ModeCommand", "contract.Node", "contract.Plan", "contract.Task", "execute.Run"}, 4},
 	// 04 阶段 15 号单：报告站的屏幕那一段是「话」，落点由别人给（新增不算改）
-	{"TestRedlineReportScreenAndPath", []string{"contract.Ledger", "message.Line", "message.StatisticsLine", "report.Run"}},
+	{"TestRedlineReportScreenAndPath", []string{"contract.Ledger", "message.Line", "message.StatisticsLine", "report.Run"}, 6},
 	// 07 阶段 02 号单：遮的构造点只有一个（新增一条，不算改名单）
-	{"TestCheckMask", []string{"ClassMask", "CheckMask", "Report"}},
+	{"TestCheckMask", []string{"CheckMask", "ClassMask", "Report"}, 4},
 	// 检查器自反补硬 01 号单：入口登记（新增不算改）
-	{"TestCheckRegistry", []string{"CheckAll", "CheckRegistry", "DefaultFailures", "EntryFiles", "Kind", "KindCheck", "Load", "LoadLedger", "Module", "Package", "RedLine", "Report", "Rule", "Rules", "Target"}},
+	{"TestCheckRegistry", []string{"CheckAll", "CheckRegistry", "DefaultFailures", "EntryFiles", "Kind", "KindCheck", "Load", "LoadLedger", "Module", "Package", "RedLine", "Report", "Rule", "Rules", "Target"}, 5},
 	// 检查器自反补硬 03 号单：台账四格必填（新增不算改）
-	{"TestCheckLedgerRequiresFourCells", []string{"CheckLedger", "Exception", "Rule"}},
+	{"TestCheckLedgerRequiresFourCells", []string{"CheckLedger", "Exception", "Rule"}, 3},
 }
 
 // RedLine 返回名单的一份拷贝。检查读它；改返回值影响不到名单本身。
 func RedLine() []RedLineEntry {
 	out := make([]RedLineEntry, len(redline))
 	for i, e := range redline {
-		out[i] = RedLineEntry{Test: e.Test, Symbols: slices.Clone(e.Symbols)}
+		out[i] = RedLineEntry{Test: e.Test, Symbols: slices.Clone(e.Symbols), Assertions: e.Assertions}
 	}
 	return out
 }
@@ -141,23 +144,25 @@ func CheckRedline(m *Module) []Violation {
 			name := fn.Name.Name
 			seen[name] = true
 			got := fingerprint(m, gp, f, fn)
+			gotAssertions := assertionCount(fn)
 			entry, ok := listed[name]
 			if !ok {
 				out = append(out, f.violation(ClassRedline, fn.Pos(),
 					fmt.Sprintf("红线测试 %s 不在名单里", name),
 					"这一处的每一条测试都要留痕：不留名字，删掉它、改小它都没人看得见",
-					"把这一行补进 guard/redline.go："+entryLiteral(name, got)))
+					"把这一行补进 guard/redline.go："+entryLiteral(name, got, gotAssertions)))
 				continue
 			}
 			want := slices.Clone(entry.Symbols)
 			slices.Sort(want)
-			if slices.Equal(want, got) {
+			if slices.Equal(want, got) && entry.Assertions == gotAssertions {
 				continue
 			}
 			out = append(out, f.violation(ClassRedline, fn.Pos(),
-				fmt.Sprintf("红线测试 %s 的指纹对不上：名单里 %v，现在是 %v", name, want, got),
-				"指纹钉住这条测试直接引用到的生产符号：符号一变，说明它测的东西被改窄、改宽或挪走了",
-				"确认是有意的改动之后改名单："+entryLiteral(name, got)+"——改名单是红线，走议题加 ADR"))
+				fmt.Sprintf("红线测试 %s 的指纹对不上：名单里 %v／%d 次喊失败，现在是 %v／%d 次",
+					name, want, entry.Assertions, got, gotAssertions),
+				"指纹钉住这条测试直接引用到的生产符号与它喊失败的次数：符号一变说明它测的东西被改窄、改宽或挪走了；次数一变说明断言被掏空或被塞进了别的判断",
+				"确认是有意的改动之后改名单："+entryLiteral(name, got, gotAssertions)+"——改名单是红线，走议题加 ADR"))
 		}
 	}
 
@@ -240,10 +245,41 @@ func productionNames(p *Package) map[string]bool {
 	return out
 }
 
-func entryLiteral(name string, symbols []string) string {
+// assertionCount 数一条测试里「喊失败」的调用点：t.Fatal／Fatalf／FailNow／Error／Errorf／Fail。
+//
+// 收哪几个是定死的：含 Fail 这一族的分支都算，不看调用者叫不叫 t——经 helper 间接喊的不算，
+// 与指纹只认直接引用同一条口径。
+func assertionCount(fn *ast.FuncDecl) int {
+	n := 0
+	if fn.Body == nil {
+		return 0
+	}
+	ast.Inspect(fn.Body, func(x ast.Node) bool {
+		call, ok := x.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		sel, ok := call.Fun.(*ast.SelectorExpr)
+		if !ok {
+			return true
+		}
+		if failureCalls[sel.Sel.Name] {
+			n++
+		}
+		return true
+	})
+	return n
+}
+
+// failureCalls 是算作「一次断言」的方法名。
+var failureCalls = map[string]bool{
+	"Fail": true, "FailNow": true, "Fatal": true, "Fatalf": true, "Error": true, "Errorf": true,
+}
+
+func entryLiteral(name string, symbols []string, assertions int) string {
 	quoted := make([]string, 0, len(symbols))
 	for _, s := range symbols {
 		quoted = append(quoted, strconv.Quote(s))
 	}
-	return fmt.Sprintf("{%s, []string{%s}}", strconv.Quote(name), strings.Join(quoted, ", "))
+	return fmt.Sprintf("{%s, []string{%s}, %d}", strconv.Quote(name), strings.Join(quoted, ", "), assertions)
 }
