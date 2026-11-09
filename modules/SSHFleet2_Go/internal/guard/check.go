@@ -45,5 +45,10 @@ func CheckAll(m *Module) []Violation {
 			"放行是让一条已知的越界暂时过去；那一处改好之后台账还留着，条目就只会越攒越多，翻的人也就不翻了",
 			"把这一行删掉——删它同样要开发者点头"))
 	}
+
+	// 这两条判的是闸门自己，所以放在台账之后：拿台账把「检查被拆了」放行掉，
+	// 等于自己给自己开条子。
+	kept = append(kept, CheckRegistry(m)...)
+	kept = append(kept, CheckLedger(m.Ledger)...)
 	return kept
 }
