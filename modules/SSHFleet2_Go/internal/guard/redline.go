@@ -100,6 +100,8 @@ var redline = []RedLineEntry{
 	{"TestCheckRegistry", []string{"CheckAll", "CheckRegistry", "DefaultFailures", "EntryFiles", "Kind", "KindCheck", "Load", "LoadLedger", "Module", "Package", "RedLine", "Report", "Rule", "Rules", "Target"}, 5},
 	// 检查器自反补硬 03 号单：台账四格必填（新增不算改）
 	{"TestCheckLedgerRequiresFourCells", []string{"CheckLedger", "Exception", "Rule"}, 3},
+	// helper 断言入指纹 01 号单：掏空 helper 即红（新增不算改）
+	{"TestCheckHelperAssertions", []string{"CheckRedline", "DefaultFailures", "HelperEntry", "Load", "RedLine", "RedLineEntry", "Report", "Rules", "Target", "helperHomeModule"}, 6},
 }
 
 // RedLine 返回名单的一份拷贝。检查读它；改返回值影响不到名单本身。
@@ -110,6 +112,39 @@ func RedLine() []RedLineEntry {
 	}
 	return out
 }
+
+// HelperEntry 是 helper 登记表的一行：一个替测试喊失败的 helper，加它喊几次。
+//
+// 与 RedLineEntry 同一把尺：只数调用点，不数条件表达式（ADR-0045 决定二、ADR-0046 决定三）。
+type HelperEntry struct {
+	Name string
+	// Assertions 是这个 helper 里「喊失败」的调用点个数。
+	Assertions int
+}
+
+// helperAsserts 是 helper 登记表本体。
+//
+// 为什么要有这张表：断言搬进 helper 再掏空 helper，测试体一个字符都不变，符号指纹与
+// 次数指纹一个都不动——删入口、删测试、掏空测试体三种拆法看得见，第四种看不见。
+// 只登记喊失败的（inClass、fixtureRules 这类纯判断的不登记）：掏空纯判断只会算错，
+// 那由测试自己的断言接住（ADR-0046 决定二）。
+var helperAsserts = []HelperEntry{
+	{"loadFixture", 1},
+	{"wantOne", 4},
+	// 以下五个是落地时扫全包才露出来的：几条红线的边界测试各自带了一个喊失败的 helper。
+	{"closedPort", 3},
+	{"readText", 1},
+	{"tipEndingsProbe", 4},
+	{"copyRedlineDangerRules", 3},
+	{"writeRedlineConfig", 2},
+}
+
+// helperHomeModule 是登记表所属的模块。
+//
+// 登记写的是这个工程自己 guard 包里的 helper；样本模块（testdata）里那个同名包没有这些函数，
+// 拿这张表去量它，只会把每一条都报成「已经没有了」。与 CheckRegistry「只对自己这个模块生效」
+// 同一条理由。
+const helperHomeModule = "sshfleet2"
 
 // CheckRedline 是类七：红线名单与代码对不对得上。
 func CheckRedline(m *Module) []Violation {
@@ -174,6 +209,66 @@ func CheckRedline(m *Module) []Violation {
 			fmt.Sprintf("名单里的 %s 在代码里已经没有了", e.Test),
 			"删一条红线测试就算改红线：名单还留着，说明它被删掉却没走议题加 ADR",
 			"把测试补回来；确要删，先开议题写 ADR，再动名单"))
+	}
+
+	return append(out, helperViolations(m, gp)...)
+}
+
+// helperViolations 判登记表与代码对不对得上：喊了没登记、次数不对、登记了函数没了，三种都红。
+//
+// 扫的是检查包里所有非 Test 开头的顶层测试函数——只钉现有的两个 helper，等于承认新加的
+// helper 是盲区（ADR-0046 理由）。
+func helperViolations(m *Module, gp *Package) []Violation {
+	if m.ModulePath != helperHomeModule {
+		return nil
+	}
+
+	listed := map[string]int{}
+	for _, e := range helperAsserts {
+		listed[e.Name] = e.Assertions
+	}
+
+	var out []Violation
+	seen := map[string]bool{}
+	for _, f := range gp.Files {
+		if !f.IsTest {
+			continue
+		}
+		for _, decl := range f.AST.Decls {
+			fn, ok := decl.(*ast.FuncDecl)
+			if !ok || fn.Recv != nil || strings.HasPrefix(fn.Name.Name, "Test") {
+				continue
+			}
+			name := fn.Name.Name
+			seen[name] = true
+			got := assertionCount(fn)
+			want, ok := listed[name]
+			switch {
+			case ok && want != got:
+				out = append(out, f.violation(ClassRedline, fn.Pos(),
+					fmt.Sprintf("helper %s 的次数对不上：登记表里 %d 次，现在是 %d 次", name, want, got),
+					"helper 喊失败的次数就是调它的那几条测试的断言强度：次数变少，多半是断言被删掉了一半；"+
+						"归零，就是整层被掏空",
+					"确认是有意的改动之后改登记表："+helperLiteral(name, got)+"——改登记表是红线，走议题加 ADR"))
+			case !ok && got > 0:
+				out = append(out, f.violation(ClassRedline, fn.Pos(),
+					fmt.Sprintf("helper %s 在替测试喊失败（%d 次），但没登记", name, got),
+					"断言搬进 helper 再掏空 helper，测试体一个字符都不变，符号与次数指纹也一个都不动——"+
+						"这一层没人看着，几条调它的红线一起变松",
+					"确认这个 helper 该留之后登记一行："+helperLiteral(name, got)+"——改登记表是红线，走议题加 ADR"))
+			}
+		}
+	}
+
+	for _, e := range helperAsserts {
+		if seen[e.Name] {
+			continue
+		}
+		out = append(out, violationAt(ClassRedline, gp.Path,
+			fmt.Sprintf("登记表里的 helper %s 在代码里已经没有了", e.Name),
+			"helper 不喊失败，登记的次数就没人兑现：要么它被删了、被改名了，要么断言被搬去了别处——"+
+				"这几种都让调它的那几条测试悄悄变松",
+			"把 helper 补回来；确要删、要改名，先开议题写 ADR，再动登记表"))
 	}
 	return out
 }
@@ -282,4 +377,9 @@ func entryLiteral(name string, symbols []string, assertions int) string {
 		quoted = append(quoted, strconv.Quote(s))
 	}
 	return fmt.Sprintf("{%s, []string{%s}, %d}", strconv.Quote(name), strings.Join(quoted, ", "), assertions)
+}
+
+// helperLiteral 是 helper 登记表一行的字面量，报错里直接给出来，省得补的人再去对格式。
+func helperLiteral(name string, assertions int) string {
+	return fmt.Sprintf("{%s, %d}", strconv.Quote(name), assertions)
 }

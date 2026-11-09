@@ -1,6 +1,6 @@
 # 规格：helper 断言入指纹
 
-**状态**：ready-for-agent
+**状态**：done
 **底本**：`docs/adr/0046-helper的断言也要入指纹.md`（决定）
 **事实底本**：`docs/issues/2026-11-09-1315-检查器自反补硬/issues/02-断言强度入指纹.md` 的 Comments（`TestCheckDepsClock` 记 0）、`modules/SSHFleet2_Go/internal/guard/helpers_test.go`
 

@@ -68,6 +68,12 @@ func fixtureRules(name string) []Rule {
 			{"log", KindCrosscut, nil},
 			{"fixture", KindTip, []string{"parse", "execute", "log"}},
 		}
+	case "helper":
+		// 类七第四种拆法的样本：guard 包里的 shout 替测试喊两次失败。
+		return []Rule{
+			{"guard", KindCheck, nil},
+			{"fixture", KindTip, nil},
+		}
 	case "mask":
 		// 类七的样本：mask 自己写星号不红，解析站自己替换明文红。
 		return []Rule{

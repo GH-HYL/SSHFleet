@@ -37,7 +37,7 @@ wantOne(t, CheckDeps(loadFixture(t, "clock")), ClassDeps, "internal/parse/run.go
 
 ## 影响
 
-- 名单旁边多一张小表：`loadFixture` 1 次、`wantOne` 4 次。
+- 名单旁边多一张小表，落地时七条：`loadFixture` 1 次、`wantOne` 4 次，另有 `closedPort` 3、`readText` 1、`tipEndingsProbe` 4、`copyRedlineDangerRules` 3、`writeRedlineConfig` 2——写这份决策时只数到前两个，扫全包才露全。
 - 以后写新 helper，只要它喊失败，第一次跑会红一次，补一行即可。
 - 与 `ADR-0045` 的两张表合起来，`go test` 能看见四种拆法：删入口、删测试、掏空测试体、掏空 helper。
 
