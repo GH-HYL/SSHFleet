@@ -179,7 +179,7 @@ func TestLogNodeWritesFailedSteps(t *testing.T) {
 		},
 	}
 	got := captureNodeLog(t, res, contract.ModeDownload)
-	want := "【10.0.0.1】中间步骤：预检（test -e） 退出码 1、枚举（find） 退出码 0"
+	want := "【10.0.0.1】中间步骤：下载预检（test -e） 退出码 1、远程文件枚举（find） 退出码 0"
 	if !strings.Contains(got, want) {
 		t.Fatalf("中间步骤那一行不对，缺 %q：\n%s", want, got)
 	}
