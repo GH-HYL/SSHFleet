@@ -14,12 +14,15 @@ import (
 )
 
 // stepLabels 是中间步骤在日志里的中文名与那条命令的原文。
+//
+// 名字照老版：那三条各有模式限定（预检、枚举只在下载里、改密收尾只在改密里），日志里换一段
+// 就没别的行说明它是哪个模式的步骤——所以「下载」「远程文件」不省。
 var stepLabels = map[string]struct {
 	label string
 	cmd   string
 }{
-	contract.StepPrecheck:  {"预检", "test -e"},
-	contract.StepEnumerate: {"枚举", "find"},
+	contract.StepPrecheck:  {"下载预检", "test -e"},
+	contract.StepEnumerate: {"远程文件枚举", "find"},
 	contract.StepPasswd:    {"改密收尾", ":"},
 }
 

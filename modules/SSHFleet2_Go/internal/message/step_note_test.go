@@ -13,7 +13,7 @@ func TestStepNote(t *testing.T) {
 		{Name: contract.StepPrecheck, ExitCode: &code1},
 		{Name: contract.StepEnumerate, ExitCode: &code0},
 	})
-	want := "中间步骤：预检（test -e） 退出码 1、枚举（find） 退出码 0"
+	want := "中间步骤：下载预检（test -e） 退出码 1、远程文件枚举（find） 退出码 0"
 	if got != want {
 		t.Fatalf("got=%q\nwant=%q", got, want)
 	}
@@ -33,7 +33,7 @@ func TestStepNoteNoExitCode(t *testing.T) {
 		{Name: contract.StepPasswd, ExitCode: &code1},
 		{Name: contract.StepPrecheck},
 	})
-	want := "中间步骤：改密收尾（:） 退出码 1、预检（test -e） 未拿到退出码"
+	want := "中间步骤：改密收尾（:） 退出码 1、下载预检（test -e） 未拿到退出码"
 	if got != want {
 		t.Fatalf("got=%q\nwant=%q", got, want)
 	}
