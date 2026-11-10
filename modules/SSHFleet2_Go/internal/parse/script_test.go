@@ -6,9 +6,9 @@ package parse
 // 直接调一个纯函数验不出「读一次、整备一次」这件事。
 
 import (
-	"sshfleet2/internal/message"
 	"os"
 	"path/filepath"
+	"sshfleet2/internal/message"
 	"testing"
 )
 

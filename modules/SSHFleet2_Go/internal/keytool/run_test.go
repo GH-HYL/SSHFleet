@@ -8,8 +8,8 @@ import (
 	"testing"
 
 	"sshfleet2/internal/contract"
-	"sshfleet2/internal/message"
 	"sshfleet2/internal/credential"
+	"sshfleet2/internal/message"
 )
 
 // 三条命令的流程（自定义区）：真跑一遍，看的是使用者看得见的结果——有没有写出去、

@@ -20,7 +20,6 @@ type CannotStart struct {
 
 	// Reason 是这一屏的原因：类别加参数，句子由 `message` 按类别成形（ADR-0044）。
 	Reason CannotStartReason
-
 }
 
 // CannotStartKind 是「起不来」的原因类别。
@@ -135,17 +134,17 @@ const (
 	// CannotStartCredRows 是凭据预检那一屏：先说共几处错，下面一行一处，末尾一句去路。
 	CannotStartCredRows CannotStartKind = "nodelist_cred_rows"
 
-	CannotStartRowIPMissing      CannotStartKind = "row_ip_missing"
-	CannotStartRowIPBad          CannotStartKind = "row_ip_bad"
-	CannotStartRowPortBad        CannotStartKind = "row_port_bad"
-	CannotStartRowUserMissing    CannotStartKind = "row_user_missing"
-	CannotStartRowKeyMissing     CannotStartKind = "row_key_missing"
+	CannotStartRowIPMissing       CannotStartKind = "row_ip_missing"
+	CannotStartRowIPBad           CannotStartKind = "row_ip_bad"
+	CannotStartRowPortBad         CannotStartKind = "row_port_bad"
+	CannotStartRowUserMissing     CannotStartKind = "row_user_missing"
+	CannotStartRowKeyMissing      CannotStartKind = "row_key_missing"
 	CannotStartRowPasswordMissing CannotStartKind = "row_password_missing"
 
 	// 凭据预检的三条：Place 是那一格（密码／口令），Value 是回显（可能被遮蔽），Origin 是
 	// 系统原话（没有就留空）。
-	CannotStartRowCredMissing   CannotStartKind = "row_cred_missing"
-	CannotStartRowCredBadCipher CannotStartKind = "row_cred_bad_cipher"
+	CannotStartRowCredMissing    CannotStartKind = "row_cred_missing"
+	CannotStartRowCredBadCipher  CannotStartKind = "row_cred_bad_cipher"
 	CannotStartRowCredUnreadable CannotStartKind = "row_cred_unreadable"
 	// 两条配置级的：Origin 是系统原话。
 	CannotStartRowCredConfigPassword    CannotStartKind = "row_cred_config_password"
@@ -158,15 +157,15 @@ const (
 // 这三族的句子本来就住 `message`（answer.go／passwd.go／keytool.go），站里只是把它塞进纸；
 // 现在纸只装类别与参数，模板不动窝，由 `message.CannotStartText` 转派过去。
 const (
-	CannotStartAnswerFileUnreadable  CannotStartKind = "answer_file_unreadable"
-	CannotStartAnswerFileBinary      CannotStartKind = "answer_file_binary"
-	CannotStartAnswerInlineNewline   CannotStartKind = "answer_inline_newline"
-	CannotStartAnswerGone            CannotStartKind = "answer_gone"
-	CannotStartAnswerSyntax          CannotStartKind = "answer_syntax"
-	CannotStartAnswerRowInvalid      CannotStartKind = "answer_row_invalid"
-	CannotStartAnswerEmpty           CannotStartKind = "answer_empty"
-	CannotStartAnswerMissingTrigger  CannotStartKind = "answer_missing_trigger"
-	CannotStartAnswerBadRegex        CannotStartKind = "answer_bad_regex"
+	CannotStartAnswerFileUnreadable CannotStartKind = "answer_file_unreadable"
+	CannotStartAnswerFileBinary     CannotStartKind = "answer_file_binary"
+	CannotStartAnswerInlineNewline  CannotStartKind = "answer_inline_newline"
+	CannotStartAnswerGone           CannotStartKind = "answer_gone"
+	CannotStartAnswerSyntax         CannotStartKind = "answer_syntax"
+	CannotStartAnswerRowInvalid     CannotStartKind = "answer_row_invalid"
+	CannotStartAnswerEmpty          CannotStartKind = "answer_empty"
+	CannotStartAnswerMissingTrigger CannotStartKind = "answer_missing_trigger"
+	CannotStartAnswerBadRegex       CannotStartKind = "answer_bad_regex"
 
 	CannotStartPasswdCipherEncrypted CannotStartKind = "passwd_cipher_encrypted"
 	CannotStartPasswdCipherPlain     CannotStartKind = "passwd_cipher_plain"

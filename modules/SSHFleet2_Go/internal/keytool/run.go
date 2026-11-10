@@ -129,9 +129,9 @@ func toPlain(path, content string, upstream *credential.KeySource) *contract.Can
 	key, err := credential.MasterKey()
 	if err != nil {
 		return keyReason(contract.CannotStartReason{
-		Kind: contract.CannotStartKeyNoMasterKey,
-		Key:  upstream.Inspect(),
-	})
+			Kind: contract.CannotStartKeyNoMasterKey,
+			Key:  upstream.Inspect(),
+		})
 	}
 	plain, err := credential.Decrypt(content, key)
 	if err != nil {
