@@ -25,9 +25,9 @@ func TestReporterWritesThreePlaces(t *testing.T) {
 	execLog := filepath.Join(dir, "SSHFleetExec.log")
 
 	var screenBuf bytes.Buffer
-	rep, err := newReporter(newScreen(&screenBuf), term, execLog, contract.ModeCommand)
-	if err != nil {
-		t.Fatalf("开落点失败：%v", err)
+	rep, reason, bad := newReporter(newScreen(&screenBuf), term, execLog, contract.ModeCommand)
+	if bad {
+		t.Fatalf("开落点失败：%v", reason)
 	}
 	defer rep.close()
 
@@ -78,9 +78,9 @@ func TestReporterAppendsPerResult(t *testing.T) {
 	execLog := filepath.Join(dir, "SSHFleetExec.log")
 
 	var screenBuf bytes.Buffer
-	rep, err := newReporter(newScreen(&screenBuf), term, execLog, contract.ModeCommand)
-	if err != nil {
-		t.Fatalf("开落点失败：%v", err)
+	rep, reason, bad := newReporter(newScreen(&screenBuf), term, execLog, contract.ModeCommand)
+	if bad {
+		t.Fatalf("开落点失败：%v", reason)
 	}
 	defer rep.close()
 
@@ -150,9 +150,9 @@ func TestReporterScreenAndFileMatch(t *testing.T) {
 	execLog := filepath.Join(dir, "SSHFleetExec.log")
 
 	var screenBuf bytes.Buffer
-	rep, err := newReporter(newScreen(&screenBuf), term, execLog, contract.ModeCommand)
-	if err != nil {
-		t.Fatalf("开落点失败：%v", err)
+	rep, reason, bad := newReporter(newScreen(&screenBuf), term, execLog, contract.ModeCommand)
+	if bad {
+		t.Fatalf("开落点失败：%v", reason)
 	}
 
 	code := 3

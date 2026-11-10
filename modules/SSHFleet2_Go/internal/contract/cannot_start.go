@@ -21,9 +21,6 @@ type CannotStart struct {
 	// Reason 是这一屏的原因：类别加参数，句子由 `message` 按类别成形（ADR-0044）。
 	Reason CannotStartReason
 
-	// Body 是**迁移期字段**：01／02 号单期间还有填点在往里装成品句子，03 号单末尾删掉。
-	// 删完之后这一格所代表的那个口子才算关上——纸里再没有地方能放一句拼好的话。
-	Body string
 }
 
 // CannotStartKind 是「起不来」的原因类别。
@@ -186,6 +183,43 @@ const (
 	CannotStartKeyToolWithBatch CannotStartKind = "cli_keytool_with_batch"
 )
 
+// 密钥管理那十三屏（03 号单）：生成、查状态、转换凭据。
+//
+// 它们的句子本来就住 `message/keytool.go`，而那一屏要的事实是一整包 `KeyFacts`（环境变量、
+// 两处持久值、rc 文件路径……）——拿几个具名格凑不出来，所以纸里带一格 `Key`。
+const (
+	CannotStartKeyNoMasterKey        CannotStartKind = "key_no_master_key"
+	CannotStartKeyConvertBlocked     CannotStartKind = "key_convert_blocked"
+	CannotStartKeyConfigUnreadable   CannotStartKind = "key_config_unreadable"
+	CannotStartKeyGenNoOverwrite     CannotStartKind = "key_gen_no_overwrite"
+	CannotStartKeyGenSaveFailed      CannotStartKind = "key_gen_save_failed"
+	CannotStartKeyConvertReadProblem CannotStartKind = "key_convert_read_problem"
+	CannotStartKeyConvertDecryptFail CannotStartKind = "key_convert_decrypt_failed"
+	CannotStartKeyConvertEmpty       CannotStartKind = "key_convert_empty"
+	CannotStartKeyConvertWriteFail   CannotStartKind = "key_convert_write_failed"
+	CannotStartKeyConvertVerifyFail  CannotStartKind = "key_convert_verify_failed"
+	// 这两条只有系统原话：生不出主密钥、加不了密，下一步是看凭据包那句话。
+	CannotStartKeyGenFailed     CannotStartKind = "key_gen_failed"
+	CannotStartKeyEncryptFailed CannotStartKind = "key_encrypt_failed"
+)
+
+// 内部故障那两屏（03 号单）：运行上下文封不起来、两个落点开不出来。
+//
+// 它们原先的正文是别的包用 `fmt.Errorf` 拼好的中文——那是「站里拼句」的另一条暗道。
+// 现在那两个包只交事实（哪一格、系统原话），句子回到这里。
+const (
+	// CannotStartRunMetaMarshal 是运行上下文序列化不出来：Origin 是 json 的原话。
+	CannotStartRunMetaMarshal CannotStartKind = "runmeta_marshal"
+	// CannotStartRunMetaCipher 是建不出密码器：Origin 是系统原话。
+	CannotStartRunMetaCipher CannotStartKind = "runmeta_cipher"
+	// CannotStartRunMetaGCM 是建不出 GCM：Origin 是系统原话。
+	CannotStartRunMetaGCM CannotStartKind = "runmeta_gcm"
+	// CannotStartOutputTerminal 是终端输出文件开不出来：Place 是路径，Origin 是系统原话。
+	CannotStartOutputTerminal CannotStartKind = "output_terminal_open"
+	// CannotStartOutputLog 是执行期日志开不出来：Place 是路径，Origin 是系统原话。
+	CannotStartOutputLog CannotStartKind = "output_log_open"
+)
+
 // 条目层（改密提示词表、错误分类表、危险规则表各条里对不上的那一格）。
 const (
 	CannotStartPasswdStepNoKeywords CannotStartKind = "passwd_step_no_keywords"
@@ -221,6 +255,10 @@ type CannotStartReason struct {
 	Value  string
 	Limit  int
 	Origin string
+
+	// Key 只给密钥管理那几类用：那一屏要的是整包事实（哪一格环境变量、两处持久值、
+	// rc 文件路径），拿几个具名格凑不出来。其余类别留零值。
+	Key KeyFacts
 
 	// Rows 只给「逐行报告」那两类用（ADR-0044，03b 号单）：多行报告不是一句话，是一张表，
 	// 拿几个具名格凑不出来。其余类别留空。

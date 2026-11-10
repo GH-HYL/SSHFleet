@@ -35,9 +35,9 @@ func runMetaSettings() *settings {
 }
 
 func TestSealRunMetaMatchesRecordedVector(t *testing.T) {
-	sealed, err := sealRunMeta(runMetaSample())
-	if err != nil {
-		t.Fatalf("封不起来：%v", err)
+	sealed, reason, bad := sealRunMeta(runMetaSample())
+	if bad {
+		t.Fatalf("封不起来：%v", reason)
 	}
 	if got := base64.StdEncoding.EncodeToString(sealed); got != runMetaVector {
 		t.Fatalf("封出来的字节与录下的样本对不上\n got=%s\nwant=%s", got, runMetaVector)
@@ -46,13 +46,13 @@ func TestSealRunMetaMatchesRecordedVector(t *testing.T) {
 
 // 同一份内容封两次必须一字不差——nonce 取明文哈希，就是为了这条（见 runmeta.go）。
 func TestSealRunMetaIsStable(t *testing.T) {
-	a, err := sealRunMeta(runMetaSample())
-	if err != nil {
-		t.Fatalf("封不起来：%v", err)
+	a, _, bad := sealRunMeta(runMetaSample())
+	if bad {
+		t.Fatal("封不起来（第一次）")
 	}
-	b, err := sealRunMeta(runMetaSample())
-	if err != nil {
-		t.Fatalf("封不起来：%v", err)
+	b, _, bad := sealRunMeta(runMetaSample())
+	if bad {
+		t.Fatal("封不起来（第二次）")
 	}
 	if string(a) != string(b) {
 		t.Fatal("同一份原值封出来两次不一样，两处的固定样本就没法对账了")
@@ -61,9 +61,9 @@ func TestSealRunMetaIsStable(t *testing.T) {
 
 // 明文不许出现在那段字节里——封的意义就在这一条。
 func TestSealRunMetaHidesPlaintext(t *testing.T) {
-	sealed, err := sealRunMeta(runMetaSample())
-	if err != nil {
-		t.Fatalf("封不起来：%v", err)
+	sealed, reason, bad := sealRunMeta(runMetaSample())
+	if bad {
+		t.Fatalf("封不起来：%v", reason)
 	}
 	if contains(sealed, []byte("uptime")) {
 		t.Fatal("那段字节里能直接找到命令原文，等于没封")

@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"sshfleet2/internal/contract"
+	"sshfleet2/internal/message"
 	"sshfleet2/internal/credential"
 )
 
@@ -98,8 +99,8 @@ func TestGenKeyYesRefusesOverwrite(t *testing.T) {
 	if cannot == nil {
 		t.Fatalf("已有密钥时加 --yes 应当是起不来")
 	}
-	if !strings.Contains(cannot.Body, "非交互模式不自动覆盖") {
-		t.Fatalf("那一屏要说清非交互不覆盖：%q", cannot.Body)
+	if !strings.Contains(message.CannotStartText(*cannot), "非交互模式不自动覆盖") {
+		t.Fatalf("那一屏要说清非交互不覆盖：%q", message.CannotStartText(*cannot))
 	}
 	if cannot.Where != "credential" {
 		t.Fatalf("环节名沿用老版 credential，got %q", cannot.Where)
@@ -179,8 +180,8 @@ func TestConvertBlocksEncryptWhenDiverged(t *testing.T) {
 		t.Fatalf("不一致时加密方向应当被拦")
 	}
 	for _, want := range []string{"已阻止加密", "出路", "① 执行 source"} {
-		if !strings.Contains(cannot.Body, want) {
-			t.Fatalf("那一屏缺「%s」：%q", want, cannot.Body)
+		if !strings.Contains(message.CannotStartText(*cannot), want) {
+			t.Fatalf("那一屏缺「%s」：%q", want, message.CannotStartText(*cannot))
 		}
 	}
 	if got := readFile(t, path); got != plain {
@@ -198,11 +199,11 @@ func TestConvertReportsMissingFile(t *testing.T) {
 	if cannot == nil {
 		t.Fatalf("文件不在应当起不来")
 	}
-	if !strings.Contains(cannot.Body, "读取凭据文件失败："+missing) {
-		t.Fatalf("要说清是读不到那个文件：%q", cannot.Body)
+	if !strings.Contains(message.CannotStartText(*cannot), "读取凭据文件失败："+missing) {
+		t.Fatalf("要说清是读不到那个文件：%q", message.CannotStartText(*cannot))
 	}
-	if strings.Contains(cannot.Body, "主密钥不匹配") {
-		t.Fatalf("不该把读不到说成密钥不对：%q", cannot.Body)
+	if strings.Contains(message.CannotStartText(*cannot), "主密钥不匹配") {
+		t.Fatalf("不该把读不到说成密钥不对：%q", message.CannotStartText(*cannot))
 	}
 }
 

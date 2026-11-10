@@ -5,7 +5,6 @@ import (
 	"crypto/cipher"
 	"crypto/sha256"
 	"encoding/json"
-	"fmt"
 	"strings"
 
 	"sshfleet2/internal/contract"
@@ -33,14 +32,17 @@ var runMetaKey = [32]byte{
 // 两处代码（封与解）就能各拿一条**固定的密文样本**对账——谁把密钥或格式写歪了，样本立刻
 // 对不上。GCM 对 nonce 的要求是「同一把密钥下不同消息不撞」，取明文哈希满足它；代价是
 // 相同原值封出相同字节，泄漏的只是「这两次的命令行一样」，那不是秘密。
-func sealRunMeta(body contract.RunMetaBody) (contract.RunMeta, error) {
+func sealRunMeta(body contract.RunMetaBody) (contract.RunMeta, contract.CannotStartReason, bool) {
 	plain, err := json.Marshal(body)
 	if err != nil {
-		return nil, fmt.Errorf("封装运行上下文：%w", err)
+		return nil, contract.CannotStartReason{
+			Kind:   contract.CannotStartRunMetaMarshal,
+			Origin: err.Error(),
+		}, true
 	}
-	gcm, err := runMetaGCM()
-	if err != nil {
-		return nil, err
+	gcm, reason, bad := runMetaGCM()
+	if bad {
+		return nil, reason, true
 	}
 	sum := sha256.Sum256(plain)
 	nonce := sum[:contract.RunMetaNonceSize]
@@ -48,7 +50,7 @@ func sealRunMeta(body contract.RunMetaBody) (contract.RunMeta, error) {
 	out := make([]byte, 0, 1+contract.RunMetaNonceSize+len(plain)+contract.RunMetaTagSize)
 	out = append(out, contract.RunMetaVersion)
 	out = append(out, nonce...)
-	return gcm.Seal(out, nonce, plain, nil), nil
+	return gcm.Seal(out, nonce, plain, nil), contract.CannotStartReason{}, false
 }
 
 // runMetaBodyOf 把这次的原值收进那一格的内容里。
@@ -94,16 +96,22 @@ func runMetaBodyOf(p *contract.Plan, argv []string, cfg *settings) contract.RunM
 }
 
 // runMetaGCM 建出那次用的 GCM；建不起来说明密钥长度不对（写死的东西不该发生）。
-func runMetaGCM() (cipher.AEAD, error) {
+func runMetaGCM() (cipher.AEAD, contract.CannotStartReason, bool) {
 	block, err := aes.NewCipher(runMetaKey[:])
 	if err != nil {
-		return nil, fmt.Errorf("运行上下文：建不出密码器：%w", err)
+		return nil, contract.CannotStartReason{
+			Kind:   contract.CannotStartRunMetaCipher,
+			Origin: err.Error(),
+		}, true
 	}
 	gcm, err := cipher.NewGCM(block)
 	if err != nil {
-		return nil, fmt.Errorf("运行上下文：建不出 GCM：%w", err)
+		return nil, contract.CannotStartReason{
+			Kind:   contract.CannotStartRunMetaGCM,
+			Origin: err.Error(),
+		}, true
 	}
-	return gcm, nil
+	return gcm, contract.CannotStartReason{}, false
 }
 
 // displayPath 给使用者看的路径形态：去掉开头的 `./`，它对使用者没有意义（老版

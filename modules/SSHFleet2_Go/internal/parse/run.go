@@ -2,7 +2,6 @@ package parse
 
 import (
 	"path/filepath"
-	"strings"
 
 	"sshfleet2/internal/console"
 	"sshfleet2/internal/contract"
@@ -55,27 +54,20 @@ func Run(argv []string, version string) (message.Line, *contract.Plan, *contract
 	}
 	// 运行上下文：把这次的原值封进纸上那一格。封不起来就是内部写死的密钥或格式坏了，
 	// 按「起不来」报——不静默降级成明文，那等于把这一格的意义抹掉。
-	sealed, err := sealRunMeta(runMetaBodyOf(plan, argv, cfg))
-	if err != nil {
-		return message.Line{}, nil, nil, cannotStartBeforeLog("cli", "", err.Error())
+	sealed, reason, bad := sealRunMeta(runMetaBodyOf(plan, argv, cfg))
+	if bad {
+		return message.Line{}, nil, nil, cannotStartReasonBeforeLog("cli", reason)
 	}
 	plan.RunMeta = sealed
 	return message.Line{}, plan, nil, nil
 }
 
-// cannotStart 排一屏「起不来」：环节、外壳句与原因照老版那一处，末尾附工具日志路径。
-func cannotStart(where, head, body string) *contract.CannotStart {
-	return cannotStartScreen(where, head, body, false)
-}
-
-// cannotStartBeforeLog 是配置那一步的「起不来」：老版读配置时日志还没建起来，
-// 所以那一屏不带「日志：」行。两个具名入口各表一件事，调用点不许拿空串自己表达。
-func cannotStartBeforeLog(where, head, body string) *contract.CannotStart {
-	return cannotStartScreen(where, head, body, true)
-}
-
-// cannotStartReasonBeforeLog 同上，但原因按「类别 ＋ 参数」交上去：句子由 message 按类别
-// 成形，站里不拼（ADR-0044）。01 号单起，配置这一步走这条；02／03 号单把其余填点也搬过来。
+// cannotStartReasonBeforeLog 是配置那一步的「起不来」：老版读配置时日志还没建起来，
+// 所以那一屏不带「日志：」行。原因按「类别 ＋ 参数」交上去，句子由 message 按类别成形
+// （ADR-0044）。
+//
+// 到这里为止，「往纸里塞一句拼好的话」的三个入口（`cannotStart`、`cannotStartBeforeLog`、
+// `cannotStartScreen`）已经全数删掉——纸里再没有地方放成品句子。
 func cannotStartReasonBeforeLog(where string, reason contract.CannotStartReason) *contract.CannotStart {
 	return &contract.CannotStart{Where: where, NoLog: true, Reason: reason}
 }
@@ -83,13 +75,4 @@ func cannotStartReasonBeforeLog(where string, reason contract.CannotStartReason)
 // cannotStartReason 排一屏「起不来」：原因按类别交上去，句子由 message 成形（ADR-0044）。
 func cannotStartReason(where string, reason contract.CannotStartReason) *contract.CannotStart {
 	return &contract.CannotStart{Where: where, Reason: reason}
-}
-
-// cannotStartScreen 是「起不来」屏的唯一拼装处：外壳句由 message 加（ADR-0028 决定一）。
-//
-// 它只交事实（哪一环、哪句话、带不带日志行），那一屏由塔尖向 message 要——契约里
-// 装不了成品的话（`message.Line` 的字段不导出）。
-func cannotStartScreen(where, head, body string, noLog bool) *contract.CannotStart {
-	full := message.Shell(head, strings.TrimRight(body, "\r\n"))
-	return &contract.CannotStart{Where: where, NoLog: noLog, Body: full}
 }

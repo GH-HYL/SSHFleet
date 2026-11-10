@@ -44,9 +44,9 @@ func Run(ctx context.Context, p *contract.Plan, termPath, execLogPath string) (c
 	scr := newScreen(console.Writer())
 	defer scr.stop()
 
-	rep, err := newReporter(scr, termPath, execLogPath, p.Mode)
-	if err != nil {
-		return contract.ResultPaper{}, &contract.CannotStart{Where: contract.WhereOutput, Body: err.Error()}
+	rep, reason, bad := newReporter(scr, termPath, execLogPath, p.Mode)
+	if bad {
+		return contract.ResultPaper{}, &contract.CannotStart{Where: contract.WhereOutput, Reason: reason}
 	}
 	defer rep.close()
 
