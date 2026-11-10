@@ -194,3 +194,9 @@
 环境换了：目标机是 WSL2 里的 sshd（`127.0.0.1:2201`），七场景新老两侧各跑一遍。**四份产物（屏幕、`report.txt`、`terminal-output.txt`、执行期日志）归一化后全同**；一处差异当场修掉——代填中断时老版末尾列「未送出的代填」，新版漏了，已补 `message.AnswerMissedNote`（见 05 号单）。
 
 **未验两项**：改密中断（本机 0.12 秒跑完，打断窗口不存在）、「建连被取消」这个分类（报文对，但拨号原文先命中「网络不可达」，老版同）。逐场景明细见 06 号单。
+
+## 更新记录
+
+- 2026-11-10：「建连被取消」改到判据表表头，且只认工具自己那句报文（`sshfleet.abort.connect_canceled`），不再拿 `operation was canceled` 兜底；上文第三节「各有两条关键词」与「系统原文那句是兜底」不再约束，替代见 `modules/SSHFleet2_Go/config/keywords_error.conf` 该档注释。
+- 2026-11-10：改密分类不拿服务端提示查表——提示是改密的前提，会把「被中断」认成「密码过期」；上文第三节「分类仍由判据表认领」仍成立，查表口径新增这一条豁免，替代见 `modules/SSHFleet2_Go/internal/execute/verdict.go` 的 `categoryOf`。
+- 2026-11-10：中断报文排在服务端提示之前（原文 → 报文 → 提示）；上文第三节「两句都接在原文之后」仍成立，取代的是它未说清的那一处次序，见 `run_answer.go`、`run_command.go`、`run_passwd.go`。

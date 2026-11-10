@@ -24,19 +24,29 @@ import (
 // 多字节字符切成无效 UTF-8（老版 2026-09-14 修过这一处）。
 const fallbackMaxLen = 200
 
-// categoryOf 这一台的分类名。入参是收齐了事实的那一条结果。
+// categoryOf 这一台的分类名。入参是收齐了事实的那一条结果，serverHint 是连接时收到的
+// 服务端提示（改密那条规矩要用它剔原文，见下）。
 //
 // 三步，顺序照老版：
 //  1. 按本模式的成功规则干净走完 → 成功那一类；
 //  2. 有退出码 → 先查第二组；没认出、且退出码非 0 → 按退出码给「执行失败(退出码N)」；
 //  3. 其余 → 查第一组；没认出就把原文当分类名（保留具体失败内容），两段都空才兜底「原因未知」。
-func categoryOf(mode contract.Mode, t contract.Tables, r *contract.NodeResult) string {
+func categoryOf(mode contract.Mode, t contract.Tables, r *contract.NodeResult, serverHint string) string {
 	if ranClean(mode, r) {
 		return message.SuccessCategory(mode)
 	}
 
 	// 这一格装着工具自己的报文、远端原话、服务端提示三样（见 contract.NodeResult.ErrorText）。
 	src := r.ErrorText
+
+	// 改密不吃服务端提示。`You are required to change your password immediately` 那句在改密里
+	// 是**前提**（它就是入场信号），不是失败原因：算进去，跑到一半被 Ctrl+C 那一档会被
+	// 「密码过期」抢走。其余模式照旧连着提示一起查（老版同口径）。
+	if mode == contract.ModePasswd {
+		if hint := strings.TrimSpace(serverHint); hint != "" {
+			src = strings.ReplaceAll(src, hint, "")
+		}
+	}
 
 	if r.ExitCode != nil {
 		if hit := firstCategory(t.ExitCategories, joinText(src, r.Output)); hit != "" {

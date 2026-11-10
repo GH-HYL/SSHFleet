@@ -109,7 +109,7 @@ func TestCategoryOfCommandMode(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if got := categoryOf(contract.ModeCommand, tables, &c.res); got != c.want {
+			if got := categoryOf(contract.ModeCommand, tables, &c.res, ""); got != c.want {
 				t.Fatalf("分类名该是 %q，实际 %q", c.want, got)
 			}
 		})
@@ -124,13 +124,13 @@ func TestCategoryGroupDependsOnExitCode(t *testing.T) {
 
 	// 没有退出码：第一组里没有这条关键词，认不出 → 分类名是原文本身。
 	noCode := contract.NodeResult{ErrorText: "connection reset by peer"}
-	if got := categoryOf(contract.ModeCommand, tables, &noCode); got != "connection reset by peer" {
+	if got := categoryOf(contract.ModeCommand, tables, &noCode, ""); got != "connection reset by peer" {
 		t.Fatalf("没有退出码该走第一组、认不出就显示原文，实际 %q", got)
 	}
 
 	// 有退出码：第二组命中，拿的是第二组那个同名分类。
 	withCode := contract.NodeResult{ExitCode: intPtr(1), ErrorText: "connection reset by peer"}
-	if got := categoryOf(contract.ModeCommand, tables, &withCode); got != "连接失败" {
+	if got := categoryOf(contract.ModeCommand, tables, &withCode, ""); got != "连接失败" {
 		t.Fatalf("有退出码该走第二组，实际 %q", got)
 	}
 }
@@ -139,7 +139,7 @@ func TestCategoryGroupDependsOnExitCode(t *testing.T) {
 func TestCategoryFallbackIsTruncated(t *testing.T) {
 	long := strings.Repeat("a", 250)
 	res := contract.NodeResult{ErrorText: long}
-	got := categoryOf(contract.ModeCommand, classifyTables(), &res)
+	got := categoryOf(contract.ModeCommand, classifyTables(), &res, "")
 
 	want := strings.Repeat("a", 200) + "…"
 	if got != want {
@@ -151,7 +151,7 @@ func TestCategoryFallbackIsTruncated(t *testing.T) {
 // TestCategoryEmptyTables 判据表一句都没配时不 panic：有退出码的按退出码兜底，其余的退回原文。
 func TestCategoryEmptyTables(t *testing.T) {
 	res := contract.NodeResult{ExitCode: intPtr(1), ErrorText: "sshfleet.run.rejected: rejected"}
-	if got := categoryOf(contract.ModeCommand, contract.Tables{}, &res); got != "执行失败(退出码1)" {
+	if got := categoryOf(contract.ModeCommand, contract.Tables{}, &res, ""); got != "执行失败(退出码1)" {
 		t.Fatalf("判据表空时该按退出码兜底，实际 %q", got)
 	}
 }
@@ -186,7 +186,7 @@ func TestCategoryOfPasswdUsesOwnTableFirst(t *testing.T) {
 	}
 	for _, c := range cases {
 		res := contract.NodeResult{Connected: true, ErrorText: c.text}
-		if got := categoryOf(contract.ModePasswd, tables, &res); got != c.want {
+		if got := categoryOf(contract.ModePasswd, tables, &res, ""); got != c.want {
 			t.Fatalf("%s：期望 %q，实际 %q", c.name, c.want, got)
 		}
 	}
@@ -200,18 +200,44 @@ func TestCategoryOfCommandIgnoresPasswdTable(t *testing.T) {
 	const text = "sshfleet.passwd.not_expired: no password-expiry prompt seen"
 	res := contract.NodeResult{Connected: true, ErrorText: text}
 
-	if got := categoryOf(contract.ModeCommand, passwdTables(), &res); got != text {
+	if got := categoryOf(contract.ModeCommand, passwdTables(), &res, ""); got != text {
 		t.Fatalf("命令模式该认不出、回落原文，实际 %q", got)
+	}
+}
+
+// TestCategoryOfPasswdSkipsServerHint 改密不拿服务端提示认分类。
+//
+// 「密码必须马上改」那句在改密里是**前提**（它就是入场信号），不是失败原因：算进去，
+// 跑到一半被 Ctrl+C 那一档会被「密码过期」抢走——那一档排在它后面。
+func TestCategoryOfPasswdSkipsServerHint(t *testing.T) {
+	const hint = "You are required to change your password immediately (administrator enforced)."
+	tables := contract.Tables{Categories: []contract.Category{
+		{Name: "密码过期", Keywords: []string{"You are required to change your password immediately"}},
+		{Name: "任务已取消", Keywords: []string{"sshfleet.abort.canceled"}},
+	}}
+	res := contract.NodeResult{Connected: true, Cancelled: true,
+		ErrorText: "context canceled\nsshfleet.abort.canceled: interrupted after session established\n" + hint}
+
+	if got := categoryOf(contract.ModePasswd, tables, &res, hint); got != "任务已取消" {
+		t.Fatalf("改密被中断该归「任务已取消」，实际 %q", got)
+	}
+	// 没给提示时照旧按原文认：这条只管「提示不参与」，不放宽别的。
+	if got := categoryOf(contract.ModePasswd, tables, &res, ""); got != "密码过期" {
+		t.Fatalf("没给提示时该照旧按原文认，实际 %q", got)
+	}
+	// 命令模式不吃这条豁免：提示照旧参与分类。
+	if got := categoryOf(contract.ModeCommand, tables, &res, hint); got != "密码过期" {
+		t.Fatalf("命令模式该照旧连着提示查表，实际 %q", got)
 	}
 }
 
 // TestCategoryOfAbort 中断两档：各认自己那句报文，名字写死（照随包配置那两类的次序）。
 //
-// 判据表的次序就是随包的次序——「建连被取消」在前，「任务已取消」在后；两句话不互相
-// 包含，所以谁在前都不该串味，这里仍按配置原序摆。
+// 判据表的次序就是随包的次序——「建连被取消」排在表头，「任务已取消」在后面一档；两档
+// 只认工具自己写的那句报文，所以别的报文串不进来。
 func TestCategoryOfAbort(t *testing.T) {
 	tables := contract.Tables{Categories: []contract.Category{
-		{Name: "建连被取消", Keywords: []string{"sshfleet.abort.connect_canceled", "operation was canceled"}},
+		{Name: "建连被取消", Keywords: []string{"sshfleet.abort.connect_canceled"}},
 		{Name: "任务已取消", Keywords: []string{"sshfleet.abort.canceled", "context canceled"}},
 	}}
 
@@ -232,11 +258,19 @@ func TestCategoryOfAbort(t *testing.T) {
 				"sshfleet.abort.canceled: interrupted after session established"},
 			want: "任务已取消",
 		},
+		{
+			// Windows 上命令中途取消，原文里会多带一句 operation was canceled；
+			// 「建连被取消」排在表头，若它认这个词，这一档就被抢走了。
+			name: "Windows 上跑在命令中途",
+			res: contract.NodeResult{Connected: true, ErrorText: "The operation was canceled by the user.\n" +
+				"sshfleet.abort.canceled: interrupted after session established"},
+			want: "任务已取消",
+		},
 	}
 
 	for _, c := range cases {
 		res := c.res
-		if got := categoryOf(contract.ModeCommand, tables, &res); got != c.want {
+		if got := categoryOf(contract.ModeCommand, tables, &res, ""); got != c.want {
 			t.Fatalf("%s：期望 %q，实际 %q", c.name, c.want, got)
 		}
 	}
