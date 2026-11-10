@@ -2,7 +2,6 @@ package parse
 
 import (
 	"errors"
-	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -47,7 +46,7 @@ func buildNodes(rows [][]string, cfg *settings, useKey bool) ([]contract.Node, [
 
 	var (
 		nodes  []contract.Node
-		errs   []string
+		bad    []contract.CannotStartRow
 		unused []int
 	)
 	for idx, raw := range rows {
@@ -55,19 +54,24 @@ func buildNodes(rows [][]string, cfg *settings, useKey bool) ([]contract.Node, [
 		lineNo := idx + 1
 		ip := strings.TrimSpace(row[0])
 
-		var rowErrs []string
+		var rowErrs []contract.CannotStartReason
 		if ip == "" {
-			rowErrs = append(rowErrs, "IP必须存在")
+			rowErrs = append(rowErrs, contract.CannotStartReason{Kind: contract.CannotStartRowIPMissing})
 		} else if !isIPv4(ip) {
-			rowErrs = append(rowErrs, "IP格式不正确")
+			rowErrs = append(rowErrs, contract.CannotStartReason{Kind: contract.CannotStartRowIPBad})
 		}
 
-		port, portErrs := resolvePort(strings.TrimSpace(row[1]), cfg.account.Port)
-		rowErrs = append(rowErrs, portErrs...)
+		port, portBad := resolvePort(strings.TrimSpace(row[1]), cfg.account.Port)
+		if portBad {
+			rowErrs = append(rowErrs, contract.CannotStartReason{
+				Kind:  contract.CannotStartRowPortBad,
+				Value: strings.TrimSpace(row[1]),
+			})
+		}
 
-		user, userErr := resolveUser(strings.TrimSpace(row[2]), cfg.account.User)
-		if userErr != nil {
-			rowErrs = append(rowErrs, userErr.Error())
+		user, userBad := resolveUser(strings.TrimSpace(row[2]), cfg.account.User)
+		if userBad {
+			rowErrs = append(rowErrs, contract.CannotStartReason{Kind: contract.CannotStartRowUserMissing})
 		}
 
 		// 私钥：写了 -k 才用密钥登录，路径取「清单第 5 列 > 配置 credential.key」。
@@ -78,7 +82,7 @@ func buildNodes(rows [][]string, cfg *settings, useKey bool) ([]contract.Node, [
 				keyPath = cfg.credentialCfg.Key
 			}
 			if keyPath == "" {
-				rowErrs = append(rowErrs, "用了 -k，但没有找到可用的私钥——在第 5 列写私钥路径，或把统一私钥配到配置 credential.key")
+				rowErrs = append(rowErrs, contract.CannotStartReason{Kind: contract.CannotStartRowKeyMissing})
 			}
 		} else if strings.TrimSpace(row[4]) != "" {
 			unused = append(unused, lineNo)
@@ -88,7 +92,7 @@ func buildNodes(rows [][]string, cfg *settings, useKey bool) ([]contract.Node, [
 		password := creds[idx].password
 		if password == "" && keyPath == "" {
 			if cfg.account.Password == "" {
-				rowErrs = append(rowErrs, "密码为空：清单第 4 列没写，配置 account.password 也没配")
+				rowErrs = append(rowErrs, contract.CannotStartReason{Kind: contract.CannotStartRowPasswordMissing})
 			} else {
 				password = creds[idx].defaultPassword
 			}
@@ -105,11 +109,7 @@ func buildNodes(rows [][]string, cfg *settings, useKey bool) ([]contract.Node, [
 		}
 
 		if len(rowErrs) > 0 {
-			shown := ip
-			if shown == "" {
-				shown = "空值"
-			}
-			errs = append(errs, fmt.Sprintf("行 %d (IP: %s): - %s", lineNo, shown, strings.Join(rowErrs, "，")))
+			bad = append(bad, contract.CannotStartRow{Line: lineNo, IP: ip, Items: rowErrs})
 			continue
 		}
 
@@ -127,8 +127,11 @@ func buildNodes(rows [][]string, cfg *settings, useKey bool) ([]contract.Node, [
 	if len(unused) > 0 {
 		notices = append(notices, contract.Notice{Kind: contract.NoticeUnusedKey, Rows: unused})
 	}
-	if len(errs) > 0 {
-		return nil, nil, cannotStart("nodelist", "", "发现以下错误:"+"\n"+strings.Join(errs, "\n"))
+	if len(bad) > 0 {
+		return nil, nil, cannotStartReason("nodelist", contract.CannotStartReason{
+			Kind: contract.CannotStartNodeRows,
+			Rows: bad,
+		})
 	}
 	return nodes, notices, nil
 }
@@ -144,7 +147,7 @@ func precheckCredentials(rows [][]string, cfg *settings) ([]rowCred, *contract.C
 	defaultPassword, defErr := resolveSecret(cfg.account.Password, cfg)
 	configKeyPass, confErr := resolveSecret(cfg.credentialCfg.KeyPassword, cfg)
 
-	var errs []string
+	var bad []contract.CannotStartRow
 	for idx, raw := range rows {
 		row := padRow(raw)
 		lineNo := idx + 1
@@ -154,7 +157,7 @@ func precheckCredentials(rows [][]string, cfg *settings) ([]rowCred, *contract.C
 		if rawPass := strings.TrimSpace(row[3]); rawPass != "" {
 			plain, err := resolveSecret(rawPass, cfg)
 			if err != nil {
-				errs = append(errs, rowIssue(lineNo, row[0], "密码", rawPass, err))
+				bad = append(bad, credRow(lineNo, row[0], "密码", rawPass, err))
 				continue
 			}
 			creds[idx].password = plain
@@ -162,7 +165,7 @@ func precheckCredentials(rows [][]string, cfg *settings) ([]rowCred, *contract.C
 		if rawPass := strings.TrimSpace(row[5]); rawPass != "" {
 			plain, err := resolveSecret(rawPass, cfg)
 			if err != nil {
-				errs = append(errs, rowIssue(lineNo, row[0], "口令", rawPass, err))
+				bad = append(bad, credRow(lineNo, row[0], "口令", rawPass, err))
 				continue
 			}
 			creds[idx].keyPass = plain
@@ -171,20 +174,17 @@ func precheckCredentials(rows [][]string, cfg *settings) ([]rowCred, *contract.C
 
 	// 配置里的默认密码只在有人真的用它时才报错（清单每行都写了密码就不必管它）。
 	if needsDefault(rows) && defErr != nil {
-		errs = append(errs, "配置 account.password："+defErr.Error())
+		bad = append(bad, configRow(contract.CannotStartRowCredConfigPassword, defErr))
 	}
 	if confErr != nil {
-		errs = append(errs, "配置 credential.key_password："+confErr.Error())
+		bad = append(bad, configRow(contract.CannotStartRowCredConfigKeyPassword, confErr))
 	}
 
-	if len(errs) > 0 {
-		var b strings.Builder
-		fmt.Fprintf(&b, "CSV凭据预检查失败，共 %d 处错误：\n", len(errs))
-		for _, e := range errs {
-			b.WriteString("  " + e + "\n")
-		}
-		b.WriteString("请修复上述问题后重新执行")
-		return nil, cannotStart("nodelist", "", b.String())
+	if len(bad) > 0 {
+		return nil, cannotStartReason("nodelist", contract.CannotStartReason{
+			Kind: contract.CannotStartCredRows,
+			Rows: bad,
+		})
 	}
 	return creds, nil
 }
@@ -200,35 +200,46 @@ func needsDefault(rows [][]string) bool {
 	return false
 }
 
-// rowIssue 凭据那一行的话：`行 N (IP: x): 密码文件<哪一处不对> → <回显> (<系统原文>)`。
+// credRow 凭据预检的一行：`行 N (IP: x): 密码文件<哪一处不对> → <回显> (<系统原文>)`。
 //
-// 三种不对分开说——它们的下一步不是一件事：文件不在、解不开、读不了。
-func rowIssue(lineNo int, ip, kind, raw string, err error) string {
+// 三种不对分开说——它们的下一步不是一件事：文件不在、解不开、读不了。回显像路径就原样给
+// （排查要看的就是它），不像路径的遮起来：加密刚打开时清单常还是明文密码，而这段字要进
+// 终端与工具日志。
+func credRow(lineNo int, ip, field, raw string, err error) contract.CannotStartRow {
 	shown := raw
 	if !strings.ContainsAny(raw, `/\`) {
 		shown = mask.Secret(raw)
 	}
-	line := fmt.Sprintf("行 %d (IP: %s): %s文件%s → %s", lineNo, ip, kind, credLabel(err), shown)
+	item := contract.CannotStartReason{
+		Kind:  credKind(err),
+		Place: field,
+		Value: shown,
+	}
 	// 系统那句原因照原样带出来：只说「不存在」会把「没权限」也说成不存在（ADR-0025 决定 6）。
 	var pe *fs.PathError
 	if errors.As(err, &pe) {
-		line += " (" + pe.Err.Error() + ")"
+		item.Origin = pe.Err.Error()
 	}
-	return line
+	return contract.CannotStartRow{Line: lineNo, IP: ip, Items: []contract.CannotStartReason{item}}
 }
 
-// credLabel 把凭据包的失败翻成老版那几句话。
+// configRow 是配置级的那两条：不挂在清单某一行上，所以在屏上没有行号前缀。
+func configRow(kind contract.CannotStartKind, err error) contract.CannotStartRow {
+	return contract.CannotStartRow{Items: []contract.CannotStartReason{{Kind: kind, Origin: err.Error()}}}
+}
+
+// credKind 把凭据包的失败归到三条里的一条。
 //
 // 老版把凭据失败分成一串码，这里只留这一阶段真会撞上的三种：文件不在、读不了、
 // 解不开（含主密钥没读到——它和解不开是同一个下一步：先去看主密钥）。
-func credLabel(err error) string {
+func credKind(err error) contract.CannotStartKind {
 	switch {
 	case errors.Is(err, os.ErrNotExist):
-		return "不存在（打开加密时这里填的是凭据文件的绝对路径，不加密时才是密码本身）"
+		return contract.CannotStartRowCredMissing
 	case errors.Is(err, credential.ErrKeyMissing), errors.Is(err, credential.ErrBadCipher):
-		return "不是有效的密文，或主密钥不匹配（先用 --convert-secret 重新转换）"
+		return contract.CannotStartRowCredBadCipher
 	default:
-		return "无法读取"
+		return contract.CannotStartRowCredUnreadable
 	}
 }
 
@@ -267,15 +278,15 @@ func padRow(row []string) []string {
 // resolvePort 端口补全：清单第 2 列 > 配置 account.port。
 //
 // 只认纯数字、1-65535；配置侧的范围由读配置那一步保证。
-func resolvePort(raw string, defaultPort int) (int, []string) {
+func resolvePort(raw string, defaultPort int) (int, bool) {
 	if raw != "" {
 		v, err := strconv.Atoi(raw)
 		if err != nil || !allDigits(raw) || v < 1 || v > 65535 {
-			return 0, []string{"端口必须是1-65535之间的整数，当前值为：" + raw}
+			return 0, true
 		}
-		return v, nil
+		return v, false
 	}
-	return defaultPort, nil
+	return defaultPort, false
 }
 
 // allDigits 纯数字判定：`+22`、` 22` 都不算。
@@ -292,12 +303,12 @@ func allDigits(s string) bool {
 }
 
 // resolveUser 用户名补全：清单第 3 列 > 配置 account.user。
-func resolveUser(raw, defaultUser string) (string, error) {
+func resolveUser(raw, defaultUser string) (string, bool) {
 	if raw != "" {
-		return raw, nil
+		return raw, false
 	}
 	if defaultUser != "" {
-		return defaultUser, nil
+		return defaultUser, false
 	}
-	return "", fmt.Errorf("用户名为空：清单第 3 列没写，配置 account.user 也没配")
+	return "", true
 }

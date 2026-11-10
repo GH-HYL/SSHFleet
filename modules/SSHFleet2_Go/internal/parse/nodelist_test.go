@@ -167,14 +167,15 @@ func TestBuildNodesCollectsAllErrors(t *testing.T) {
 	if fail == nil {
 		t.Fatal("三行都坏，应当起不来")
 	}
+	say := message.CannotStartText(*fail)
 	for _, want := range []string{
 		"发现以下错误:",
 		"行 1 (IP: 10.0.0.1): - 端口必须是1-65535之间的整数",
 		"行 2 (IP: 10.0.0.300): - IP格式不正确",
 		"行 3 (IP: 空值): - IP必须存在",
 	} {
-		if !strings.Contains(fail.Body, want) {
-			t.Fatalf("少了这一段：%q\n实际：%s", want, fail.Body)
+		if !strings.Contains(say, want) {
+			t.Fatalf("少了这一段：%q\n实际：%s", want, say)
 		}
 	}
 }
@@ -187,8 +188,8 @@ func TestBuildNodesNeedsKeyWhenKeyMode(t *testing.T) {
 	if fail == nil {
 		t.Fatal("用了 -k 没私钥应当起不来")
 	}
-	if !strings.Contains(fail.Body, "用了 -k，但没有找到可用的私钥") {
-		t.Fatalf("话不对：%s", fail.Body)
+	if say := message.CannotStartText(*fail); !strings.Contains(say, "用了 -k，但没有找到可用的私钥") {
+		t.Fatalf("话不对：%s", say)
 	}
 }
 

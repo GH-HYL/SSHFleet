@@ -128,6 +128,33 @@ const (
 	CannotStartUploadNothingLeft CannotStartKind = "upload_nothing_left"
 )
 
+// 逐行报告（03b 号单）：一行一处错的那种屏，不是一句话，是一张表。
+//
+// 头两条是「整屏」的类别：它决定那几行怎么排（表头、缩进、收尾那句）。第三条起是「一行里
+// 的一条」，只成半句——拼成一句话的活仍归 `message`，站里只交行号、原值与类别。
+const (
+	// CannotStartNodeRows 是逐台补全那一屏：表头「发现以下错误:」，下面一行一台。
+	CannotStartNodeRows CannotStartKind = "nodelist_rows"
+	// CannotStartCredRows 是凭据预检那一屏：先说共几处错，下面一行一处，末尾一句去路。
+	CannotStartCredRows CannotStartKind = "nodelist_cred_rows"
+
+	CannotStartRowIPMissing      CannotStartKind = "row_ip_missing"
+	CannotStartRowIPBad          CannotStartKind = "row_ip_bad"
+	CannotStartRowPortBad        CannotStartKind = "row_port_bad"
+	CannotStartRowUserMissing    CannotStartKind = "row_user_missing"
+	CannotStartRowKeyMissing     CannotStartKind = "row_key_missing"
+	CannotStartRowPasswordMissing CannotStartKind = "row_password_missing"
+
+	// 凭据预检的三条：Place 是那一格（密码／口令），Value 是回显（可能被遮蔽），Origin 是
+	// 系统原话（没有就留空）。
+	CannotStartRowCredMissing   CannotStartKind = "row_cred_missing"
+	CannotStartRowCredBadCipher CannotStartKind = "row_cred_bad_cipher"
+	CannotStartRowCredUnreadable CannotStartKind = "row_cred_unreadable"
+	// 两条配置级的：Origin 是系统原话。
+	CannotStartRowCredConfigPassword    CannotStartKind = "row_cred_config_password"
+	CannotStartRowCredConfigKeyPassword CannotStartKind = "row_cred_config_key_password"
+)
+
 // 条目层（改密提示词表、错误分类表、危险规则表各条里对不上的那一格）。
 const (
 	CannotStartPasswdStepNoKeywords CannotStartKind = "passwd_step_no_keywords"
@@ -163,4 +190,18 @@ type CannotStartReason struct {
 	Value  string
 	Limit  int
 	Origin string
+
+	// Rows 只给「逐行报告」那两类用（ADR-0044，03b 号单）：多行报告不是一句话，是一张表，
+	// 拿几个具名格凑不出来。其余类别留空。
+	Rows []CannotStartRow
+}
+
+// CannotStartRow 是逐行报告里的一行：行号、IP 原值、这一行撞上的那几条。
+//
+// Line 为 0 表示这一行不挂在清单某一行上（配置级的那两条）：那一行只印条目本身，不带
+// 「行 N (IP: x):」前缀。IP 是清单第 1 列原样——怎么呈现（空值顶什么）归 `message`。
+type CannotStartRow struct {
+	Line  int
+	IP    string
+	Items []CannotStartReason
 }
