@@ -71,6 +71,12 @@ func reasonText(r contract.CannotStartReason) string {
 		return "错误分类关键词第 " + strconv.Itoa(r.Index) + " 条缺少 name"
 	case contract.CannotStartKeywordCatEmptyItem:
 		return "错误分类关键词里 " + r.Value + " 的 keywords 有空项"
+	case contract.CannotStartKeywordCatDuplicate:
+		return "错误分类关键词第 " + strconv.Itoa(r.Index) + " 条与第 " + strconv.Itoa(r.Limit) +
+			" 条重名：" + r.Value
+	case contract.CannotStartPasswdCatDuplicate:
+		return "改密配置第 " + strconv.Itoa(r.Index) + " 条 " + r.Place + " 与第 " +
+			strconv.Itoa(r.Limit) + " 条重名：" + r.Value
 
 	// 危险规则表的条目层：前缀是「危险命令检测规则第 N 条：」。
 	case contract.CannotStartDangerNoName:

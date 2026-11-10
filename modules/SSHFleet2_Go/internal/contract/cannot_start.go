@@ -230,6 +230,12 @@ const (
 	CannotStartPasswdCatEmptyItem   CannotStartKind = "passwd_category_empty_item"
 	CannotStartKeywordCatNoName     CannotStartKind = "keyword_category_no_name"
 	CannotStartKeywordCatEmptyItem  CannotStartKind = "keyword_category_empty_item"
+	// CannotStartKeywordCatDuplicate 是同一块里两条分类重名：Index 是前一条的序号，Limit 是
+	// 后一条的序号，Value 是那个名字。跨块同名不算——`category` 与 `exit_code_category`
+	// 是两份互不相干的表。
+	CannotStartKeywordCatDuplicate CannotStartKind = "keyword_category_duplicate"
+	// CannotStartPasswdCatDuplicate 是改密提示词表 `category` 块里两条分类重名：同上三格。
+	CannotStartPasswdCatDuplicate   CannotStartKind = "passwd_category_duplicate"
 	CannotStartDangerNoName         CannotStartKind = "danger_no_name"
 	CannotStartDangerBadLevel       CannotStartKind = "danger_bad_level"
 	CannotStartDangerExampleTooWide CannotStartKind = "danger_example_too_wide"
