@@ -25,20 +25,6 @@ const (
 // ruleTextLimit 是规则里 example／reason 的显示宽度上限（一个汉字算两列）。
 const ruleTextLimit = 30
 
-// unknownCategoryField 是错误分类表两条「含未识别字段」共用的句子头。
-const unknownCategoryField = "错误分类关键词含未识别字段："
-
-// maxMustBePositive 是改密 max 那一格的句子：算出来的值与非正数都走它。
-// 取值那半句向 message 的构造点要，不在这里抄一份。
-func maxMustBePositive(raw string) string {
-	return message.CurrentValue("max 必须是正整数", raw)
-}
-
-// passwdIssue 给「改密提示词表第 N 条」的失败排一句：前缀只在这里拼，七条失败共用。
-func passwdIssue(kind string, i int, format string, args ...any) string {
-	return "改密配置第 " + strconv.Itoa(i) + " 条 " + kind + "：" + fmt.Sprintf(format, args...)
-}
-
 // loadTables 读三份表。任何一份不成器都是「起不来」。
 func loadTables(mode contract.Mode) (contract.Tables, *contract.CannotStart) {
 	danger, fail := loadDangerRules()
@@ -57,11 +43,8 @@ func loadTables(mode contract.Mode) (contract.Tables, *contract.CannotStart) {
 	// 那条唯一的行为例外：改密模式下，「密码过期」这一分类没有关键词就是起不来，启动即报。
 	// 老版跑到改密那一步才说；这一处是定过的行为变化（ADR-0034 决定七）。
 	if mode == contract.ModePasswd && len(keywordsOf(cats, "密码过期")) == 0 && len(keywordsOf(exitCats, "密码过期")) == 0 {
-		body := message.Problem(
-			"改密缺少入场信号",
-			"判据文件里「密码过期」分类没有关键词，工具认不出哪台机器要改密",
-			"该分类在 config/keywords_error.conf，别删它")
-		return contract.Tables{}, cannotStart("ssh", "", body)
+		return contract.Tables{}, cannotStartReason("ssh",
+			contract.CannotStartReason{Kind: contract.CannotStartPasswdNoSignal})
 	}
 
 	return contract.Tables{
@@ -83,41 +66,56 @@ func keywordsOf(cats []contract.Category, name string) []string {
 	return nil
 }
 
-// dangerFail 排一屏「危险规则表不成器」：环节与外壳句照老版那一处，五条失败共用一个入口。
-func dangerFail(body string) *contract.CannotStart {
-	return cannotStart("dangercheck", message.HeadDangerRules, body)
+// dangerFail 排一屏「危险规则表不成器」：环节与外壳句照老版那一处，六条失败共用一个入口。
+func dangerFail(reason contract.CannotStartReason) *contract.CannotStart {
+	reason.Head = message.HeadDangerRules
+	return cannotStartReason("dangercheck", reason)
 }
 
 // loadDangerRules 读危险规则表：六项字段、四档等级、正则编译、示例与说明的宽度。
 func loadDangerRules() ([]contract.DangerRule, *contract.CannotStart) {
 	data, err := os.ReadFile(dangerRulesPath)
 	if err != nil {
-		return nil, dangerFail(
-			message.ProblemReason("读取危险命令检测规则失败："+dangerRulesPath, err.Error()))
+		return nil, dangerFail(contract.CannotStartReason{
+			Kind:   contract.CannotStartTableRead,
+			Place:  "读取危险命令检测规则",
+			Value:  dangerRulesPath,
+			Origin: err.Error(),
+		})
 	}
 	lines, err := tokenize(data)
 	if err != nil {
-		return nil, dangerFail(
-			message.ProblemReason("危险命令检测规则解析失败："+dangerRulesPath, err.Error()))
+		return nil, dangerFail(contract.CannotStartReason{
+			Kind:   contract.CannotStartTableParse,
+			Place:  "危险命令检测规则",
+			Value:  dangerRulesPath,
+			Origin: err.Error(),
+		})
 	}
 	if !hasArrayTable(lines, "rules") {
-		return nil, dangerFail(
-			fmt.Sprintf("危险命令检测规则里一条 rules 都没有：%s", dangerRulesPath))
+		return nil, dangerFail(contract.CannotStartReason{
+			Kind:   contract.CannotStartTableEmpty,
+			Place:  "危险命令检测规则",
+			Value:  "rules",
+			Origin: dangerRulesPath,
+		})
 	}
 
 	items := arrayItems(lines, "rules")
 	out := make([]contract.DangerRule, 0, len(items))
 	for i, item := range items {
 		if unknown := unknownRuleKeys(item); len(unknown) > 0 {
-			return nil, dangerFail(
-				message.ProblemOrigin(
-					fmt.Sprintf("危险命令检测规则含未识别字段：%s", strings.Join(unknown, ", ")),
-					"规则只认 name / example / reason / regex / risk_level / enabled 六项，把它删掉或改成这六项之一"))
+			return nil, dangerFail(contract.CannotStartReason{
+				Kind:  contract.CannotStartTableUnknownField,
+				Place: "危险命令检测规则",
+				Value: strings.Join(unknown, ", "),
+				Origin: "规则只认 name / example / reason / regex / risk_level / enabled 六项，" +
+					"把它删掉或改成这六项之一",
+			})
 		}
-		rule, err := buildRule(item)
-		if err != nil {
-			return nil, dangerFail(
-				fmt.Sprintf("危险命令检测规则第 %d 条：%v", i+1, err))
+		rule, bad := buildRule(item, i+1)
+		if bad != nil {
+			return nil, dangerFail(*bad)
 		}
 		out = append(out, rule)
 	}
@@ -137,8 +135,8 @@ func unknownRuleKeys(item map[string]string) []string {
 	return out
 }
 
-// buildRule 校验并编译一条规则。
-func buildRule(item map[string]string) (contract.DangerRule, error) {
+// buildRule 校验并编译一条规则：哪一格对不上就交回「哪一类 ＋ 几个参数」，句子由 message 拼。
+func buildRule(item map[string]string, index int) (contract.DangerRule, *contract.CannotStartReason) {
 	rule := contract.DangerRule{
 		Name:    unquote(item["name"]),
 		Example: unquote(item["example"]),
@@ -147,19 +145,32 @@ func buildRule(item map[string]string) (contract.DangerRule, error) {
 		Enabled: true,
 	}
 	if strings.TrimSpace(rule.Name) == "" {
-		return rule, fmt.Errorf("缺少 name")
+		return rule, &contract.CannotStartReason{Kind: contract.CannotStartDangerNoName, Index: index}
 	}
 	if !validRiskLevel(rule.Level) {
-		return rule, fmt.Errorf("%s", message.CurrentValue(
-			fmt.Sprintf("risk_level 只能写 %s / %s / %s / %s",
-				contract.RiskForbidden, contract.RiskHigh, contract.RiskMedium, contract.RiskLow),
-			rule.Level))
+		return rule, &contract.CannotStartReason{
+			Kind:  contract.CannotStartDangerBadLevel,
+			Index: index,
+			Value: rule.Level,
+		}
 	}
 	if w := message.DisplayWidth(rule.Example); w > ruleTextLimit {
-		return rule, fmt.Errorf("%s 的 example 有 %d 列宽，超过上限 %d 列（一个汉字算两列）", rule.Name, w, ruleTextLimit)
+		return rule, &contract.CannotStartReason{
+			Kind:   contract.CannotStartDangerExampleTooWide,
+			Index:  index,
+			Value:  rule.Name,
+			Limit:  ruleTextLimit,
+			Origin: strconv.Itoa(w),
+		}
 	}
 	if w := message.DisplayWidth(rule.Reason); w > ruleTextLimit {
-		return rule, fmt.Errorf("%s 的 reason 有 %d 列宽，超过上限 %d 列（一个汉字算两列）", rule.Name, w, ruleTextLimit)
+		return rule, &contract.CannotStartReason{
+			Kind:   contract.CannotStartDangerReasonTooWide,
+			Index:  index,
+			Value:  rule.Name,
+			Limit:  ruleTextLimit,
+			Origin: strconv.Itoa(w),
+		}
 	}
 	if v, ok := item["enabled"]; ok {
 		switch strings.TrimSpace(unquote(v)) {
@@ -168,23 +179,40 @@ func buildRule(item map[string]string) (contract.DangerRule, error) {
 		case "true":
 			rule.Enabled = true
 		default:
-			return rule, fmt.Errorf("%s 的 enabled 只认 true / false", rule.Name)
+			return rule, &contract.CannotStartReason{
+				Kind:  contract.CannotStartDangerBadEnabled,
+				Index: index,
+				Value: rule.Name,
+			}
 		}
 	}
 	raw := unquote(item["regex"])
 	if strings.TrimSpace(raw) == "" {
-		return rule, fmt.Errorf("%s 没有 regex", rule.Name)
+		return rule, &contract.CannotStartReason{
+			Kind:  contract.CannotStartDangerNoRegex,
+			Index: index,
+			Value: rule.Name,
+		}
 	}
 	patterns := splitArray(raw)
 	if len(patterns) == 0 {
-		return rule, fmt.Errorf("%s 的 regex 是空的", rule.Name)
+		return rule, &contract.CannotStartReason{
+			Kind:  contract.CannotStartDangerEmptyRegex,
+			Index: index,
+			Value: rule.Name,
+		}
 	}
 	for _, p := range patterns {
 		// 大小写不敏感：老版编译时统一加 `(?i)`（对位旧实现的 re.IGNORECASE），
 		// 不照搬就会漏掉 `RM -RF /etc` 这一类写法。
 		re, err := regexp.Compile("(?i)" + p)
 		if err != nil {
-			return rule, fmt.Errorf("%s 的一条正则编译不过：%v", rule.Name, err)
+			return rule, &contract.CannotStartReason{
+				Kind:   contract.CannotStartDangerBadRegex,
+				Index:  index,
+				Value:  rule.Name,
+				Origin: err.Error(),
+			}
 		}
 		rule.Patterns = append(rule.Patterns, re)
 	}
@@ -211,31 +239,45 @@ const (
 func loadErrorKeywords() ([]contract.Category, []contract.Category, *contract.CannotStart) {
 	data, err := os.ReadFile(errorKeywordsPath)
 	if err != nil {
-		return nil, nil, cannotStart("verdict", "",
-			message.ProblemReason("读取错误分类关键词失败："+errorKeywordsPath, err.Error()))
+		return nil, nil, cannotStartReason("verdict", contract.CannotStartReason{
+			Kind:   contract.CannotStartTableRead,
+			Place:  "读取错误分类关键词",
+			Value:  errorKeywordsPath,
+			Origin: err.Error(),
+		})
 	}
 	lines, err := tokenize(data)
 	if err != nil {
-		return nil, nil, cannotStart("verdict", "",
-			message.ProblemReason("错误分类关键词解析失败："+errorKeywordsPath, err.Error()))
+		return nil, nil, cannotStartReason("verdict", contract.CannotStartReason{
+			Kind:   contract.CannotStartTableParse,
+			Place:  "错误分类关键词",
+			Value:  errorKeywordsPath,
+			Origin: err.Error(),
+		})
 	}
-	if unknown := unknownCategoryKeys(lines, errorCategoriesKey); len(unknown) > 0 {
-		return nil, nil, cannotStart("verdict", "", unknownCategoryField+strings.Join(unknown, ", "))
-	}
-	if unknown := unknownCategoryKeys(lines, exitCategoriesKey); len(unknown) > 0 {
-		return nil, nil, cannotStart("verdict", "", unknownCategoryField+strings.Join(unknown, ", "))
+	for _, section := range []string{errorCategoriesKey, exitCategoriesKey} {
+		if unknown := unknownCategoryKeys(lines, section); len(unknown) > 0 {
+			return nil, nil, cannotStartReason("verdict", contract.CannotStartReason{
+				Kind:  contract.CannotStartTableUnknownField,
+				Place: "错误分类关键词",
+				Value: strings.Join(unknown, ", "),
+			})
+		}
 	}
 
-	cats, err := buildCategories(lines, errorCategoriesKey)
-	if err != nil {
-		return nil, nil, cannotStart("verdict", "", err.Error())
+	cats, bad := buildCategories(lines, errorCategoriesKey)
+	if bad != nil {
+		return nil, nil, cannotStartReason("verdict", *bad)
 	}
 	if len(cats) == 0 {
-		return nil, nil, cannotStart("verdict", "", "错误分类关键词为空："+errorKeywordsPath)
+		return nil, nil, cannotStartReason("verdict", contract.CannotStartReason{
+			Kind:  contract.CannotStartCategoriesEmpty,
+			Place: errorKeywordsPath,
+		})
 	}
-	exitCats, err := buildCategories(lines, exitCategoriesKey)
-	if err != nil {
-		return nil, nil, cannotStart("verdict", "", err.Error())
+	exitCats, bad := buildCategories(lines, exitCategoriesKey)
+	if bad != nil {
+		return nil, nil, cannotStartReason("verdict", *bad)
 	}
 	return cats, exitCats, nil
 }
@@ -255,7 +297,7 @@ func unknownCategoryKeys(lines []tomlLine, section string) []string {
 }
 
 // buildCategories 把某个数组表建成分类清单：名字非空、关键词里不许有空项。
-func buildCategories(lines []tomlLine, section string) ([]contract.Category, error) {
+func buildCategories(lines []tomlLine, section string) ([]contract.Category, *contract.CannotStartReason) {
 	var out []contract.Category
 	for i, item := range arrayItems(lines, section) {
 		c := contract.Category{
@@ -264,11 +306,17 @@ func buildCategories(lines []tomlLine, section string) ([]contract.Category, err
 			Tip:      unquote(item["tip"]),
 		}
 		if strings.TrimSpace(c.Name) == "" {
-			return nil, fmt.Errorf("错误分类关键词第 %d 条缺少 name", i+1)
+			return nil, &contract.CannotStartReason{
+				Kind:  contract.CannotStartKeywordCatNoName,
+				Index: i + 1,
+			}
 		}
 		for _, kw := range c.Keywords {
 			if strings.TrimSpace(kw) == "" {
-				return nil, fmt.Errorf("错误分类关键词里 %s 的 keywords 有空项", c.Name)
+				return nil, &contract.CannotStartReason{
+					Kind:  contract.CannotStartKeywordCatEmptyItem,
+					Value: c.Name,
+				}
 			}
 		}
 		out = append(out, c)
@@ -280,13 +328,21 @@ func buildCategories(lines []tomlLine, section string) ([]contract.Category, err
 func loadPasswdKeywords() ([]contract.PasswdStep, []contract.Category, *contract.CannotStart) {
 	data, err := os.ReadFile(passwdKeywordsPath)
 	if err != nil {
-		return nil, nil, cannotStart("config", "",
-			message.ProblemReason("读取改密配置失败："+passwdKeywordsPath, err.Error()))
+		return nil, nil, cannotStartReason("config", contract.CannotStartReason{
+			Kind:   contract.CannotStartTableRead,
+			Place:  "读取改密配置",
+			Value:  passwdKeywordsPath,
+			Origin: err.Error(),
+		})
 	}
 	lines, err := tokenize(data)
 	if err != nil {
-		return nil, nil, cannotStart("config", "",
-			message.ProblemReason("改密配置解析失败："+passwdKeywordsPath, err.Error()))
+		return nil, nil, cannotStartReason("config", contract.CannotStartReason{
+			Kind:   contract.CannotStartTableParse,
+			Place:  "改密配置",
+			Value:  passwdKeywordsPath,
+			Origin: err.Error(),
+		})
 	}
 	for _, section := range []string{"step", "category"} {
 		for _, item := range arrayItems(lines, section) {
@@ -297,17 +353,21 @@ func loadPasswdKeywords() ([]contract.PasswdStep, []contract.Category, *contract
 				if section == "category" && (k == "name" || k == "keywords" || k == "tip") {
 					continue
 				}
-				return nil, nil, cannotStart("config", "", "改密配置含未识别字段："+k)
+				return nil, nil, cannotStartReason("config", contract.CannotStartReason{
+					Kind:  contract.CannotStartTableUnknownField,
+					Place: "改密配置",
+					Value: k,
+				})
 			}
 		}
 	}
 
 	stepItems := arrayItems(lines, "step")
 	if len(stepItems) == 0 {
-		return nil, nil, cannotStart("config", "",
-			fmt.Sprintf("%s", message.ProblemHint(
-				"改密配置里一条 step 都没有："+passwdKeywordsPath,
-				"至少留一条 [[step]]")))
+		return nil, nil, cannotStartReason("config", contract.CannotStartReason{
+			Kind:   contract.CannotStartPasswdEmptyStep,
+			Origin: passwdKeywordsPath,
+		})
 	}
 	var steps []contract.PasswdStep
 	for i, item := range stepItems {
@@ -316,30 +376,50 @@ func loadPasswdKeywords() ([]contract.PasswdStep, []contract.Category, *contract
 			Value:    unquote(item["value"]),
 		}
 		if len(step.Keywords) == 0 {
-			return nil, nil, cannotStart("config", "", passwdIssue("step", i+1, "缺少 keywords（提示原文）"))
+			return nil, nil, cannotStartReason("config", contract.CannotStartReason{
+				Kind:  contract.CannotStartPasswdStepNoKeywords,
+				Place: "step",
+				Index: i + 1,
+			})
 		}
 		for _, kw := range step.Keywords {
 			if strings.TrimSpace(kw) == "" {
-				return nil, nil, cannotStart("config", "", passwdIssue("step", i+1, "keywords 里有空项"))
+				return nil, nil, cannotStartReason("config", contract.CannotStartReason{
+					Kind:  contract.CannotStartPasswdStepEmptyItem,
+					Place: "step",
+					Index: i + 1,
+				})
 			}
 		}
 		switch step.Value {
 		case contract.PasswdValueCurrent, contract.PasswdValueNew:
 		default:
-			return nil, nil, cannotStart("config", "", passwdIssue("step", i+1,
-				"%s",
-				message.CurrentValue(fmt.Sprintf("value 只能写 %s 或 %s",
-					contract.PasswdValueCurrent, contract.PasswdValueNew), step.Value)))
+			return nil, nil, cannotStartReason("config", contract.CannotStartReason{
+				Kind:  contract.CannotStartPasswdStepBadValue,
+				Place: "step",
+				Index: i + 1,
+				Value: step.Value,
+			})
 		}
 		if maxRaw := strings.TrimSpace(unquote(item["max"])); maxRaw != "" {
 			n, err := atoi(maxRaw)
 			if err != nil || n < 1 {
-				return nil, nil, cannotStart("config", "", passwdIssue("step", i+1, "%s", maxMustBePositive(maxRaw)))
+				return nil, nil, cannotStartReason("config", contract.CannotStartReason{
+					Kind:  contract.CannotStartPasswdStepBadMax,
+					Place: "step",
+					Index: i + 1,
+					Value: maxRaw,
+				})
 			}
 			step.Max = n
 		}
 		if step.Max < 1 {
-			return nil, nil, cannotStart("config", "", passwdIssue("step", i+1, "%s", maxMustBePositive("0")))
+			return nil, nil, cannotStartReason("config", contract.CannotStartReason{
+				Kind:  contract.CannotStartPasswdStepBadMax,
+				Place: "step",
+				Index: i + 1,
+				Value: "0",
+			})
 		}
 		steps = append(steps, step)
 	}
@@ -352,11 +432,20 @@ func loadPasswdKeywords() ([]contract.PasswdStep, []contract.Category, *contract
 			Tip:      unquote(item["tip"]),
 		}
 		if strings.TrimSpace(c.Name) == "" {
-			return nil, nil, cannotStart("config", "", passwdIssue("category", i+1, "缺少 name（分类名）"))
+			return nil, nil, cannotStartReason("config", contract.CannotStartReason{
+				Kind:  contract.CannotStartPasswdCatNoName,
+				Place: "category",
+				Index: i + 1,
+			})
 		}
 		for _, kw := range c.Keywords {
 			if strings.TrimSpace(kw) == "" {
-				return nil, nil, cannotStart("config", "", passwdIssue("category", i+1, "%s 的 keywords 里有空项", c.Name))
+				return nil, nil, cannotStartReason("config", contract.CannotStartReason{
+					Kind:  contract.CannotStartPasswdCatEmptyItem,
+					Place: "category",
+					Index: i + 1,
+					Value: c.Name,
+				})
 			}
 		}
 		cats = append(cats, c)

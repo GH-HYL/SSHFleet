@@ -33,16 +33,61 @@ type CannotStart struct {
 type CannotStartKind string
 
 // CannotStartConfigLoad 是「配置文件读不到或读不懂」：先说读的是哪一份，再附系统原话。
-// 更多类别随 02／03 号单加。
 const CannotStartConfigLoad CannotStartKind = "config_load"
 
-// CannotStartReason 是那一屏要装的全部事实：一个类别，加三个具名格。
+// 判据文件写坏那一族（02 号单）：按「坏在哪一层」分四层，前三层三份表共用同一类别。
+const (
+	// CannotStartTableRead 是读不到那一份表：Place 是表名，Extra 是路径，Origin 是系统原话。
+	CannotStartTableRead CannotStartKind = "table_read"
+	// CannotStartTableParse 是表读到了但解析不了：同上三格。
+	CannotStartTableParse CannotStartKind = "table_parse"
+	// CannotStartTableEmpty 是表里一条都没有：Place 是表名，Value 是节名（rules、step、
+	// category），Origin 是路径。
+	CannotStartTableEmpty CannotStartKind = "table_empty"
+	// CannotStartTableUnknownField 是表里出现不认识的字：Place 是表名，Value 是那几个键，
+	// Origin 是「出处」那一句（没有出处留空）。
+	CannotStartTableUnknownField CannotStartKind = "table_unknown_field"
+	// CannotStartCategoriesEmpty 是错误分类表一条都没有：Place 是路径。
+	CannotStartCategoriesEmpty CannotStartKind = "categories_empty"
+	// CannotStartPasswdEmptyStep 是改密表里一条 step 都没有：Origin 是路径。
+	CannotStartPasswdEmptyStep CannotStartKind = "passwd_empty_step"
+	// CannotStartPasswdNoSignal 是改密模式下「密码过期」那一分类没有关键词：一个字都不带。
+	CannotStartPasswdNoSignal CannotStartKind = "passwd_no_signal"
+)
+
+// 条目层（改密提示词表、错误分类表、危险规则表各条里对不上的那一格）。
+const (
+	CannotStartPasswdStepNoKeywords CannotStartKind = "passwd_step_no_keywords"
+	CannotStartPasswdStepEmptyItem  CannotStartKind = "passwd_step_empty_item"
+	CannotStartPasswdStepBadValue   CannotStartKind = "passwd_step_bad_value"
+	CannotStartPasswdStepBadMax     CannotStartKind = "passwd_step_bad_max"
+	CannotStartPasswdCatNoName      CannotStartKind = "passwd_category_no_name"
+	CannotStartPasswdCatEmptyItem   CannotStartKind = "passwd_category_empty_item"
+	CannotStartKeywordCatNoName     CannotStartKind = "keyword_category_no_name"
+	CannotStartKeywordCatEmptyItem  CannotStartKind = "keyword_category_empty_item"
+	CannotStartDangerNoName         CannotStartKind = "danger_no_name"
+	CannotStartDangerBadLevel       CannotStartKind = "danger_bad_level"
+	CannotStartDangerExampleTooWide CannotStartKind = "danger_example_too_wide"
+	CannotStartDangerReasonTooWide  CannotStartKind = "danger_reason_too_wide"
+	CannotStartDangerBadEnabled     CannotStartKind = "danger_bad_enabled"
+	CannotStartDangerNoRegex        CannotStartKind = "danger_no_regex"
+	CannotStartDangerEmptyRegex     CannotStartKind = "danger_empty_regex"
+	CannotStartDangerBadRegex       CannotStartKind = "danger_bad_regex"
+)
+
+// CannotStartReason 是那一屏要装的全部事实：一个类别，加几个具名格。
 //
-// 三个格按类别取用，用不上的留空：Place 是位置（文件路径、哪一份表），Extra 是这一类别
-// 多要的一个原值（行号、键名、条目序号），Origin 是系统或解析器给的原话——工具不加工它。
+// 格子按类别取用，用不上的留零值：Head 是外壳句的类别常量（`message.HeadXxx`，没有外壳
+// 留空），Place 是位置（路径、表名、规则名、改密表的那一节），Index 是条目序号（从 1 起，
+// 0 表示这一类别不编号），Value 是这一类别要说的原值（当前值、键名、分类名），Limit 是与
+// Value 成对的那个数（上限），Origin 是系统或解析器给的原话——工具不加工它。
+// 句子怎么拼只住在 message。
 type CannotStartReason struct {
 	Kind   CannotStartKind
+	Head   string
 	Place  string
-	Extra  string
+	Index  int
+	Value  string
+	Limit  int
 	Origin string
 }

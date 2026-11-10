@@ -80,6 +80,11 @@ func cannotStartReasonBeforeLog(where string, reason contract.CannotStartReason)
 	return &contract.CannotStart{Where: where, NoLog: true, Reason: reason}
 }
 
+// cannotStartReason 排一屏「起不来」：原因按类别交上去，句子由 message 成形（ADR-0044）。
+func cannotStartReason(where string, reason contract.CannotStartReason) *contract.CannotStart {
+	return &contract.CannotStart{Where: where, Reason: reason}
+}
+
 // cannotStartScreen 是「起不来」屏的唯一拼装处：外壳句由 message 加（ADR-0028 决定一）。
 //
 // 它只交事实（哪一环、哪句话、带不带日志行），那一屏由塔尖向 message 要——契约里
