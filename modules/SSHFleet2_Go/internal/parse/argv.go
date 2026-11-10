@@ -8,7 +8,7 @@ import (
 
 	"sshfleet2/internal/archive"
 	"sshfleet2/internal/contract"
-	"sshfleet2/internal/message"
+	
 )
 
 // 认命令行：20 条选项、取值、默认值、认出五种模式。
@@ -164,7 +164,7 @@ func buildPlan(cfg *settings, s scanned) (*contract.Plan, *contract.KeyRun, *con
 		}
 	} else {
 		p.Problems = append(p.Problems, contract.Problem{
-			Kind: contract.ProblemBadValue, Option: "-n", Raw: numberRaw, Detail: message.SubjectConcurrency,
+			Kind: contract.ProblemBadValue, Option: "-n", Raw: numberRaw, Subject: contract.SubjectConcurrency,
 		})
 	}
 	if n, ok := positiveValue(timeoutRaw); ok {
@@ -175,7 +175,7 @@ func buildPlan(cfg *settings, s scanned) (*contract.Plan, *contract.KeyRun, *con
 		}
 	} else {
 		p.Problems = append(p.Problems, contract.Problem{
-			Kind: contract.ProblemBadValue, Option: "-t", Raw: timeoutRaw, Detail: message.SubjectTimeout,
+			Kind: contract.ProblemBadValue, Option: "-t", Raw: timeoutRaw, Subject: contract.SubjectTimeout,
 		})
 	}
 	if n, ok := positiveValue(connectTimeoutRaw); ok {
@@ -184,7 +184,7 @@ func buildPlan(cfg *settings, s scanned) (*contract.Plan, *contract.KeyRun, *con
 		}
 	} else {
 		p.Problems = append(p.Problems, contract.Problem{
-			Kind: contract.ProblemBadValue, Option: "-T", Raw: connectTimeoutRaw, Detail: message.SubjectConnect,
+			Kind: contract.ProblemBadValue, Option: "-T", Raw: connectTimeoutRaw, Subject: contract.SubjectConnect,
 		})
 	}
 
@@ -223,10 +223,8 @@ func buildPlan(cfg *settings, s scanned) (*contract.Plan, *contract.KeyRun, *con
 	// 纸上不留第二个形态——闸门拿到的就是要去判的那个值。
 	p.Task.Path = strings.TrimSpace(vals["--path"])
 	if len(modes) > 1 {
-		p.Problems = append(p.Problems, contract.Problem{
-			Kind:   contract.ProblemMultiMode,
-			Detail: strings.Join(modes, "、"),
-		})
+		// 哪几个模式一起给，闸门不看：零个与多个到纸面时已经互斥，它只认这条事实。
+		p.Problems = append(p.Problems, contract.Problem{Kind: contract.ProblemMultiMode})
 	}
 	switch mode {
 	case contract.ModeCommand:

@@ -124,10 +124,23 @@ const (
 
 // Problem 一条事实：哪个选项、原值是什么、哪一处对不上。
 //
-// 它不带结论，也不带句子——判「这条不过」是闸门的活，拼话是 message 的活。
+// 它不带结论，也不带句子——判「这条不过」是闸门的活，拼话是 message 的活。第四格装的是
+// **名词类别**（这一格说的是谁），不是一句拼好的话：称呼怎么写归 message（ADR-0044）。
 type Problem struct {
-	Kind   ProblemKind
-	Option string // 选项名，例如 -n；冲突那一类装的是两个开关名，空格分开；多余参数装的是它跟在谁后面
-	Raw    string // 命令行上给的原值，没给值时为空；多余参数装的是那几段按原样拼起来
-	Detail string // 一句事实说明，例如「必须是正整数」
+	Kind    ProblemKind
+	Option  string         // 选项名，例如 -n；冲突那一类装的是两个开关名，空格分开；多余参数装的是它跟在谁后面
+	Raw     string         // 命令行上给的原值，没给值时为空；多余参数装的是那几段按原样拼起来
+	Subject ProblemSubject // 取值不对那一类说的是谁；其余类别留空
 }
+
+// ProblemSubject 是「这一格说的是谁」：三个数值选项各占一格。
+//
+// 它替代了原来那格自由字符串（`Detail`）——那一格能装任何一句拼好的话，是「站里拼话」的
+// 最后一条暗道（ADR-0044）。
+type ProblemSubject string
+
+const (
+	SubjectConcurrency ProblemSubject = "concurrency"
+	SubjectTimeout     ProblemSubject = "timeout"
+	SubjectConnect     ProblemSubject = "connect_timeout"
+)

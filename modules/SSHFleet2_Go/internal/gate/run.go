@@ -225,7 +225,7 @@ func argumentRefusal(p *contract.Plan) Refusal {
 		// 表外解释器：解析站拼不出下发行，只记了一条事实，这里下结论。
 		for _, pr := range p.Problems {
 			if pr.Kind == contract.ProblemInterpreterUnsupported {
-				return refuse(message.RefuseAnswerUnsupportedInterpreter(pr.Detail))
+				return refuse(message.RefuseAnswerUnsupportedInterpreter(pr.Raw))
 			}
 		}
 		// 长度：量的是**整条下发行**（老版上限 98304 字节，写死不开放配置）。
@@ -285,7 +285,7 @@ func checkRemotePath(flag, what, value string, needDirSlash bool) Refusal {
 func valueRefusal(p *contract.Plan) Refusal {
 	for _, pr := range p.Problems {
 		if pr.Kind == contract.ProblemBadValue {
-			return refuse(message.RefuseBadPositiveInt(pr.Option, pr.Detail, pr.Raw))
+			return refuse(message.RefuseBadPositiveInt(pr.Option, pr.Subject, pr.Raw))
 		}
 	}
 	return nil
