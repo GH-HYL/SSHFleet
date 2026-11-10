@@ -37,7 +37,7 @@ func readManifest(raw string) (manifest, *contract.CannotStart) {
 		return manifest{}, cannotStart("nodelist", "", manifestSyntaxError(raw, inline, err))
 	}
 	if len(rows) == 0 {
-		return manifest{}, cannotStart("nodelist", "", message.NoNodeParsed)
+		return manifest{}, cannotStartReason("nodelist", contract.CannotStartReason{Kind: contract.CannotStartNoNodeParsed})
 	}
 
 	m := manifest{rows: rows, inline: inline}
@@ -49,10 +49,10 @@ func readManifest(raw string) (manifest, *contract.CannotStart) {
 			m.rows = rows[1:]
 			m.headerDropped = true
 			if len(m.rows) == 0 {
-				return manifest{}, cannotStart("nodelist", "", message.NoNodeParsed)
+				return manifest{}, cannotStartReason("nodelist", contract.CannotStartReason{Kind: contract.CannotStartNoNodeParsed})
 			}
 		} else {
-			return manifest{}, cannotStart("nodelist", "", message.NoNodeParsed)
+			return manifest{}, cannotStartReason("nodelist", contract.CannotStartReason{Kind: contract.CannotStartNoNodeParsed})
 		}
 	}
 	return m, nil
@@ -67,7 +67,7 @@ func manifestText(raw string) (string, bool, *contract.CannotStart) {
 		// 老版这里也是把空串当路径交给系统，报的就是系统那一句
 		// （`读取内容时发生错误: open : no such file or directory`）。照办，不另写一句话。
 		_, err := os.ReadFile(raw)
-		return "", false, cannotStart("nodelist", "", readFailure(err))
+		return "", false, cannotStartReason("nodelist", contract.CannotStartReason{Kind: contract.CannotStartManifestRead, Origin: err.Error()})
 	}
 
 	info, statErr := os.Stat(raw)

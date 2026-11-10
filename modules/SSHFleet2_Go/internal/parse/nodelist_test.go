@@ -2,6 +2,7 @@ package parse
 
 import (
 	"sshfleet2/internal/contract"
+	"sshfleet2/internal/message"
 
 	"strings"
 	"testing"
@@ -79,8 +80,8 @@ func TestReadManifestRejectsMissingF(t *testing.T) {
 	if fail.Where != "nodelist" {
 		t.Fatalf("环节标签应当是 nodelist，拿到 %q", fail.Where)
 	}
-	if !strings.Contains(fail.Body, "读取内容时发生错误:") {
-		t.Fatalf("话不对：%s", fail.Body)
+	if say := message.CannotStartText(*fail); !strings.Contains(say, "读取内容时发生错误:") {
+		t.Fatalf("话不对：%s", say)
 	}
 }
 

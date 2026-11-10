@@ -55,6 +55,17 @@ const (
 	CannotStartPasswdNoSignal CannotStartKind = "passwd_no_signal"
 )
 
+// 解析站其余十四处（03 号单）：参数用错、清单读不到、凭据预检不过三族。
+const (
+	// CannotStartExtraArgs 是多出来的位置参数：Value 是它跟在谁后面（认不出留空），
+	// Origin 是那几段按原样拼起来。
+	CannotStartExtraArgs CannotStartKind = "cli_extra_args"
+	// CannotStartNoNodeParsed 是一条节点都没解析出来：一个字都不带。
+	CannotStartNoNodeParsed CannotStartKind = "nodelist_empty"
+	// CannotStartManifestRead 是读清单这一步栽了：Origin 是系统原话。
+	CannotStartManifestRead CannotStartKind = "nodelist_read"
+)
+
 // 条目层（改密提示词表、错误分类表、危险规则表各条里对不上的那一格）。
 const (
 	CannotStartPasswdStepNoKeywords CannotStartKind = "passwd_step_no_keywords"
