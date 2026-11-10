@@ -81,7 +81,7 @@ func (c *client) runAnswer(ctx context.Context, p *contract.Plan, res *contract.
 	if outcome.canceled {
 		reason = abortMessage(true)
 	}
-	res.ErrorText = c.mergeBanner(appendText(deref(f.errText), reason))
+	res.ErrorText = c.noteBeforeHint(deref(f.errText), reason)
 	// 末尾这一段逐条列出没送出去的：被按停不等于那些条已经送出去了，中断时照列（老版同）。
 	res.ErrorText = appendText(res.ErrorText, message.AnswerMissedNote(answers, missed))
 }

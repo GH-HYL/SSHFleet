@@ -51,6 +51,10 @@ func (c *client) passwd(ctx context.Context, p *contract.Plan, res *contract.Nod
 	close(send)
 	hook.Flush()
 
+	// 见过入场信号这一格只服务分类：见过的会话里，那句「密码必须马上改」是前提而不是失败
+	// 原因，不该拿它认分类（ADR-0005 修订段）。判定那一步在 `visit`，事实从这里递出去。
+	c.expiryPromptSeen = hook.sawEnter()
+
 	// 采集全文与「最后一次喂入之后」那一段都要脱敏：远端关回显的时机不由我们定，
 	// 密码回显可能落在任意一处。
 	secrets := c.secrets(p)
@@ -85,7 +89,7 @@ func (c *client) passwd(ctx context.Context, p *contract.Plan, res *contract.Nod
 		// 次序照老版：原文 → 中断报文 → 服务端提示在最后。上一段只有「无退出码」那条路
 		// 把提示接过一次，正好是这一档——从原文重拼一遍，别让提示卡在报文前面。
 		if outcome.err != nil && f.exitCode == nil {
-			res.ErrorText = c.mergeBanner(appendText(deref(f.errText), abortMessage(true)))
+			res.ErrorText = c.noteBeforeHint(deref(f.errText), abortMessage(true))
 		} else {
 			res.ErrorText = appendText(res.ErrorText, abortMessage(true))
 		}
