@@ -330,8 +330,8 @@ func rowItemText(r contract.CannotStartReason) string {
 
 // 凭据预检那三种「文件怎么不对」：下一步各是一件不同的事，所以不合成一句。
 const (
-	credLabelMissing = "不存在（打开加密时这里填的是凭据文件的绝对路径，不加密时才是密码本身）"
-	credLabelBadCipher = "不是有效的密文，或主密钥不匹配（先用 --convert-secret 重新转换）"
+	credLabelMissing    = "不存在（打开加密时这里填的是凭据文件的绝对路径，不加密时才是密码本身）"
+	credLabelBadCipher  = "不是有效的密文，或主密钥不匹配（先用 --convert-secret 重新转换）"
 	credLabelUnreadable = "无法读取"
 )
 
