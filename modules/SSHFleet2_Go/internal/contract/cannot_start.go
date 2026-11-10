@@ -66,6 +66,48 @@ const (
 	CannotStartManifestRead CannotStartKind = "nodelist_read"
 )
 
+// 材料自检与读清单（03 号单）：`-s` 那份脚本、`-d` 的 `-p` 那个本机目录、`-f` 那份清单，
+// 外加读清单这一步。Place 一律是那一格的原值（路径），Origin 是系统原话。
+//
+// `-f` 那三句在自检与读清单两处各写过一遍，现在合成一条——改口径只改一处。
+const (
+	// CannotStartScriptIsDir 是 `-s` 指到了目录：Place 是那个路径。
+	CannotStartScriptIsDir CannotStartKind = "cli_script_is_dir"
+	// CannotStartScriptUnreadable 是 `-s` 的脚本读不到：Place 是路径，Origin 是系统原话。
+	CannotStartScriptUnreadable CannotStartKind = "cli_script_unreadable"
+	// CannotStartScriptEmpty 是 `-s` 的脚本是空文件：Place 是路径。
+	CannotStartScriptEmpty CannotStartKind = "cli_script_empty"
+	// CannotStartScriptBinary 是 `-s` 的脚本里有 NUL：Place 是路径。
+	CannotStartScriptBinary CannotStartKind = "cli_script_binary"
+	// CannotStartScriptNotUTF8 是 `-s` 的脚本不是 UTF-8：Place 是路径。
+	CannotStartScriptNotUTF8 CannotStartKind = "cli_script_not_utf8"
+
+	// CannotStartDownloadPathUnreadable 是下载模式下 `-p` 的本机目录读不到：Place 是路径，
+	// Origin 是系统原话。
+	CannotStartDownloadPathUnreadable CannotStartKind = "cli_download_path_unreadable"
+	// CannotStartDownloadPathNotDir 是下载模式下 `-p` 指到了文件：Place 是路径。
+	CannotStartDownloadPathNotDir CannotStartKind = "cli_download_path_not_dir"
+
+	// CannotStartCSVUnreadable 是 `-f` 的清单文件读不到：Place 是路径，Origin 是系统原话。
+	CannotStartCSVUnreadable CannotStartKind = "cli_csv_unreadable"
+	// CannotStartCSVEmpty 是 `-f` 的清单文件是空的：Place 是路径。
+	CannotStartCSVEmpty CannotStartKind = "cli_csv_empty"
+	// CannotStartCSVBinary 是 `-f` 的清单是二进制：Place 是路径。
+	CannotStartCSVBinary CannotStartKind = "cli_csv_binary"
+
+	// CannotStartManifestInlineNewline 是 `-f` 的内联值里带了换行：一个字都不带。
+	CannotStartManifestInlineNewline CannotStartKind = "nodelist_inline_newline"
+	// CannotStartManifestPathMissing 是 `-f` 那格既不是文件、也不像一条记录，而系统
+	// 又说不出别的：Place 是那个原值。系统报得出原因时走下一条。
+	CannotStartManifestPathMissing CannotStartKind = "nodelist_path_missing"
+	// CannotStartManifestStatFailed 同上，但原因取系统那一句：Origin 是系统原话。
+	CannotStartManifestStatFailed CannotStartKind = "nodelist_stat_failed"
+	// CannotStartManifestSyntaxInline 是内联那条记录的 CSV 语法错：Index 是行号。
+	CannotStartManifestSyntaxInline CannotStartKind = "nodelist_syntax_inline"
+	// CannotStartManifestSyntaxFile 是清单文件的 CSV 语法错：Place 是路径，Index 是行号。
+	CannotStartManifestSyntaxFile CannotStartKind = "nodelist_syntax_file"
+)
+
 // 条目层（改密提示词表、错误分类表、危险规则表各条里对不上的那一格）。
 const (
 	CannotStartPasswdStepNoKeywords CannotStartKind = "passwd_step_no_keywords"

@@ -2,7 +2,6 @@ package parse
 
 import (
 	"bytes"
-	"fmt"
 	"os"
 	"unicode/utf8"
 
@@ -26,31 +25,36 @@ func checkMaterial(p *contract.Plan, given map[string]bool, vals map[string]stri
 	if script := vals["--script"]; script != "" {
 		info, err := os.Stat(script)
 		if err == nil && info.IsDir() {
-			return materialFail(message.ProblemHint(
-				fmt.Sprintf("-s 参数指定的路径是目录，不是脚本文件：%s", script),
-				"请指向一个脚本文件"))
+			return materialReason(contract.CannotStartReason{
+				Kind:  contract.CannotStartScriptIsDir,
+				Place: script,
+			})
 		}
 		data, rerr := os.ReadFile(script)
 		if rerr != nil {
-			return materialFail(message.Problem(
-				fmt.Sprintf("-s 参数指定的脚本文件读不到：%s", script),
-				message.SystemReason(rerr),
-				"请检查文件是否存在、当前用户有没有读权限"))
+			return materialReason(contract.CannotStartReason{
+				Kind:   contract.CannotStartScriptUnreadable,
+				Place:  script,
+				Origin: message.SystemReason(rerr),
+			})
 		}
 		if len(data) == 0 {
-			return materialFail(message.ProblemHint(
-				fmt.Sprintf("-s 参数指定的脚本文件为空：%s", script),
-				"请先写入内容再执行"))
+			return materialReason(contract.CannotStartReason{
+				Kind:  contract.CannotStartScriptEmpty,
+				Place: script,
+			})
 		}
 		if bytes.IndexByte(data, 0) >= 0 {
-			return materialFail(message.ProblemHint(
-				fmt.Sprintf("-s 参数指定的脚本是二进制文件：%s", script),
-				"请换一个文本格式的脚本"))
+			return materialReason(contract.CannotStartReason{
+				Kind:  contract.CannotStartScriptBinary,
+				Place: script,
+			})
 		}
 		if !utf8ValidExceptBOM(data) {
-			return materialFail(message.ProblemHint(
-				fmt.Sprintf("-s 参数指定的脚本不是 UTF-8 编码：%s", script),
-				"请把脚本转成 UTF-8 后再执行"))
+			return materialReason(contract.CannotStartReason{
+				Kind:  contract.CannotStartScriptNotUTF8,
+				Place: script,
+			})
 		}
 		if p.Task.Script != nil {
 			// 正文整备只此一处（剥 BOM、去首尾空白）：危险检测、长度判据与实际下发
@@ -63,15 +67,17 @@ func checkMaterial(p *contract.Plan, given map[string]bool, vals map[string]stri
 	if vals["--download"] != "" && vals["--path"] != "" {
 		info, err := os.Stat(vals["--path"])
 		if err != nil {
-			return materialFail(message.Problem(
-				fmt.Sprintf("下载模式：-p 参数指定的本地目录读不到：%s", vals["--path"]),
-				message.SystemReason(err),
-				"这个目录要在本机上先建好，工具不会替你建"))
+			return materialReason(contract.CannotStartReason{
+				Kind:   contract.CannotStartDownloadPathUnreadable,
+				Place:  vals["--path"],
+				Origin: message.SystemReason(err),
+			})
 		}
 		if !info.IsDir() {
-			return materialFail(message.ProblemHint(
-				fmt.Sprintf("下载模式：-p 参数指定的本地路径不是目录：%s", vals["--path"]),
-				"这个目录要在本机上先建好，工具不会替你建"))
+			return materialReason(contract.CannotStartReason{
+				Kind:  contract.CannotStartDownloadPathNotDir,
+				Place: vals["--path"],
+			})
 		}
 	}
 
@@ -81,20 +87,23 @@ func checkMaterial(p *contract.Plan, given map[string]bool, vals map[string]stri
 		if info, err := os.Stat(csv); err == nil && !info.IsDir() {
 			data, rerr := os.ReadFile(csv)
 			if rerr != nil {
-				return materialFail(message.Problem(
-					fmt.Sprintf("-f 参数指定的 CSV 文件读不到：%s", csv),
-					message.SystemReason(rerr),
-					"请检查文件是否存在、当前用户有没有读权限"))
+				return materialReason(contract.CannotStartReason{
+					Kind:   contract.CannotStartCSVUnreadable,
+					Place:  csv,
+					Origin: message.SystemReason(rerr),
+				})
 			}
 			if len(data) == 0 {
-				return materialFail(message.ProblemHint(
-					fmt.Sprintf("-f 参数指定的 CSV 文件为空：%s", csv),
-					"一行写一台机器，只写 IP 就能跑（端口、用户名、密码走配置）"))
+				return materialReason(contract.CannotStartReason{
+					Kind:  contract.CannotStartCSVEmpty,
+					Place: csv,
+				})
 			}
 			if bytes.IndexByte(data, 0) >= 0 {
-				return materialFail(message.ProblemHint(
-					fmt.Sprintf("-f 参数指定的清单是二进制文件：%s", csv),
-					"清单要是文本文件（CSV）"))
+				return materialReason(contract.CannotStartReason{
+					Kind:  contract.CannotStartCSVBinary,
+					Place: csv,
+				})
 			}
 		}
 	}
@@ -104,7 +113,16 @@ func checkMaterial(p *contract.Plan, given map[string]bool, vals map[string]stri
 	return nil
 }
 
+// materialReason 按「类别 ＋ 参数」交上去，外壳句由 `message` 加（ADR-0044）。
+func materialReason(reason contract.CannotStartReason) *contract.CannotStart {
+	reason.Head = message.HeadCompliance
+	return cannotStartReason("cli", reason)
+}
+
 // materialFail 套上老版那句外壳，再按「起不来」排屏。外壳句住在 `message`，不在这里抄一份。
+//
+// 迁移期留着的口子：`-a` 代填、改密取值、读清单自检那几处还没搬（03 号单的后半），
+// 搬完一处就少一个调用点，`Body` 删掉之前必然清零。
 func materialFail(body string) *contract.CannotStart {
 	return cannotStart("cli", message.HeadCompliance, body)
 }

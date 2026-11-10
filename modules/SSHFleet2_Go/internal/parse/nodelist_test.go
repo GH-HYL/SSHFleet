@@ -67,8 +67,8 @@ func TestReadManifestRejectsEmptyFile(t *testing.T) {
 	if fail == nil {
 		t.Fatal("空文件应当起不来")
 	}
-	if !strings.Contains(fail.Body, "CSV 文件为空") {
-		t.Fatalf("话不对：%s", fail.Body)
+	if say := message.CannotStartText(*fail); !strings.Contains(say, "CSV 文件为空") {
+		t.Fatalf("话不对：%s", say)
 	}
 }
 
@@ -91,11 +91,12 @@ func TestReadManifestRejectsNeitherFileNorRecord(t *testing.T) {
 	if fail == nil {
 		t.Fatal("应当起不来")
 	}
-	if !strings.Contains(fail.Body, "-f 参数指定的文件读不到：这不是文件也不是记录") {
-		t.Fatalf("话不对：%s", fail.Body)
+	say := message.CannotStartText(*fail)
+	if !strings.Contains(say, "-f 参数指定的文件读不到：这不是文件也不是记录") {
+		t.Fatalf("话不对：%s", say)
 	}
-	if !strings.Contains(fail.Body, "提示：") {
-		t.Fatalf("没给去路：%s", fail.Body)
+	if !strings.Contains(say, "提示：") {
+		t.Fatalf("没给去路：%s", say)
 	}
 }
 
@@ -104,8 +105,8 @@ func TestReadManifestRejectsNewlineInInline(t *testing.T) {
 	if fail == nil {
 		t.Fatal("内联值里有换行应当起不来")
 	}
-	if !strings.Contains(fail.Body, "内联值里不能有换行") {
-		t.Fatalf("话不对：%s", fail.Body)
+	if say := message.CannotStartText(*fail); !strings.Contains(say, "内联值里不能有换行") {
+		t.Fatalf("话不对：%s", say)
 	}
 }
 
@@ -118,8 +119,8 @@ func TestReadManifestReportsSyntaxError(t *testing.T) {
 	if fail == nil {
 		t.Fatal("引号不配对应当起不来")
 	}
-	if !strings.Contains(fail.Body, "CSV 的双引号要成对出现") {
-		t.Fatalf("话不对：%s", fail.Body)
+	if say := message.CannotStartText(*fail); !strings.Contains(say, "CSV 的双引号要成对出现") {
+		t.Fatalf("话不对：%s", say)
 	}
 }
 
