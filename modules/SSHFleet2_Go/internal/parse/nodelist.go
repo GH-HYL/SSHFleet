@@ -186,9 +186,14 @@ func looksLikeInlineNode(raw string) bool {
 	return isIPv4(strings.TrimSpace(rows[0][0]))
 }
 
-// isIPv4 严格认 IPv4 字面量：四段、每段 0-255、不认前导零以外的花样。
+// isIPv4 严格认 IPv4 字面量：四段、每段 0-255、不认前导零。
 //
-// 与老版同一条判据（旧版正则不校验每段范围，已修正）。
+// 前导零这一条 2026-11-10 收严（审计 06-H1）：`010.0.0.1` 不是合法 IP，老版
+// `netip.ParseAddr` 当场拒；这份手写副本原来按十进制读，把它收成合法地址，再当内联
+// 记录送进凭据预检。第一列怎么判与「这一串算不算内联记录」无关——先认 IP。
+//
+// 掩码包里那份同源副本还在，按盘点表 4.3 的两步走：这里先修一处，等判据叶子包立住
+// 再并过去，不在这轮重复改第二份。
 func isIPv4(s string) bool {
 	if s == "" {
 		return false
@@ -199,6 +204,10 @@ func isIPv4(s string) bool {
 	}
 	for _, p := range parts {
 		if p == "" || len(p) > 3 {
+			return false
+		}
+		// 前导零不算：`010` 与 `10` 是两回事，含糊就当场报错，不替使用者猜。
+		if len(p) > 1 && p[0] == '0' {
 			return false
 		}
 		n := 0

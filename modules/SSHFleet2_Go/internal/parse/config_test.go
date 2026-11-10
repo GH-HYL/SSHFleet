@@ -69,6 +69,30 @@ func TestParseRawConfigRejects(t *testing.T) {
 	}
 }
 
+// 同节同名键写两次：当场报错，不静默取后值（2026-11-10，审计 06-H3）。
+// 注释一直写着「遇到就报错」，代码却是后值盖前值、还退 0——这里把注释兑现。
+func TestParseRejectsDuplicateKeys(t *testing.T) {
+	_, err := tokenize([]byte("[account]\nport = 22\nport = 2201\n"))
+	if err == nil {
+		t.Fatal("同节同名键写两次应当报错，不取后值")
+	}
+	if !strings.Contains(err.Error(), "写了两次") {
+		t.Fatalf("报错该说清哪个键写了两次：%v", err)
+	}
+
+	// 数组表各条目键名当然重复：`[[category]]` 两条各有 name，那不叫冲突。
+	arr := "[[category]]\nname = \"a\"\n[[category]]\nname = \"b\"\n"
+	if _, err := tokenize([]byte(arr)); err != nil {
+		t.Fatalf("数组表各条目的同名键不该报错：%v", err)
+	}
+
+	// 不同节的同名键也不冲突。
+	other := "[account]\nport = 22\n[execution]\nport = 2201\n"
+	if _, err := tokenize([]byte(other)); err != nil {
+		t.Fatalf("不同节的同名键不该报错：%v", err)
+	}
+}
+
 // 字符串键必须带引号：裸值（password = /tmp/x）该被拒，带引号的原样取出。
 // 老版用 TOML 库，裸值当场是语法错——这条口径不能松。
 func TestStringOfRequiresQuotes(t *testing.T) {

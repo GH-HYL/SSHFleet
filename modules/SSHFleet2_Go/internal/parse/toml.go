@@ -2,6 +2,7 @@ package parse
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -31,6 +32,10 @@ func tokenize(data []byte) ([]tomlLine, error) {
 	var out []tomlLine
 	section := ""
 	isArray := false
+	// 重复键：同一个表里同一个键第二次出现即报错，不取后值（审计 06-H3）。
+	// 数组表按「第几条」分作用域——`[[category]]` 各条目键名当然重复，那不叫冲突。
+	seenKeys := map[string]map[string]bool{}
+	arraySeq := map[string]int{}
 	for i := 0; i < len(lines); i++ {
 		trimmed := strings.TrimSpace(stripComment(lines[i]))
 		if trimmed == "" {
@@ -41,6 +46,9 @@ func tokenize(data []byte) ([]tomlLine, error) {
 				return nil, fmt.Errorf("第 %d 行的节名是空的", i+1)
 			}
 			section, isArray = name, array
+			if array {
+				arraySeq[name]++
+			}
 			out = append(out, tomlLine{section: section, array: isArray})
 			continue
 		}
@@ -55,6 +63,20 @@ func tokenize(data []byte) ([]tomlLine, error) {
 		if section == "" {
 			return nil, fmt.Errorf("第 %d 行的键 %s 出现在任何节之前", i+1, key)
 		}
+		scope := section
+		where := "[" + section + "]"
+		if isArray {
+			scope = section + "#" + strconv.Itoa(arraySeq[section])
+			where = fmt.Sprintf("[[%s]] 第 %d 条", section, arraySeq[section])
+		}
+		name := unquote(key)
+		if seenKeys[scope] == nil {
+			seenKeys[scope] = map[string]bool{}
+		}
+		if seenKeys[scope][name] {
+			return nil, fmt.Errorf("第 %d 行的键 %s 在 %s 里写了两次", i+1, name, where)
+		}
+		seenKeys[scope][name] = true
 		value := strings.TrimSpace(trimmed[eq+1:])
 		// 跨行数组：按引号外的方括号配平来吃，不能「见到 ] 就收」——正则里的
 		// [a-zA-Z] 也带 ]，照那个判会把数组腰斩，后面每一行都成了野行。
@@ -176,7 +198,10 @@ func splitArray(raw string) []string {
 // rawConfig 配置原文表：节名 → （键名 → 原文值）。只用于单值配置，不用于数组表。
 type rawConfig map[string]map[string]string
 
-// rawView 把行摊成原文表：同名节的单值键后值盖前值（出厂配置里没有重复键）。
+// rawView 把行摊成原文表：同名节的单值键并进同一张表。
+//
+// 重复键在这里不会再出现——`tokenize` 已经当场报错退回了（2026-11-10）。写成后值盖
+// 前值的时候，这个函数看起来像「允许重复」，实际是让配置写坏也能跑、还退 0。
 //
 // 值存**原文**（引号留在里面）：字符串要不要引号是取值时按类型判的事（`stringOf`），
 // 这里提前剥掉就把「写没写引号」这个事实抹了。
