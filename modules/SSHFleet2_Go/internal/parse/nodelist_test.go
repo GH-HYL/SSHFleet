@@ -236,3 +236,32 @@ func TestRunFillsNodesAndNotices(t *testing.T) {
 		t.Fatalf("「执行资源」那一格不对：%q", plan.Resources.Manifest)
 	}
 }
+
+// —— 前导零（2026-11-10，审计 06-H1）——
+
+// 前导零不是合法 IPv4：`010` 与 `10` 是两回事，判据不替使用者猜。
+func TestIsIPv4RejectsLeadingZero(t *testing.T) {
+	for _, bad := range []string{"010.0.0.1", "10.00.0.1", "10.0.0.01", "10.0.0", "10.0.0.256"} {
+		if isIPv4(bad) {
+			t.Errorf("%q 不该认成合法 IPv4", bad)
+		}
+	}
+	for _, ok := range []string{"10.0.0.1", "0.0.0.0", "127.0.0.1", "255.255.255.255"} {
+		if !isIPv4(ok) {
+			t.Errorf("%q 应当认成合法 IPv4", ok)
+		}
+	}
+}
+
+// 带前导零的那串不能被当内联记录收下：收下就送进凭据预检、拿去连机器了。
+// 起不来即可——报的是「文件读不到」还是「IP 不对」不影响这条判据，
+// 要紧的是它没走进内联那条路。
+func TestReadManifestRejectsLeadingZeroInline(t *testing.T) {
+	m, fail := readManifest("010.0.0.1,22,root,pw")
+	if fail == nil {
+		t.Fatalf("前导零的记录不该被收下：inline=%v rows=%v", m.inline, m.rows)
+	}
+	if m.inline {
+		t.Fatal("更不该判成内联记录——那正是 06-H1 的那条退步")
+	}
+}
