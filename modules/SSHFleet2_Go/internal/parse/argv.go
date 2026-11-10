@@ -465,10 +465,17 @@ func keyRunOf(s scanned) (*contract.KeyRun, *contract.CannotStart) {
 		return nil, cannotStartReason("cli", contract.CannotStartReason{Kind: contract.CannotStartExtraArgs, Value: s.extraOwner, Origin: strings.Join(s.extras, " ")})
 	}
 	if len(tools) > 1 {
-		return nil, cannotStart("cli", message.HeadCompliance, message.KeyToolNeedAlone(strings.Join(tools, "、")))
+		return nil, cliReason(contract.CannotStartReason{
+			Kind:  contract.CannotStartKeyToolAlone,
+			Value: strings.Join(tools, "、"),
+		})
 	}
 	if given := batchParamsOf(s); len(given) > 0 {
-		return nil, cannotStart("cli", message.HeadCompliance, message.KeyToolWithBatch(tools[0], strings.Join(given, "、")))
+		return nil, cliReason(contract.CannotStartReason{
+			Kind:  contract.CannotStartKeyToolWithBatch,
+			Place: tools[0],
+			Value: strings.Join(given, "、"),
+		})
 	}
 	which := contract.KeyToolGen
 	switch tools[0] {

@@ -16,7 +16,7 @@ func TestReadManifestFromFile(t *testing.T) {
 
 	m, fail := readManifest(path)
 	if fail != nil {
-		t.Fatalf("读不成器：%s", fail.Body)
+		t.Fatalf("读不成器：%s", message.CannotStartText(*fail))
 	}
 	if len(m.rows) != 2 {
 		t.Fatalf("应当读到两行，拿到 %d 行：%v", len(m.rows), m.rows)
@@ -32,7 +32,7 @@ func TestReadManifestFromFile(t *testing.T) {
 func TestReadManifestFromInlineRecord(t *testing.T) {
 	m, fail := readManifest("10.0.0.9,22,root,pw")
 	if fail != nil {
-		t.Fatalf("读不成器：%s", fail.Body)
+		t.Fatalf("读不成器：%s", message.CannotStartText(*fail))
 	}
 	if !m.inline {
 		t.Fatal("内联记录应当判成 inline")
@@ -49,7 +49,7 @@ func TestReadManifestDropsHeader(t *testing.T) {
 
 	m, fail := readManifest(path)
 	if fail != nil {
-		t.Fatalf("读不成器：%s", fail.Body)
+		t.Fatalf("读不成器：%s", message.CannotStartText(*fail))
 	}
 	if len(m.rows) != 1 {
 		t.Fatalf("表头没被移除：%v", m.rows)
@@ -131,7 +131,7 @@ func TestBuildNodesFallsBackToConfig(t *testing.T) {
 
 	nodes, _, fail := buildNodes([][]string{{"10.0.0.1"}}, cfg, false)
 	if fail != nil {
-		t.Fatalf("不该起不来：%s", fail.Body)
+		t.Fatalf("不该起不来：%s", message.CannotStartText(*fail))
 	}
 	if len(nodes) != 1 {
 		t.Fatalf("应当补出一台：%v", nodes)
@@ -147,7 +147,7 @@ func TestBuildNodesPrefersListColumns(t *testing.T) {
 
 	nodes, _, fail := buildNodes([][]string{{"10.0.0.2", "2222", "root", "list-pw"}}, cfg, false)
 	if fail != nil {
-		t.Fatalf("不该起不来：%s", fail.Body)
+		t.Fatalf("不该起不来：%s", message.CannotStartText(*fail))
 	}
 	got := nodes[0]
 	if got.Port != "2222" || got.User != "root" || got.Password != "list-pw" {
@@ -199,7 +199,7 @@ func TestBuildNodesWarnsUnusedKey(t *testing.T) {
 
 	_, notices, fail := buildNodes([][]string{{"10.0.0.1", "22", "root", "pw", "/k/id_rsa"}}, cfg, false)
 	if fail != nil {
-		t.Fatalf("加 -k 之外不该起不来：%s", fail.Body)
+		t.Fatalf("加 -k 之外不该起不来：%s", message.CannotStartText(*fail))
 	}
 	// 纸上只装种类与事实：句子由 message 照 Kind 成形（`TestUnusedKeyNotice` 管那句话）。
 	if len(notices) != 1 || notices[0].Kind != contract.NoticeUnusedKey {
@@ -218,7 +218,7 @@ func TestRunFillsNodesAndNotices(t *testing.T) {
 
 	_, plan, _, fail := Run([]string{"sshfleet2", "-f", "nodes.csv", "-c", "uptime"}, "9.9.9")
 	if fail != nil {
-		t.Fatalf("不该起不来：%s", fail.Body)
+		t.Fatalf("不该起不来：%s", message.CannotStartText(*fail))
 	}
 	if plan == nil {
 		t.Fatal("没交回纸")

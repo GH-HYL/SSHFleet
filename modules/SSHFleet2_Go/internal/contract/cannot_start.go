@@ -155,6 +155,37 @@ const (
 	CannotStartRowCredConfigKeyPassword CannotStartKind = "row_cred_config_key_password"
 )
 
+// 提交前那几处「取值不对」（03 号单最后一批）：代填 `-a`、改密 `--change-password`、
+// 密钥命令与批量参数并行。
+//
+// 这三族的句子本来就住 `message`（answer.go／passwd.go／keytool.go），站里只是把它塞进纸；
+// 现在纸只装类别与参数，模板不动窝，由 `message.CannotStartText` 转派过去。
+const (
+	CannotStartAnswerFileUnreadable  CannotStartKind = "answer_file_unreadable"
+	CannotStartAnswerFileBinary      CannotStartKind = "answer_file_binary"
+	CannotStartAnswerInlineNewline   CannotStartKind = "answer_inline_newline"
+	CannotStartAnswerGone            CannotStartKind = "answer_gone"
+	CannotStartAnswerSyntax          CannotStartKind = "answer_syntax"
+	CannotStartAnswerRowInvalid      CannotStartKind = "answer_row_invalid"
+	CannotStartAnswerEmpty           CannotStartKind = "answer_empty"
+	CannotStartAnswerMissingTrigger  CannotStartKind = "answer_missing_trigger"
+	CannotStartAnswerBadRegex        CannotStartKind = "answer_bad_regex"
+
+	CannotStartPasswdCipherEncrypted CannotStartKind = "passwd_cipher_encrypted"
+	CannotStartPasswdCipherPlain     CannotStartKind = "passwd_cipher_plain"
+	CannotStartPasswdUnreadable      CannotStartKind = "passwd_unreadable"
+	CannotStartPasswdUndecodable     CannotStartKind = "passwd_undecodable"
+	CannotStartPasswdProblems        CannotStartKind = "passwd_problems"
+	CannotStartPasswdNewline         CannotStartKind = "passwd_newline"
+	CannotStartPasswdOuterSpace      CannotStartKind = "passwd_outer_space"
+
+	// CannotStartKeyToolAlone 是一次给了两条以上密钥命令：Value 是逗号连起来的命令名。
+	CannotStartKeyToolAlone CannotStartKind = "cli_keytool_alone"
+	// CannotStartKeyToolWithBatch 是密钥命令与批量参数一起给：Place 是那条命令，Value 是
+	// 跟着给出来的那几个选项名。
+	CannotStartKeyToolWithBatch CannotStartKind = "cli_keytool_with_batch"
+)
+
 // 条目层（改密提示词表、错误分类表、危险规则表各条里对不上的那一格）。
 const (
 	CannotStartPasswdStepNoKeywords CannotStartKind = "passwd_step_no_keywords"

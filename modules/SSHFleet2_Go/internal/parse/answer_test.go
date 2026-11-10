@@ -12,12 +12,13 @@ import (
 	"testing"
 
 	"sshfleet2/internal/contract"
+	"sshfleet2/internal/message"
 )
 
 func TestAnswerTableInline(t *testing.T) {
 	answers, fail := answerTable("y,是否继续", false, false)
 	if fail != nil {
-		t.Fatalf("不该报错：%v", fail.Body)
+		t.Fatalf("不该报错：%v", message.CannotStartText(*fail))
 	}
 	if len(answers) != 1 {
 		t.Fatalf("内联一条应当读出一条：%v", answers)
@@ -31,7 +32,7 @@ func TestAnswerTableInline(t *testing.T) {
 func TestAnswerTableInlineEmptyValue(t *testing.T) {
 	answers, fail := answerTable(",是否继续", false, false)
 	if fail != nil {
-		t.Fatalf("不该报错：%v", fail.Body)
+		t.Fatalf("不该报错：%v", message.CannotStartText(*fail))
 	}
 	if answers[0].Value != "" {
 		t.Fatalf("第一列留空应当读成空串：%q", answers[0].Value)
@@ -42,7 +43,7 @@ func TestAnswerTableInlineEmptyValue(t *testing.T) {
 func TestAnswerTableFromFile(t *testing.T) {
 	answers, fail := answerTable("testdata/answers.csv", false, false)
 	if fail != nil {
-		t.Fatalf("不该报错：%v", fail.Body)
+		t.Fatalf("不该报错：%v", message.CannotStartText(*fail))
 	}
 	if len(answers) != 2 {
 		t.Fatalf("应当读出两条：%+v", answers)
@@ -75,8 +76,8 @@ func TestAnswerTableErrors(t *testing.T) {
 			t.Errorf("%s：应当报错", c.name)
 			continue
 		}
-		if !strings.Contains(fail.Body, c.want) {
-			t.Errorf("%s：报的话里没有 %q：%s", c.name, c.want, fail.Body)
+		if !strings.Contains(message.CannotStartText(*fail), c.want) {
+			t.Errorf("%s：报的话里没有 %q：%s", c.name, c.want, message.CannotStartText(*fail))
 		}
 	}
 }
@@ -84,11 +85,11 @@ func TestAnswerTableErrors(t *testing.T) {
 // 「只有一列」是缺触发词还是缺列：单列、逗号结尾、中间空列都算触发词这一侧的问题。
 func TestAnswerTableMissingTrigger(t *testing.T) {
 	_, fail := answerTable("testdata/one_col.csv", false, false)
-	if fail == nil || !strings.Contains(fail.Body, "第 1 行不合规") {
+	if fail == nil || !strings.Contains(message.CannotStartText(*fail), "第 1 行不合规") {
 		t.Fatalf("应当指到第 1 行：%v", fail)
 	}
-	if !strings.Contains(fail.Body, "缺触发词") {
-		t.Fatalf("话里要说清缺触发词：%s", fail.Body)
+	if !strings.Contains(message.CannotStartText(*fail), "缺触发词") {
+		t.Fatalf("话里要说清缺触发词：%s", message.CannotStartText(*fail))
 	}
 }
 
@@ -98,8 +99,8 @@ func TestAnswerTableReportsRealLineNumber(t *testing.T) {
 	if fail == nil {
 		t.Fatal("应当报错")
 	}
-	if !strings.Contains(fail.Body, "第 3 行不合规") {
-		t.Fatalf("第三行才是那条坏记录：%s", fail.Body)
+	if !strings.Contains(message.CannotStartText(*fail), "第 3 行不合规") {
+		t.Fatalf("第三行才是那条坏记录：%s", message.CannotStartText(*fail))
 	}
 }
 
@@ -109,12 +110,12 @@ func TestAnswerTableRejectsBadRegex(t *testing.T) {
 	if fail == nil {
 		t.Fatal("应当报错")
 	}
-	if !strings.Contains(fail.Body, "触发词不是合法正则") {
-		t.Fatalf("话里要说清是正则的问题：%s", fail.Body)
+	if !strings.Contains(message.CannotStartText(*fail), "触发词不是合法正则") {
+		t.Fatalf("话里要说清是正则的问题：%s", message.CannotStartText(*fail))
 	}
 	// 同一个值在子串口径下是合法触发词：括号只是普通字符。
 	if _, ok := answerTable("y,(未闭合", false, false); ok != nil {
-		t.Fatalf("子串口径下不该拦：%v", ok.Body)
+		t.Fatalf("子串口径下不该拦：%v", message.CannotStartText(*ok))
 	}
 }
 
@@ -139,7 +140,7 @@ func TestAnswerTableLandsOnPaper(t *testing.T) {
 
 	cmd, _, fail := buildPlan(cfg, scan([]string{"sshfleet2", "-f", manifest, "-c", "install.sh", "-a", "y,继续"}))
 	if fail != nil {
-		t.Fatalf("命令模式不该走到「起不来」：%v", fail.Body)
+		t.Fatalf("命令模式不该走到「起不来」：%v", message.CannotStartText(*fail))
 	}
 	if cmd.Task.Command == nil || len(cmd.Task.Command.Answers) != 1 {
 		t.Fatalf("命令载荷上没带代填表：%+v", cmd.Task.Command)
@@ -147,7 +148,7 @@ func TestAnswerTableLandsOnPaper(t *testing.T) {
 
 	sh, _, fail := buildPlan(cfg, scan([]string{"sshfleet2", "-f", manifest, "-s", script, "-a", "y,继续"}))
 	if fail != nil {
-		t.Fatalf("脚本模式不该走到「起不来」：%v", fail.Body)
+		t.Fatalf("脚本模式不该走到「起不来」：%v", message.CannotStartText(*fail))
 	}
 	if sh.Task.Script == nil || len(sh.Task.Script.Answers) != 1 {
 		t.Fatalf("脚本载荷上没带代填表：%+v", sh.Task.Script)
@@ -179,7 +180,7 @@ func TestAnswerWithUnsupportedInterpreterRecordsProblem(t *testing.T) {
 	cfg.interpreter.Command = "tclsh"
 	p, _, fail := buildPlan(cfg, scan([]string{"sshfleet2", "-f", manifest, "-s", script, "-a", "y,继续"}))
 	if fail != nil {
-		t.Fatalf("解析站不该自己报错：%v", fail.Body)
+		t.Fatalf("解析站不该自己报错：%v", message.CannotStartText(*fail))
 	}
 	found := false
 	for _, pr := range p.Problems {

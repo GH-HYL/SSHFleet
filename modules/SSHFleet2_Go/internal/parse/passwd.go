@@ -33,25 +33,32 @@ func passwdValue(p *contract.Plan, encrypted bool) *contract.CannotStart {
 	// 「读不到：AgAA…」，看的人以为是文件名写错；开了加密又贴内容，连「该写路径」都说不清。
 	if credential.IsEncrypted(raw) {
 		if encrypted {
-			return materialFail(message.PasswdValueIsCipherEncrypted())
+			return cliReason(contract.CannotStartReason{Kind: contract.CannotStartPasswdCipherEncrypted})
 		}
-		return materialFail(message.PasswdValueIsCipherPlain())
+		return cliReason(contract.CannotStartReason{Kind: contract.CannotStartPasswdCipherPlain})
 	}
 
 	// 打开加密时这个值是密文文件的路径：读不到就先给三行套，原因取系统原文——
 	// 只说「值有问题」，看的人得自己猜是路径写错还是文件被挪了。
 	if encrypted {
 		if _, err := os.Stat(raw); err != nil {
-			return materialFail(message.PasswdValueUnreadable(raw, message.SystemReason(err)))
+			return cliReason(contract.CannotStartReason{
+				Kind:   contract.CannotStartPasswdUnreadable,
+				Place:  raw,
+				Origin: message.SystemReason(err),
+			})
 		}
 	}
 
 	plain, problems, err := credential.PlainValue(raw, encrypted, true)
 	if err != nil {
-		return materialFail(message.PasswdValueUndecodable(err.Error()))
+		return cliReason(contract.CannotStartReason{Kind: contract.CannotStartPasswdUndecodable, Origin: err.Error()})
 	}
 	if len(problems) > 0 {
-		return materialFail(message.PasswdValueProblems(joinProblems(problems)))
+		return cliReason(contract.CannotStartReason{
+			Kind:  contract.CannotStartPasswdProblems,
+			Value: joinProblems(problems),
+		})
 	}
 	if fail := checkPasswdShape(plain); fail != nil {
 		return fail
@@ -76,10 +83,10 @@ func joinProblems(problems []credential.ValueProblem) string {
 // 全是空白的值按第二条拦——它开头就是空白。
 func checkPasswdShape(plain string) *contract.CannotStart {
 	if strings.ContainsAny(plain, "\r\n") {
-		return materialFail(message.PasswdHasNewline())
+		return cliReason(contract.CannotStartReason{Kind: contract.CannotStartPasswdNewline})
 	}
 	if strings.TrimSpace(plain) != plain {
-		return materialFail(message.PasswdHasOuterSpace())
+		return cliReason(contract.CannotStartReason{Kind: contract.CannotStartPasswdOuterSpace})
 	}
 	return nil
 }

@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"sshfleet2/internal/contract"
+	"sshfleet2/internal/message"
 )
 
 const (
@@ -71,7 +72,7 @@ func passwdRaw(t *testing.T, encrypt bool, raw string) (*contract.Plan, *contrac
 func TestPasswdPlainValue(t *testing.T) {
 	p, fail := passwdRaw(t, false, "NewPass#1")
 	if fail != nil {
-		t.Fatalf("不该报错：%v", fail.Body)
+		t.Fatalf("不该报错：%v", message.CannotStartText(*fail))
 	}
 	if p.Task.Passwd.NewPassword != "NewPass#1" {
 		t.Fatalf("明文没进纸：%q", p.Task.Passwd.NewPassword)
@@ -91,8 +92,8 @@ func TestPasswdShapeRejected(t *testing.T) {
 			t.Errorf("%s：应当报错", c.name)
 			continue
 		}
-		if !strings.Contains(fail.Body, c.want) {
-			t.Errorf("%s：话里没有 %q：%s", c.name, c.want, fail.Body)
+		if !strings.Contains(message.CannotStartText(*fail), c.want) {
+			t.Errorf("%s：话里没有 %q：%s", c.name, c.want, message.CannotStartText(*fail))
 		}
 	}
 }
@@ -102,11 +103,11 @@ func TestPasswdCipherTextInValue(t *testing.T) {
 	const token = "AtKvT37VuLHwfIb8LkmbXSmfFepr17YYvRI1txT+WFdV/kVFvEuG4FUP"
 
 	_, fail := passwdRaw(t, false, token)
-	if fail == nil || !strings.Contains(fail.Body, "不是新密码") {
+	if fail == nil || !strings.Contains(message.CannotStartText(*fail), "不是新密码") {
 		t.Fatalf("没开加密时要说「不是新密码」：%v", fail)
 	}
 	_, fail = passwdRaw(t, true, token)
-	if fail == nil || !strings.Contains(fail.Body, "不是文件路径") {
+	if fail == nil || !strings.Contains(message.CannotStartText(*fail), "不是文件路径") {
 		t.Fatalf("开了加密时要说「不是文件路径」：%v", fail)
 	}
 }
@@ -121,7 +122,7 @@ func TestPasswdEncryptedValue(t *testing.T) {
 
 	p, fail := passwdRaw(t, true, abs)
 	if fail != nil {
-		t.Fatalf("不该报错：%v", fail.Body)
+		t.Fatalf("不该报错：%v", message.CannotStartText(*fail))
 	}
 	if p.Task.Passwd.NewPassword != testPlain {
 		t.Fatalf("解出来的明文不对：%q", p.Task.Passwd.NewPassword)
@@ -135,8 +136,8 @@ func TestPasswdEncryptedMissingFile(t *testing.T) {
 		t.Fatal("应当报错")
 	}
 	for _, want := range []string{"的值读不到", "原因：", "提示："} {
-		if !strings.Contains(fail.Body, want) {
-			t.Fatalf("三行套里少了 %q：%s", want, fail.Body)
+		if !strings.Contains(message.CannotStartText(*fail), want) {
+			t.Fatalf("三行套里少了 %q：%s", want, message.CannotStartText(*fail))
 		}
 	}
 }
@@ -153,10 +154,10 @@ func TestPasswdBadMasterKeySeparate(t *testing.T) {
 	if fail == nil {
 		t.Fatal("没有主密钥时应当报错")
 	}
-	if !strings.Contains(fail.Body, "读不出新密码") {
-		t.Fatalf("这一条要说「读不出新密码」：%s", fail.Body)
+	if !strings.Contains(message.CannotStartText(*fail), "读不出新密码") {
+		t.Fatalf("这一条要说「读不出新密码」：%s", message.CannotStartText(*fail))
 	}
-	if strings.Contains(fail.Body, "值有问题") {
-		t.Fatalf("主密钥那一类不该混成「值有问题」：%s", fail.Body)
+	if strings.Contains(message.CannotStartText(*fail), "值有问题") {
+		t.Fatalf("主密钥那一类不该混成「值有问题」：%s", message.CannotStartText(*fail))
 	}
 }
