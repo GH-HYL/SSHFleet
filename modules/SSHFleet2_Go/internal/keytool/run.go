@@ -45,7 +45,7 @@ func Run(run contract.KeyRun, upstream *credential.KeySource) *contract.CannotSt
 func genKey(run contract.KeyRun, upstream *credential.KeySource) *contract.CannotStart {
 	key, err := credential.GenerateMasterKey()
 	if err != nil {
-		return cannotStart(err.Error())
+		return keyReason(contract.CannotStartReason{Kind: contract.CannotStartKeyGenFailed, Origin: err.Error()})
 	}
 	facts := upstream.Inspect()
 
@@ -54,7 +54,7 @@ func genKey(run contract.KeyRun, upstream *credential.KeySource) *contract.Canno
 		ask.Show(message.KeyGenExisting(facts))
 		if run.Yes {
 			// 非交互模式下不替人决定：覆盖是不可逆的，缺省必须是不覆盖。
-			return cannotStart(message.KeyGenNoOverwrite())
+			return keyReason(contract.CannotStartReason{Kind: contract.CannotStartKeyGenNoOverwrite})
 		}
 		if ask.AskQuestion(message.Line{}, message.KeyGenConfirm(), false) != ask.Yes {
 			// 答否与读到输入结束是同一个收场：原密钥留着，正常退出（不是取消）。
@@ -67,7 +67,12 @@ func genKey(run contract.KeyRun, upstream *credential.KeySource) *contract.Canno
 
 	res, err := upstream.Write(key)
 	if err != nil {
-		return cannotStart(message.KeyGenSaveFailed(facts, res.Where, reasonOf(err)))
+		return keyReason(contract.CannotStartReason{
+			Kind:   contract.CannotStartKeyGenSaveFailed,
+			Key:    facts,
+			Place:  res.Where,
+			Origin: reasonOf(err),
+		})
 	}
 	ask.Show(message.KeyGenSaved(overwritten, facts, res, credential.Fingerprint(key)))
 	return nil
@@ -77,11 +82,16 @@ func genKey(run contract.KeyRun, upstream *credential.KeySource) *contract.Canno
 func convertSecret(run contract.KeyRun, upstream *credential.KeySource) *contract.CannotStart {
 	content, problem, reason := credential.ReadConvertible(run.Path)
 	if problem != "" {
-		return cannotStart(message.KeyConvertReadProblem(problem, run.Path, reason))
+		return keyReason(contract.CannotStartReason{
+			Kind:   contract.CannotStartKeyConvertReadProblem,
+			Place:  run.Path,
+			Value:  string(problem),
+			Origin: reason,
+		})
 	}
 	encrypted, err := encryptFlag()
 	if err != nil {
-		return cannotStart(message.KeyConfigUnreadable(reasonOf(err)))
+		return keyReason(contract.CannotStartReason{Kind: contract.CannotStartKeyConfigUnreadable, Origin: reasonOf(err)})
 	}
 	if encrypted {
 		return toCipher(run.Path, content, upstream)
@@ -97,15 +107,15 @@ func toCipher(path, content string, upstream *credential.KeySource) *contract.Ca
 	}
 	facts := upstream.Inspect()
 	if facts.State == contract.KeyStateDiverged {
-		return cannotStart(message.KeyConvertBlocked(facts))
+		return keyReason(contract.CannotStartReason{Kind: contract.CannotStartKeyConvertBlocked, Key: facts})
 	}
 	key, err := credential.MasterKey()
 	if err != nil {
-		return cannotStart(message.KeyNoMasterKey(facts))
+		return keyReason(contract.CannotStartReason{Kind: contract.CannotStartKeyNoMasterKey, Key: facts})
 	}
 	token, err := credential.Encrypt(content, key)
 	if err != nil {
-		return cannotStart(err.Error())
+		return keyReason(contract.CannotStartReason{Kind: contract.CannotStartKeyEncryptFailed, Origin: err.Error()})
 	}
 	return writeAndEcho(path, token, "明文", "密文")
 }
@@ -118,14 +128,21 @@ func toPlain(path, content string, upstream *credential.KeySource) *contract.Can
 	}
 	key, err := credential.MasterKey()
 	if err != nil {
-		return cannotStart(message.KeyNoMasterKey(upstream.Inspect()))
+		return keyReason(contract.CannotStartReason{
+		Kind: contract.CannotStartKeyNoMasterKey,
+		Key:  upstream.Inspect(),
+	})
 	}
 	plain, err := credential.Decrypt(content, key)
 	if err != nil {
-		return cannotStart(message.KeyConvertDecryptFailed(path, reasonOf(err)))
+		return keyReason(contract.CannotStartReason{
+			Kind:   contract.CannotStartKeyConvertDecryptFail,
+			Place:  path,
+			Origin: reasonOf(err),
+		})
 	}
 	if plain == "" {
-		return cannotStart(message.KeyConvertEmpty(path))
+		return keyReason(contract.CannotStartReason{Kind: contract.CannotStartKeyConvertEmpty, Place: path})
 	}
 	return writeAndEcho(path, plain, "密文", "明文")
 }
@@ -133,11 +150,19 @@ func toPlain(path, content string, upstream *credential.KeySource) *contract.Can
 // writeAndEcho 就地写回，再从磁盘回读一次：只报方向、路径与长度，不回显内容本体。
 func writeAndEcho(path, newContent, from, to string) *contract.CannotStart {
 	if err := os.WriteFile(path, []byte(newContent), 0o644); err != nil {
-		return cannotStart(message.KeyConvertWriteFailed(path, reasonOf(err)))
+		return keyReason(contract.CannotStartReason{
+			Kind:   contract.CannotStartKeyConvertWriteFail,
+			Place:  path,
+			Origin: reasonOf(err),
+		})
 	}
 	onDisk, err := os.ReadFile(path)
 	if err != nil {
-		return cannotStart(message.KeyConvertVerifyFailed(path, reasonOf(err)))
+		return keyReason(contract.CannotStartReason{
+			Kind:   contract.CannotStartKeyConvertVerifyFail,
+			Place:  path,
+			Origin: reasonOf(err),
+		})
 	}
 	ask.Show(message.KeyConvertDone(from, to, path, len(strings.TrimSpace(string(onDisk)))))
 	return nil
@@ -185,15 +210,13 @@ func stripComment(value string) string {
 	return strings.TrimSpace(value)
 }
 
-// cannotStart 排一屏「起不来」：环节名沿用老版的 `credential`。
+// keyReason 排一屏「起不来」：环节名沿用老版的 `credential`，原因按类别与事实交上去，
+// 句子由 `message` 成形（ADR-0044）。
 //
-// 那个名字不是定位线索，只是逐字一致的一部分：同一屏上还有「无法生成主密钥」这类中文句子，
+// 那个环节名不是定位线索，只是逐字一致的一部分：同一屏上还有「无法生成主密钥」这类中文句子，
 // 维护者靠那句话找地方，不靠 tag。
-func cannotStart(body string) *contract.CannotStart {
-	return &contract.CannotStart{
-		Where: "credential",
-		Body:  strings.TrimRight(body, "\r\n"),
-	}
+func keyReason(reason contract.CannotStartReason) *contract.CannotStart {
+	return &contract.CannotStart{Where: "credential", Reason: reason}
 }
 
 // reasonOf 取系统那句原因，去掉「open <路径>:」这类前缀（口径同 message.SystemReason）。

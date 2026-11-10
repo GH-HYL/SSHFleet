@@ -18,13 +18,9 @@ import (
 // 日志与屏幕共用这一份（老版那两处本来同一个字符串），不各拼一遍——ADR-0028 第五节讲的
 // 「屏给使用者看、日志留现场」讲的是形态，不是让两处各说一句（ADR-0044）。
 //
-// 迁移期（01／02 号单）：纸上有类别就走模板，没有就把 `Body` 原样交回；03 号单删掉
-// `Body` 之后，前一条是唯一的路。
+// 纸上只有类别这一条路：`Body` 那一格已经在 03 号单末尾删掉，谁也没法再往纸上装整句。
 func CannotStartText(c contract.CannotStart) string {
 	r := c.Reason
-	if r.Kind == "" {
-		return c.Body
-	}
 	text := reasonText(r)
 	if r.Head == "" {
 		return text
@@ -209,6 +205,43 @@ func reasonText(r contract.CannotStartReason) string {
 		return KeyToolNeedAlone(r.Value)
 	case contract.CannotStartKeyToolWithBatch:
 		return KeyToolWithBatch(r.Place, r.Value)
+
+	// 密钥管理那十三屏（03 号单）：模板仍住 keytool.go，这里只转派。
+	case contract.CannotStartKeyNoMasterKey:
+		return KeyNoMasterKey(r.Key)
+	case contract.CannotStartKeyConvertBlocked:
+		return KeyConvertBlocked(r.Key)
+	case contract.CannotStartKeyConfigUnreadable:
+		return KeyConfigUnreadable(r.Origin)
+	case contract.CannotStartKeyGenNoOverwrite:
+		return KeyGenNoOverwrite()
+	case contract.CannotStartKeyGenSaveFailed:
+		return KeyGenSaveFailed(r.Key, r.Place, r.Origin)
+	case contract.CannotStartKeyConvertReadProblem:
+		return KeyConvertReadProblem(contract.CredFileProblem(r.Value), r.Place, r.Origin)
+	case contract.CannotStartKeyConvertDecryptFail:
+		return KeyConvertDecryptFailed(r.Place, r.Origin)
+	case contract.CannotStartKeyConvertEmpty:
+		return KeyConvertEmpty(r.Place)
+	case contract.CannotStartKeyConvertWriteFail:
+		return KeyConvertWriteFailed(r.Place, r.Origin)
+	case contract.CannotStartKeyConvertVerifyFail:
+		return KeyConvertVerifyFailed(r.Place, r.Origin)
+	// 这两条就是那一句系统原话，没有半句工具自己的话可加。
+	case contract.CannotStartKeyGenFailed, contract.CannotStartKeyEncryptFailed:
+		return r.Origin
+
+	// 内部故障那两屏（03 号单）。
+	case contract.CannotStartRunMetaMarshal:
+		return "封装运行上下文：" + r.Origin
+	case contract.CannotStartRunMetaCipher:
+		return "运行上下文：建不出密码器：" + r.Origin
+	case contract.CannotStartRunMetaGCM:
+		return "运行上下文：建不出 GCM：" + r.Origin
+	case contract.CannotStartOutputTerminal:
+		return "建终端输出文件失败（" + r.Place + "）：" + r.Origin
+	case contract.CannotStartOutputLog:
+		return "建执行期日志失败（" + r.Place + "）：" + r.Origin
 	}
 	panic("起不来：类别 " + string(r.Kind) + " 在 message.CannotStartText 里没有模板")
 }

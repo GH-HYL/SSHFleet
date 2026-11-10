@@ -10,7 +10,6 @@ package execute
 // 维护者要按 IP 过滤、要分清「哪一步、什么现象」。
 
 import (
-	"fmt"
 	"os"
 	"sync"
 
@@ -36,17 +35,25 @@ type reporter struct {
 //
 // 两个路径都由归档包发、塔尖转手；本包不拼路径，也不自己起目录——目录归归档包建，
 // 这里建不出来就是上游没给对，不默默补一个（与 04 号单 `log.InitExec` 同一口径）。
-func newReporter(scr *screen, termPath, execLogPath string, mode contract.Mode) (*reporter, error) {
+func newReporter(scr *screen, termPath, execLogPath string, mode contract.Mode) (*reporter, contract.CannotStartReason, bool) {
 	f, err := os.Create(termPath)
 	if err != nil {
-		return nil, fmt.Errorf("建终端输出文件失败（%s）：%w", termPath, err)
+		return nil, contract.CannotStartReason{
+			Kind:   contract.CannotStartOutputTerminal,
+			Place:  termPath,
+			Origin: err.Error(),
+		}, true
 	}
 	lg, err := log.InitExec(execLogPath)
 	if err != nil {
 		_ = f.Close()
-		return nil, fmt.Errorf("建执行期日志失败（%s）：%w", execLogPath, err)
+		return nil, contract.CannotStartReason{
+			Kind:   contract.CannotStartOutputLog,
+			Place:  execLogPath,
+			Origin: err.Error(),
+		}, true
 	}
-	return &reporter{scr: scr, file: f, lg: lg, mode: mode, termPath: termPath}, nil
+	return &reporter{scr: scr, file: f, lg: lg, mode: mode, termPath: termPath}, contract.CannotStartReason{}, false
 }
 
 // result 一条结果：屏幕与终端输出文件拿到同一段字，执行期日志写节点明细。
