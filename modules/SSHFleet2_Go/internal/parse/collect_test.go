@@ -177,9 +177,20 @@ func TestCollectUnreadableFileFails(t *testing.T) {
 		t.Fatalf("造文件失败：%v", err)
 	}
 	if err := os.Chmod(secret, 0o000); err != nil {
-		t.Fatalf("改权限失败：%v", err)
+		// drvfs（WSL 挂上来的 Windows 盘）根本不认权限位，chmod 当场就报 operation not
+		// permitted。这是「这条测试的前提搭不起来」，不是被测代码坏了——跳过，不假报红。
+		t.Skipf("这台机器的文件系统不落实权限位（chmod 000 报错：%v），这一条的前提搭不起来", err)
 	}
 	t.Cleanup(func() { _ = os.Chmod(secret, 0o644) })
+	// 有些文件系统不落实权限位（WSL 挂在 drvfs 上的 /mnt/c 就是）：chmod 不报错，
+	// 可 root 之外照样打得开。这时这条测试的前提搭不起来，跳过而不是假报红。
+	//
+	// 判据是「真能不能打开」，不是 runtime.GOOS：WSL 跑在 ext4 上权限是真生效的，
+	// 按 GOOS 判会把能跑的机会也跳掉，等于白丢这条路径的覆盖。
+	if f, err := os.Open(secret); err == nil {
+		_ = f.Close()
+		t.Skip("这台机器的文件系统不落实权限位（chmod 000 之后仍能打开），这一条的前提搭不起来")
+	}
 
 	_, fail := collectPlan(t, root)
 	if fail == nil {
