@@ -197,8 +197,8 @@ func visit(ctx context.Context, p *contract.Plan, idx int, ag *aggregator) contr
 	}
 
 	// 事实收齐了才定分类：两条路都要定，不然连不上的那些台在结算站那里没有名字。
-	// 服务端提示另递一份：改密的分类不看它（见 categoryOf）。
-	res.Category = categoryOf(p.Mode, p.Tables, &res, c.banner)
+	// 哪一截提示不参与匹配由本站定，判定层只管照它剔（见 client.ignoredHint）。
+	res.Category = categoryOf(p.Mode, p.Tables, &res, c.ignoredHint())
 	return res
 }
 

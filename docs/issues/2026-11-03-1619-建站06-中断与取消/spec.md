@@ -198,5 +198,5 @@
 ## 更新记录
 
 - 2026-11-10：「建连被取消」改到判据表表头，且只认工具自己那句报文（`sshfleet.abort.connect_canceled`），不再拿 `operation was canceled` 兜底；上文第三节「各有两条关键词」与「系统原文那句是兜底」不再约束，替代见 `modules/SSHFleet2_Go/config/keywords_error.conf` 该档注释。
-- 2026-11-10：改密分类不拿服务端提示查表——提示是改密的前提，会把「被中断」认成「密码过期」；上文第三节「分类仍由判据表认领」仍成立，查表口径新增这一条豁免，替代见 `modules/SSHFleet2_Go/internal/execute/verdict.go` 的 `categoryOf`。
+- 2026-11-10：改密分类不拿服务端提示查表——但只在「这一场见过入场信号」时才算前提：没见过的（连接阶段就被拒的「账号过期」）照旧拿它认，否则那一档认不出来。递不递由执行侧按事实定，判定层只管剔，替代见 `modules/SSHFleet2_Go/internal/execute/client.go` 的 `ignoredHint` 与 `verdict.go` 的 `categoryOf`。
 - 2026-11-10：中断报文排在服务端提示之前（原文 → 报文 → 提示）；上文第三节「两句都接在原文之后」仍成立，取代的是它未说清的那一处次序，见 `run_answer.go`、`run_command.go`、`run_passwd.go`。

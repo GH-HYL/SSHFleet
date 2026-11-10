@@ -205,11 +205,11 @@ func TestCategoryOfCommandIgnoresPasswdTable(t *testing.T) {
 	}
 }
 
-// TestCategoryOfPasswdSkipsServerHint 改密不拿服务端提示认分类。
+// TestCategoryOfIgnoredHint 执行侧递来的那一截不参与匹配；没递就照旧按原文认。
 //
-// 「密码必须马上改」那句在改密里是**前提**（它就是入场信号），不是失败原因：算进去，
-// 跑到一半被 Ctrl+C 那一档会被「密码过期」抢走——那一档排在它后面。
-func TestCategoryOfPasswdSkipsServerHint(t *testing.T) {
+// 「账号过期」那一档的关键词只有 PAM 那句提示一个来源——所以没递时必须照原文认得出它，
+// 这条与上一条是同一条规矩的两面。
+func TestCategoryOfIgnoredHint(t *testing.T) {
 	const hint = "You are required to change your password immediately (administrator enforced)."
 	tables := contract.Tables{Categories: []contract.Category{
 		{Name: "密码过期", Keywords: []string{"You are required to change your password immediately"}},
@@ -219,15 +219,28 @@ func TestCategoryOfPasswdSkipsServerHint(t *testing.T) {
 		ErrorText: "context canceled\nsshfleet.abort.canceled: interrupted after session established\n" + hint}
 
 	if got := categoryOf(contract.ModePasswd, tables, &res, hint); got != "任务已取消" {
-		t.Fatalf("改密被中断该归「任务已取消」，实际 %q", got)
+		t.Fatalf("递了提示该把它剔掉、归「任务已取消」，实际 %q", got)
 	}
-	// 没给提示时照旧按原文认：这条只管「提示不参与」，不放宽别的。
 	if got := categoryOf(contract.ModePasswd, tables, &res, ""); got != "密码过期" {
-		t.Fatalf("没给提示时该照旧按原文认，实际 %q", got)
+		t.Fatalf("没递提示时该照旧按原文认，实际 %q", got)
 	}
-	// 命令模式不吃这条豁免：提示照旧参与分类。
-	if got := categoryOf(contract.ModeCommand, tables, &res, hint); got != "密码过期" {
-		t.Fatalf("命令模式该照旧连着提示查表，实际 %q", got)
+}
+
+// TestIgnoredHintOnlyAfterExpiryPrompt 递不递那截提示，看的是「这场见没见过入场信号」。
+//
+// 没见过（连接阶段就被拒的「账号过期」就是这种）：提示要参与匹配，递空；
+// 见过：提示是改密的前提，递出去让判定层剔掉。它住在这儿，是为了让「递什么」与
+// 「怎么用」两条紧挨着读。
+func TestIgnoredHintOnlyAfterExpiryPrompt(t *testing.T) {
+	c := &client{banner: "You are required to change your password immediately (administrator enforced)."}
+
+	if got := c.ignoredHint(); got != "" {
+		t.Fatalf("还没见过入场信号，提示要参与匹配，实际递了 %q", got)
+	}
+
+	c.expiryPromptSeen = true
+	if got := c.ignoredHint(); got != c.banner {
+		t.Fatalf("见过入场信号该把那句提示递出去，实际 %q", got)
 	}
 }
 

@@ -36,6 +36,10 @@ type client struct {
 
 	// banner 认证阶段服务端下发的提示原文（SSH_MSG_USERAUTH_BANNER），重连时清空。
 	banner string
+
+	// expiryPromptSeen 改密那一场里见过「密码必须马上改」那句入场信号。
+	// 只有见过它的会话，那句提示才是前提而不是失败原因（ADR-0005 修订段）。
+	expiryPromptSeen bool
 }
 
 // connect 建立连接：拨号超时 = 纸上那个连接超时，握手宽限 +2 秒；主机密钥跳过校验。
@@ -118,6 +122,22 @@ func (c *client) mergeBanner(text string) string {
 		parts = append(parts, hint)
 	}
 	return strings.Join(parts, "\n")
+}
+
+// ignoredHint 判定层不必拿它匹配的那段提示：改密且已见过入场信号时，那句提示是改密的前提
+// 而不是失败原因（ADR-0005 修订段）。其余情形一律递空——「账号过期」那一档的关键词只有
+// 这句 PAM 提示一个来源，递空就把那一档认成原文了。
+func (c *client) ignoredHint() string {
+	if c.expiryPromptSeen {
+		return c.banner
+	}
+	return ""
+}
+
+// noteBeforeHint 拼一份失败原因：原文在前、工具那条报文居中、服务端提示在最后（老版次序）。
+// 中断那几档都要这一种次序，拼法只留这一处。
+func (c *client) noteBeforeHint(text, note string) string {
+	return c.mergeBanner(appendText(text, note))
 }
 
 // authMethods 认证方法列表：密钥就只走密钥，密码就只走密码（两者都配时按老版顺序：先密钥后密码）。

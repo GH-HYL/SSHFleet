@@ -24,14 +24,14 @@ import (
 // 多字节字符切成无效 UTF-8（老版 2026-09-14 修过这一处）。
 const fallbackMaxLen = 200
 
-// categoryOf 这一台的分类名。入参是收齐了事实的那一条结果，serverHint 是连接时收到的
-// 服务端提示（改密那条规矩要用它剔原文，见下）。
+// categoryOf 这一台的分类名。入参是收齐了事实的那一条结果，ignoredHint 是这段原文里不该
+// 参与匹配的一截——递不递由执行侧按事实定（见 client.ignoredHint），判定层不知道它跟模式的关系。
 //
 // 三步，顺序照老版：
 //  1. 按本模式的成功规则干净走完 → 成功那一类；
 //  2. 有退出码 → 先查第二组；没认出、且退出码非 0 → 按退出码给「执行失败(退出码N)」；
 //  3. 其余 → 查第一组；没认出就把原文当分类名（保留具体失败内容），两段都空才兜底「原因未知」。
-func categoryOf(mode contract.Mode, t contract.Tables, r *contract.NodeResult, serverHint string) string {
+func categoryOf(mode contract.Mode, t contract.Tables, r *contract.NodeResult, ignoredHint string) string {
 	if ranClean(mode, r) {
 		return message.SuccessCategory(mode)
 	}
@@ -39,13 +39,10 @@ func categoryOf(mode contract.Mode, t contract.Tables, r *contract.NodeResult, s
 	// 这一格装着工具自己的报文、远端原话、服务端提示三样（见 contract.NodeResult.ErrorText）。
 	src := r.ErrorText
 
-	// 改密不吃服务端提示。`You are required to change your password immediately` 那句在改密里
-	// 是**前提**（它就是入场信号），不是失败原因：算进去，跑到一半被 Ctrl+C 那一档会被
-	// 「密码过期」抢走。其余模式照旧连着提示一起查（老版同口径）。
-	if mode == contract.ModePasswd {
-		if hint := strings.TrimSpace(serverHint); hint != "" {
-			src = strings.ReplaceAll(src, hint, "")
-		}
+	// 执行侧说这一截不参与匹配，就从待匹配文本里剔掉。它仍留在原文里给使用者看——
+	// 剔的只是「拿它认分类」这一件事。
+	if hint := strings.TrimSpace(ignoredHint); hint != "" {
+		src = strings.ReplaceAll(src, hint, "")
 	}
 
 	if r.ExitCode != nil {
