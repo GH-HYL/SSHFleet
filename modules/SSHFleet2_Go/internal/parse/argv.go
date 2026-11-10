@@ -462,7 +462,7 @@ func keyRunOf(s scanned) (*contract.KeyRun, *contract.CannotStart) {
 	// 多余的位置参数先拦：老版在解析命令行那一步就报「出现多余的参数」，比密钥命令那两条
 	// 互斥更早。这一支只在密钥命令上生效——批量执行那条路仍把问题记在纸上交闸门（0x 定的先后）。
 	if len(s.extras) > 0 {
-		return nil, cannotStart("cli", "", message.RefuseExtraArgs(s.extraOwner, strings.Join(s.extras, " ")))
+		return nil, cannotStartReason("cli", contract.CannotStartReason{Kind: contract.CannotStartExtraArgs, Value: s.extraOwner, Origin: strings.Join(s.extras, " ")})
 	}
 	if len(tools) > 1 {
 		return nil, cannotStart("cli", message.HeadCompliance, message.KeyToolNeedAlone(strings.Join(tools, "、")))

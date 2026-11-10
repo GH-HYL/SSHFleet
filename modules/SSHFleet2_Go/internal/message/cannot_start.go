@@ -96,6 +96,14 @@ func reasonText(r contract.CannotStartReason) string {
 		return dangerItem(r) + r.Value + " 的 regex 是空的"
 	case contract.CannotStartDangerBadRegex:
 		return dangerItem(r) + r.Value + " 的一条正则编译不过：" + r.Origin
+
+	// 解析站其余三族里已经搬过来的几条（03 号单）。
+	case contract.CannotStartExtraArgs:
+		return RefuseExtraArgs(r.Value, r.Origin)
+	case contract.CannotStartNoNodeParsed:
+		return NoNodeParsed
+	case contract.CannotStartManifestRead:
+		return "读取内容时发生错误: " + r.Origin
 	}
 	panic("起不来：类别 " + string(r.Kind) + " 在 message.CannotStartText 里没有模板")
 }

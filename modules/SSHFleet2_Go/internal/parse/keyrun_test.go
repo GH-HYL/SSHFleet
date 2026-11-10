@@ -1,6 +1,7 @@
 package parse
 
 import (
+	"sshfleet2/internal/message"
 	"strings"
 	"testing"
 
@@ -138,8 +139,9 @@ func TestKeyRunRefusesExtraArgs(t *testing.T) {
 			"选项/参数解析失败：出现多余的参数（未被使用）：extra",
 			"常见原因：",
 		} {
-			if !strings.Contains(fail.Body, want) {
-				t.Fatalf("%v：那一屏缺「%s」：%q", argv, want, fail.Body)
+			say := message.CannotStartText(*fail)
+			if !strings.Contains(say, want) {
+				t.Fatalf("%v：那一屏缺「%s」：%q", argv, want, say)
 			}
 		}
 	}
