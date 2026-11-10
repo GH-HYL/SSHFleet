@@ -48,6 +48,8 @@ var redline = []RedLineEntry{
 
 	// 04 号工单：契约纯净与失败类型的构造点
 	{"TestCheckContract", []string{"CheckContract", "ClassContract"}, 1},
+	// 05 号单：纸面白名单与形状断言（新增一条，不算改名单）
+	{"TestCheckContractPaper", []string{"CheckContract", "ClassContract", "Kind", "KindContract", "Load", "Package", "PaperField", "PaperFact", "Rule", "Rules", "Target"}, 3},
 	{"TestCheckFailure", []string{"CheckFailure", "Report"}, 3},
 	{"TestCheckFailureDetectsMissingType", []string{"CheckFailure", "FailureSite"}, 1},
 

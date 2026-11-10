@@ -7,6 +7,9 @@ import "go/ast"
 // 判据（ADR-0032 第二条）：契约包里出现函数就报，带接收者的方法也算；类型、常量、
 // 包级变量不报（变量只许当哨兵错误这类不可变的值用）。_test.go 不享受豁免——
 // 契约里也不该长测试辅助代码。
+//
+// 类四同时管纸面白名单：契约里裸 `string` 的格子不在 `paper.go` 那张名单上就报
+// （ADR-0044，05 号单）。两类同住一处，是因为它们判的是同一件事——纸是不是只剩形状。
 func CheckContract(m *Module) []Violation {
 	var out []Violation
 	for _, p := range m.Packages {
@@ -30,5 +33,5 @@ func CheckContract(m *Module) []Violation {
 			}
 		}
 	}
-	return out
+	return append(out, checkPaperFields(m)...)
 }

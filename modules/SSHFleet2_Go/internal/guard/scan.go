@@ -30,6 +30,9 @@ type Target struct {
 	Pairs []PaperPair
 	// Redline 是红线名单与指纹；类七拿它对照代码。
 	Redline []RedLineEntry
+	// Paper 是纸面白名单；nil 表示用检查器自带的那张（只对 ssHfleet2 这个模块生效）。
+	// 样本模块传一张小的，量自己的契约。
+	Paper []PaperField
 	// Ledger 是放行台账；命中的违规不报。
 	Ledger []Exception
 }
