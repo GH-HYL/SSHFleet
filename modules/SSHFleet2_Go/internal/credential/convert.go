@@ -19,7 +19,10 @@ import (
 func ReadConvertible(path string) (text string, problem contract.CredFileProblem, reason string) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return "", contract.CredFileUnreadable, SystemReason(err)
+		// 读文件那一句保留系统原文的 `open <路径>:` 前缀（2026-11-10，审计差 3）：这一屏的第一行
+		// 没有单独一行路径，剥掉前缀之后使用者看不出是哪个文件打不开。
+		// 别处仍走 SystemReason——那里的第一行已经说过路径，前缀是重复。
+		return "", contract.CredFileUnreadable, err.Error()
 	}
 	text = strings.TrimSpace(string(data))
 	if text == "" {

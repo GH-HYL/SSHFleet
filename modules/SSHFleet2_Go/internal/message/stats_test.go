@@ -605,14 +605,18 @@ func TestReportTextAnswers(t *testing.T) {
 // 运行上下文封的是改之前的值。纸上写着几就是几；纸上没写（0）才退回节点数。
 func TestReportTextConcurrencyFromLedger(t *testing.T) {
 	for _, c := range []struct {
-		name string
-		n    int
-		want string
+		name  string
+		n     int
+		total int
+		want  string
 	}{
-		{"闸门改成了 3", 3, "  并发数： 3\n"},
-		{"没指定 -n，与节点数同", 0, "  并发数： 1\n"},
+		{"闸门改成了 3", 3, 3, "  并发数： 3\n"},
+		{"没指定 -n，与节点数同", 0, 1, "  并发数： 1\n"},
+		// 纸上那一格比台数还大（闸门没封顶的老纸）：印实际能起的台数，不许印原值。
+		{"纸上比台数大，印封顶后的台数", 5, 3, "  并发数： 3\n"},
 	} {
 		l := ledgerFail()
+		l.Total = c.total
 		l.Concurrency = c.n
 		body := reportBody()
 		body.TimeoutConnect = 0

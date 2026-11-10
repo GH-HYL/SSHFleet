@@ -63,6 +63,8 @@ func TestConfirmScreenSaysAllParallelWhenUnset(t *testing.T) {
 // 指定了 -n 就只写那个数，不加注。
 func TestConfirmScreenShowsGivenConcurrency(t *testing.T) {
 	p := confirmTestPlan()
+	// 台数要够：`-n` 比台数多时印的是实际能起的数（05 号单），场景不成立这条就会误红。
+	p.Nodes = []contract.Node{{IP: "a"}, {IP: "b"}, {IP: "c"}, {IP: "d"}, {IP: "e"}}
 	p.Run.Concurrency = 4
 
 	got := stripANSI(ConfirmScreen(p, "ok.csv", "", false).Text())
@@ -71,6 +73,22 @@ func TestConfirmScreenShowsGivenConcurrency(t *testing.T) {
 	}
 	if strings.Contains(got, "全部并行") {
 		t.Fatalf("指定了 -n 不该再标「全部并行」：\n%s", got)
+	}
+}
+
+// `-n` 比台数还多：印的是实际能起的那个数，不是命令行上写的那个（2026-11-10，审计 05-F11）。
+// 同一次运行不许有两个并发数——确认屏这一格与 `report.txt` 那一格必须同值。
+func TestConfirmScreenCapsConcurrencyAtNodeCount(t *testing.T) {
+	p := confirmTestPlan()
+	p.Nodes = []contract.Node{{IP: "a"}, {IP: "b"}, {IP: "c"}, {IP: "d"}, {IP: "e"}}
+	p.Run.Concurrency = 100
+
+	got := stripANSI(ConfirmScreen(p, "ok.csv", "", false).Text())
+	if !strings.Contains(got, "▶ 并发数  -→   5\n") {
+		t.Fatalf("`-n 100` 配五台该印 5：\n%s", got)
+	}
+	if strings.Contains(got, "100") {
+		t.Fatalf("命令行上的原值不该上屏（同一次运行两个并发数就是要消掉的那个毛病）：\n%s", got)
 	}
 }
 
