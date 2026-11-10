@@ -296,9 +296,13 @@ func unknownCategoryKeys(lines []tomlLine, section string) []string {
 	return out
 }
 
-// buildCategories 把某个数组表建成分类清单：名字非空、关键词里不许有空项。
+// buildCategories 把某个数组表建成分类清单：名字非空、同块内不许重名、关键词里不许有空项。
+//
+// 重名只查**这一次调用**里的那一块：`category` 与 `exit_code_category` 各是一次调用，两块的
+// 分类名撞上不算错——它们是两张互不相干的表。
 func buildCategories(lines []tomlLine, section string) ([]contract.Category, *contract.CannotStartReason) {
 	var out []contract.Category
+	seen := make(map[string]int, len(arrayItems(lines, section)))
 	for i, item := range arrayItems(lines, section) {
 		c := contract.Category{
 			Name:     unquote(item["name"]),
@@ -311,6 +315,15 @@ func buildCategories(lines []tomlLine, section string) ([]contract.Category, *co
 				Index: i + 1,
 			}
 		}
+		if first, ok := seen[c.Name]; ok {
+			return nil, &contract.CannotStartReason{
+				Kind:  contract.CannotStartKeywordCatDuplicate,
+				Index: first,
+				Limit: i + 1,
+				Value: c.Name,
+			}
+		}
+		seen[c.Name] = i + 1
 		for _, kw := range c.Keywords {
 			if strings.TrimSpace(kw) == "" {
 				return nil, &contract.CannotStartReason{
@@ -425,6 +438,7 @@ func loadPasswdKeywords() ([]contract.PasswdStep, []contract.Category, *contract
 	}
 
 	var cats []contract.Category
+	seenCat := make(map[string]int, len(arrayItems(lines, "category")))
 	for i, item := range arrayItems(lines, "category") {
 		c := contract.Category{
 			Name:     unquote(item["name"]),
@@ -438,6 +452,17 @@ func loadPasswdKeywords() ([]contract.PasswdStep, []contract.Category, *contract
 				Index: i + 1,
 			})
 		}
+		// 同名只查这一块内：`step` 块里没有名字这一格，跨文件更谈不上。
+		if first, ok := seenCat[c.Name]; ok {
+			return nil, nil, cannotStartReason("config", contract.CannotStartReason{
+				Kind:  contract.CannotStartPasswdCatDuplicate,
+				Place: "category",
+				Index: first,
+				Limit: i + 1,
+				Value: c.Name,
+			})
+		}
+		seenCat[c.Name] = i + 1
 		for _, kw := range c.Keywords {
 			if strings.TrimSpace(kw) == "" {
 				return nil, nil, cannotStartReason("config", contract.CannotStartReason{
