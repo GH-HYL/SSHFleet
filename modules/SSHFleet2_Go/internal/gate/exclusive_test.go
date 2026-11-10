@@ -127,7 +127,7 @@ func TestRefuseAnswerUnsupportedInterpreter(t *testing.T) {
 		p.Problems = append(p.Problems, contract.Problem{
 			Kind:   contract.ProblemInterpreterUnsupported,
 			Option: "--answer",
-			Detail: "tclsh",
+			Raw:    "tclsh",
 		})
 	})
 	r, _ := Run(plan)

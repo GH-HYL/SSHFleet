@@ -24,7 +24,7 @@ func redlinePaper() *contract.Plan {
 func TestRedlineGateRefusesBadCombination(t *testing.T) {
 	bad := redlinePaper()
 	bad.Task.Command = nil
-	bad.Problems = []contract.Problem{{Kind: contract.ProblemMultiMode, Detail: "--command、--download"}}
+	bad.Problems = []contract.Problem{{Kind: contract.ProblemMultiMode}}
 
 	refusal, _ := gate.Run(bad)
 	if refusal == nil {

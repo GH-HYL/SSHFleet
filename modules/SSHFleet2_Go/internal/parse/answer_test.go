@@ -184,7 +184,7 @@ func TestAnswerWithUnsupportedInterpreterRecordsProblem(t *testing.T) {
 	}
 	found := false
 	for _, pr := range p.Problems {
-		if pr.Kind == contract.ProblemInterpreterUnsupported && pr.Detail == "tclsh" {
+		if pr.Kind == contract.ProblemInterpreterUnsupported && pr.Raw == "tclsh" {
 			found = true
 		}
 	}

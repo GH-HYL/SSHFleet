@@ -37,7 +37,7 @@ func sealDownlink(p *contract.Plan) {
 			p.Problems = append(p.Problems, contract.Problem{
 				Kind:   contract.ProblemInterpreterUnsupported,
 				Option: "--answer",
-				Detail: p.Run.Interpreter,
+				Raw:    p.Run.Interpreter,
 			})
 			return
 		}

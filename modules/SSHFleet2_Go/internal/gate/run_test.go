@@ -159,7 +159,7 @@ func TestRefuseArguments(t *testing.T) {
 			plan: planOf(contract.ModeCommand, func(p *contract.Plan) {
 				p.Task.Command = &contract.CommandTask{Text: "ls"}
 				p.Problems = append(p.Problems, contract.Problem{
-					Kind: contract.ProblemBadValue, Option: "-n", Raw: "abc", Detail: "并发连接数",
+					Kind: contract.ProblemBadValue, Option: "-n", Raw: "abc", Subject: contract.SubjectConcurrency,
 				})
 			}),
 			want: "选项/参数合规性检查未通过：-n 参数格式错误，并发连接数必须是正整数，当前值：abc",

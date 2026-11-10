@@ -3,6 +3,8 @@ package message
 import (
 	"fmt"
 	"strings"
+
+	"sshfleet2/internal/contract"
 )
 
 // 闸门那几类拒绝的话：闸门只交事实（哪一条没过、哪个选项、哪段原文），句子在这里成形。
@@ -75,19 +77,25 @@ func RefuseExtraArgs(owner, joined string) string {
 		hintLabel+"本来想写成一个值的，把整条用双引号包起来，例如 -p \"/opt/my dir/\"（bash、Git Bash、cmd、PowerShell 都认双引号）")
 }
 
-// 三个数值选项在报错里怎么称呼自己。解析站挑一个填进事实（contract.Problem.Detail），
-// 句子仍由这里成形——称呼是话，不归站。
-const (
-	SubjectConcurrency = "并发连接数"
-	SubjectTimeout     = "命令或传输超时时间"
-	SubjectConnect     = "连接超时时间"
-)
+// 三个数值选项在报错里怎么称呼自己。解析站只交类别（`contract.ProblemSubject`），
+// 称呼是话，在这里成形——不归站。
+func subjectText(s contract.ProblemSubject) string {
+	switch s {
+	case contract.SubjectConcurrency:
+		return "并发连接数"
+	case contract.SubjectTimeout:
+		return "命令或传输超时时间"
+	case contract.SubjectConnect:
+		return "连接超时时间"
+	}
+	panic("拒绝：取值主语 " + string(s) + " 没有称呼")
+}
 
 // RefuseBadPositiveInt 三个数值选项（-n／-t／-T）取值认不出或不是正数。
 // subject 是这一格怎么称呼自己（上面那三个常量之一）。
-func RefuseBadPositiveInt(flag, subject, raw string) string {
+func RefuseBadPositiveInt(flag string, subject contract.ProblemSubject, raw string) string {
 	return Shell(HeadCompliance, ProblemHint(
-		CurrentValue(flag+" 参数格式错误，"+subject+"必须是正整数", raw),
+		CurrentValue(flag+" 参数格式错误，"+subjectText(subject)+"必须是正整数", raw),
 		"给一个正整数（单位见该选项的说明）"))
 }
 
