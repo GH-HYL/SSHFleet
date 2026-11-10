@@ -82,7 +82,13 @@ func (c *client) passwd(ctx context.Context, p *contract.Plan, res *contract.Nod
 	clean := isCleanStop(res)
 	switch {
 	case res.Cancelled:
-		res.ErrorText = appendText(res.ErrorText, abortMessage(true))
+		// 次序照老版：原文 → 中断报文 → 服务端提示在最后。上一段只有「无退出码」那条路
+		// 把提示接过一次，正好是这一档——从原文重拼一遍，别让提示卡在报文前面。
+		if outcome.err != nil && f.exitCode == nil {
+			res.ErrorText = c.mergeBanner(appendText(deref(f.errText), abortMessage(true)))
+		} else {
+			res.ErrorText = appendText(res.ErrorText, abortMessage(true))
+		}
 	case outcome.err == nil && f.exitCode == nil:
 		// 连接层就失败了：connect.* 报文已在上一步写好，这里没有可补充的事实。
 	case clean && !hook.sawEnter():

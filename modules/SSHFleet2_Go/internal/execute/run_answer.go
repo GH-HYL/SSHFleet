@@ -59,7 +59,6 @@ func (c *client) runAnswer(ctx context.Context, p *contract.Plan, res *contract.
 	res.ExitCode = f.exitCode
 	res.TimedOut = f.timedOut
 	res.Cancelled = f.cancelled
-	res.ErrorText = c.mergeBanner(deref(f.errText))
 
 	// 代填的收尾三态。中止词优先（命中过的场次不判未命中，否则即时归因会被盖掉）；
 	// 中断有自己的去处（任务已取消），也不判未命中。
@@ -76,12 +75,13 @@ func (c *client) runAnswer(ctx context.Context, p *contract.Plan, res *contract.
 	}
 
 	// 收尾时说清这一摊是怎么结束的：代填没送完 / 表空了还在等 / 被中断。
+	// 服务端提示排在报文之后（老版次序：原文 → 报文 → 提示 → 未送出的代填），所以提示
+	// 留到这儿再接：先接报文、再接提示，别让报文落到提示后面。
+	reason := answerMessage(len(missed), res.Answer.Exhausted, res.TimedOut)
 	if outcome.canceled {
-		res.ErrorText = appendText(res.ErrorText, abortMessage(true))
-	} else {
-		res.ErrorText = appendText(res.ErrorText,
-			answerMessage(len(missed), res.Answer.Exhausted, res.TimedOut))
+		reason = abortMessage(true)
 	}
+	res.ErrorText = c.mergeBanner(appendText(deref(f.errText), reason))
 	// 末尾这一段逐条列出没送出去的：被按停不等于那些条已经送出去了，中断时照列（老版同）。
 	res.ErrorText = appendText(res.ErrorText, message.AnswerMissedNote(answers, missed))
 }
