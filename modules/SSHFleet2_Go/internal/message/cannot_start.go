@@ -163,8 +163,106 @@ func reasonText(r contract.CannotStartReason) string {
 	case contract.CannotStartUploadNothingLeft:
 		return "没有可上传的文件：" + r.Place + " 下的文件全部是软链接/快捷方式（已过滤 " +
 			strconv.Itoa(r.Index) + " 个：" + namesPreview(r.Value) + "）"
+
+	// 逐行报告：一行一处错的两屏（03b 号单）。
+	case contract.CannotStartNodeRows:
+		return nodeRowsText(r)
+	case contract.CannotStartCredRows:
+		return credRowsText(r)
 	}
 	panic("起不来：类别 " + string(r.Kind) + " 在 message.CannotStartText 里没有模板")
+}
+
+// nodeRowsText 是逐台补全那一屏：表头一句，下面一行一台。
+//
+// 一行里的几条原因用「，」连起来——它们说的是同一台机器的几处毛病，不该拆成几行。
+func nodeRowsText(r contract.CannotStartReason) string {
+	var b strings.Builder
+	b.WriteString("发现以下错误:")
+	for _, row := range r.Rows {
+		b.WriteString("\n行 " + strconv.Itoa(row.Line) + " (IP: " + shownIP(row.IP) + "): - " +
+			rowItemsText(row.Items))
+	}
+	return b.String()
+}
+
+// credRowsText 是凭据预检那一屏：先说共几处，下面缩两格一行一处，末尾一句去路。
+func credRowsText(r contract.CannotStartReason) string {
+	var b strings.Builder
+	b.WriteString("CSV凭据预检查失败，共 " + strconv.Itoa(len(r.Rows)) + " 处错误：")
+	for _, row := range r.Rows {
+		b.WriteString("\n  ")
+		if row.Line > 0 {
+			b.WriteString("行 " + strconv.Itoa(row.Line) + " (IP: " + row.IP + "): ")
+		}
+		b.WriteString(rowItemsText(row.Items))
+	}
+	b.WriteString("\n请修复上述问题后重新执行")
+	return b.String()
+}
+
+// shownIP 是清单第一列怎么露在屏上：没填时写「空值」，否则原样。
+func shownIP(ip string) string {
+	if ip == "" {
+		return "空值"
+	}
+	return ip
+}
+
+// rowItemsText 把一行里那几条拼起来：它们同属一行，用「，」分段。
+func rowItemsText(items []contract.CannotStartReason) string {
+	parts := make([]string, 0, len(items))
+	for _, it := range items {
+		parts = append(parts, rowItemText(it))
+	}
+	return strings.Join(parts, "，")
+}
+
+// rowItemText 是逐行报告里的一条：只成半句，不带行号前缀。
+func rowItemText(r contract.CannotStartReason) string {
+	switch r.Kind {
+	case contract.CannotStartRowIPMissing:
+		return "IP必须存在"
+	case contract.CannotStartRowIPBad:
+		return "IP格式不正确"
+	case contract.CannotStartRowPortBad:
+		return "端口必须是1-65535之间的整数，当前值为：" + r.Value
+	case contract.CannotStartRowUserMissing:
+		return "用户名为空：清单第 3 列没写，配置 account.user 也没配"
+	case contract.CannotStartRowKeyMissing:
+		return "用了 -k，但没有找到可用的私钥——在第 5 列写私钥路径，或把统一私钥配到配置 credential.key"
+	case contract.CannotStartRowPasswordMissing:
+		return "密码为空：清单第 4 列没写，配置 account.password 也没配"
+
+	// 凭据预检那几条：`<哪一格>文件<怎么不对> → <回显>`，系统原话括在末尾。
+	case contract.CannotStartRowCredMissing:
+		return r.Place + "文件" + credLabelMissing + credShown(r)
+	case contract.CannotStartRowCredBadCipher:
+		return r.Place + "文件" + credLabelBadCipher + credShown(r)
+	case contract.CannotStartRowCredUnreadable:
+		return r.Place + "文件" + credLabelUnreadable + credShown(r)
+	case contract.CannotStartRowCredConfigPassword:
+		return "配置 account.password：" + r.Origin
+	case contract.CannotStartRowCredConfigKeyPassword:
+		return "配置 credential.key_password：" + r.Origin
+	}
+	panic("起不来：逐行报告里的类别 " + string(r.Kind) + " 没有模板")
+}
+
+// 凭据预检那三种「文件怎么不对」：下一步各是一件不同的事，所以不合成一句。
+const (
+	credLabelMissing = "不存在（打开加密时这里填的是凭据文件的绝对路径，不加密时才是密码本身）"
+	credLabelBadCipher = "不是有效的密文，或主密钥不匹配（先用 --convert-secret 重新转换）"
+	credLabelUnreadable = "无法读取"
+)
+
+// credShown 拼「→ 回显」那一截，系统报得出原因时再括上它。
+func credShown(r contract.CannotStartReason) string {
+	out := " → " + r.Value
+	if r.Origin != "" {
+		out += " (" + r.Origin + ")"
+	}
+	return out
 }
 
 // reasonTail 是「原因：」那一行：系统原文为空时整行不出现。
