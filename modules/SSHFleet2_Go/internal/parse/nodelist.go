@@ -34,7 +34,7 @@ func readManifest(raw string) (manifest, *contract.CannotStart) {
 
 	rows, _, err := csvRows(text)
 	if err != nil {
-		return manifest{}, cannotStart("nodelist", "", manifestSyntaxError(raw, inline, err))
+		return manifest{}, cannotStartReason("nodelist", manifestSyntaxError(raw, inline, err))
 	}
 	if len(rows) == 0 {
 		return manifest{}, cannotStartReason("nodelist", contract.CannotStartReason{Kind: contract.CannotStartNoNodeParsed})
@@ -74,34 +74,37 @@ func manifestText(raw string) (string, bool, *contract.CannotStart) {
 	if statErr == nil && !info.IsDir() {
 		data, err := os.ReadFile(raw)
 		if err != nil {
-			return "", false, materialFail(message.Problem(
-				fmt.Sprintf("-f 参数指定的 CSV 文件读不到：%s", raw),
-				message.SystemReason(err),
-				"请检查文件是否存在、当前用户有没有读权限"))
+			return "", false, materialReason(contract.CannotStartReason{
+				Kind:   contract.CannotStartCSVUnreadable,
+				Place:  raw,
+				Origin: message.SystemReason(err),
+			})
 		}
 		if len(data) == 0 {
-			return "", false, materialFail(message.ProblemHint(
-				fmt.Sprintf("-f 参数指定的 CSV 文件为空：%s", raw),
-				"一行写一台机器，只写 IP 就能跑（端口、用户名、密码走配置）"))
+			return "", false, materialReason(contract.CannotStartReason{
+				Kind:  contract.CannotStartCSVEmpty,
+				Place: raw,
+			})
 		}
 		return string(data), false, nil
 	}
 
 	// 不是文件：要么是一条内联记录，要么两样都不是。
 	if strings.ContainsAny(raw, "\r\n") {
-		return "", true, materialFail(message.ProblemHint(
-			"-f 的内联值里不能有换行：内联只写一条",
-			"把节点写进 CSV 文件，再用 -f 指向它"))
+		return "", true, materialReason(contract.CannotStartReason{
+			Kind: contract.CannotStartManifestInlineNewline,
+		})
 	}
 	if !looksLikeInlineNode(raw) {
-		reason := "找不到这个文件"
-		if statErr != nil {
-			reason = message.SystemReason(statErr)
+		reason := contract.CannotStartReason{
+			Kind:  contract.CannotStartManifestPathMissing,
+			Place: raw,
 		}
-		return "", true, materialFail(message.Problem(
-			fmt.Sprintf("-f 参数指定的文件读不到：%s", raw),
-			reason,
-			message.ManifestGoneHint))
+		if statErr != nil {
+			reason.Kind = contract.CannotStartManifestStatFailed
+			reason.Origin = message.SystemReason(statErr)
+		}
+		return "", true, materialReason(reason)
 	}
 	return raw, true, nil
 }
@@ -149,18 +152,27 @@ func csvRows(text string) ([][]string, []int, error) {
 
 // manifestSyntaxError 是 CSV 语法错的那句话：说清哪一行、引号要成对。
 // Go 的原文是行话，使用者看了不知道怎么办。
-func manifestSyntaxError(raw string, inline bool, err error) string {
+//
+// 说得出行号时交「内联／文件 ＋ 行号」，说不出来就退回「读清单栽了」那一类（系统原话照贴）。
+func manifestSyntaxError(raw string, inline bool, err error) contract.CannotStartReason {
 	var parseErr *csv.ParseError
 	if !errors.As(err, &parseErr) {
-		return readFailure(err)
+		return contract.CannotStartReason{
+			Kind:   contract.CannotStartManifestRead,
+			Origin: err.Error(),
+		}
 	}
-	where := "内联节点信息的"
-	if !inline {
-		where = raw + " 的"
+	if inline {
+		return contract.CannotStartReason{
+			Kind:  contract.CannotStartManifestSyntaxInline,
+			Index: parseErr.Line,
+		}
 	}
-	return message.ProblemHint(
-		fmt.Sprintf("读取节点清单失败：%s第 %d 行格式读不了——CSV 的双引号要成对出现", where, parseErr.Line),
-		"值里要用引号时，把里面的引号写成两个")
+	return contract.CannotStartReason{
+		Kind:  contract.CannotStartManifestSyntaxFile,
+		Place: raw,
+		Index: parseErr.Line,
+	}
 }
 
 // looksLikeInlineNode 这个值像不像一条内联节点记录：按 CSV 读法取首字段，是 IPv4 就算。
