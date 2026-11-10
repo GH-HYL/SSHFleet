@@ -38,10 +38,14 @@ func answerTable(raw string, regex, caseSensitive bool) ([]contract.Answer, *con
 	if isFile {
 		data, err := os.ReadFile(path)
 		if err != nil {
-			return nil, materialFail(message.AnswerFileUnreadable(path, message.SystemReason(err)))
+			return nil, cliReason(contract.CannotStartReason{
+				Kind:   contract.CannotStartAnswerFileUnreadable,
+				Place:  path,
+				Origin: message.SystemReason(err),
+			})
 		}
 		if isBinaryContent(data) {
-			return nil, materialFail(message.AnswerFileIsBinary(path))
+			return nil, cliReason(contract.CannotStartReason{Kind: contract.CannotStartAnswerFileBinary, Place: path})
 		}
 		text = string(data)
 	}
@@ -54,9 +58,13 @@ func answerTable(raw string, regex, caseSensitive bool) ([]contract.Answer, *con
 			if isFile {
 				where = path
 			}
-			return nil, materialFail(message.AnswerSyntaxError(where, parseErr.Line))
+			return nil, cliReason(contract.CannotStartReason{
+				Kind:  contract.CannotStartAnswerSyntax,
+				Place: where,
+				Index: parseErr.Line,
+			})
 		}
-		return nil, materialFail(readFailure(err))
+		return nil, cliReason(contract.CannotStartReason{Kind: contract.CannotStartManifestRead, Origin: err.Error()})
 	}
 
 	answers := make([]contract.Answer, 0, len(rows))
@@ -67,7 +75,13 @@ func answerTable(raw string, regex, caseSensitive bool) ([]contract.Answer, *con
 			if isFile {
 				where = path
 			}
-			return nil, materialFail(message.AnswerRowInvalid(where, lines[i], strings.Join(row, ","), why))
+			return nil, cliReason(contract.CannotStartReason{
+				Kind:   contract.CannotStartAnswerRowInvalid,
+				Place:  where,
+				Index:  lines[i],
+				Value:  strings.Join(row, ","),
+				Origin: why,
+			})
 		}
 		answers = append(answers, entry)
 	}
@@ -76,7 +90,7 @@ func answerTable(raw string, regex, caseSensitive bool) ([]contract.Answer, *con
 		if isFile {
 			where = path
 		}
-		return nil, materialFail(message.AnswerEmpty(where))
+		return nil, cliReason(contract.CannotStartReason{Kind: contract.CannotStartAnswerEmpty, Place: where})
 	}
 	if fail := validateAnswers(answers, regex, caseSensitive); fail != nil {
 		return nil, fail
@@ -96,10 +110,14 @@ func answerSource(raw string) (path string, isFile bool, fail *contract.CannotSt
 		return raw, true, nil
 	}
 	if strings.ContainsAny(raw, "\r\n") {
-		return "", false, materialFail(message.AnswerInlineHasNewline())
+		return "", false, cliReason(contract.CannotStartReason{Kind: contract.CannotStartAnswerInlineNewline})
 	}
 	if !strings.Contains(raw, ",") {
-		return "", false, materialFail(message.AnswerGone(raw, message.SystemReason(statErr)))
+		return "", false, cliReason(contract.CannotStartReason{
+			Kind:   contract.CannotStartAnswerGone,
+			Place:  raw,
+			Origin: message.SystemReason(statErr),
+		})
 	}
 	return "", false, nil
 }
@@ -130,7 +148,11 @@ func answerOf(fields []string) (contract.Answer, string) {
 func validateAnswers(answers []contract.Answer, regex, caseSensitive bool) *contract.CannotStart {
 	for i, entry := range answers {
 		if len(entry.Triggers) == 0 {
-			return materialFail(message.AnswerMissingTrigger(i+1, entry.Value))
+			return cliReason(contract.CannotStartReason{
+				Kind:  contract.CannotStartAnswerMissingTrigger,
+				Index: i + 1,
+				Value: entry.Value,
+			})
 		}
 		if !regex {
 			continue
@@ -141,7 +163,12 @@ func validateAnswers(answers []contract.Answer, regex, caseSensitive bool) *cont
 				pattern = "(?i)" + kw
 			}
 			if _, err := regexp.Compile(pattern); err != nil {
-				return materialFail(message.AnswerBadRegex(i+1, kw, err.Error()))
+				return cliReason(contract.CannotStartReason{
+					Kind:   contract.CannotStartAnswerBadRegex,
+					Index:  i + 1,
+					Value:  kw,
+					Origin: err.Error(),
+				})
 			}
 		}
 	}

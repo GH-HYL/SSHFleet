@@ -6,6 +6,7 @@ package parse
 // 直接调一个纯函数验不出「读一次、整备一次」这件事。
 
 import (
+	"sshfleet2/internal/message"
 	"os"
 	"path/filepath"
 	"testing"
@@ -23,7 +24,7 @@ func TestInterpreterBySuffixHit(t *testing.T) {
 	}
 	p, _, fail := buildPlan(cfg, scan([]string{"sshfleet2", "-f", manifest, "-s", script}))
 	if fail != nil {
-		t.Fatalf("不该走到「起不来」：%v", fail.Body)
+		t.Fatalf("不该走到「起不来」：%v", message.CannotStartText(*fail))
 	}
 	if p.Run.Interpreter != "bash" {
 		t.Fatalf("`.sh` 该配到 bash，实际 %q", p.Run.Interpreter)
@@ -45,7 +46,7 @@ func TestInterpreterSuffixIsCaseInsensitive(t *testing.T) {
 	}
 	p, _, fail := buildPlan(cfg, scan([]string{"sshfleet2", "-f", manifest, "-s", script}))
 	if fail != nil {
-		t.Fatalf("不该走到「起不来」：%v", fail.Body)
+		t.Fatalf("不该走到「起不来」：%v", message.CannotStartText(*fail))
 	}
 	if p.Run.Interpreter != "bash" || p.Run.FallbackExt != "" {
 		t.Fatalf("`.SH` 应当命中 `.sh`：解释器 %q，回退后缀 %q", p.Run.Interpreter, p.Run.FallbackExt)
@@ -64,7 +65,7 @@ func TestInterpreterFallsBackAndRecordsSuffix(t *testing.T) {
 	}
 	p, _, fail := buildPlan(cfg, scan([]string{"sshfleet2", "-f", manifest, "-s", script}))
 	if fail != nil {
-		t.Fatalf("不该走到「起不来」：%v", fail.Body)
+		t.Fatalf("不该走到「起不来」：%v", message.CannotStartText(*fail))
 	}
 	if p.Run.Interpreter != "bash" {
 		t.Fatalf("没配到应当回退到命令解释器 bash，实际 %q", p.Run.Interpreter)
@@ -91,7 +92,7 @@ func TestScriptBodyTrimmedOnce(t *testing.T) {
 	}
 	p, _, fail := buildPlan(cfg, scan([]string{"sshfleet2", "-f", manifest, "-s", script}))
 	if fail != nil {
-		t.Fatalf("不该走到「起不来」：%v", fail.Body)
+		t.Fatalf("不该走到「起不来」：%v", message.CannotStartText(*fail))
 	}
 	if p.Task.Script.Body != "echo hi" {
 		t.Fatalf("正文整备不对：%q", p.Task.Script.Body)
@@ -128,7 +129,7 @@ func TestInterpreterOnlyForCommandAndScript(t *testing.T) {
 	for _, c := range cases {
 		p, _, fail := buildPlan(cfg, scan(append([]string{"sshfleet2", "-f", manifest}, c.argv...)))
 		if fail != nil {
-			t.Fatalf("%s 不该走到「起不来」：%v", c.name, fail.Body)
+			t.Fatalf("%s 不该走到「起不来」：%v", c.name, message.CannotStartText(*fail))
 		}
 		if p.Run.Interpreter != c.want {
 			t.Errorf("%s 的解释器应当是 %q，实际 %q", c.name, c.want, p.Run.Interpreter)

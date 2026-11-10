@@ -70,8 +70,8 @@ func TestKeyRunRefusesTwoTools(t *testing.T) {
 		"选项/参数合规性检查未通过：",
 		"--gen-key、--key-status 只能给一个——它们是三个独立命令，一次做一件事",
 	} {
-		if !strings.Contains(fail.Body, want) {
-			t.Fatalf("那一屏缺「%s」：%q", want, fail.Body)
+		if !strings.Contains(message.CannotStartText(*fail), want) {
+			t.Fatalf("那一屏缺「%s」：%q", want, message.CannotStartText(*fail))
 		}
 	}
 }
@@ -92,8 +92,8 @@ func TestKeyRunRefusesWithBatchParams(t *testing.T) {
 		"--key-status 不能和批量执行选项一起用：同时给了 -c、-n、-r",
 		"提示：分成两次执行——先跑密钥管理命令，再跑批量执行",
 	} {
-		if !strings.Contains(fail.Body, want) {
-			t.Fatalf("那一屏缺「%s」：%q", want, fail.Body)
+		if !strings.Contains(message.CannotStartText(*fail), want) {
+			t.Fatalf("那一屏缺「%s」：%q", want, message.CannotStartText(*fail))
 		}
 	}
 }

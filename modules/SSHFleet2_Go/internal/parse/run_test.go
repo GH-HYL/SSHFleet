@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"sshfleet2/internal/contract"
+	"sshfleet2/internal/message"
 )
 
 // 认「要不要看帮助」：-h / --help / 空参三种触发；带值选项吃掉下一个 token；
@@ -74,7 +75,7 @@ func TestSudoConflictRecordedAsProblem(t *testing.T) {
 	both := scan([]string{"sshfleet2", "--sudo", "--no-sudo", "-c", "uptime", "-f", manifest})
 	p, _, fail := buildPlan(cfg, both)
 	if fail != nil {
-		t.Fatalf("两个开关同给不该走到「起不来」：%v", fail.Body)
+		t.Fatalf("两个开关同给不该走到「起不来」：%v", message.CannotStartText(*fail))
 	}
 	found := false
 	for _, pr := range p.Problems {
@@ -92,7 +93,7 @@ func TestSudoConflictRecordedAsProblem(t *testing.T) {
 	onlyNo := scan([]string{"sshfleet2", "--no-sudo", "-c", "uptime", "-f", manifest})
 	p, _, fail = buildPlan(cfg, onlyNo)
 	if fail != nil {
-		t.Fatalf("只给 --no-sudo 不该走到「起不来」：%v", fail.Body)
+		t.Fatalf("只给 --no-sudo 不该走到「起不来」：%v", message.CannotStartText(*fail))
 	}
 	for _, pr := range p.Problems {
 		if pr.Kind == contract.ProblemFlagConflict {
@@ -152,7 +153,7 @@ func TestExtraArgsRecordedAsProblem(t *testing.T) {
 
 	p, _, fail := buildPlan(cfg, scan([]string{"sshfleet2", "-c", "echo hi", "extra"}))
 	if fail != nil {
-		t.Fatalf("有多余段时不该走到「起不来」（应当交给闸门拒）：%v", fail.Body)
+		t.Fatalf("有多余段时不该走到「起不来」（应当交给闸门拒）：%v", message.CannotStartText(*fail))
 	}
 	found := false
 	for _, pr := range p.Problems {
@@ -183,7 +184,7 @@ func TestBuildPlanCarriesDownlinkMaterial(t *testing.T) {
 
 	p, _, fail := buildPlan(cfg, scan([]string{"sshfleet2", "-c", "uptime", "-f", manifest}))
 	if fail != nil {
-		t.Fatalf("不该走到「起不来」：%v", fail.Body)
+		t.Fatalf("不该走到「起不来」：%v", message.CannotStartText(*fail))
 	}
 	if p.Run.Interpreter != "bash" {
 		t.Errorf("解释器应照配置带上纸，实际 %q", p.Run.Interpreter)

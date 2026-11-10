@@ -169,6 +169,46 @@ func reasonText(r contract.CannotStartReason) string {
 		return nodeRowsText(r)
 	case contract.CannotStartCredRows:
 		return credRowsText(r)
+
+	// 提交前那几处取值不对（03 号单最后一批）：模板仍住各自的文件，这里只转派。
+	case contract.CannotStartAnswerFileUnreadable:
+		return AnswerFileUnreadable(r.Place, r.Origin)
+	case contract.CannotStartAnswerFileBinary:
+		return AnswerFileIsBinary(r.Place)
+	case contract.CannotStartAnswerInlineNewline:
+		return AnswerInlineHasNewline()
+	case contract.CannotStartAnswerGone:
+		return AnswerGone(r.Place, r.Origin)
+	case contract.CannotStartAnswerSyntax:
+		return AnswerSyntaxError(r.Place, r.Index)
+	case contract.CannotStartAnswerRowInvalid:
+		return AnswerRowInvalid(r.Place, r.Index, r.Value, r.Origin)
+	case contract.CannotStartAnswerEmpty:
+		return AnswerEmpty(r.Place)
+	case contract.CannotStartAnswerMissingTrigger:
+		return AnswerMissingTrigger(r.Index, r.Value)
+	case contract.CannotStartAnswerBadRegex:
+		return AnswerBadRegex(r.Index, r.Value, r.Origin)
+
+	case contract.CannotStartPasswdCipherEncrypted:
+		return PasswdValueIsCipherEncrypted()
+	case contract.CannotStartPasswdCipherPlain:
+		return PasswdValueIsCipherPlain()
+	case contract.CannotStartPasswdUnreadable:
+		return PasswdValueUnreadable(r.Place, r.Origin)
+	case contract.CannotStartPasswdUndecodable:
+		return PasswdValueUndecodable(r.Origin)
+	case contract.CannotStartPasswdProblems:
+		return PasswdValueProblems(r.Value)
+	case contract.CannotStartPasswdNewline:
+		return PasswdHasNewline()
+	case contract.CannotStartPasswdOuterSpace:
+		return PasswdHasOuterSpace()
+
+	case contract.CannotStartKeyToolAlone:
+		return KeyToolNeedAlone(r.Value)
+	case contract.CannotStartKeyToolWithBatch:
+		return KeyToolWithBatch(r.Place, r.Value)
 	}
 	panic("起不来：类别 " + string(r.Kind) + " 在 message.CannotStartText 里没有模板")
 }

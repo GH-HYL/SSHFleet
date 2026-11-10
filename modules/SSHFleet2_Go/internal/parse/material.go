@@ -25,33 +25,33 @@ func checkMaterial(p *contract.Plan, given map[string]bool, vals map[string]stri
 	if script := vals["--script"]; script != "" {
 		info, err := os.Stat(script)
 		if err == nil && info.IsDir() {
-			return materialReason(contract.CannotStartReason{
+			return cliReason(contract.CannotStartReason{
 				Kind:  contract.CannotStartScriptIsDir,
 				Place: script,
 			})
 		}
 		data, rerr := os.ReadFile(script)
 		if rerr != nil {
-			return materialReason(contract.CannotStartReason{
+			return cliReason(contract.CannotStartReason{
 				Kind:   contract.CannotStartScriptUnreadable,
 				Place:  script,
 				Origin: message.SystemReason(rerr),
 			})
 		}
 		if len(data) == 0 {
-			return materialReason(contract.CannotStartReason{
+			return cliReason(contract.CannotStartReason{
 				Kind:  contract.CannotStartScriptEmpty,
 				Place: script,
 			})
 		}
 		if bytes.IndexByte(data, 0) >= 0 {
-			return materialReason(contract.CannotStartReason{
+			return cliReason(contract.CannotStartReason{
 				Kind:  contract.CannotStartScriptBinary,
 				Place: script,
 			})
 		}
 		if !utf8ValidExceptBOM(data) {
-			return materialReason(contract.CannotStartReason{
+			return cliReason(contract.CannotStartReason{
 				Kind:  contract.CannotStartScriptNotUTF8,
 				Place: script,
 			})
@@ -67,14 +67,14 @@ func checkMaterial(p *contract.Plan, given map[string]bool, vals map[string]stri
 	if vals["--download"] != "" && vals["--path"] != "" {
 		info, err := os.Stat(vals["--path"])
 		if err != nil {
-			return materialReason(contract.CannotStartReason{
+			return cliReason(contract.CannotStartReason{
 				Kind:   contract.CannotStartDownloadPathUnreadable,
 				Place:  vals["--path"],
 				Origin: message.SystemReason(err),
 			})
 		}
 		if !info.IsDir() {
-			return materialReason(contract.CannotStartReason{
+			return cliReason(contract.CannotStartReason{
 				Kind:  contract.CannotStartDownloadPathNotDir,
 				Place: vals["--path"],
 			})
@@ -87,20 +87,20 @@ func checkMaterial(p *contract.Plan, given map[string]bool, vals map[string]stri
 		if info, err := os.Stat(csv); err == nil && !info.IsDir() {
 			data, rerr := os.ReadFile(csv)
 			if rerr != nil {
-				return materialReason(contract.CannotStartReason{
+				return cliReason(contract.CannotStartReason{
 					Kind:   contract.CannotStartCSVUnreadable,
 					Place:  csv,
 					Origin: message.SystemReason(rerr),
 				})
 			}
 			if len(data) == 0 {
-				return materialReason(contract.CannotStartReason{
+				return cliReason(contract.CannotStartReason{
 					Kind:  contract.CannotStartCSVEmpty,
 					Place: csv,
 				})
 			}
 			if bytes.IndexByte(data, 0) >= 0 {
-				return materialReason(contract.CannotStartReason{
+				return cliReason(contract.CannotStartReason{
 					Kind:  contract.CannotStartCSVBinary,
 					Place: csv,
 				})
@@ -113,18 +113,11 @@ func checkMaterial(p *contract.Plan, given map[string]bool, vals map[string]stri
 	return nil
 }
 
-// materialReason 按「类别 ＋ 参数」交上去，外壳句由 `message` 加（ADR-0044）。
-func materialReason(reason contract.CannotStartReason) *contract.CannotStart {
+// cliReason 是「cli 环节 ＋ 合规外壳」那一屏：类别与参数由调用点填，句子由 `message` 成形
+// （ADR-0044）。材料自检、代填、改密取值、密钥命令那几处都用它。
+func cliReason(reason contract.CannotStartReason) *contract.CannotStart {
 	reason.Head = message.HeadCompliance
 	return cannotStartReason("cli", reason)
-}
-
-// materialFail 套上老版那句外壳，再按「起不来」排屏。外壳句住在 `message`，不在这里抄一份。
-//
-// 迁移期留着的口子：`-a` 代填、改密取值、读清单自检那几处还没搬（03 号单的后半），
-// 搬完一处就少一个调用点，`Body` 删掉之前必然清零。
-func materialFail(body string) *contract.CannotStart {
-	return cannotStart("cli", message.HeadCompliance, body)
 }
 
 // utf8ValidExceptBOM 判内容为合法 UTF-8（允许带 BOM）。

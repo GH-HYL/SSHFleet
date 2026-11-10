@@ -74,14 +74,14 @@ func manifestText(raw string) (string, bool, *contract.CannotStart) {
 	if statErr == nil && !info.IsDir() {
 		data, err := os.ReadFile(raw)
 		if err != nil {
-			return "", false, materialReason(contract.CannotStartReason{
+			return "", false, cliReason(contract.CannotStartReason{
 				Kind:   contract.CannotStartCSVUnreadable,
 				Place:  raw,
 				Origin: message.SystemReason(err),
 			})
 		}
 		if len(data) == 0 {
-			return "", false, materialReason(contract.CannotStartReason{
+			return "", false, cliReason(contract.CannotStartReason{
 				Kind:  contract.CannotStartCSVEmpty,
 				Place: raw,
 			})
@@ -91,7 +91,7 @@ func manifestText(raw string) (string, bool, *contract.CannotStart) {
 
 	// 不是文件：要么是一条内联记录，要么两样都不是。
 	if strings.ContainsAny(raw, "\r\n") {
-		return "", true, materialReason(contract.CannotStartReason{
+		return "", true, cliReason(contract.CannotStartReason{
 			Kind: contract.CannotStartManifestInlineNewline,
 		})
 	}
@@ -104,7 +104,7 @@ func manifestText(raw string) (string, bool, *contract.CannotStart) {
 			reason.Kind = contract.CannotStartManifestStatFailed
 			reason.Origin = message.SystemReason(statErr)
 		}
-		return "", true, materialReason(reason)
+		return "", true, cliReason(reason)
 	}
 	return raw, true, nil
 }
