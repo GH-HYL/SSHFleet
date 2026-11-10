@@ -108,6 +108,26 @@ const (
 	CannotStartManifestSyntaxFile CannotStartKind = "nodelist_syntax_file"
 )
 
+// 上传源采集（03 号单）：`-u` 那棵树在确认屏之前清点一遍时撞上的毛病。
+//
+// 这一族走「起不来」，环节名 upload，不带合规外壳（老版那一处就没有外壳）。
+const (
+	// CannotStartUploadRootMissing 是 `-u` 指的东西本机上不存在：Place 是那个原值，
+	// Origin 是系统原话。
+	CannotStartUploadRootMissing CannotStartKind = "upload_root_missing"
+	// CannotStartUploadRootIsLink 是 `-u` 指的路径本身就是软链接／快捷方式：Place 是它。
+	CannotStartUploadRootIsLink CannotStartKind = "upload_root_is_link"
+	// CannotStartUploadSpecialType 是撞上 FIFO／设备／socket：Place 是那个路径。
+	CannotStartUploadSpecialType CannotStartKind = "upload_special_type"
+	// CannotStartUploadFileUnreadable 是某个文件打不开：Place 是路径，Origin 是系统原话。
+	CannotStartUploadFileUnreadable CannotStartKind = "upload_file_unreadable"
+	// CannotStartUploadDirUnreadable 是那棵树走不下去：Place 是根，Origin 是系统原话。
+	CannotStartUploadDirUnreadable CannotStartKind = "upload_dir_unreadable"
+	// CannotStartUploadNothingLeft 是过滤完一个可传文件都不剩：Place 是根，Index 是被过滤的
+	// 个数，Value 是那些名字的呈现形态（最多五个，超出带「等 N 个」）。
+	CannotStartUploadNothingLeft CannotStartKind = "upload_nothing_left"
+)
+
 // 条目层（改密提示词表、错误分类表、危险规则表各条里对不上的那一格）。
 const (
 	CannotStartPasswdStepNoKeywords CannotStartKind = "passwd_step_no_keywords"

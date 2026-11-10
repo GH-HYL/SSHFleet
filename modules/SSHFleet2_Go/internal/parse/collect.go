@@ -17,7 +17,6 @@ package parse
 // 相对路径不含上传根那一层（`-u modules -p /tmp/` ⇒ `/tmp/<内容>`），上传侧据此保留层级。
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -36,17 +35,23 @@ func collect(p *contract.Plan, cfg *settings) *contract.CannotStart {
 
 	info, err := os.Lstat(root)
 	if err != nil {
-		return collectFail(fmt.Sprintf("-u 参数指定的上传文件或目录读不到：%s", root),
-			message.SystemReason(err), "-u 后面要写本机上真实存在的文件或目录")
+		return collectReason(contract.CannotStartReason{
+			Kind:   contract.CannotStartUploadRootMissing,
+			Place:  root,
+			Origin: message.SystemReason(err),
+		})
 	}
 
 	if !info.IsDir() {
 		// 单文件：根路径本身是链接时同样过滤（没有可传目标 → 报错）。
 		if isLinkish(root, info) {
-			return collectFail(fmt.Sprintf("没有可上传的文件：-u 指定的路径本身是软链接/快捷方式：%s", root), "", "")
+			return collectReason(contract.CannotStartReason{
+				Kind:  contract.CannotStartUploadRootIsLink,
+				Place: root,
+			})
 		}
-		if why := specialTypeErr(root, info); why != "" {
-			return collectFail(why, "", "")
+		if reason, bad := specialTypeErr(root, info); bad {
+			return collectReason(reason)
 		}
 		task.Files = []contract.UploadFile{{Path: root, Rel: info.Name(), Size: info.Size()}}
 		task.TotalBytes = info.Size()
@@ -67,15 +72,19 @@ func collect(p *contract.Plan, cfg *settings) *contract.CannotStart {
 			task.Skipped = append(task.Skipped, relOf(root, path))
 			return nil
 		}
-		if why := specialTypeErr(path, fi); why != "" {
-			return errSkipUpload(why)
+		if reason, bad := specialTypeErr(path, fi); bad {
+			return uploadStop{reason: reason}
 		}
 		if fi.IsDir() {
 			return nil
 		}
 		f, openErr := os.Open(path)
 		if openErr != nil {
-			return errSkipUpload(fmt.Sprintf("文件不可读: %s: %v", path, openErr))
+			return uploadStop{reason: contract.CannotStartReason{
+				Kind:   contract.CannotStartUploadFileUnreadable,
+				Place:  path,
+				Origin: openErr.Error(),
+			}}
 		}
 		_ = f.Close()
 
@@ -90,15 +99,22 @@ func collect(p *contract.Plan, cfg *settings) *contract.CannotStart {
 	if err != nil {
 		var stop uploadStop
 		if asUploadStop(err, &stop) {
-			return collectFail(string(stop), "", "")
+			return collectReason(stop.reason)
 		}
-		return collectFail(fmt.Sprintf("-u 参数指定的上传目录读不了：%s", root),
-			message.SystemReason(err), "请检查目录的读权限")
+		return collectReason(contract.CannotStartReason{
+			Kind:   contract.CannotStartUploadDirUnreadable,
+			Place:  root,
+			Origin: message.SystemReason(err),
+		})
 	}
 
 	if len(task.Files) == 0 {
-		return collectFail(fmt.Sprintf("没有可上传的文件：%s 下的文件全部是软链接/快捷方式（已过滤 %d 个：%s）",
-			root, len(task.Skipped), summarize(task.Skipped)), "", "")
+		return collectReason(contract.CannotStartReason{
+			Kind:  contract.CannotStartUploadNothingLeft,
+			Place: root,
+			Index: len(task.Skipped),
+			Value: strings.Join(task.Skipped, "、"),
+		})
 	}
 
 	p.Run.ConcurrencyAdvice = suggestConcurrency(task.TotalBytes, cfg, len(p.Nodes))
@@ -158,11 +174,16 @@ func isLinkish(path string, info os.FileInfo) bool {
 }
 
 // specialTypeErr FIFO／设备／socket 一律按错报：它们不是"链接"，过滤掉会静默改变语义。
-func specialTypeErr(path string, info os.FileInfo) string {
+//
+// 第二个返回值表示「撞上了」，撞上时那一条原因按类别交上去（句子由 `message` 成形）。
+func specialTypeErr(path string, info os.FileInfo) (contract.CannotStartReason, bool) {
 	if info.Mode()&os.ModeNamedPipe != 0 || info.Mode()&os.ModeDevice != 0 || info.Mode()&os.ModeSocket != 0 {
-		return fmt.Sprintf("不支持的文件类型: %s (FIFO/device/socket)", path)
+		return contract.CannotStartReason{
+			Kind:  contract.CannotStartUploadSpecialType,
+			Place: path,
+		}, true
 	}
-	return ""
+	return contract.CannotStartReason{}, false
 }
 
 // relOf 相对上传根的路径（POSIX 斜杠，远端拼接用）。
@@ -174,22 +195,15 @@ func relOf(root, path string) string {
 	return filepath.ToSlash(rel)
 }
 
-// summarize 把被过滤的条目拼成提示：超过 5 个时截断（清单可能几百个，一句提示刷满屏没有意义）。
-func summarize(names []string) string {
-	const maxShow = 5
-	if len(names) <= maxShow {
-		return strings.Join(names, "、")
-	}
-	return strings.Join(names[:maxShow], "、") + fmt.Sprintf(" 等 %d 个", len(names))
+// uploadStop 是「遍历中途要停」的那一条：它带着一项事实，不再包装一层。
+//
+// 它是 Walk 回调唯一的「停下来」口子；Error 只给 error 接口用，没有一处把它印上屏
+// ——认出来之后交的是 reason 本身。
+type uploadStop struct {
+	reason contract.CannotStartReason
 }
 
-// uploadStop 是「遍历中途要停」的那条原因：它带着老版那句话，不再包装一层。
-type uploadStop string
-
-func (s uploadStop) Error() string { return string(s) }
-
-// errSkipUpload 把遍历里遇到的那句话变成一个能停住 Walk 的错误值。
-func errSkipUpload(why string) error { return uploadStop(why) }
+func (s uploadStop) Error() string { return "上传源采集停住了：" + string(s.reason.Kind) }
 
 // asUploadStop 认得出遍历里我们自己抛的那条原因。
 func asUploadStop(err error, target *uploadStop) bool {
@@ -202,14 +216,7 @@ func asUploadStop(err error, target *uploadStop) bool {
 
 // —— 与「起不来」的接口 ——
 
-// collectFail 采集失败：老版这一处用 where=upload 排屏，不带合规外壳。
-func collectFail(problem, reason, hint string) *contract.CannotStart {
-	body := problem
-	switch {
-	case reason != "" && hint != "":
-		body = message.Problem(problem, reason, hint)
-	case hint != "":
-		body = message.ProblemHint(problem, hint)
-	}
-	return cannotStart("upload", "", body)
+// collectReason 采集失败：老版这一处用 where=upload 排屏，不带合规外壳（ADR-0044）。
+func collectReason(reason contract.CannotStartReason) *contract.CannotStart {
+	return cannotStartReason("upload", reason)
 }

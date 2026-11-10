@@ -2,6 +2,7 @@ package message
 
 import (
 	"strconv"
+	"strings"
 
 	"sshfleet2/internal/contract"
 )
@@ -145,6 +146,23 @@ func reasonText(r contract.CannotStartReason) string {
 		return manifestSyntaxText("内联节点信息的", r.Index)
 	case contract.CannotStartManifestSyntaxFile:
 		return manifestSyntaxText(r.Place+" 的", r.Index)
+
+	// 上传源采集：`-u` 那棵树在确认屏之前清点一遍时撞上的毛病。
+	case contract.CannotStartUploadRootMissing:
+		return "-u 参数指定的上传文件或目录读不到：" + r.Place + reasonTail(r.Origin) +
+			hintTail("-u 后面要写本机上真实存在的文件或目录")
+	case contract.CannotStartUploadRootIsLink:
+		return "没有可上传的文件：-u 指定的路径本身是软链接/快捷方式：" + r.Place
+	case contract.CannotStartUploadSpecialType:
+		return "不支持的文件类型: " + r.Place + " (FIFO/device/socket)"
+	case contract.CannotStartUploadFileUnreadable:
+		return "文件不可读: " + r.Place + ": " + r.Origin
+	case contract.CannotStartUploadDirUnreadable:
+		return "-u 参数指定的上传目录读不了：" + r.Place + reasonTail(r.Origin) +
+			hintTail("请检查目录的读权限")
+	case contract.CannotStartUploadNothingLeft:
+		return "没有可上传的文件：" + r.Place + " 下的文件全部是软链接/快捷方式（已过滤 " +
+			strconv.Itoa(r.Index) + " 个：" + namesPreview(r.Value) + "）"
 	}
 	panic("起不来：类别 " + string(r.Kind) + " 在 message.CannotStartText 里没有模板")
 }
@@ -190,6 +208,22 @@ const (
 	downloadDirHint = "这个目录要在本机上先建好，工具不会替你建"
 	csvEmptyHint    = "一行写一台机器，只写 IP 就能跑（端口、用户名、密码走配置）"
 )
+
+// namesPreview 把一串名字（`、` 连起来）截成最多五个，超出时带一句「等 N 个」。
+//
+// 清单可能有几百个——一句提示刷满屏没有意义。名字怎么截是**话**，所以住这里，站里只交
+// 原始那一串（`CannotStartReason.Value`）。
+func namesPreview(joined string) string {
+	const maxShow = 5
+	if joined == "" {
+		return ""
+	}
+	names := strings.Split(joined, "、")
+	if len(names) <= maxShow {
+		return joined
+	}
+	return strings.Join(names[:maxShow], "、") + " 等 " + strconv.Itoa(len(names)) + " 个"
+}
 
 // manifestSyntaxText 是 CSV 语法错那一句：`读取节点清单失败：<谁的>第 N 行格式读不了`。
 //

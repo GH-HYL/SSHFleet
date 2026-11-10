@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"sshfleet2/internal/contract"
+	"sshfleet2/internal/message"
 )
 
 // collectPlan 造一张只带上传任务的纸，跑一遍 collect。
@@ -156,8 +157,8 @@ func TestCollectAllFilteredFails(t *testing.T) {
 	if fail == nil {
 		t.Fatal("一个可传文件都不剩时应当报错")
 	}
-	if want := "已过滤 1 个：only.txt"; !strings.Contains(fail.Body, want) {
-		t.Fatalf("报错要说清滤掉了谁：%s", fail.Body)
+	if want := "已过滤 1 个：only.txt"; !strings.Contains(message.CannotStartText(*fail), want) {
+		t.Fatalf("报错要说清滤掉了谁：%s", message.CannotStartText(*fail))
 	}
 }
 
@@ -184,8 +185,8 @@ func TestCollectUnreadableFileFails(t *testing.T) {
 	if fail == nil {
 		t.Fatal("不可读的文件应当当场报错")
 	}
-	if !strings.Contains(fail.Body, "文件不可读") {
-		t.Fatalf("话里要说清是不可读：%s", fail.Body)
+	if say := message.CannotStartText(*fail); !strings.Contains(say, "文件不可读") {
+		t.Fatalf("话里要说清是不可读：%s", say)
 	}
 }
 
