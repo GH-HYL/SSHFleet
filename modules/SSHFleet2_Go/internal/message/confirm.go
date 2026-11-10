@@ -170,13 +170,16 @@ func concurrencyText(p *contract.Plan, adopted bool) string {
 	return strconv.Itoa(v) + suffixForUnset(p.Run.Concurrency)
 }
 
-// concurrencyValue 把「没指定 -n」那一格（0）换成它实际生效的值：全部并行 = 节点数。
-// 确认屏与 `report.txt` 两处读同一个换法——老版里两处写的也是同一个数。
+// concurrencyValue 是**实际生效**的并发数：没指定 -n（0）就是全部并行＝节点数；
+// 指定了但比台数还多，也只能起这么多（2026-11-10，审计 05-F11）。
+//
+// 确认屏、`report.txt`、执行期日志三处读同一个换法。改前这里只换 0、不封顶，于是
+// `-n 100` 配三台时屏上印 100、报告印 5、实际起 5——同一次运行两个并发数。
 func concurrencyValue(n, total int) int {
-	if n != 0 {
-		return n
+	if n == 0 || n > total {
+		return total
 	}
-	return total
+	return n
 }
 
 // suffixForUnset 没指定 -n 时补的那半句；指定了就是空串。

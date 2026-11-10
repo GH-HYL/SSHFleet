@@ -99,9 +99,23 @@ func LogInitFailed(err error) Line {
 //
 // 形态逐字照老版 `dangercheck.Match.Note()`：级别用英文枚举、带来源行、示例与说明不论空否都留着。
 func TraceDanger(m contract.DangerMatch) Line {
-	note := m.RuleName + "（" + m.Level + "，来源行 " + linesText(m.Lines) + "）：" + m.Content +
+	return Line{s: "非交互模式放行危险命令：" + dangerNote(m)}
+}
+
+// TraceDangerConfirmed 是交互答「是」之后那一行留痕，逐字照老版 `main.go`：
+// 老版在这里写 `logger.Warn` 与 `execLog.Warn` 各一次（审计 08-4）。
+//
+// 与 TraceDanger 分开两句不是重复：一句说「有人把关，他点了头」，一句说「无人值守放行」，
+// 事后追责时这两件事不能混（`2026-10-18-2214-代码缺陷清点` 的 02 号单 45 行写明是信息不是差异）。
+func TraceDangerConfirmed(m contract.DangerMatch) Line {
+	return Line{s: "用户已确认风险继续执行：" + dangerNote(m)}
+}
+
+// dangerNote 是两句留痕共用的那一段事实：规则名、级别、来源行、原文、示例与说明。
+// 两句话只在外壳上分岔，事实拼法只此一处——分开各拼一遍，改一处就漏一处。
+func dangerNote(m contract.DangerMatch) string {
+	return m.RuleName + "（" + m.Level + "，来源行 " + linesText(m.Lines) + "）：" + m.Content +
 		"；示例：" + m.Example + "；说明：" + m.Reason
-	return Line{s: "非交互模式放行危险命令：" + note}
 }
 
 // TraceForbidden 是禁止档退场时那一行日志留痕，逐字照老版 `main`：只记原文。

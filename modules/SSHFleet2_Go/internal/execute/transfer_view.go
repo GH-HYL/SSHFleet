@@ -203,6 +203,23 @@ func (m transferModel) nodeProgressRatio() float64 {
 	return clamp01(float64(m.completed) / float64(m.total))
 }
 
+// finalSnapshot 是收场定格那一帧的输入（06 号单，审计 10-T1）。
+//
+// 老版跑到末了，屏上留的最后一帧是「节点进度 100%」；新版传输面板与命令那行共用一个流，
+// 退出次序把面板压在下面，留下的是「总进度 100%」。收场前把面板再画一帧就补回来了。
+//
+// **只在真跑完时落满格**：中断的场次 completed 没到总台数，这时候补 100% 就是把「没跑完」
+// 画成「跑完了」——那是新的假绿，比缺一帧更坏。所以这一处只判完成度，不判别的。
+func finalSnapshot(snap snapshot, total int) snapshot {
+	if total <= 0 || snap.Completed < total {
+		return snap
+	}
+	for i := range snap.Nodes {
+		snap.Nodes[i].Done = true
+	}
+	return snap
+}
+
 // nodePercent 单节点进度：优先按字节，其次按文件数。
 func nodePercent(n nodeView) float64 {
 	switch {

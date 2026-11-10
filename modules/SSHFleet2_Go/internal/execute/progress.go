@@ -148,6 +148,14 @@ type screen struct {
 	prog  *tea.Program // 命令／脚本／改密那块单行面板
 	tprog *tea.Program // 传输类那块逐节点面板（两种模式一执行期只会起一种）
 	plain bool
+
+	// 传输面板收场定格用（06 号单）：存最后一份快照与它的模式／总台数。
+	// 两块界面共用一个流，退出次序决定屏上留谁——老版留的是「节点进度 100%」，
+	// 新版留成了「总进度 100%」（审计 10-T1）。收场前拿这份快照再画一帧就补回来了。
+	lastSnap  snapshot
+	lastMode  contract.Mode
+	lastTotal int
+	hasSnap   bool
 }
 
 // newScreen 造屏幕那一路。流由 `console` 发，是不是终端也由它判。
@@ -177,6 +185,8 @@ func (s *screen) transfer(snap snapshot, mode contract.Mode, total int, start ti
 	}
 
 	s.mu.Lock()
+	// 存下最后一份快照：收场那一步要拿它定格（见 stop）。
+	s.lastSnap, s.lastMode, s.lastTotal, s.hasSnap = snap, mode, total, true
 	if s.tprog == nil {
 		p := tea.NewProgram(newTransferModel(mode, total, start),
 			tea.WithOutput(s.w),
@@ -216,16 +226,27 @@ func (s *screen) progress(completed, succeeded, failed, total int, start time.Ti
 }
 
 // stop 收工：让界面把最后那几帧与结果行渲染完再退，光标落回界面下方。幂等。
+//
+// 传输面板那一块要多一步：退出前把最后一份快照再画一帧（06 号单，审计 10-T1）。
+// 两块界面共用一个流，谁后退出就留谁——老版屏上留的是「节点进度 100%」，新版留成了
+// 命令那行的「总进度 100%」。补这一帧与「动画节奏不同」不是一回事，它是关键行变了。
 func (s *screen) stop() {
 	s.mu.Lock()
 	prog, tprog := s.prog, s.tprog
+	snap, mode, total, hasSnap := s.lastSnap, s.lastMode, s.lastTotal, s.hasSnap
 	s.prog, s.tprog = nil, nil
+	s.hasSnap = false
 	s.mu.Unlock()
-	for _, p := range []*tea.Program{prog, tprog} {
-		if p == nil {
-			continue
+
+	if prog != nil {
+		prog.Send(finalMsg{})
+		prog.Wait()
+	}
+	if tprog != nil {
+		if hasSnap {
+			tprog.Send(transferSnapshotMsg{snap: finalSnapshot(snap, total), mode: mode})
 		}
-		p.Send(finalMsg{})
-		p.Wait()
+		tprog.Send(finalMsg{})
+		tprog.Wait()
 	}
 }

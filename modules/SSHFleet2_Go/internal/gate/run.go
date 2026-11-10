@@ -321,7 +321,9 @@ func dangerRefusal(p *contract.Plan) (Refusal, message.Line) {
 		// 非交互跳过确认要留痕：老版由交互器顺手写，本版把这个事实交回塔尖，由塔尖落日志。
 		return nil, message.TraceDanger(report.Matches[0])
 	}
-	return nil, message.Line{}
+	// 交互答「是」：老版在这里写 `用户已确认风险继续执行：` + 同一段事实，工具日志与执行日志各一行。
+	// 本版原来返回空行，那两行留痕整条丢了（审计 08-4）——回来。
+	return nil, message.TraceDangerConfirmed(report.Matches[0])
 }
 
 // dangerSource 取出要判的原文：命令模式取 -c，脚本模式取脚本正文。
