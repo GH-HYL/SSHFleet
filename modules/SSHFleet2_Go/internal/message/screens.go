@@ -51,6 +51,19 @@ func Fatal(where, body, logPath string) Line {
 	return Line{s: s, toErr: true}
 }
 
+// TraceRefusal 是同一句拒绝落进工具日志时的形态：只有正文，不带 `[ERROR]` 外壳、不带
+// 「日志：」那一行——外壳与环节标签由日志包按 `[环节] 正文` 自己补（与老版 `fatal` 逐字同）。
+//
+// 为什么要两格：屏幕与日志要的不是同一句话的两个色码版本，是**两种形态**。屏幕上那句是
+// 「给人当场看的」，带红头、带环节标签、末尾还报一句日志路径；日志那一行是「事后翻的」，
+// 只要正文——把 `[ERROR] [function:cli]` 再抄进日志就成了两套壳叠在一起。
+//
+// 传空串表示这一拒不留痕：使用者自己答否、或危险框上按了「不继续」——那不是失败，
+// 老版在 `ErrCancelled` 那条路上也是直接退、不落日志。塔尖按「有没有字」决定落不落。
+func TraceRefusal(body string) Line {
+	return Line{s: body}
+}
+
 // CancelLine 是危险提醒档答否时那一行。老版 fmt.Println 在它前面没有空行。
 func CancelLine() Line {
 	return Line{s: ansiYellow + "操作已取消" + ansiReset + "\n"}

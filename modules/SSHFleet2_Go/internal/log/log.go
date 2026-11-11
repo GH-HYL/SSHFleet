@@ -148,3 +148,12 @@ func (lg *Logger) Startup(historyDir, toolFile string) {
 	lg.Info("工作路径：" + wd)
 	lg.Info("日志目录：" + historyDir + "，工具日志文件名：" + toolFile)
 }
+
+// Closing 写收尾那一条分隔线，与 Startup 开头那条同形。
+//
+// 一次运行在日志里自成一段：下次开跑时，一眼看得出上一次到哪儿结束。老版在 `main.go` 收尾处
+// 也补这一条（`:510` 之后），新版的「SSHFleet已退出」后面原来什么都没有。
+// 画法留在本包——塔尖不拼字符（ADR-0032 第五条）。
+func (lg *Logger) Closing() {
+	lg.Raw("\n    " + strings.Repeat("─", 50) + "\n\n")
+}
