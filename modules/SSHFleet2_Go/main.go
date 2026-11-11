@@ -6,6 +6,7 @@ package main
 
 import (
 	"os"
+	"path/filepath"
 	"time"
 
 	"sshfleet2/internal/archive"
@@ -108,6 +109,14 @@ func main() {
 		}
 		if refusal != nil {
 			console.Print(refusal.Say())
+			// 拒绝也要落日志：老版这一族（参数认不出、搭配不合规、取值不成）全走 fatal，
+			// 屏幕末尾报了「日志：<路径>」，日志里就得有那一行。闸门只交正文、不持日志句柄，
+			// 环节标签与多行续行由日志包按老版规矩补（`[cli] …` / `[cli]   …`）。
+			// 空正文表示这一拒不留痕——使用者自己答否、危险框上按「不继续」，都不是失败，
+			// 老版在 ErrCancelled 那条路上也是直接退（审计 a3）。
+			if trace := refusal.Trace(); trace.Plain() != "" {
+				lg.Fatal(contract.WhereCLI, trace.Plain())
+			}
 			finish(exitcode.Refused)
 		}
 
@@ -120,6 +129,10 @@ func main() {
 		if aerr != nil {
 			fatal(contract.WhereOutput, aerr.Error(), toolPath)
 		}
+		// 塔尖自己做的动作，自己留痕（老版 `:435`／`:443`）。各站的「解析成功、合规通过、
+		// 读取节点成功」那一族不补：句柄只在塔尖，补它们就得替站宣布成功（见 `message.TraceArchiveCreated`）。
+		lg.Success(message.TraceArchiveCreated(paths.Dir).Plain())
+		lg.Info(message.TraceExecLogRotated(paths.ExecLog).Plain())
 
 		// 闸门交上来的留痕也要进归档执行日志（审计 09-1）：`--yes` 跳过确认、危险命令放行、
 		// 脚本后缀回退这几件事原来只躺在工具日志里，归档打开来查不到。执行日志是追加打开，
@@ -137,6 +150,9 @@ func main() {
 		if cannot != nil {
 			fatal(cannot.Where, message.CannotStartText(*cannot), toolPath)
 		}
+		// 执行期日志写完、切回工具日志（老版 `:484`）。老版排在「执行结束：成功 N 台」那条
+		// 统计行**之前**，所以这一句也放在结算与执行日志收尾之前。
+		lg.Info(message.TraceExecLogClosed(paths.ExecLog).Plain())
 
 		// 步骤 9、10：结算站算总账，报告站出屏幕统计块与 `report.txt`。
 		ledger := settle.Run(paper)
@@ -163,6 +179,11 @@ func main() {
 		for _, w := range warns {
 			lg.Warn(w.Plain())
 		}
+		// 收尾那一句（老版 `:510`）：只在真跑完执行链之后写，帮助／拒绝／起不来那几条路都不写。
+		// 路径照老版用相对形态（`history/SSHFleetTools.log`）——日志是给人看的，工作目录就在旁边。
+		lg.Info(message.TraceExit(filepath.Join(toolDir, toolFile)).Plain())
+		// 再补一条与开头同形的分隔线：一次运行在日志里自成一段（画法归日志包）。
+		lg.Closing()
 
 	default:
 		console.Print(say)

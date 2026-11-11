@@ -23,6 +23,13 @@ const HistoryDir = "history"
 // 写 `report.txt` 失败时也用它，所以提到契约：改一次两处一起变。
 const WhereOutput = "output"
 
+// WhereCLI 是「参数与规则这一环」的标签。
+//
+// 它跨两个包：闸门造那一屏拒绝时要把它交给 `message.Fatal`，塔尖把这次拒绝落进工具日志时
+// 要把它交给 `log.Fatal`。同一个标签两处各写一份，改名时必然漏一处——于是提到契约。
+// 屏幕与日志都靠它对齐：屏幕上 `[function:cli]`，日志里 `[cli] …`。
+const WhereCLI = "cli"
+
 // FlagPairSudo 是「两个身份开关同时给」这条事实的标签。
 //
 // 解析站把它记进 `Problem.Option`，闸门按它认出是哪一对冲突——两处比的是同一个串，
