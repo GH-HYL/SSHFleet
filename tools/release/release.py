@@ -8,6 +8,8 @@
 用法：
     python tools/release/release.py            # 交互选档位，回车即发布
     python tools/release/release.py --dry-run  # 只打印将要做什么，不落地
+    python tools/release/release.py --pack-only     # 只按当前树打包
+    python tools/release/release.py --publish-only  # 只推 tag 并建 Release
 
 它做的事，按顺序：校验 → 定号 → 封段 → 插新未发布区 → 改入口版本常量
 → 提交 → 打 tag → 两个平台编译打包 → 校验产物非空 → 推 tag 到两个远端
@@ -500,6 +502,37 @@ def publish(version: str, assets: list[Path]) -> None:
     publish_gitee(version, assets)
 
 
+# ---- 单独跑其中一段 --------------------------------------------------------
+# 老线收尾时用：封版与打 tag 在 tag 那棵树上做，包也得在那棵树上编，
+# 而主线上的 CHANGELOG 已经是封好段的样子。所以拆成「只打包」「只发布」两个入口。
+
+
+def top_version() -> str:
+    m = RE_HEAD.search(read_text(CHANGELOG).replace("\r\n", "\n"))
+    if not m:
+        die("CHANGELOG 顶部没有 `## [x.y.z]` 段，先封版")
+    return ".".join(m.groups())
+
+
+def check_app_version(version: str) -> None:
+    m = RE_APPVER.search(read_text(MAIN_GO))
+    if not m:
+        die("main.go 里找不到 appVersion 常量")
+    if m.group(1) != version:
+        die(f"版本号不一致：CHANGELOG 是 {version}，main.go 是 {m.group(1)}（规范要求两处同步）")
+
+
+def collect_assets(version: str) -> list[Path]:
+    made: list[Path] = []
+    for pat in (f"{APP_NAME}_{version}_*_windows.zip",
+                f"{APP_NAME}_{version}_*_linux.tar.gz"):
+        hits = sorted(REL.glob(pat))
+        if not hits:
+            die(f"release/ 下没有 {pat}，先打包")
+        made.append(hits[-1])
+    return made
+
+
 # ---- 交互 ------------------------------------------------------------------
 
 
@@ -532,6 +565,10 @@ def choose_tier(base: tuple[int, int, int]) -> int:
 def main() -> None:
     ap = argparse.ArgumentParser(add_help=False)
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--pack-only", action="store_true",
+                    help="只按当前树打包，不封段、不提交、不打 tag、不推")
+    ap.add_argument("--publish-only", action="store_true",
+                    help="只推 tag 并建 Release，包取 release/ 下已有的")
     ap.add_argument("-h", "--help", action="store_true")
     args = ap.parse_args()
     if args.help:
@@ -542,6 +579,25 @@ def main() -> None:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[attr-defined]
     except Exception:
         pass
+
+    # 老线收尾用：封版在 tag 那棵树上，主线只留封好段的 CHANGELOG。
+    # 这时整条链走不通，拆成两段分别跑。
+    if args.publish_only:
+        ver = top_version()
+        assets = collect_assets(ver)
+        step(f"发布 v{ver}，附件：{', '.join(a.name for a in assets)}")
+        publish(ver, assets)
+        return
+
+    if args.pack_only:
+        ver = top_version()
+        check_app_version(ver)
+        go = pick_go()
+        made = package(go, ver, datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
+        print(f"\n打包完成（{REL}）：")
+        for p in made:
+            print(f"  {p.name}  {p.stat().st_size / 1024 / 1024:.1f} MB")
+        return
 
     base, undone, days = read_state()
     items = len(RE_ITEM.findall(undone))
