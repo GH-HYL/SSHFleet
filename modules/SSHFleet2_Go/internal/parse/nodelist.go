@@ -5,12 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/netip"
 	"os"
 	"strings"
 
 	"sshfleet2/internal/contract"
-	"sshfleet2/internal/message"
+	"sshfleet2/internal/criterion"
 )
 
 // 读清单：把 `-f` 那个值变成一张行表。
@@ -45,7 +44,7 @@ func readManifest(raw string) (manifest, *contract.CannotStart) {
 
 	// 表头识别：首行首列不是 IPv4、且这一行里有逗号，就当表头移除（老版 D13 的落法）。
 	// 报了那一行提示，使用者才知道「为什么少了一台」。
-	if len(rows) > 0 && !isIPv4(strings.TrimSpace(rows[0][0])) {
+	if len(rows) > 0 && !criterion.IsIPv4(rows[0][0]) {
 		if len(rows[0]) > 1 {
 			m.rows = rows[1:]
 			m.headerDropped = true
@@ -78,7 +77,7 @@ func manifestText(raw string) (string, bool, *contract.CannotStart) {
 			return "", false, cliReason(contract.CannotStartReason{
 				Kind:   contract.CannotStartCSVUnreadable,
 				Place:  raw,
-				Origin: message.SystemReason(err),
+				Origin: criterion.SystemReason(err),
 			})
 		}
 		if len(data) == 0 {
@@ -103,7 +102,7 @@ func manifestText(raw string) (string, bool, *contract.CannotStart) {
 		}
 		if statErr != nil {
 			reason.Kind = contract.CannotStartManifestStatFailed
-			reason.Origin = message.SystemReason(statErr)
+			reason.Origin = criterion.SystemReason(statErr)
 		}
 		return "", true, cliReason(reason)
 	}
@@ -184,17 +183,5 @@ func looksLikeInlineNode(raw string) bool {
 	if err != nil || len(rows) != 1 || len(rows[0]) == 0 {
 		return false
 	}
-	return isIPv4(strings.TrimSpace(rows[0][0]))
-}
-
-// isIPv4 严格认 IPv4 字面量：四段、每段 0-255、不认前导零。
-//
-// 判据不自己写，交给标准库（`netip.ParseAddr` ＋ `Is4`）——老版就是这么做的。上一版手写
-// 副本漏了前导零（审计 06-H1：`010.0.0.1` 被收成合法节点），注释还谎称「与老版同一条判据」。
-//
-// 掩码包里那份同源副本同样改成调标准库；两份仍各站一份（横切包不许反过来依赖站），合并
-// 归判据叶子包（盘点表 4.3）。
-func isIPv4(s string) bool {
-	addr, err := netip.ParseAddr(strings.TrimSpace(s))
-	return err == nil && addr.Is4()
+	return criterion.IsIPv4(rows[0][0])
 }

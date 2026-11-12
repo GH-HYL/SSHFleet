@@ -2,14 +2,14 @@ package guard
 
 import "testing"
 
-// 真模块要数出十八个包，塔尖对的是模块名那一行（不是 main）。
+// 真模块要数出十九个包，塔尖对的是模块名那一行（不是 main）。
 func TestLoadCountsPackages(t *testing.T) {
 	m, err := Load(Target{Dir: "../..", ModulePath: "sshfleet2", Rules: Rules()})
 	if err != nil {
 		t.Fatalf("读真模块失败：%v", err)
 	}
-	if len(m.Packages) != 18 {
-		t.Fatalf("包数 want 18，got %d", len(m.Packages))
+	if len(m.Packages) != 19 {
+		t.Fatalf("包数 want 19，got %d", len(m.Packages))
 	}
 	tip := m.Pkg("sshfleet2")
 	if tip == nil {

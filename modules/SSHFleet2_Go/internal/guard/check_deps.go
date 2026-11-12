@@ -92,7 +92,7 @@ func reconcile(m *Module) []Violation {
 	for _, p := range m.Packages {
 		if p.Rule == nil {
 			out = append(out, violationAt(ClassDeps, p.Path,
-				fmt.Sprintf("包 %s 不在规则表里（规则表十七行，没有它）", p.Path),
+				fmt.Sprintf("包 %s 不在规则表里（规则表十八行，没有它）", p.Path),
 				"包清单以规则表为准：多一个包而表里没有，它属于哪一类、能依赖谁就没人说得清",
 				"要么删掉这个包，要么先改规则表并说清它属于哪一类——规则表是约束类，改它要开发者点头"))
 			continue
@@ -159,10 +159,10 @@ func judgeImport(m *Module, p *Package, f *SourceFile, path string) []Violation 
 func whyNotAllowed(r *Rule, what string) string {
 	switch r.Kind {
 	case KindStation:
-		return fmt.Sprintf("站之间单向：一站只许依赖契约与九个横切包，不许依赖别的站（依赖 %s 就是往回走）", what)
+		return fmt.Sprintf("站之间单向：一站只许依赖契约与十个横切包，不许依赖别的站（依赖 %s 就是往回走）", what)
 	case KindCrosscut:
 		if r.Package == "ask" {
-			return "横切包是叶子：只许依赖标准库与契约，叶子之间的例外只有 ask → console、ask → message 两条"
+			return "横切包是叶子：只许依赖标准库、契约与判据包（criterion），叶子之间的例外只有 ask → console、ask → message、console → message 三条"
 		}
 		return "横切包是叶子：只许依赖标准库与契约，反向依赖站就成环了"
 	case KindContract:
@@ -172,7 +172,7 @@ func whyNotAllowed(r *Rule, what string) string {
 	case KindCheck:
 		return "结构检查只读源码：它一旦 import 站或契约，就把被检查的东西变成了自己的依赖"
 	case KindTip:
-		return "塔尖只许依赖五站、九个横切包、契约与密钥管理包——它的薄厚看依赖清单，不看行数"
+		return "塔尖只许依赖五站、十个横切包、契约与密钥管理包——它的薄厚看依赖清单，不看行数"
 	}
 	return "这一行不在规则表允许的依赖范围内"
 }

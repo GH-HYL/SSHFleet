@@ -1,8 +1,9 @@
 package mask
 
 import (
-	"net/netip"
 	"strings"
+
+	"sshfleet2/internal/criterion"
 )
 
 // 内联清单（`-f 10.0.0.1,22,root,密码,私钥路径,口令`）的遮法。
@@ -42,7 +43,7 @@ func InlineRecordIf(s string) string {
 // 且第 4 或第 6 段写了东西。裸 IP 没有凭据可遮，不遮。
 func looksLikeInlineList(s string) bool {
 	fields, ok := singleRecord(s)
-	if !ok || len(fields) == 0 || !isIPv4(strings.TrimSpace(fields[0])) {
+	if !ok || len(fields) == 0 || !criterion.IsIPv4(fields[0]) {
 		return false
 	}
 	for _, idx := range credentialColumns {
@@ -64,13 +65,4 @@ func singleRecord(text string) ([]string, bool) {
 		return nil, false // 不止一条：那不是一个内联值
 	}
 	return rec, true
-}
-
-// isIPv4 严格认 IPv4 字面量：判据交给标准库（`netip.ParseAddr` ＋ `Is4`），与老版同一条。
-//
-// 与解析站那一份**各写一遍、不合并**：横切包不许反过来依赖站，方向会反。两份都调标准库，
-// 至少不会一份紧一份松——手写那版漏过前导零（审计 06-H1）。合并归判据叶子包（盘点表 4.3）。
-func isIPv4(s string) bool {
-	addr, err := netip.ParseAddr(strings.TrimSpace(s))
-	return err == nil && addr.Is4()
 }

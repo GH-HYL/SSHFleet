@@ -12,6 +12,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"sshfleet2/internal/criterion"
 )
 
 // WriteManifestCopy 把清单按脱敏副本写进 destDir，文件名不变。
@@ -65,7 +67,7 @@ func maskManifestLine(line string) string {
 	}
 	// 首列是不是 IP：BOM 不算内容，只在判断时剥掉，输出里照旧留着。
 	first := strings.TrimSpace(strings.TrimPrefix(line[spans[0].start:spans[0].end], "\ufeff"))
-	if !isIPv4(first) {
+	if !criterion.IsIPv4(first) {
 		return line
 	}
 

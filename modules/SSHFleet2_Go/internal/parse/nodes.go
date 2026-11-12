@@ -10,6 +10,7 @@ import (
 
 	"sshfleet2/internal/contract"
 	"sshfleet2/internal/credential"
+	"sshfleet2/internal/criterion"
 	"sshfleet2/internal/mask"
 )
 
@@ -57,7 +58,7 @@ func buildNodes(rows [][]string, cfg *settings, useKey bool) ([]contract.Node, [
 		var rowErrs []contract.CannotStartReason
 		if ip == "" {
 			rowErrs = append(rowErrs, contract.CannotStartReason{Kind: contract.CannotStartRowIPMissing})
-		} else if !isIPv4(ip) {
+		} else if !criterion.IsIPv4(ip) {
 			rowErrs = append(rowErrs, contract.CannotStartReason{Kind: contract.CannotStartRowIPBad})
 		}
 

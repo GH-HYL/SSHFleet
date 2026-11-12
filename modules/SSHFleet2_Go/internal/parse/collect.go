@@ -22,7 +22,7 @@ import (
 	"strings"
 
 	"sshfleet2/internal/contract"
-	"sshfleet2/internal/message"
+	"sshfleet2/internal/criterion"
 )
 
 // collect 采集上传源。交回的可传文件表、被过滤的链接、根下一层的条目都装进纸上那一格。
@@ -38,7 +38,7 @@ func collect(p *contract.Plan, cfg *settings) *contract.CannotStart {
 		return collectReason(contract.CannotStartReason{
 			Kind:   contract.CannotStartUploadRootMissing,
 			Place:  root,
-			Origin: message.SystemReason(err),
+			Origin: criterion.SystemReason(err),
 		})
 	}
 
@@ -104,7 +104,7 @@ func collect(p *contract.Plan, cfg *settings) *contract.CannotStart {
 		return collectReason(contract.CannotStartReason{
 			Kind:   contract.CannotStartUploadDirUnreadable,
 			Place:  root,
-			Origin: message.SystemReason(err),
+			Origin: criterion.SystemReason(err),
 		})
 	}
 

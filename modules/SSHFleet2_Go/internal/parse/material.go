@@ -6,6 +6,7 @@ import (
 	"unicode/utf8"
 
 	"sshfleet2/internal/contract"
+	"sshfleet2/internal/criterion"
 	"sshfleet2/internal/message"
 )
 
@@ -35,7 +36,7 @@ func checkMaterial(p *contract.Plan, given map[string]bool, vals map[string]stri
 			return cliReason(contract.CannotStartReason{
 				Kind:   contract.CannotStartScriptUnreadable,
 				Place:  script,
-				Origin: message.SystemReason(rerr),
+				Origin: criterion.SystemReason(rerr),
 			})
 		}
 		if len(data) == 0 {
@@ -70,7 +71,7 @@ func checkMaterial(p *contract.Plan, given map[string]bool, vals map[string]stri
 			return cliReason(contract.CannotStartReason{
 				Kind:   contract.CannotStartDownloadPathUnreadable,
 				Place:  vals["--path"],
-				Origin: message.SystemReason(err),
+				Origin: criterion.SystemReason(err),
 			})
 		}
 		if !info.IsDir() {
@@ -90,7 +91,7 @@ func checkMaterial(p *contract.Plan, given map[string]bool, vals map[string]stri
 				return cliReason(contract.CannotStartReason{
 					Kind:   contract.CannotStartCSVUnreadable,
 					Place:  csv,
-					Origin: message.SystemReason(rerr),
+					Origin: criterion.SystemReason(rerr),
 				})
 			}
 			if len(data) == 0 {
