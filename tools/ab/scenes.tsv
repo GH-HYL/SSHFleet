@@ -1,0 +1,39 @@
+# 09 号单的固定输入集。字段用 \x1f 分隔（制表符会被 read 当空白折叠，空字段会丢）：
+# 场景名 | machine(1=要机器) | stdin | conf | pre(或 ticket:NN) | reset | env | kill(秒) | argv | expect(hist/-) | tty
+a1-help0-h-tty
+a2-noargs0-
+a3-unknown-option0--nope-
+a4-missing-value0-c-
+a5-two-keycmds0--key-status --gen-key-
+a6-key-extra0--key-status extra-
+a7-key-with-batch0--key-status -c uptime -f u1.csv-
+b1-command1-f u1.csv -c "echo hello" --yeshisttty
+b2-command-fail1-f u1.csv -c "exit 3" --yeshist
+b3-unreachable1-f bad.csv -c "uptime" --yeshist
+b4-script1-f u1.csv -s hello.sh --yeshist
+b5-script-answer1-f u1.csv -s ask1.sh -a "y,Continue?,Press enter to go on:" --yeshist
+b6-script-fallback1y\ny-f u1.csv -s deploy.xyzhist
+b7-upload1sudo rm -rf /tmp/fleet09-up && sudo mkdir -p /tmp/fleet09-up && sudo chmod 777 /tmp/fleet09-up-f u1.csv -u ./updir -p /tmp/fleet09-up/ --yeshist
+b8-upload-collide1sudo rm -rf /tmp/fleet09-up && sudo mkdir -p /tmp/fleet09-up && sudo chmod 777 /tmp/fleet09-up && echo old-one | sudo tee /tmp/fleet09-up/one.txt >/dev/null-f u1.csv -u ./updir -p /tmp/fleet09-up/ --yeshist
+b9-download1sudo rm -rf /tmp/fleet09-down && sudo mkdir -p /tmp/fleet09-down && sudo sh -c 'printf "alpha\n" > /tmp/fleet09-down/a.txt; printf "beta\n" > /tmp/fleet09-down/b.txt; ln -s a.txt /tmp/fleet09-down/link.txt; chmod -R a+rX /tmp/fleet09-down'-f u1.csv -d /tmp/fleet09-down -p ./down/ --yeshist
+b10-passwd-expired1echo t1:OldPass#2026 | sudo chpasswd && sudo chage -d 0 t1-f t1.csv --change-password "Fleet#New2026" --yeshisttty
+b11-passwd-valid1echo t1:OldPass#2026 | sudo chpasswd && sudo chage -d 2026-11-06 t1-f t1.csv --change-password "Fleet#New2026" --yeshist
+b12-inline-f1y-f "127.0.0.1,2201,sshfleet,Sshfleet#2026" -c "whoami"hist
+b13-two-nodes1-f two.csv -c "whoami" --yeshist
+c1-gate-refuse1n-f u1.csv -c "rm -rf /tmp/whatever"-
+c2-yes-all1-f u1.csv -c "whoami" --yeshist
+c3-interrupt1sudo rm -f /tmp/fleet09-int3-f int2.csv -n 1 -c 'if [ -f /tmp/fleet09-int ]; then sleep 30; else touch /tmp/fleet09-int; echo node-done; fi' --yeshist
+c4-start-no-config1mv config/SSHFleet.conf config/SSHFleet.conf.away-f u1.csv -c "uptime" --yes-
+c5-start-missing-key1sed -i '/^port /d' config/SSHFleet.conf-f u1.csv -c "uptime" --yes-
+d1-key-empty0--key-status-
+d2-key-generated0./sshfleet --gen-key >/dev/null && bash ../fixtures/seedkey.sh FIXEDKEY-AB-0001--key-status-
+d3-key-diverged0bash ../fixtures/seedkey.sh FIXEDKEY-AB-0001SSHFLEET_KEY=FIXEDKEY-AB-0002--key-status-
+d4-genkey-keep0nbash ../fixtures/seedkey.sh FIXEDKEY-AB-0001--gen-key-
+d5-genkey-yesflag0bash ../fixtures/seedkey.sh FIXEDKEY-AB-0001--gen-key --yes-
+d6-convert-to-cipher0encrypt=true password="/tmp/fleet09-pw"bash ../fixtures/seedkey.sh FIXEDKEY-AB-0001SSHFLEET_KEY=FIXEDKEY-AB-0001--convert-secret sec.txt-
+d7-convert-already0encrypt=true password="/tmp/fleet09-pw"bash ../fixtures/seedkey.sh FIXEDKEY-AB-0001 && SSHFLEET_KEY=FIXEDKEY-AB-0001 ./sshfleet --convert-secret sec.txtSSHFLEET_KEY=FIXEDKEY-AB-0001--convert-secret sec.txt-
+d8-convert-unreadable0encrypt=true password="/tmp/fleet09-pw"--convert-secret nope.txt-
+d12-convert-to-plain0encrypt=false password="/tmp/fleet09-pw"printf 'Sshfleet#2026' > /tmp/fleet09-pw && bash ../fixtures/seedkey.sh FIXEDKEY-AB-0001 && python3 ../prep.py config/SSHFleet.conf encrypt=true && SSHFLEET_KEY=FIXEDKEY-AB-0001 ./sshfleet --convert-secret sec.txt && python3 ../prep.py config/SSHFleet.conf encrypt=falseSSHFLEET_KEY=FIXEDKEY-AB-0001--convert-secret sec.txt-
+d9-precheck1encrypt=true password="/tmp/fleet09-pw"printf 'Sshfleet#2026' > /tmp/fleet09-pw && bash ../fixtures/seedkey.sh ANOTHER-KEY-0002 .bashrc && SSHFLEET_KEY=ANOTHER-KEY-0002 ./sshfleet --convert-secret /tmp/fleet09-pw && bash ../fixtures/seedkey.sh FIXEDKEY-AB-0001 .zshrcSSHFLEET_KEY=ANOTHER-KEY-0002-f u1enc.csv -c "whoami" --yeshist
+d10-english-false1english=false-f u1.csv -c "whoami" --yeshist
+d11-english-true1english=true-f u1.csv -c "whoami" --yeshist
