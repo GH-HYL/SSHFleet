@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/netip"
 	"os"
 	"strings"
 
@@ -188,38 +189,12 @@ func looksLikeInlineNode(raw string) bool {
 
 // isIPv4 严格认 IPv4 字面量：四段、每段 0-255、不认前导零。
 //
-// 前导零这一条 2026-11-10 收严（审计 06-H1）：`010.0.0.1` 不是合法 IP，老版
-// `netip.ParseAddr` 当场拒；这份手写副本原来按十进制读，把它收成合法地址，再当内联
-// 记录送进凭据预检。第一列怎么判与「这一串算不算内联记录」无关——先认 IP。
+// 判据不自己写，交给标准库（`netip.ParseAddr` ＋ `Is4`）——老版就是这么做的。上一版手写
+// 副本漏了前导零（审计 06-H1：`010.0.0.1` 被收成合法节点），注释还谎称「与老版同一条判据」。
 //
-// 掩码包里那份同源副本还在，按盘点表 4.3 的两步走：这里先修一处，等判据叶子包立住
-// 再并过去，不在这轮重复改第二份。
+// 掩码包里那份同源副本同样改成调标准库；两份仍各站一份（横切包不许反过来依赖站），合并
+// 归判据叶子包（盘点表 4.3）。
 func isIPv4(s string) bool {
-	if s == "" {
-		return false
-	}
-	parts := strings.Split(s, ".")
-	if len(parts) != 4 {
-		return false
-	}
-	for _, p := range parts {
-		if p == "" || len(p) > 3 {
-			return false
-		}
-		// 前导零不算：`010` 与 `10` 是两回事，含糊就当场报错，不替使用者猜。
-		if len(p) > 1 && p[0] == '0' {
-			return false
-		}
-		n := 0
-		for _, r := range p {
-			if r < '0' || r > '9' {
-				return false
-			}
-			n = n*10 + int(r-'0')
-		}
-		if n > 255 {
-			return false
-		}
-	}
-	return true
+	addr, err := netip.ParseAddr(strings.TrimSpace(s))
+	return err == nil && addr.Is4()
 }

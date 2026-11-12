@@ -1,6 +1,9 @@
 package mask
 
-import "strings"
+import (
+	"net/netip"
+	"strings"
+)
 
 // 内联清单（`-f 10.0.0.1,22,root,密码,私钥路径,口令`）的遮法。
 //
@@ -63,29 +66,11 @@ func singleRecord(text string) ([]string, bool) {
 	return rec, true
 }
 
-// isIPv4 严格认 IPv4 字面量。
+// isIPv4 严格认 IPv4 字面量：判据交给标准库（`netip.ParseAddr` ＋ `Is4`），与老版同一条。
 //
-// 与解析站那一份**各写一遍、不合并**（上一张图 04 号工单的 Answer：解析认清单、
-// mask 认数据行，两处各写一份）。合成一份就要让横切包依赖站，方向就反了。
+// 与解析站那一份**各写一遍、不合并**：横切包不许反过来依赖站，方向会反。两份都调标准库，
+// 至少不会一份紧一份松——手写那版漏过前导零（审计 06-H1）。合并归判据叶子包（盘点表 4.3）。
 func isIPv4(s string) bool {
-	parts := strings.Split(s, ".")
-	if len(parts) != 4 {
-		return false
-	}
-	for _, p := range parts {
-		if p == "" || len(p) > 3 {
-			return false
-		}
-		n := 0
-		for _, r := range p {
-			if r < '0' || r > '9' {
-				return false
-			}
-			n = n*10 + int(r-'0')
-		}
-		if n > 255 {
-			return false
-		}
-	}
-	return true
+	addr, err := netip.ParseAddr(strings.TrimSpace(s))
+	return err == nil && addr.Is4()
 }
