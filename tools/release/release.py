@@ -10,7 +10,13 @@
     python tools/release/release.py --dry-run  # 只打印将要做什么，不落地
 
 它做的事，按顺序：校验 → 定号 → 封段 → 插新未发布区 → 改入口版本常量
-→ 提交 → 打 tag → 两个平台编译打包 → 校验产物非空。
+→ 提交 → 打 tag → 两个平台编译打包 → 校验产物非空 → 推 tag 到两个远端
+→ GitHub 建 Release 传附件 → Gitee 建 Release 传附件。
+
+令牌两处都认，优先级：环境变量 GITHUB_TOKEN / GITEE_TOKEN，
+其次 ~/.git-credentials 里 https://<user>:<token>@<host> 那行的密码位。
+GitHub 要「Contents: Read and write」，Gitee 要 projects 权限。
+远端按 URL 认（github.com / gitee.com），不按名字认。
 
 一次出齐两个平台的包：release/SSHFleet_<号>_<时间戳>_windows.zip
 与 release/SSHFleet_<号>_<时间戳>_linux.tar.gz。打包前清空整个 release/，
@@ -40,15 +46,20 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
 import shutil
 import subprocess
 import sys
 import tarfile
+import urllib.error
+import urllib.request
+import uuid
 import zipfile
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import quote, urlencode
 
 ROOT = Path(__file__).resolve().parents[2]
 MOD = ROOT / "modules" / "SSHFleet_Go"
@@ -305,6 +316,190 @@ def package(go: str, version: str, ts: str) -> list[Path]:
     return made
 
 
+# ---- 发布到远端：推 tag、建 Release、传附件 ---------------------------------
+# 远端按 URL 认，不按名字认：不同机器上起过 GitHub/Gitee，也起过 github/origin。
+
+GH_OWNER, GH_NAME = "GH-HYL", "SSHFleet"
+GITEE_OWNER, GITEE_NAME = "huang-fugui-123", "sshfleet"
+GH_API = f"https://api.github.com/repos/{GH_OWNER}/{GH_NAME}"
+GITEE_API = f"https://gitee.com/api/v5/repos/{GITEE_OWNER}/{GITEE_NAME}"
+
+
+def remote_for_host(host: str) -> str:
+    for line in run(["git", "remote", "-v"]).splitlines():
+        parts = line.split()
+        if len(parts) >= 3 and parts[2] == "(push)" and host in parts[1]:
+            return parts[0]
+    return ""
+
+
+def resolve_token(var: str, host: str) -> str:
+    """环境变量优先，其次 ~/.git-credentials 里 https://<user>:<token>@<host> 那行的密码位。"""
+    val = os.environ.get(var, "").strip()
+    if val:
+        return val
+    f = Path.home() / ".git-credentials"
+    if not f.exists():
+        return ""
+    for line in read_text(f).splitlines():
+        line = line.strip()
+        if "://" not in line or "@" not in line:
+            continue
+        userinfo, rest = line.split("://", 1)[1].rsplit("@", 1)
+        if ":" in userinfo and rest.split("/")[0].endswith(host):
+            return userinfo.split(":", 1)[1]
+    return ""
+
+
+def http(method: str, url: str, *, token: str = "", body: bytes | None = None,
+         ctype: str = "", accept: str = "") -> tuple[int, bytes]:
+    req = urllib.request.Request(url, data=body, method=method)
+    req.add_header("User-Agent", "SSHFleet-release")
+    if accept:
+        req.add_header("Accept", accept)
+    if token:
+        req.add_header("Authorization", f"token {token}")
+    if ctype:
+        req.add_header("Content-Type", ctype)
+    try:
+        with urllib.request.urlopen(req, timeout=180) as r:
+            return r.status, r.read()
+    except urllib.error.HTTPError as e:
+        return e.code, e.read()
+
+
+def as_json(raw: bytes) -> dict | list:
+    try:
+        return json.loads(raw.decode("utf-8", "replace") or "{}")
+    except json.JSONDecodeError:
+        return {}
+
+
+def brief(raw: bytes) -> str:
+    return raw.decode("utf-8", "replace")[:400]
+
+
+def release_notes(version: str) -> str:
+    """封段之后取「本次版本那一段」当 Release 正文。"""
+    text = read_text(CHANGELOG).replace("\r\n", "\n")
+    at = text.find(f"## [{version}]")
+    if at < 0:
+        die(f"CHANGELOG 里找不到 `## [{version}]` 段")
+    rest = text[at:]
+    m = RE_NEXT_H2.search(rest[len(f"## [{version}]"):])
+    return (rest if not m else rest[: len(f"## [{version}]") + m.start()]).strip() + "\n"
+
+
+def precheck_publish() -> tuple[str, str]:
+    """推之前把两处都核一遍：缺远端、缺令牌都要在封段之前死。"""
+    gh_remote = remote_for_host("github.com")
+    ge_remote = remote_for_host("gitee.com")
+    if not gh_remote:
+        die("没有指向 github.com 的远端，先 git remote add")
+    if not ge_remote:
+        die("没有指向 gitee.com 的远端，先 git remote add")
+    if not resolve_token("GITHUB_TOKEN", "github.com"):
+        die("未找到 GitHub 令牌：设 GITHUB_TOKEN，或写进 ~/.git-credentials")
+    if not resolve_token("GITEE_TOKEN", "gitee.com"):
+        die("未找到 Gitee 令牌：设 GITEE_TOKEN，或写进 ~/.git-credentials")
+    return gh_remote, ge_remote
+
+
+def push_tag(version: str, gh_remote: str, ge_remote: str) -> None:
+    tag = f"v{version}"
+    for name in (gh_remote, ge_remote):
+        step(f"[推送] git push {name} {tag} ...")
+        run(["git", "push", name, tag])
+
+
+def multipart(fields: dict[str, str], field: str, filename: str, data: bytes) -> tuple[bytes, str]:
+    b = "SSHFleetBoundary" + uuid.uuid4().hex
+    out = bytearray()
+    for k, v in fields.items():
+        out += f'--{b}\r\nContent-Disposition: form-data; name="{k}"\r\n\r\n{v}\r\n'.encode()
+    out += (f'--{b}\r\nContent-Disposition: form-data; name="{field}"; filename="{filename}"\r\n'
+            f"Content-Type: application/octet-stream\r\n\r\n").encode()
+    out += data + f"\r\n--{b}--\r\n".encode()
+    return bytes(out), f"multipart/form-data; boundary={b}"
+
+
+def publish_github(version: str, assets: list[Path]) -> None:
+    tag = f"v{version}"
+    token = resolve_token("GITHUB_TOKEN", "github.com")
+    accept = "application/vnd.github+json"
+
+    step(f"[GitHub] 建 {tag} 的 Release ...")
+    payload = json.dumps({"tag_name": tag, "name": tag,
+                          "body": release_notes(version)}).encode()
+    code, raw = http("POST", f"{GH_API}/releases", token=token, body=payload,
+                     ctype="application/json", accept=accept)
+    data = as_json(raw)
+    rid = data.get("id") if isinstance(data, dict) else None
+    if code not in (200, 201) or not rid:
+        die(f"GitHub 建 Release 失败，HTTP {code}：{brief(raw)}\n"
+            "      已经发过同一个 tag 的话，先在网页删掉那个 Release 再重跑。")
+    step(f"[GitHub] 已建，id={rid} {data.get('html_url', '')}")
+
+    for f in assets:
+        code, raw = http("GET", f"{GH_API}/releases/{rid}/assets", token=token, accept=accept)
+        names = [a.get("name") for a in as_json(raw) if isinstance(a, dict)]
+        if f.name in names:
+            die(f"GitHub 上已存在附件 {f.name}，本次发布终止（要替换请先在网页删掉它）")
+        step(f"[GitHub] 上传 {f.name}（{f.stat().st_size / 1024 / 1024:.1f} MB）...")
+        code, raw = http("POST",
+                         "https://uploads.github.com/repos/"
+                         f"{GH_OWNER}/{GH_NAME}/releases/{rid}/assets?name={quote(f.name)}",
+                         token=token, body=f.read_bytes(),
+                         ctype="application/octet-stream", accept=accept)
+        if code not in (200, 201):
+            die(f"上传 {f.name} 到 GitHub 失败，HTTP {code}：{brief(raw)}")
+        step(f"[GitHub] 已上传 {f.name}")
+
+
+def publish_gitee(version: str, assets: list[Path]) -> None:
+    tag = f"v{version}"
+    token = resolve_token("GITEE_TOKEN", "gitee.com")
+    query = urlencode({"access_token": token})
+
+    step(f"[Gitee] 建 {tag} 的 Release ...")
+    form = urlencode({"tag_name": tag, "target_commitish": "master", "name": tag,
+                      "body": release_notes(version)}).encode()
+    code, raw = http("POST", f"{GITEE_API}/releases?{query}", body=form,
+                     ctype="application/x-www-form-urlencoded")
+    data = as_json(raw)
+    rid = data.get("id") if isinstance(data, dict) else None
+    if code not in (200, 201) or not rid:
+        code2, raw2 = http("GET", f"{GITEE_API}/releases/tags/{tag}?{query}")
+        exist = as_json(raw2)
+        if isinstance(exist, dict) and exist.get("id"):
+            die(f"Gitee 上已存在 {tag} 的 Release（id={exist['id']}），本次发布终止"
+                "（要重发请先在网页删掉那个 Release）")
+        die(f"Gitee 建 Release 失败，HTTP {code}：{brief(raw)}")
+    step(f"[Gitee] 已建，id={rid}")
+
+    for f in assets:
+        code, raw = http("GET", f"{GITEE_API}/releases/{rid}?{query}")
+        data = as_json(raw)
+        names = [a.get("name") for a in (data.get("assets") or [])
+                 if isinstance(data, dict) and isinstance(a, dict)]
+        if f.name in names:
+            die(f"Gitee 上已存在附件 {f.name}，本次发布终止（要替换请先在网页删掉它）")
+        step(f"[Gitee] 上传 {f.name}（{f.stat().st_size / 1024 / 1024:.1f} MB）...")
+        body, ctype = multipart({"access_token": token}, "file", f.name, f.read_bytes())
+        code, raw = http("POST", f"{GITEE_API}/releases/{rid}/attach_files",
+                         body=body, ctype=ctype)
+        if code not in (200, 201):
+            die(f"上传 {f.name} 到 Gitee 失败，HTTP {code}：{brief(raw)}")
+        step(f"[Gitee] 已上传 {f.name}")
+
+
+def publish(version: str, assets: list[Path]) -> None:
+    gh_remote, ge_remote = precheck_publish()
+    push_tag(version, gh_remote, ge_remote)
+    publish_github(version, assets)
+    publish_gitee(version, assets)
+
+
 # ---- 交互 ------------------------------------------------------------------
 
 
@@ -361,6 +556,8 @@ def main() -> None:
 
     span = f"，覆盖 {len(days)} 天" if days else ""
     print(f"\n未发布区：{items} 条{span}")
+    if not args.dry_run:
+        precheck_publish()  # 缺远端、缺令牌要在封段之前死，别发出半个版
     tier = choose_tier(base)
 
     a, b, c = bump(base, tier)
@@ -373,12 +570,19 @@ def main() -> None:
         return
 
     if args.dry_run:
+        gh_remote = remote_for_host("github.com") or "<未配>"
+        ge_remote = remote_for_host("gitee.com") or "<未配>"
+        gh_token = "已获取" if resolve_token("GITHUB_TOKEN", "github.com") else "未找到"
+        ge_token = "已获取" if resolve_token("GITEE_TOKEN", "gitee.com") else "未找到"
         print("\n[dry-run] 只演不练，以下动作未执行：")
         print(f"  封段：## 未发布 → ## [{version}] - {today}，并在其上插入新的 ## 未发布")
         print(f"  改号：main.go 的 appVersion → {version}")
         print(f"  提交：chore(发布): 定版 {version}")
         print(f"  打 tag：v{version}")
         print(f"  打包：release/{APP_NAME}_{version}_<时间戳>_windows.zip / _linux.tar.gz")
+        print(f"  推 tag：git push {gh_remote} v{version}；git push {ge_remote} v{version}")
+        print(f"  建 Release：GitHub（令牌{gh_token}）与 Gitee（令牌{ge_token}），正文取 CHANGELOG 本版那段")
+        print("  传附件：上面打出来的两只包")
         return
 
     ts = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
@@ -390,10 +594,13 @@ def main() -> None:
 
     made = package(go, version, ts)
 
+    step("")
+    publish(version, made)
+
     print(f"\n全部完成，发布产物（{REL}）：")
     for p in made:
         print(f"  {p.name}  {p.stat().st_size / 1024 / 1024:.1f} MB")
-    print(f"[完成] 已打 tag v{version}（仅本地，未推送）")
+    print(f"[完成] {version} 已推 tag、两个远端都已建 Release 并传附件")
 
 
 if __name__ == "__main__":
