@@ -25,8 +25,8 @@ var tipSymbols = map[string][]string{
 // CheckDeps 是类二：谁 import 谁。
 //
 // 三档（ADR-0032 第四条）：生产文件按规则表那一行；普通 _test.go 豁免；红线测试不享这条豁免，
-// 按它自己的 import 白名单判（那一条在类六）。另含三条窄判据：塔尖的点名符号、模块之外的
-// import、谁许读当前时刻（checkClock）。
+// 按它自己的 import 白名单判（那一条在类六）。另含四条窄判据：塔尖的点名符号、模块之外的
+// import、谁许读当前时刻（checkClock）、不经 import 的边（checkLinkEdges）。
 //
 // 规则表与真实包清单对不上也归这一类：「多一个」「少一个」都是这张尺子失准，不另立类号
 // （map.md 阶段表 01 那一行）。
@@ -44,7 +44,44 @@ func CheckDeps(m *Module) []Violation {
 		}
 	}
 	out = append(out, checkTipSymbols(m)...)
+	out = append(out, checkLinkEdges(m)...)
 	return append(out, checkClock(m)...)
+}
+
+// linkDirective 是那条能把别的包的符号绑进来的编译指令。
+const linkDirective = "//go:linkname"
+
+// checkLinkEdges 是类二第四条：不经 import 的边也报（ADR-0049）。
+//
+// 判两样：源码里的 `//go:linkname` 指令、工程里的 `.s` 汇编文件。这两条是唯一能做到
+// 「完全不经 import 的跨包绑定」的机制——不禁掉它们，类二那张 import 表只等于「愿意登记的边」。
+func checkLinkEdges(m *Module) []Violation {
+	var out []Violation
+	for _, p := range m.Packages {
+		for _, f := range p.Files {
+			if !scans(ClassDeps, f) {
+				continue
+			}
+			for _, group := range f.AST.Comments {
+				for _, c := range group.List {
+					if !strings.HasPrefix(c.Text, linkDirective) {
+						continue
+					}
+					out = append(out, f.violation(ClassDeps, c.Pos(),
+						fmt.Sprintf("%s 包里用了 %s 直接绑别的包的符号", p.Short, linkDirective),
+						"这条指令建出来的边在 import 表上不存在：依赖图看不见它，反向依赖、跨站取内部都做得成而检查器全绿",
+						"删掉它，改成 import ＋ 导出符号；确需跨包取内部，先改 ADR-0032 第四条（红线，单独点头）"))
+				}
+			}
+		}
+	}
+	for _, rel := range m.AsmFiles {
+		out = append(out, violationAt(ClassDeps, rel,
+			"工程里有汇编文件 "+rel,
+			"汇编可以直接 CALL 任意符号，不经 import——同 `go:linkname`，它造的是一条判据看不见的边",
+			"删掉这份汇编；确需用汇编，先改 ADR-0032 第四条（红线，单独点头）"))
+	}
+	return out
 }
 
 // reconcile 是包清单对账：规则表多一行、少一行都报。

@@ -88,6 +88,12 @@ func fixtureRules(name string) []Rule {
 			{"message", KindCrosscut, nil},
 			{"fixture", KindTip, []string{"cli"}},
 		}
+	case "linkedge":
+		// 类二第四条判据的样本：一处 linkname、一份汇编文件。
+		return []Rule{
+			{"parse", KindStation, []string{"contract"}},
+			{"fixture", KindTip, []string{"parse"}},
+		}
 	default: // clean
 		return []Rule{
 			{"parse", KindStation, []string{"contract", "console", "message"}},
