@@ -27,8 +27,11 @@ func TestRedlineSettleFillsLedger(t *testing.T) {
 
 	ledger := settle.Run(paper)
 
-	if ledger.Total != 2 || ledger.Done != 2 || ledger.NotRun != 0 {
-		t.Fatalf("台数那几格没人填：总 %d、跑完 %d、没跑 %d", ledger.Total, ledger.Done, ledger.NotRun)
+	// 形状与流向，不钉数（ADR-0050）：跑完的加没跑的等于总数、总数有人填。台数对不对
+	// 由结算站自己的自定义区判（`settle_test.go` 那一片），这里再判一遍就成了值断言。
+	if ledger.Total == 0 || ledger.Done+ledger.NotRun != ledger.Total {
+		t.Fatalf("台数那几格没人填或对不上：总 %d、跑完 %d、没跑 %d",
+			ledger.Total, ledger.Done, ledger.NotRun)
 	}
 	if ledger.Verify == "" {
 		t.Fatalf("跑没跑齐那一格没人填")
