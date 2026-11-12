@@ -38,7 +38,9 @@ func TestRedlineExecuteWritesResultLine(t *testing.T) {
 	if !strings.Contains(gone, "127.0.0.1") {
 		t.Fatalf("终端输出文件里没有这一台：\n%s", gone)
 	}
-	if n := strings.Count(gone, strings.Repeat("=", 50)); n != 1 {
+	// 分隔线只判「有几条」，不判多宽（ADR-0050）：宽度是 `message` 的版式，归它的自定义区
+	// 与 A/B 比对；红线要的是「一台跑完只出一条结果」这个形状。
+	if n := dividerLines(gone); n != 1 {
 		t.Fatalf("终端输出文件里应正好一条结果，分隔线实际 %d 条：\n%s", n, gone)
 	}
 
@@ -56,4 +58,18 @@ func readText(t *testing.T, path string) string {
 		t.Fatalf("读 %s 失败：%v", path, err)
 	}
 	return string(b)
+}
+
+// dividerLines 数「整行都由 `=` 组成」的那种行有几条。
+//
+// 不判宽度、不判字符数：宽度是版式，改一次就红的话这条红线就成了版式的哨兵（ADR-0050）。
+func dividerLines(text string) int {
+	n := 0
+	for _, line := range strings.Split(text, "\n") {
+		line = strings.TrimRight(line, "\r")
+		if line != "" && strings.Trim(line, "=") == "" {
+			n++
+		}
+	}
+	return n
 }
