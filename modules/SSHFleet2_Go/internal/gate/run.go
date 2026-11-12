@@ -106,7 +106,7 @@ func confirmRefusal(p *contract.Plan) (Refusal, message.Line) {
 // **两格一起造**：屏幕那句带外壳与日志路径，日志那句只有正文（外壳与 `[cli]` 标签由日志包
 // 补）——两者不是「同一句话的两个色码版本」，是两种形态。老版这一族全走 `fatal`，
 // 屏幕上既然报了日志路径，日志里就得有这一行；漏掉它是审计 `a3` 那处差异的根。
-func refuse(body string) Refusal {
+func refuse(body message.FatalBody) Refusal {
 	return newRefusalLogged(
 		message.Fatal(contract.WhereCLI, body, archive.ToolLogPath(contract.HistoryDir)),
 		message.TraceRefusal(body),

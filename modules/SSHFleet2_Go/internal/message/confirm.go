@@ -258,21 +258,21 @@ func CancelTrace() Line {
 //
 // 括号里那截由下面三个具名构造点给：闸门只交事实（有哪几份、标签是什么、装的是什么），
 // 句子在这里成形（ADR-0034 决定八）。
-func refuseEnvelope(what string) string {
-	return HeadCompliance + "：这次要做什么与它的载荷对不上（" + what + "）"
+func refuseEnvelope(what string) FatalBody {
+	return bodyOf(HeadCompliance + "：这次要做什么与它的载荷对不上（" + what + "）")
 }
 
 // RefuseEnvelopeMulti 一次装了不止一份载荷：labels 是那几份的称呼。
-func RefuseEnvelopeMulti(labels []string) string {
+func RefuseEnvelopeMulti(labels []string) FatalBody {
 	return refuseEnvelope("同时装了" + strings.Join(labels, "、"))
 }
 
 // RefuseEnvelopeEmpty 标签说是哪一种活，载荷却是空的。
-func RefuseEnvelopeEmpty(want string) string {
+func RefuseEnvelopeEmpty(want string) FatalBody {
 	return refuseEnvelope("标签是" + want + "，载荷却是空的")
 }
 
 // RefuseEnvelopeWrong 标签与载荷对不上：标签是 want，装的是 got。
-func RefuseEnvelopeWrong(want, got string) string {
+func RefuseEnvelopeWrong(want, got string) FatalBody {
 	return refuseEnvelope("标签是" + want + "，装的是" + got)
 }

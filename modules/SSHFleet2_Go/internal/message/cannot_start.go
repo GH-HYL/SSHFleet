@@ -13,13 +13,25 @@ import (
 // 判据文件那一族的表格层（读不到／解析失败／缺节／未识别字段）三份表共用同一个类别，
 // 条目层每句各不相同，所以各占一条。
 
-// CannotStartText 是「起不来」那一屏的正文：按原因类别取模板成形。
+// CannotStartBody 是「起不来」那一屏的正文：按原因类别取模板成形。
 //
 // 日志与屏幕共用这一份（老版那两处本来同一个字符串），不各拼一遍——ADR-0028 第五节讲的
 // 「屏给使用者看、日志留现场」讲的是形态，不是让两处各说一句（ADR-0044）。
 //
 // 纸上只有类别这一条路：`Body` 那一格已经在 03 号单末尾删掉，谁也没法再往纸上装整句。
+func CannotStartBody(c contract.CannotStart) FatalBody {
+	return bodyOf(cannotStartText(c))
+}
+
+// CannotStartText 是同一段正文的字：测试与日志拿它比对、落盘，不上屏。
+//
+// 上屏走 `CannotStartBody`——两者同一实现，不各拼一遍（ADR-0047）。
 func CannotStartText(c contract.CannotStart) string {
+	return cannotStartText(c)
+}
+
+// cannotStartText 是正文本体：类别那一句，加可选的外壳句。
+func cannotStartText(c contract.CannotStart) string {
 	r := c.Reason
 	text := reasonText(r)
 	if r.Head == "" {
@@ -102,7 +114,7 @@ func reasonText(r contract.CannotStartReason) string {
 
 	// 解析站其余三族里已经搬过来的几条（03 号单）。
 	case contract.CannotStartExtraArgs:
-		return RefuseExtraArgs(r.Value, r.Origin)
+		return RefuseExtraArgs(r.Value, r.Origin).Text()
 	case contract.CannotStartNoNodeParsed:
 		return NoNodeParsed
 	case contract.CannotStartManifestRead:
@@ -248,6 +260,10 @@ func reasonText(r contract.CannotStartReason) string {
 		return "建终端输出文件失败（" + r.Place + "）：" + r.Origin
 	case contract.CannotStartOutputLog:
 		return "建执行期日志失败（" + r.Place + "）：" + r.Origin
+
+	// 站交上来的系统原文：一句自己的话都不加，原样交出（过渡口子，ADR-0047）。
+	case contract.CannotStartSystemFault:
+		return r.Origin
 	}
 	panic("起不来：类别 " + string(r.Kind) + " 在 message.CannotStartText 里没有模板")
 }

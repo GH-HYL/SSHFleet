@@ -30,7 +30,7 @@ func TestRefusalTraceIsBodyOnly(t *testing.T) {
 	cases := []struct {
 		name string
 		plan *contract.Plan
-		want string
+		want message.FatalBody
 	}{
 		{
 			name: "认不出的选项（a3 那一场）",
@@ -61,8 +61,8 @@ func TestRefusalTraceIsBodyOnly(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			got := traceOf(t, c.plan)
-			if got != c.want {
-				t.Fatalf("日志正文应当正好是那一句：\n要：%q\n得：%q", c.want, got)
+			if got != c.want.Text() {
+				t.Fatalf("日志正文应当正好是那一句：\n要：%q\n得：%q", c.want.Text(), got)
 			}
 			for _, bad := range []string{"[ERROR]", "[function:", "日志：", "\x1b["} {
 				if strings.Contains(got, bad) {
@@ -86,8 +86,8 @@ func TestRefusalTraceKeepsMultiLineBody(t *testing.T) {
 	if !strings.Contains(got, "\n") {
 		t.Fatalf("这一条正文本身是多行的，不该被压成一行：%q", got)
 	}
-	if got != message.RefuseExtraArgs("-c", "uptime x") {
-		t.Fatalf("多行正文被改写了：\n要：%q\n得：%q", message.RefuseExtraArgs("-c", "uptime x"), got)
+	if got != message.RefuseExtraArgs("-c", "uptime x").Text() {
+		t.Fatalf("多行正文被改写了：\n要：%q\n得：%q", message.RefuseExtraArgs("-c", "uptime x").Text(), got)
 	}
 }
 

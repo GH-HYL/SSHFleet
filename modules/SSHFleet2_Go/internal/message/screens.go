@@ -43,11 +43,15 @@ func ProblemOrigin(problem, origin string) string {
 // Fatal 排一屏致命错误：红色 [ERROR] 头、黄色环节标签、正文，末尾附日志路径。
 //
 // 日志还没建起来时 logPath 传空串，那一行就不出现——老版同一判据。
-func Fatal(where, body, logPath string) Line {
+//
+// 正文收 `FatalBody` 而不是 `string`：那一屏的字只能由本包成形，站里贴不进自己拼的句子，
+// 也贴不进系统原文（要贴得走「系统原文」那一类别，ADR-0047）。
+func Fatal(where string, body FatalBody, logPath string) Line {
+	s := body.Text()
 	if logPath != "" {
-		body += "\n日志：" + logPath
+		s += "\n日志：" + logPath
 	}
-	s := tagLabel(ansiRed, "ERROR") + ansiYellow + " [function:" + where + "]" + ansiReset + " " + body + "\n"
+	s = tagLabel(ansiRed, "ERROR") + ansiYellow + " [function:" + where + "]" + ansiReset + " " + s + "\n"
 	return Line{s: s, toErr: true}
 }
 
@@ -60,8 +64,8 @@ func Fatal(where, body, logPath string) Line {
 //
 // 传空串表示这一拒不留痕：使用者自己答否、或危险框上按了「不继续」——那不是失败，
 // 老版在 `ErrCancelled` 那条路上也是直接退、不落日志。塔尖按「有没有字」决定落不落。
-func TraceRefusal(body string) Line {
-	return Line{s: body}
+func TraceRefusal(body FatalBody) Line {
+	return Line{s: body.Text()}
 }
 
 // CancelLine 是危险提醒档答否时那一行。老版 fmt.Println 在它前面没有空行。
@@ -104,7 +108,7 @@ func PromptWith(question Line, defaultYes bool) Line {
 //
 // 这是塔尖唯一一处自己触发的造屏：它只把系统给的错交进来，字由这里拼。
 func LogInitFailed(err error) Line {
-	return Fatal("log", "初始化工具日志失败："+err.Error()+"\n请检查程序所在目录是否可写，然后重试", "")
+	return Fatal("log", bodyOf("初始化工具日志失败："+err.Error()+"\n请检查程序所在目录是否可写，然后重试"), "")
 }
 
 // TraceDanger 是一条留给工具日志的留痕：非交互（--yes）跳过危险命令确认时写它。
