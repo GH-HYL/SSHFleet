@@ -34,6 +34,7 @@ TTY 那几场只能在 WSL 里跑（Git Bash 没有 `script`）：`a1-help`、`b
 | `ab.sh` | 单场采集：两侧各跑一遍，收屏幕／退出码／归档目录／HOME |
 | `cmp.py` | 尺子：归一化后按字节比，输出「一致」或差异项 |
 | `scenes.tsv` | 场景表，字段用 `\x1f` 分隔（制表符会被 `read` 折叠） |
+| `gen_scenes.py` | 生成 `scenes.tsv`；改场景表就改这里再跑一遍，别手改表格 |
 | `selftest_cmp.py` | 尺子的自检：造样本断言红／绿，`--real` 额外拿真实产物回归 |
 | `build.sh` | 按当前代码重编两侧 |
 | `reset.sh` | 每场开跑前复位一侧现场 |
