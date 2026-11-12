@@ -79,35 +79,44 @@ func reconcile(m *Module) []Violation {
 func checkImports(m *Module, p *Package, f *SourceFile) []Violation {
 	var out []Violation
 	for _, local := range sortedImportNames(f) {
-		path := f.Imports[local]
-		what, ok := m.Internal(path)
-		if !ok {
-			if IsStdlib(path) {
-				continue
-			}
-			if namedImport(path) {
-				continue
-			}
-			out = append(out, f.violation(ClassDeps, f.importPos[path],
-				fmt.Sprintf("import 了模块之外的 %s，它不在点名白名单里", path),
-				"模块之外的依赖要点名：白名单外的第三方包一律报红，供应链要一条条认得出来，不是「第三方随便用」",
-				fmt.Sprintf("要的包先在标准库里找；确实不够，在 guard 的规则表里加一个名并说清用途（加名记一行，新增一类用途要开发者点头）。今天点名的是：%v", thirdParty),
-			))
-			continue
-		}
-		if p.Rule == nil {
-			continue // 「多一个包」上面已经报过，不重复
-		}
-		if slices.Contains(p.Rule.Deps, what) {
-			continue
-		}
-		out = append(out, f.violation(ClassDeps, f.importPos[path],
-			fmt.Sprintf("%s 依赖了 %s", p.Short, what),
-			whyNotAllowed(p.Rule, what),
-			fmt.Sprintf("%s 只许依赖 %s", p.Short, depList(p.Rule.Deps)),
-		))
+		out = append(out, judgeImport(m, p, f, f.Imports[local])...)
+	}
+	// `_` 与 `.` 两种写法没有名字可引用，但依赖边一样成立：换一种写法绕开规则表，
+	// 绕过去的是「这条边不许有」，不是「这个名字不许用」（ADR-0048）。
+	for _, path := range f.SideImports {
+		out = append(out, judgeImport(m, p, f, path)...)
 	}
 	return out
+}
+
+// judgeImport 判一条依赖边（不管它在 import 里写成什么名字）。
+func judgeImport(m *Module, p *Package, f *SourceFile, path string) []Violation {
+	var out []Violation
+	what, ok := m.Internal(path)
+	if !ok {
+		if IsStdlib(path) {
+			return nil
+		}
+		if namedImport(path) {
+			return nil
+		}
+		return append(out, f.violation(ClassDeps, f.importPos[path],
+			fmt.Sprintf("import 了模块之外的 %s，它不在点名白名单里", path),
+			"模块之外的依赖要点名：白名单外的第三方包一律报红，供应链要一条条认得出来，不是「第三方随便用」",
+			fmt.Sprintf("要的包先在标准库里找；确实不够，在 guard 的规则表里加一个名并说清用途（加名记一行，新增一类用途要开发者点头）。今天点名的是：%v", thirdParty),
+		))
+	}
+	if p.Rule == nil {
+		return nil // 「多一个包」上面已经报过，不重复
+	}
+	if slices.Contains(p.Rule.Deps, what) {
+		return nil
+	}
+	return append(out, f.violation(ClassDeps, f.importPos[path],
+		fmt.Sprintf("%s 依赖了 %s", p.Short, what),
+		whyNotAllowed(p.Rule, what),
+		fmt.Sprintf("%s 只许依赖 %s", p.Short, depList(p.Rule.Deps)),
+	))
 }
 
 func whyNotAllowed(r *Rule, what string) string {
