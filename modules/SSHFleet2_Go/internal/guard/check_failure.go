@@ -3,6 +3,7 @@ package guard
 import (
 	"fmt"
 	"go/ast"
+	"go/token"
 	"slices"
 )
 
@@ -61,22 +62,46 @@ func constructionSites(m *Module, decl *Package, site FailureSite) []Violation {
 			if !scans(ClassFailure, f) {
 				continue
 			}
+			if site.allows(p.Short) {
+				continue
+			}
 			ast.Inspect(f.AST, func(n ast.Node) bool {
-				lit, ok := n.(*ast.CompositeLit)
-				if !ok || !isTypeOf(lit.Type, f, decl, site.Type) {
+				pos, how := constructionAt(n, f, decl, site.Type)
+				if pos == token.NoPos {
 					return true
 				}
-				if site.allows(p.Short) {
-					return true
-				}
-				out = append(out, f.violation(ClassFailure, lit.Pos(),
-					fmt.Sprintf("在 %s 包里造了 %s.%s", p.Short, site.Pkg, site.Type),
+				out = append(out, f.violation(ClassFailure, pos,
+					fmt.Sprintf("在 %s 包里造了 %s.%s（%s）", p.Short, site.Pkg, site.Type, how),
 					reason(site), fixFor(site)))
 				return true
 			})
 		}
 	}
 	return out
+}
+
+// constructionAt 判一个节点是不是「造了这个失败类型」，是就交回位置与写法。
+//
+// 三种写法都算（ADR-0048）：复合字面量、`new(T)`、一个零值变量。只认第一种，等于让绕过
+// 成本降到「换个写法」——而这一条防的是「包外伪造一个拒绝」，写法本来就不该参与判断。
+func constructionAt(n ast.Node, f *SourceFile, decl *Package, name string) (token.Pos, string) {
+	switch x := n.(type) {
+	case *ast.CompositeLit:
+		if isTypeOf(x.Type, f, decl, name) {
+			return x.Pos(), "复合字面量"
+		}
+	case *ast.CallExpr:
+		if id, ok := x.Fun.(*ast.Ident); ok && id.Name == "new" && len(x.Args) == 1 {
+			if isTypeOf(x.Args[0], f, decl, name) {
+				return x.Pos(), "new"
+			}
+		}
+	case *ast.ValueSpec:
+		if x.Type != nil && len(x.Values) == 0 && isTypeOf(x.Type, f, decl, name) {
+			return x.Pos(), "零值变量"
+		}
+	}
+	return token.NoPos, ""
 }
 
 func reason(site FailureSite) string {

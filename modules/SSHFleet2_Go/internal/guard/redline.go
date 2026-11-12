@@ -38,19 +38,19 @@ var redline = []RedLineEntry{
 	// 04 阶段 13 号单：writer 只许执行站拿（新增不算改）
 	{"TestCheckTerminalWriterHome", []string{"CheckTerminal"}, 3},
 	{"TestCheckTerminalExemptsTestFiles", []string{"CheckTerminal"}, 1},
-	{"TestCheckExit", []string{"CheckExit", "ClassExit", "Report"}, 5},
+	{"TestCheckExit", []string{"CheckExit", "ClassExit", "Report"}, 6},
 
 	// 03 号工单：依赖方向与包清单对账
-	{"TestCheckDeps", []string{"CheckDeps", "Report"}, 2},
+	{"TestCheckDeps", []string{"CheckDeps", "Report"}, 3},
 	{"TestCheckDepsClean", []string{"CheckDeps", "Report"}, 1},
 	// 04 阶段质量审计命中二：谁许读当前时刻（新增不算改）
 	{"TestCheckDepsClock", []string{"CheckDeps", "ClassDeps"}, 0},
 
 	// 04 号工单：契约纯净与失败类型的构造点
-	{"TestCheckContract", []string{"CheckContract", "ClassContract"}, 1},
+	{"TestCheckContract", []string{"CheckContract", "ClassContract", "Report"}, 4},
 	// 05 号单：纸面白名单与形状断言（新增一条，不算改名单）
 	{"TestCheckContractPaper", []string{"CheckContract", "ClassContract", "Kind", "KindContract", "Load", "Package", "PaperField", "PaperFact", "Rule", "Rules", "Target"}, 3},
-	{"TestCheckFailure", []string{"CheckFailure", "Report"}, 3},
+	{"TestCheckFailure", []string{"CheckFailure", "Report"}, 4},
 	{"TestCheckFailureDetectsMissingType", []string{"CheckFailure", "FailureSite"}, 1},
 
 	// 05 号工单：测试站位

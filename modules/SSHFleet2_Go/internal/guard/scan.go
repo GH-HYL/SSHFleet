@@ -69,6 +69,8 @@ type SourceFile struct {
 	AST       *ast.File
 	// Imports 是这份文件 import 的表，按文件里的写法解得动的名字索引。
 	Imports map[string]string
+	// SideImports 是 `_` 与 `.` 两种写法的 import 路径：名字解不出来，边照样在（ADR-0048）。
+	SideImports []string
 	// importPos 记每条 import 在文件里的位置，报错要指到那一行。
 	importPos map[string]token.Pos
 	fset      *token.FileSet
@@ -205,6 +207,9 @@ func (m *Module) parseFile(root, dir, name string) (*SourceFile, error) {
 		}
 		file.importPos[path] = spec.Pos()
 		if local == "_" || local == "." {
+			// 名字解不出来，但这条边是真的：空白 import 会跑 init、点 import 把符号倒进
+			// 本文件的作用域——两种都够拿它反向依赖了（ADR-0048）。
+			file.SideImports = append(file.SideImports, path)
 			continue
 		}
 		file.Imports[local] = path

@@ -6,4 +6,6 @@ import "fixture/internal/contract"
 func Judge() {
 	_ = Refusal{}
 	_ = contract.CannotStart{}
+	// 换个写法造同一个类型：`new` 算构造点（ADR-0048）。
+	_ = new(contract.CannotStart)
 }
