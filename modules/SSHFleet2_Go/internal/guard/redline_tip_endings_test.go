@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -76,7 +77,9 @@ func tipEndingsProbe(t *testing.T) func(dir string, args ...string) (string, int
 	if err := os.MkdirAll(sandbox, 0o755); err != nil {
 		t.Fatalf("建沙盒失败：%v", err)
 	}
-	bin := filepath.Join(sandbox, "sshfleet2_endings_bin")
+	// Windows 上可执行文件要带 .exe：`go build -o` 不会自己补，而 exec 找不带扩展名的
+	// 路径会直接报 `executable file not found in %PATH%`（找的是 PATHEXT，不是这个文件）。
+	bin := filepath.Join(sandbox, "sshfleet2_endings_bin"+exeSuffix())
 
 	build := exec.Command("go", "build", "-o", bin, ".")
 	build.Dir = filepath.Join(repoRoot, "modules", "SSHFleet2_Go")
@@ -122,4 +125,15 @@ func copyRedlineDangerRules(t *testing.T, dir string) {
 			t.Fatalf("写临时判据表失败：%v", err)
 		}
 	}
+}
+
+// exeSuffix 是这台机器上可执行文件要带的扩展名。
+//
+// 只为了「编出来能跑」：Windows 的 exec 按 PATHEXT 找文件，不带 `.exe` 的路径它找不到。
+// 这跟被测行为无关，所以放在测试辅助里，不进生产代码。
+func exeSuffix() string {
+	if runtime.GOOS == "windows" {
+		return ".exe"
+	}
+	return ""
 }
