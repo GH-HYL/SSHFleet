@@ -1,4 +1,4 @@
-package message
+package criterion
 
 import (
 	"errors"
@@ -7,9 +7,6 @@ import (
 )
 
 // SystemReason 取系统那一句话，去掉「open <路径>:」「GetFileAttributesEx <路径>:」这类前缀。
-//
-// 凭据包里也有一份同名的（它不许 import 本包），两处认下不合并（开发者 2026-11-06 定）：
-// **改这里要一起改那边**。
 //
 // 口径照老版 `common.SystemReason`：路径已经在第一行说过一遍，原因栏里不该再出现一次；
 // 带前缀还会让「找不到文件」看起来像是在说那条路径的写法有问题。

@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	"sshfleet2/internal/contract"
+	"sshfleet2/internal/criterion"
 	"sshfleet2/internal/message"
 )
 
@@ -41,7 +42,7 @@ func answerTable(raw string, regex, caseSensitive bool) ([]contract.Answer, *con
 			return nil, cliReason(contract.CannotStartReason{
 				Kind:   contract.CannotStartAnswerFileUnreadable,
 				Place:  path,
-				Origin: message.SystemReason(err),
+				Origin: criterion.SystemReason(err),
 			})
 		}
 		if isBinaryContent(data) {
@@ -116,7 +117,7 @@ func answerSource(raw string) (path string, isFile bool, fail *contract.CannotSt
 		return "", false, cliReason(contract.CannotStartReason{
 			Kind:   contract.CannotStartAnswerGone,
 			Place:  raw,
-			Origin: message.SystemReason(statErr),
+			Origin: criterion.SystemReason(statErr),
 		})
 	}
 	return "", false, nil

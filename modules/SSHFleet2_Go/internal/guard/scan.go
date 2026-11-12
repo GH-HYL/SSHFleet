@@ -22,7 +22,7 @@ type Target struct {
 	Dir string
 	// ModulePath 是模块名，如 sshfleet2。塔尖的包路径就是它本身。
 	ModulePath string
-	// Rules 是包清单规则表，十七行。
+	// Rules 是包清单规则表，十八行。
 	Rules []Rule
 	// Failures 是类五要判的两处：哪种失败许在哪个包造。
 	Failures []FailureSite

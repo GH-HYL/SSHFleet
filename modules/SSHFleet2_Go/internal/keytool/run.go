@@ -8,6 +8,7 @@ import (
 	"sshfleet2/internal/ask"
 	"sshfleet2/internal/contract"
 	"sshfleet2/internal/credential"
+	"sshfleet2/internal/criterion"
 	"sshfleet2/internal/message"
 )
 
@@ -71,7 +72,7 @@ func genKey(run contract.KeyRun, upstream *credential.KeySource) *contract.Canno
 			Kind:   contract.CannotStartKeyGenSaveFailed,
 			Key:    facts,
 			Place:  res.Where,
-			Origin: reasonOf(err),
+			Origin: criterion.SystemReason(err),
 		})
 	}
 	ask.Show(message.KeyGenSaved(overwritten, facts, res, credential.Fingerprint(key)))
@@ -91,7 +92,7 @@ func convertSecret(run contract.KeyRun, upstream *credential.KeySource) *contrac
 	}
 	encrypted, err := encryptFlag()
 	if err != nil {
-		return keyReason(contract.CannotStartReason{Kind: contract.CannotStartKeyConfigUnreadable, Origin: reasonOf(err)})
+		return keyReason(contract.CannotStartReason{Kind: contract.CannotStartKeyConfigUnreadable, Origin: criterion.SystemReason(err)})
 	}
 	if encrypted {
 		return toCipher(run.Path, content, upstream)
@@ -138,7 +139,7 @@ func toPlain(path, content string, upstream *credential.KeySource) *contract.Can
 		return keyReason(contract.CannotStartReason{
 			Kind:   contract.CannotStartKeyConvertDecryptFail,
 			Place:  path,
-			Origin: reasonOf(err),
+			Origin: criterion.SystemReason(err),
 		})
 	}
 	if plain == "" {
@@ -153,7 +154,7 @@ func writeAndEcho(path, newContent, from, to string) *contract.CannotStart {
 		return keyReason(contract.CannotStartReason{
 			Kind:   contract.CannotStartKeyConvertWriteFail,
 			Place:  path,
-			Origin: reasonOf(err),
+			Origin: criterion.SystemReason(err),
 		})
 	}
 	onDisk, err := os.ReadFile(path)
@@ -161,7 +162,7 @@ func writeAndEcho(path, newContent, from, to string) *contract.CannotStart {
 		return keyReason(contract.CannotStartReason{
 			Kind:   contract.CannotStartKeyConvertVerifyFail,
 			Place:  path,
-			Origin: reasonOf(err),
+			Origin: criterion.SystemReason(err),
 		})
 	}
 	ask.Show(message.KeyConvertDone(from, to, path, len(strings.TrimSpace(string(onDisk)))))
@@ -217,9 +218,4 @@ func stripComment(value string) string {
 // 维护者靠那句话找地方，不靠 tag。
 func keyReason(reason contract.CannotStartReason) *contract.CannotStart {
 	return &contract.CannotStart{Where: "credential", Reason: reason}
-}
-
-// reasonOf 取系统那句原因，去掉「open <路径>:」这类前缀（口径同 message.SystemReason）。
-func reasonOf(err error) string {
-	return credential.SystemReason(err)
 }

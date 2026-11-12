@@ -16,6 +16,7 @@ import (
 
 	"sshfleet2/internal/contract"
 	"sshfleet2/internal/credential"
+	"sshfleet2/internal/criterion"
 	"sshfleet2/internal/message"
 )
 
@@ -45,7 +46,7 @@ func passwdValue(p *contract.Plan, encrypted bool) *contract.CannotStart {
 			return cliReason(contract.CannotStartReason{
 				Kind:   contract.CannotStartPasswdUnreadable,
 				Place:  raw,
-				Origin: message.SystemReason(err),
+				Origin: criterion.SystemReason(err),
 			})
 		}
 	}
