@@ -34,7 +34,7 @@ import (
 // 版本号：单一出处（显示在帮助信息首行下方，经 cli.Parse 传入 Usage）。
 // 记的是**最近一次发布的号**，与 CHANGELOG 最近一个已发布段的段头一致。
 // 日常改代码不动它——只有 tools/release/release.py 在发布时改。
-const appVersion = "1.0.0"
+const appVersion = "12.2.0"
 
 // versionWithBuildID 版本号拼上**构建标识**：git 短提交号（仓库内编译时由 go build
 // 自动注入 vcs.revision；工作区有未提交改动时加 -dirty）+ HEAD 提交时间。
