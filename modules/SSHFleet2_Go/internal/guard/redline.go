@@ -104,6 +104,8 @@ var redline = []RedLineEntry{
 	{"TestCheckLedgerRequiresFourCells", []string{"CheckLedger", "Exception", "Rule"}, 3},
 	// helper 断言入指纹 01 号单：掏空 helper 即红（新增不算改）
 	{"TestCheckHelperAssertions", []string{"CheckRedline", "DefaultFailures", "HelperEntry", "Load", "RedLine", "RedLineEntry", "Report", "Rules", "Target", "helperHomeModule"}, 6},
+	// 措辞出口收口 03 号单：那一屏的正文不许拼（新增不算改）
+	{"TestCheckFatalBody", []string{"CheckTerminal", "ClassTerminal"}, 4},
 }
 
 // RedLine 返回名单的一份拷贝。检查读它；改返回值影响不到名单本身。

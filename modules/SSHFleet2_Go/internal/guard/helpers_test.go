@@ -81,6 +81,13 @@ func fixtureRules(name string) []Rule {
 			{"mask", KindCrosscut, nil},
 			{"fixture", KindTip, nil},
 		}
+	case "fatalbody":
+		// 类一第四条判据的样本：站里两种拼法各一次报红，向 message 要正文的那次不红。
+		return []Rule{
+			{"cli", KindStation, []string{"message"}},
+			{"message", KindCrosscut, nil},
+			{"fixture", KindTip, []string{"cli"}},
+		}
 	default: // clean
 		return []Rule{
 			{"parse", KindStation, []string{"contract", "console", "message"}},

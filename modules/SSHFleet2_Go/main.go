@@ -60,8 +60,8 @@ func main() {
 	// fatal 是「起不来」的唯一收尾：落日志、打那一屏、按种类退。
 	// 那一屏向 message 要——纸上只装事实（哪一环、哪句话、带不带日志行），成品的话只在
 	// message 里成形（契约里连字都装不了：`message.Line` 字段不导出）。
-	fatal := func(where, body, logPath string) {
-		lg.Fatal(where, body)
+	fatal := func(where string, body message.FatalBody, logPath string) {
+		lg.Fatal(where, body.Text())
 		console.Print(message.Fatal(where, body, logPath))
 		finish(exitcode.CannotStart)
 	}
@@ -80,14 +80,14 @@ func main() {
 		if fail.NoLog {
 			logPath = "" // 配置那一步日志还没建起来，老版那一屏也不带「日志：」行
 		}
-		fatal(fail.Where, message.CannotStartText(*fail), logPath)
+		fatal(fail.Where, message.CannotStartBody(*fail), logPath)
 
 	case krun != nil:
 		// 第四种结局：一条不进流水线的小命令。塔尖只把命令交给密钥包、按它交回的结局收场，
 		// 不判断「该不该跑」——那三条命令自己读自己那一小块配置（ADR-0032 第五条）。
 		lg.Info(message.KeyModeEntered(krun.Which).Plain())
 		if cannot := keytool.Run(*krun, credential.DefaultKeySource()); cannot != nil {
-			fatal(cannot.Where, message.CannotStartText(*cannot), toolPath)
+			fatal(cannot.Where, message.CannotStartBody(*cannot), toolPath)
 		}
 
 	case plan != nil:
@@ -127,7 +127,11 @@ func main() {
 		// 步骤 8 前半：建本次的归档目录。本次执行的产物全在它下面，四条落点由它发。
 		paths, aerr := archive.Create(contract.HistoryDir, string(plan.Mode), plan.Run.Remark, time.Now())
 		if aerr != nil {
-			fatal(contract.WhereOutput, aerr.Error(), toolPath)
+			// 站的原文原样上屏：那一句中文现在还在站里（`archive` 一处），迁走之后这一类别就没人用
+			// 了（ADR-0047）。塔尖不替它加壳，也不许把 error 直接交给屏幕。
+			fatal(contract.WhereOutput, message.CannotStartBody(contract.CannotStart{
+				Reason: contract.CannotStartReason{Kind: contract.CannotStartSystemFault, Origin: aerr.Error()},
+			}), toolPath)
 		}
 		// 塔尖自己做的动作，自己留痕（老版 `:435`／`:443`）。各站的「解析成功、合规通过、
 		// 读取节点成功」那一族不补：句柄只在塔尖，补它们就得替站宣布成功（见 `message.TraceArchiveCreated`）。
@@ -148,7 +152,7 @@ func main() {
 		// 启动段就建好了，执行站不必另造一个。
 		paper, cannot := execute.Run(intr.Context(), plan, paths.Terminal, paths.ExecLog)
 		if cannot != nil {
-			fatal(cannot.Where, message.CannotStartText(*cannot), toolPath)
+			fatal(cannot.Where, message.CannotStartBody(*cannot), toolPath)
 		}
 		// 执行期日志写完、切回工具日志（老版 `:484`）。老版排在「执行结束：成功 N 台」那条
 		// 统计行**之前**，所以这一句也放在结算与执行日志收尾之前。
@@ -173,7 +177,10 @@ func main() {
 
 		warns, rerr := report.Run(ledger, paths)
 		if rerr != nil {
-			fatal(contract.WhereOutput, rerr.Error(), toolPath)
+			// 同上：`report` 那四句中文还在站里，这一屏只把原文接过来（ADR-0047）。
+			fatal(contract.WhereOutput, message.CannotStartBody(contract.CannotStart{
+				Reason: contract.CannotStartReason{Kind: contract.CannotStartSystemFault, Origin: rerr.Error()},
+			}), toolPath)
 		}
 		// 报告站已经把这几句打上屏了；这里只管留痕——它不持日志句柄。
 		for _, w := range warns {

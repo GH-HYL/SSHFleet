@@ -245,6 +245,15 @@ const (
 	CannotStartDangerBadRegex       CannotStartKind = "danger_bad_regex"
 )
 
+// CannotStartSystemFault 是站交上来的系统原文，工具一句自己的话都不加：Origin 是那段原文。
+//
+// **这是过渡口子，不是终局**（ADR-0047）。用它的是塔尖那两处——建归档目录失败、报告写不出来。
+// 那两句中文现在由站里自己拼（`archive` 一处、`report` 三处），所以原文本身已经是整句；
+// 站里迁进类别表之后，这里就没有调用者，届时删掉。
+//
+// 它存在的意义是让「往屏上贴系统原文」有个数得出来的入口：谁用了它，审计数得清。
+const CannotStartSystemFault CannotStartKind = "system_fault"
+
 // CannotStartReason 是那一屏要装的全部事实：一个类别，加几个具名格。
 //
 // 格子按类别取用，用不上的留零值：Head 是外壳句的类别常量（`message.HeadXxx`，没有外壳

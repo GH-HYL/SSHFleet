@@ -2,6 +2,7 @@ package guard
 
 import (
 	"go/ast"
+	"go/token"
 	"slices"
 )
 
@@ -18,6 +19,15 @@ const (
 // 带 F 的那几个要指定写入对象，写到内存缓冲不算，所以不在这儿——写到屏幕的那种必然引用
 // os.Stdout／os.Stderr，被下面那条抓住。
 var printFamily = []string{"Print", "Printf", "Println"}
+
+// messagePkg 是造字的那一站：它的 `Fatal` 是那一屏的唯一入口，正文形状在这里判。
+const messagePkg = "message"
+
+// 两个入口各自的正文位置：`Fatal` 是第二个参数，`TraceRefusal` 是第一个。
+//
+// 为什么两者都判：它们是同一句话的两个形态（屏上与日志），正文同一个——只判屏那一半，
+// 掏空日志那一半就没人看得见。
+var bodyArgOf = map[string]int{"Fatal": 1, "TraceRefusal": 0}
 
 // CheckTerminal 是类一：谁往终端写字。
 //
@@ -45,6 +55,12 @@ func CheckTerminal(m *Module) []Violation {
 							"用了内建 println 往标准错误写字",
 							"往终端写字的动作只许出现在 console 包，内建 println 绕过它直接落标准错误",
 							"把这句话交给 console——它收的是 message 造出来的那一型"))
+						return true
+					}
+					if why := fatalBodyFault(m, p.Short, f, x); why != "" {
+						out = append(out, f.violation(ClassTerminal, x.Pos(), why,
+							"那一屏的正文只能由 message 的模板成形：贴进来的句子没有类别，改口吻时找不到它，也不会有人发现两处说法已经漂开（ADR-0047）",
+							"把它收成一个类别：站里只交「哪一类、什么参数」，句子向 message 要；系统原文走类别里那一格，别直接当正文"))
 						return true
 					}
 					sel, ok := x.Fun.(*ast.SelectorExpr)
@@ -90,4 +106,72 @@ func CheckTerminal(m *Module) []Violation {
 		}
 	}
 	return out
+}
+
+// fatalBodyFault 判一次 `message.Fatal`／`TraceRefusal` 调用有没有把来路不明的正文塞进去。
+//
+// 只判两种形状：正文取自 `.Error()` 调用、正文是当场拼的字符串连接。合法的形状是「message
+// 给的正文」——某个类别函数的返回值，或接住它的变量。字面量内容不看、字节不数：那一类判据
+// 一碰内容就变成了「这话该怎么说」，而这句话该怎么说只归 message（ADR-0047）。
+//
+// message 包自己不算：它是造字的地方，正文本来就是它的模板排出来的。
+func fatalBodyFault(m *Module, pkg string, f *SourceFile, call *ast.CallExpr) string {
+	if pkg == messagePkg {
+		return ""
+	}
+	sel, ok := call.Fun.(*ast.SelectorExpr)
+	if !ok {
+		return ""
+	}
+	id, ok := sel.X.(*ast.Ident)
+	if !ok {
+		return ""
+	}
+	if short, internal := m.Internal(f.ImportPath(id.Name)); !internal || short != messagePkg {
+		return ""
+	}
+	idx, ok := bodyArgOf[sel.Sel.Name]
+	if !ok || idx >= len(call.Args) {
+		return ""
+	}
+	return badBodyShape(call.Args[idx])
+}
+
+// badBodyShape 看正文那一格是哪种形状；空串表示这一格不违规。
+//
+// 三种形状算拼出来的：直接取 `.Error()`、把它包一层再交进来、当场用 `+` 拼。
+// 交一张纸进来的不算：系统原文走纸里那一格是定好的口子（`CannotStartReason.Origin`），
+// 那句话仍由 `message` 成形；这里抓的是「把原文当成句子本身」。
+func badBodyShape(expr ast.Expr) string {
+	switch x := expr.(type) {
+	case *ast.CallExpr:
+		if sel, ok := x.Fun.(*ast.SelectorExpr); ok && sel.Sel.Name == "Error" {
+			return "把 err.Error() 直接当成那一屏的正文"
+		}
+		if hasErrorCall(x) {
+			return "把 err.Error() 包了一层再当成那一屏的正文"
+		}
+	case *ast.BinaryExpr:
+		if x.Op == token.ADD {
+			return "当场拼了一句字符串塞进那一屏"
+		}
+	}
+	return ""
+}
+
+// hasErrorCall 在这个表达式里找「取系统原文」那一下（`.Error()` 调用）。
+func hasErrorCall(expr ast.Expr) bool {
+	found := false
+	ast.Inspect(expr, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		if sel, ok := call.Fun.(*ast.SelectorExpr); ok && sel.Sel.Name == "Error" {
+			found = true
+			return false
+		}
+		return true
+	})
+	return found
 }

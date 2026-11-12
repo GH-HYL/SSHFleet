@@ -33,11 +33,11 @@ const (
 )
 
 // Shell 给正文套上老版那层壳：`<外壳>：<正文>`。head 为空表示那一处没有外壳句，正文原样交回。
-func Shell(head, body string) string {
+func Shell(head, body string) FatalBody {
 	if head == "" {
-		return body
+		return bodyOf(body)
 	}
-	return head + "：" + body
+	return bodyOf(head + "：" + body)
 }
 
 // helpHint 是两条词法错共用的收尾。
@@ -47,12 +47,12 @@ const helpHint = "（使用 -h 查看帮助）"
 const modeMutual = "执行模式选项：-c、-s、-u、-d、--change-password 互斥，只能指定一个"
 
 // RefuseUnknownOption 表里没有这个选项（name 带着横杠，例如 `--zzz`）。
-func RefuseUnknownOption(name string) string {
+func RefuseUnknownOption(name string) FatalBody {
 	return Shell(HeadParse, "不认识的选项："+name+helpHint)
 }
 
 // RefuseMissingValue 带值的选项后面没有值（name 带着横杠，例如 `-c`）。
-func RefuseMissingValue(name string) string {
+func RefuseMissingValue(name string) FatalBody {
 	return Shell(HeadParse, "选项 "+name+" 缺少值"+helpHint)
 }
 
@@ -64,7 +64,7 @@ func RefuseMissingValue(name string) string {
 //
 // 这一段不用 `ProblemHint`：它的中间还夹着三条编号原因，版式与「问题／提示」两段不同。
 // 编号与那个缩进是屏幕上的样子，所以只许在这里成形。
-func RefuseExtraArgs(owner, joined string) string {
+func RefuseExtraArgs(owner, joined string) FatalBody {
 	head := "出现多余的参数（未被使用）：" + joined
 	if owner != "" {
 		// 认得出主：多半是值里有空格、没加引号，被 shell 切成了两段。
@@ -93,7 +93,7 @@ func subjectText(s contract.ProblemSubject) string {
 
 // RefuseBadPositiveInt 三个数值选项（-n／-t／-T）取值认不出或不是正数。
 // subject 是这一格怎么称呼自己（上面那三个常量之一）。
-func RefuseBadPositiveInt(flag string, subject contract.ProblemSubject, raw string) string {
+func RefuseBadPositiveInt(flag string, subject contract.ProblemSubject, raw string) FatalBody {
 	return Shell(HeadCompliance, ProblemHint(
 		CurrentValue(flag+" 参数格式错误，"+subjectText(subject)+"必须是正整数", raw),
 		"给一个正整数（单位见该选项的说明）"))
@@ -101,7 +101,7 @@ func RefuseBadPositiveInt(flag string, subject contract.ProblemSubject, raw stri
 
 // RefuseModeNone 一个模式都没给。老版把「零个」与「多个」分开说：零个要做的是选一个，
 // 不是删掉多余的。
-func RefuseModeNone() string {
+func RefuseModeNone() FatalBody {
 	return Shell(HeadCompliance, ProblemHint(
 		modeMutual,
 		"你没有指定任何模式，请从下面五个里选一个：\n"+
@@ -109,96 +109,96 @@ func RefuseModeNone() string {
 }
 
 // RefuseModeMultiple 同时给了多个模式。
-func RefuseModeMultiple() string {
+func RefuseModeMultiple() FatalBody {
 	return Shell(HeadCompliance, ProblemHint(
 		modeMutual,
 		"一次只能做一件事，请只保留一个模式"))
 }
 
 // RefuseNoShellWithOtherMode `--no-shell` 只和 `-c` 一起用。
-func RefuseNoShellWithOtherMode() string {
+func RefuseNoShellWithOtherMode() FatalBody {
 	return Shell(HeadCompliance, ProblemHint(
 		"--no-shell 只能和 -c 一起使用",
 		"请去掉 --no-shell，或改用 -c 执行"))
 }
 
 // RefusePasswdWithAnswer 改密不能配 -a。
-func RefusePasswdWithAnswer() string {
+func RefusePasswdWithAnswer() FatalBody {
 	return Shell(HeadCompliance, ProblemHint(
 		"--change-password 不能和 -a 一起用",
 		"改密不用你配触发词，用的是一份统一的提示词表"))
 }
 
 // RefusePasswdWithPath 改密不能配 -p。
-func RefusePasswdWithPath() string {
+func RefusePasswdWithPath() FatalBody {
 	return Shell(HeadCompliance, ProblemHint(
 		"--change-password 不能和 -p 一起用",
 		"改密不传文件，用不到目标路径"))
 }
 
 // RefusePasswdWithKey 改密不能配 -k。
-func RefusePasswdWithKey() string {
+func RefusePasswdWithKey() FatalBody {
 	return Shell(HeadCompliance, ProblemHint(
 		"--change-password 不能和 -k 一起用",
 		"改密要用账号自己的登录密码登进去，密钥登录派不上用场"))
 }
 
 // RefuseRemotePathNotAbsolute 远端路径（上传目录、下载源）不以 / 开头。
-func RefuseRemotePathNotAbsolute(flag, what, value string) string {
+func RefuseRemotePathNotAbsolute(flag, what, value string) FatalBody {
 	return Shell(HeadCompliance, ProblemHint(
 		CurrentValue(flag+" 参数指定的"+what+"必须是绝对路径", value),
 		"服务器上的路径要从 / 写起，例如 /opt/app/"))
 }
 
 // RefuseRemotePathHasNewline 远端路径里有回车或换行：参数被换行打断的现场。
-func RefuseRemotePathHasNewline(flag, what, value string) string {
+func RefuseRemotePathHasNewline(flag, what, value string) FatalBody {
 	return Shell(HeadCompliance, ProblemHint(
 		flag+" 参数指定的"+what+"里有回车或换行："+value,
 		"一条命令只写一个路径，检查复制时是不是把换行带进来了"))
 }
 
 // RefuseUploadDirNeedsSlash 上传的 -p 必须以 / 收尾（ADR-0002 的消歧义约束）。
-func RefuseUploadDirNeedsSlash(value string) string {
+func RefuseUploadDirNeedsSlash(value string) FatalBody {
 	return Shell(HeadCompliance, ProblemHint(
 		CurrentValue("上传模式：-p 必须是以 / 结尾的目录", value),
 		"-p 只表示\"放到哪个目录\"，工具不会替你改文件名，所以要以 / 收尾"))
 }
 
 // RefusePathWithCommand `-p` 不能和 `-c`／`-s` 一起用。
-func RefusePathWithCommand() string {
+func RefusePathWithCommand() FatalBody {
 	return Shell(HeadCompliance, ProblemHint(
 		"-p 参数不能搭配 -c 或 -s 使用",
 		"只有上传、下载才用 -p；命令与脚本模式不需要它"))
 }
 
 // RefuseDownloadNeedsPath `-d` 必须配 `-p`。
-func RefuseDownloadNeedsPath() string {
+func RefuseDownloadNeedsPath() FatalBody {
 	return Shell(HeadCompliance, ProblemHint(
 		"-d 参数必须搭配 -p 参数使用",
 		"-p 写文件要存到本机的哪个目录，例如 -p ./logs/"))
 }
 
 // RefuseUploadNeedsPath `-u` 必须配 `-p`。
-func RefuseUploadNeedsPath() string {
+func RefuseUploadNeedsPath() FatalBody {
 	return Shell(HeadCompliance, ProblemHint(
 		"-u 参数必须搭配 -p 参数使用",
 		"-p 写文件要放到服务器上的哪个目录，例如 -p /opt/app/"))
 }
 
 // RefuseSudoConflict 两个执行身份开关同给：自相矛盾，只给一行、不补提示（老版如此）。
-func RefuseSudoConflict() string {
+func RefuseSudoConflict() FatalBody {
 	return Shell(HeadCompliance, "--sudo 与 --no-sudo 只能给一个（两个都不给=按配置里的值）")
 }
 
 // RefuseCommandEmpty `-c` 给了但只有空白。
-func RefuseCommandEmpty() string {
+func RefuseCommandEmpty() FatalBody {
 	return Shell(HeadCompliance, ProblemHint(
 		"-c 参数不能为空，请提供要执行的命令",
 		"-c 后面跟命令原文，例如 -c \"systemctl status sshd\""))
 }
 
 // RefusePasswdEmpty `--change-password` 给了但只有空白。
-func RefusePasswdEmpty() string {
+func RefusePasswdEmpty() FatalBody {
 	return Shell(HeadCompliance, ProblemHint(
 		"--change-password 的新密码不能为空",
 		"后面跟这次要统一改成的新密码"))
@@ -210,28 +210,28 @@ func RefusePasswdEmpty() string {
 // 哪一句带「提示：」、哪一句另起一行不带上标签，都照原样——使用者照着做的那一步不一样。
 
 // RefuseAnswerWithUpload `-a` 不能和 `-u` 一起用。
-func RefuseAnswerWithUpload() string {
+func RefuseAnswerWithUpload() FatalBody {
 	return Shell(HeadCompliance, ProblemHint(
 		"-a 不能和 -u 一起用",
 		"代填是给命令、脚本的交互用的，上传时没有命令在跑"))
 }
 
 // RefuseAnswerWithDownload `-a` 不能和 `-d` 一起用。
-func RefuseAnswerWithDownload() string {
+func RefuseAnswerWithDownload() FatalBody {
 	return Shell(HeadCompliance, ProblemHint(
 		"-a 不能和 -d 一起用",
 		"代填是给命令、脚本的交互用的，下载时没有命令在跑"))
 }
 
 // RefuseAnswerWithNoShell `--no-shell` 不能和 `-a` 一起用。
-func RefuseAnswerWithNoShell() string {
+func RefuseAnswerWithNoShell() FatalBody {
 	return Shell(HeadCompliance, ProblemHint(
 		"--no-shell 不能和 -a 一起使用",
 		"请去掉其中一个"))
 }
 
 // RefusePasswdWithSudo 改密不能和身份开关一起用：第二行不带上标签（老版就那样）。
-func RefusePasswdWithSudo() string {
+func RefusePasswdWithSudo() FatalBody {
 	return Shell(HeadCompliance, "--change-password 不能和 --sudo / --no-sudo 一起用\n"+
 		"改的是登录账号自己的密码，与执行身份无关")
 }
@@ -240,7 +240,7 @@ func RefusePasswdWithSudo() string {
 //
 // body 是正文的字节数（老版那一格还在，是要让人知道限的是哪一头），line 是量出来的
 // 下发行字节数，limit 是写的上限。
-func RefuseAnswerTooLong(body, line, limit int) string {
+func RefuseAnswerTooLong(body, line, limit int) FatalBody {
 	return Shell(HeadCompliance, fmt.Sprintf(
 		"-a 参数下发的命令太长：正文 %d 字节，下发 %d 字节，上限 %d 字节\n"+
 			"提示：请把正文控制在 7 万字节以内（代填要把正文编进命令行，长度受它限制）",
@@ -249,7 +249,7 @@ func RefuseAnswerTooLong(body, line, limit int) string {
 
 // RefuseAnswerUnsupportedInterpreter `-a` 不支持这个解释器：表外的名字没有统一的
 // 「一段程序文本」入口，硬跑只会静默不跑（perl 用 -c 甚至只做语法检查）。
-func RefuseAnswerUnsupportedInterpreter(interpreter string) string {
+func RefuseAnswerUnsupportedInterpreter(interpreter string) FatalBody {
 	return Shell(HeadCompliance, fmt.Sprintf(
 		"-a 代填不支持解释器 %q\n"+
 			"目前支持：%s\n"+
