@@ -4,10 +4,16 @@ package parse
 // 根下一层的条目。
 //
 // 对着临时目录造真条目：软链接、FIFO 与不可读文件都不是「传个结构体进去」验得出来的。
+//
+// **三件链接类用例在 Windows 上一律跳过**：Windows 默认没有建符号链接的特权
+// （`CreateSymbolicLink` 回 1314），要「开发人员模式」或管理员；而每次尝试都会让 360 弹窗
+// 要人放行。要看它们：开开发者模式后设 `SSHFLEET_TEST_SYMLINK=1` 再跑。跳过不算绿（规范三.3）。
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -88,9 +94,29 @@ func TestCollectSingleFile(t *testing.T) {
 	}
 }
 
+// symlinkOrSkip 在 Windows 上跳过下面三条链接类用例。
+//
+// **判据用 GOOS，不试建一条**：试一次就是一次 `CreateSymbolicLink`，360 的进程防护每次都
+// 弹窗要人手动放行——为了知道「建不了」而弹三个窗，比跳过更烦。
+// Windows 默认没有建符号链接的特权（回 1314），要「开发人员模式」或管理员。
+//
+// 在开了开发者模式、或想强制验这三条的机器上，设 `SSHFLEET_TEST_SYMLINK=1` 再跑。
+//
+// **跳过不算绿**（规范三.3）：读到这一行说明这三条用例没验，别当成过了。
+func symlinkOrSkip(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS != "windows" || os.Getenv("SSHFLEET_TEST_SYMLINK") == "1" {
+		return
+	}
+	fmt.Fprintf(os.Stderr, "[跳过] parse 的三条链接类用例没跑：Windows 默认建不了符号链接（1314）。\n"+
+		"  要看它们：开「开发人员模式」（设置 → 系统 → 开发者选项）后设 SSHFLEET_TEST_SYMLINK=1 再跑；360 弹窗与权限无关，放行也一样。\n")
+	t.Skip("Windows 上默认跳过链接类用例（不算通过）：设 SSHFLEET_TEST_SYMLINK=1 可强制跑")
+}
+
 // 软链接一律过滤、不报错、留名；被过滤的链接也要进「根下一层」，确认屏要列得出来。
 func TestCollectSkipsSymlinks(t *testing.T) {
 	dir := t.TempDir()
+	symlinkOrSkip(t)
 	root := filepath.Join(dir, "dist")
 	if err := os.Mkdir(root, 0o755); err != nil {
 		t.Fatalf("造目录失败：%v", err)
@@ -126,6 +152,7 @@ func TestCollectSkipsSymlinks(t *testing.T) {
 // 上传根本身是软链接：没有可传目标，报错。
 func TestCollectRootSymlinkFails(t *testing.T) {
 	dir := t.TempDir()
+	symlinkOrSkip(t)
 	target := filepath.Join(dir, "real.txt")
 	if err := os.WriteFile(target, []byte("x"), 0o644); err != nil {
 		t.Fatalf("造文件失败：%v", err)
@@ -142,6 +169,7 @@ func TestCollectRootSymlinkFails(t *testing.T) {
 // 过滤后一个可传文件都不剩：报错，说清滤掉了几个、都是谁。
 func TestCollectAllFilteredFails(t *testing.T) {
 	dir := t.TempDir()
+	symlinkOrSkip(t)
 	root := filepath.Join(dir, "dist")
 	if err := os.Mkdir(root, 0o755); err != nil {
 		t.Fatalf("造目录失败：%v", err)
