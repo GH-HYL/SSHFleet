@@ -21,8 +21,8 @@ func TestCheckDeps(t *testing.T) {
 		"fixture/internal/extra", // 多一个包
 		"log 在工程里不存在",            // 少一个包
 		"os.Getenv",              // 塔尖用了没点名的符号
-		"gate 依赖了 ask",          // 点 import：名字没写，边还在
-		"parse 依赖了 ask",         // 空白 import：同上
+		"gate 依赖了 ask",           // 点 import：名字没写，边还在
+		"parse 依赖了 ask",          // 空白 import：同上
 	} {
 		if !anyContains(vs, want) {
 			t.Errorf("少了这一条：%q，实得：\n%s", want, Report(vs))

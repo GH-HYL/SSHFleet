@@ -42,7 +42,13 @@ type Module struct {
 	Target
 	fset     *token.FileSet
 	Packages []*Package
+	// AsmFiles 是模块里全部 `.s` 汇编文件（模块内相对路径）。
+	// 它们不参与 import 解析，却能 CALL 任意符号——所以得单独记一笔（ADR-0049）。
+	AsmFiles []string
 }
+
+// asmExt 是 Go 汇编文件的后缀：它出现在工程里，就说明有一条不经 import 的调用边。
+const asmExt = ".s"
 
 // Package 是一个包：规则表里的一行，加上它的文件。
 type Package struct {
@@ -102,6 +108,11 @@ func Load(t Target) (*Module, error) {
 			return err
 		}
 		if !d.IsDir() {
+			if strings.HasSuffix(d.Name(), asmExt) {
+				if rel, rerr := filepath.Rel(root, p); rerr == nil {
+					m.AsmFiles = append(m.AsmFiles, filepath.ToSlash(rel))
+				}
+			}
 			return nil
 		}
 		if p != root && skipDir(d.Name()) {
@@ -182,7 +193,9 @@ func (m *Module) newPackage(rel, name string) *Package {
 
 func (m *Module) parseFile(root, dir, name string) (*SourceFile, error) {
 	full := filepath.Join(dir, name)
-	astFile, err := parser.ParseFile(m.fset, full, nil, 0)
+	// 注释要读：`//go:linkname` 是编译指令，不住语法树、只住在注释里（ADR-0049）。
+	// 别的判据仍然只看语法树——「注释里提到 os.Exit」不算越界，这条不变（ADR-0037 决定二）。
+	astFile, err := parser.ParseFile(m.fset, full, nil, parser.ParseComments)
 	if err != nil {
 		return nil, fmt.Errorf("检查器读不动 %s：%w", full, err)
 	}
