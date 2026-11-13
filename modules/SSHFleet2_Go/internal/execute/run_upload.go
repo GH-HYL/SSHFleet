@@ -22,6 +22,7 @@ import (
 	"github.com/pkg/sftp"
 
 	"sshfleet2/internal/contract"
+	"sshfleet2/internal/criterion"
 )
 
 // upload 一台的上传。
@@ -218,7 +219,7 @@ func (c *client) putFile(sftpClient *sftp.Client, localPath, remoteFilePath stri
 func (c *client) putFileViaSudo(sftpClient *sftp.Client, localPath, rel, remotePath string, perm os.FileMode, seq int, totalBytes int64, totalFiles int, onProg onProgressN) (int64, error, []string) {
 	remoteFilePath := path.Join(remotePath, rel)
 	if dir := path.Dir(remoteFilePath); dir != remotePath {
-		if err := c.exec(fmt.Sprintf("sudo mkdir -p '%s'", escapeShellArg(dir))); err != nil {
+		if err := c.exec(fmt.Sprintf("sudo mkdir -p '%s'", criterion.EscapeSingle(dir))); err != nil {
 			return 0, errors.New(msg(envTransfer, transferRemoteFileFailed, fmt.Sprintf("create remote dir %s: %v", dir, err))), nil
 		}
 	}
@@ -261,7 +262,7 @@ func (c *client) putFileViaSudo(sftpClient *sftp.Client, localPath, rel, remoteP
 	_ = sftpClient.Chmod(tmpFilePath, perm)
 
 	// 两个参数都转义：两边都含用户可控字符，任一边漏转义都会把远端命令拼坏。
-	if err := c.exec(fmt.Sprintf("sudo mv '%s' '%s'", escapeShellArg(tmpFilePath), escapeShellArg(remoteFilePath))); err != nil {
+	if err := c.exec(fmt.Sprintf("sudo mv '%s' '%s'", criterion.EscapeSingle(tmpFilePath), criterion.EscapeSingle(remoteFilePath))); err != nil {
 		// 跨文件系统时 mv 退化为 copy+unlink，中途失败可能在最终位置留下半成品。
 		// 不猜：先 Stat，确认存在才报。
 		if _, statErr := sftpClient.Stat(remoteFilePath); statErr == nil {
@@ -284,7 +285,7 @@ func (c *client) rollback(sftpClient *sftp.Client, writtenPaths []string, useSud
 	}
 	remove := func(p string) error {
 		if useSudo {
-			return c.exec(fmt.Sprintf("sudo rm -f '%s'", escapeShellArg(p)))
+			return c.exec(fmt.Sprintf("sudo rm -f '%s'", criterion.EscapeSingle(p)))
 		}
 		return sftpClient.Remove(p)
 	}

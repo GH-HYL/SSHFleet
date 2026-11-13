@@ -1,25 +1,14 @@
 package mask
 
-// CSV 的读与写各留一个入口：内联记录与清单副本都要按 CSV 规则走（值可能整段带引号、
-// 引号里可能包着逗号，按裸逗号切会把段号切错、把密码漏在外面）。两处只差「认不认 `#`
-// 注释」，所以读法共用一份、用一个参数分开；写法完全一样，只留一个。
+// CSV 的写与「按段取区间」各留一个入口：遮一条内联记录要按 CSV 规则重拼，清单副本要
+// 就地替换（除了凭据那两段，其余字节跟原件一样）。
+//
+// 读法不在这里——`criterion.ReadCSVRows` 是全工程唯一那份，取值判定与脱敏都调它。
 
 import (
 	"encoding/csv"
 	"strings"
 )
-
-// newCSVReader 读一段 CSV 文本。comment 为真时把 `#` 开头的行当注释跳过（内联记录用），
-// 为假时整行就是数据（清单逐行处理用）。
-func newCSVReader(text string, comment bool) *csv.Reader {
-	r := csv.NewReader(strings.NewReader(strings.TrimPrefix(text, "\ufeff")))
-	r.FieldsPerRecord = -1
-	r.LazyQuotes = true
-	if comment {
-		r.Comment = '#'
-	}
-	return r
-}
 
 // fieldSpan 是一段占的字节区间，**引号不算在内**：遮罩只替换这一段，引号与逗号原样留着。
 type fieldSpan struct{ start, end int }

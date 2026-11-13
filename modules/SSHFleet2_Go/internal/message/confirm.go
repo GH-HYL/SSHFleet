@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"sshfleet2/internal/contract"
+	"sshfleet2/internal/criterion"
 )
 
 // 确认屏：按确认之前，把这次要做什么摊开给人看。版式逐字照老版 confirm 那一屏——
@@ -54,14 +55,16 @@ func confirmRows(p *contract.Plan, manifest, maskedPassword string, concurrencyA
 	// --no-shell 剥掉，不生效的身份摆一行没有信息量（老版 2026-10-28 定）。
 	switch p.Mode {
 	case contract.ModeUpload, contract.ModeDownload, contract.ModePasswd:
-		t = append(t, [2]string{"执行身份", identityLabel(p.Run)})
+		t = append(t, [2]string{"执行身份", IdentityLabel(p.Run)})
 	}
 
 	// 解释器行只在命令／脚本模式出现，且只在解释器不是 bash 时占一行——默认值不必提醒。
+	// 这一格问的是「是不是那个默认值 bash」，不是「是不是 shell 家族」——后者是解析站查表的事
+	// （`sh`、`dash` 也算 shell 家族，但它们不是默认值，仍要占一行）。
 	// --no-shell 时解释器配置不参与执行，这一行改放提示。
 	switch p.Mode {
 	case contract.ModeCommand, contract.ModeScript:
-		if p.Run.Interpreter != "" && !isBashInterpreter(p.Run.Interpreter) {
+		if p.Run.Interpreter != "" && criterion.InterpreterBaseName(p.Run.Interpreter) != "bash" {
 			value := p.Run.Interpreter
 			if p.Run.NoShell {
 				value = "原样下发，本次不生效"
@@ -133,29 +136,15 @@ func answerRows(p *contract.Plan) [][2]string {
 	return rows
 }
 
-// identityLabel 「执行身份」那一行的值：取**实际生效**的那一个，不是使用者要的那一个。
-func identityLabel(run contract.RunParams) string {
+// IdentityLabel 「执行身份」那一格的值：取**实际生效**的那一个，不是使用者要的那一个
+// （`--sudo --no-shell` 下两者不同，记的必须是前者，老版 `Args.Identity()` 同一条）。
+//
+// 确认屏那一行与执行期日志那一格是同一个判断，只在这里成形；老版也只有一处。
+func IdentityLabel(run contract.RunParams) string {
 	if run.Sudo && !run.NoShell {
 		return "root"
 	}
 	return "登录用户"
-}
-
-// isBashInterpreter 解释器是不是 bash：归一后认名（`/bin/bash`、`bash5` 都算）。
-//
-// 归一规则与解析站那张解释器表同源（取第一个词、去目录、转小写、去尾部版本号），
-// 这里只为一个显示门槛服务——配置就是默认的 bash 时不占行、不提示。
-func isBashInterpreter(interpreter string) bool {
-	fields := strings.Fields(interpreter)
-	if len(fields) == 0 {
-		return false
-	}
-	name := fields[0]
-	if i := strings.LastIndexAny(name, `/\\`); i >= 0 {
-		name = name[i+1:]
-	}
-	name = strings.ToLower(name)
-	return strings.TrimRight(name, "0123456789.") == "bash"
 }
 
 // concurrencyText 是并发数那一格：没指定 -n 时补一句「全部并行」，让人知道这个数从哪来。

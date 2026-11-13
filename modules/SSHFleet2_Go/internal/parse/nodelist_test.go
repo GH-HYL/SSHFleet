@@ -238,3 +238,17 @@ func TestReadManifestRejectsLeadingZeroInline(t *testing.T) {
 		t.Fatal("更不该判成内联记录——那正是 06-H1 的那条退步")
 	}
 }
+
+// 引号不成对的内联值不成器：与遮罩侧同结论（那边原样返回、这边拒绝）。
+//
+// 拒的理由是「找不到这个文件、也不像一条内联记录」——取值判定在前，语法错在后（ADR-0052）。
+func TestReadManifestRejectsMalformedInline(t *testing.T) {
+	for _, raw := range []string{
+		`10.0.0.1,22,root,p"w`,
+		`10.0.0.1,22,ro"ot,pw`,
+	} {
+		if _, fail := readManifest(raw); fail == nil {
+			t.Errorf("%q 该被拒", raw)
+		}
+	}
+}

@@ -22,6 +22,7 @@ import (
 	"github.com/pkg/sftp"
 
 	"sshfleet2/internal/contract"
+	"sshfleet2/internal/criterion"
 )
 
 // download 一台的下载。
@@ -42,9 +43,9 @@ func (c *client) download(ctx context.Context, p *contract.Plan, res *contract.N
 	defer func() { _ = sftpClient.Close() }()
 
 	// 远程路径预检（sudo 时用 sudo test）；路径转义规则与 find/mv 同源。
-	checkCmd := fmt.Sprintf("test -e '%s'", escapeShellArg(remotePath))
+	checkCmd := fmt.Sprintf("test -e '%s'", criterion.EscapeSingle(remotePath))
 	if useSudo {
-		checkCmd = fmt.Sprintf("sudo test -e '%s'", escapeShellArg(remotePath))
+		checkCmd = fmt.Sprintf("sudo test -e '%s'", criterion.EscapeSingle(remotePath))
 	}
 	if err := c.exec(checkCmd); err != nil {
 		// 预检查是中间步骤：它自己的退出码进 Steps，不顶成结果退出码。
@@ -81,7 +82,7 @@ func (c *client) download(ctx context.Context, p *contract.Plan, res *contract.N
 	case fi.IsDir():
 		// 一次 find 同时枚举真文件（F）与软链接（L）：软链接过滤但要在结果里提示。
 		findCmd := fmt.Sprintf("find '%s' \\( -type f -printf 'F %%s %%P\\n' \\) -o \\( -type l -printf 'L %%P\\n' \\)",
-			escapeShellArg(remotePath))
+			criterion.EscapeSingle(remotePath))
 		if useSudo {
 			findCmd = "sudo " + findCmd
 		}

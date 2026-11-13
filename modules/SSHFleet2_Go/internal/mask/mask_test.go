@@ -130,3 +130,20 @@ func TestScrubUsesSameForm(t *testing.T) {
 		}
 	}
 }
+
+// 引号不成对的值不遮、原样返回：读不出就不是内联清单。
+//
+// 这四条与 `criterion.ReadCSVRows` 那条用例是同一组输入——取值侧读不出、遮罩侧也不认，
+// 两边同一把尺子（本议题 `audit.md` §三·1 里的那四条）。
+func TestInlineRecordIfLeavesMalformedAlone(t *testing.T) {
+	for _, raw := range []string{
+		`10.0.0.1,22,root,p"w`,
+		`10.0.0.1,22,root,"p"w`,
+		`10.0.0.1,22,root,pw"`,
+		`10.0.0.1,22,ro"ot,pw`,
+	} {
+		if got := InlineRecordIf(raw); got != raw {
+			t.Errorf("畸形值不该被遮：%q → %q", raw, got)
+		}
+	}
+}

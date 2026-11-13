@@ -36,7 +36,7 @@ func logSessionHead(lg *log.Logger, p *contract.Plan, limit int) {
 	}
 	lg.Info(fmt.Sprintf("执行参数：执行超时 %d 秒，连接超时 %d 秒，执行身份 %s",
 		message.TimeoutSeconds(p.Mode, p.Run.TimeoutExecute, p.Run.TimeoutTransfer),
-		p.Run.TimeoutConnect, identityLabel(p.Run)))
+		p.Run.TimeoutConnect, message.IdentityLabel(p.Run)))
 	lg.Info(fmt.Sprintf("开始执行任务：节点 %d 个，并发 %d，模式 %s",
 		len(p.Nodes), limit, message.LogName(p.Mode)))
 
@@ -113,17 +113,6 @@ func scriptIdentity(run contract.RunParams) string {
 		return "以 root 身份"
 	}
 	return "以登录用户身份"
-}
-
-// identityLabel 日志里「执行身份」那一格：要了 root 且没被 --no-shell 削掉才算 root。
-//
-// 取的是**实际生效**的那一个，不是使用者要的那一个——`--sudo --no-shell` 下两者不同，
-// 这里必须记前者（老版 `Args.Identity()` 同一条）。
-func identityLabel(run contract.RunParams) string {
-	if run.Sudo && !run.NoShell {
-		return "root"
-	}
-	return "登录用户"
 }
 
 // downBlock 交代下发行：命令行、stdin、说明三行，整块缩进两格自成一段。

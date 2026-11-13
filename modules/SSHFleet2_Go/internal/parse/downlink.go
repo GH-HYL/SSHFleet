@@ -19,12 +19,12 @@ package parse
 
 import (
 	"encoding/base64"
-	"path"
 	"path/filepath"
 	"sort"
 	"strings"
 
 	"sshfleet2/internal/contract"
+	"sshfleet2/internal/criterion"
 )
 
 // sealDownlink 把下发行拼好放进纸里，并把「拼不出来」那一件记成事实。
@@ -80,11 +80,11 @@ func downlinkOf(p *contract.Plan) (downlink, stdin string) {
 	if p.Task.Script != nil {
 		name := filepath.Base(p.Task.Script.Path)
 		inner := envHead(run.Env, run.English) + sudoPrefix(run.Sudo) + scriptInvocation(interpreter, name)
-		return "sh -c " + shellQuote(inner), p.Task.Script.Body
+		return "sh -c " + criterion.SingleQuoted(inner), p.Task.Script.Body
 	}
 	if p.Task.Command != nil {
 		inner := envHead(run.Env, run.English) + sudoPrefix(run.Sudo) + interpreter
-		return "sh -c " + shellQuote(inner), p.Task.Command.Text
+		return "sh -c " + criterion.SingleQuoted(inner), p.Task.Command.Text
 	}
 	return "", ""
 }
@@ -111,7 +111,7 @@ func interactiveCommand(run contract.RunParams, body, scriptName string) string 
 	if scriptName != "" {
 		inner += scriptNameArg(run.Interpreter, scriptName)
 	}
-	return "sh -c " + shellQuote(inner)
+	return "sh -c " + criterion.SingleQuoted(inner)
 }
 
 // sudoPrefix 执行身份那一段。
@@ -192,12 +192,6 @@ func localeFragment(english bool) string {
 	return encodingFragment
 }
 
-// shellQuote 单引号包裹：内部单引号按 '\” 转义，保证整段作为 `sh -c` 的单个参数
-// 传递时不发生二次解析。
-func shellQuote(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
-}
-
 // quoteEnvValue 把环境变量的**值**包成可直接下发的写法：一律双引号包裹，值里的双引号
 // 转义成 \"。只做这一件转义。
 //
@@ -254,7 +248,7 @@ func interpreterNames() []string {
 
 // interpreterInfoOf 按归一后的标准名查表：`/bin/sh`、`zsh5`、`perl -w`、`php8.1` 都认。
 func interpreterInfoOf(interpreter string) (interpreterInfo, bool) {
-	name := interpreterBaseName(interpreter)
+	name := criterion.InterpreterBaseName(interpreter)
 	if name == "" {
 		return interpreterInfo{}, false
 	}
@@ -278,20 +272,6 @@ func programTextArg(interpreter string) (string, bool) {
 	return it.programArg, true
 }
 
-// interpreterBaseName 把配置里的解释器取值归一成「认名用的标准名」：取第一个词
-// （带参数如 `perl -w` 时只看第一个词）、去目录、转小写、去尾部版本号
-// （/usr/bin/python3 → python、php8.1 → php、zsh5 → zsh）。
-//
-// 这套剥法全工具只有这一份：`-a` 的支持范围、$0 补名的家族判定、source 前的选项适配
-// 都认它。
-func interpreterBaseName(interpreter string) string {
-	fields := strings.Fields(interpreter)
-	if len(fields) == 0 {
-		return ""
-	}
-	return strings.TrimRight(strings.ToLower(path.Base(fields[0])), "0123456789.")
-}
-
 // isShellFamily 解释器是不是 shell 家族：归一后查表。
 func isShellFamily(interpreter string) bool {
 	it, ok := interpreterInfoOf(interpreter)
@@ -311,7 +291,7 @@ func scriptNameArg(interpreter, scriptName string) string {
 	if scriptName == "" || !isShellFamily(interpreter) {
 		return ""
 	}
-	return " " + shellQuote(scriptName)
+	return " " + criterion.SingleQuoted(scriptName)
 }
 
 // scriptInvocation 脚本模式下解释器自己那条调用串——不含环境前缀、不含 sudo：
@@ -319,7 +299,7 @@ func scriptNameArg(interpreter, scriptName string) string {
 //   - 其余（python／perl／ruby／…）：裸解释器——它们从 stdin 直接读脚本。
 func scriptInvocation(interpreter, scriptName string) string {
 	if arg := scriptNameArg(interpreter, scriptName); arg != "" {
-		return interpreter + " -c " + shellQuote(sourceStdinBody(interpreter)) + arg
+		return interpreter + " -c " + criterion.SingleQuoted(sourceStdinBody(interpreter)) + arg
 	}
 	return interpreter
 }
