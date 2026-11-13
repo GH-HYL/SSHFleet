@@ -64,7 +64,7 @@ from pathlib import Path
 from urllib.parse import quote, urlencode
 
 ROOT = Path(__file__).resolve().parents[2]
-MOD = ROOT / "modules" / "SSHFleet_Go"
+MOD = ROOT / "modules" / "SSHFleet2_Go"
 CFG = MOD / "config"
 DOCS_SRC = ROOT / "docs"
 OUT = ROOT / "build"
