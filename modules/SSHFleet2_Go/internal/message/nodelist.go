@@ -2,7 +2,8 @@ package message
 
 // 读清单那一段要说的话：一句提示、两处失败文案、一条去路。
 //
-// 清单是使用者天天手改的文件，这几句是最先撞上的那一屏，逐字照老版。
+// 清单是使用者天天手改的文件，这几句是最先撞上的那一屏，逐字照老版——只有 `-f` 去路
+// 那一句按审计改了：原来只说怎么写内联，不说路径可能写错。
 
 // ansiCyan 是 [INFO] 那种提示头的颜色（老版 common/color.go 的 36）。
 const ansiCyan = "\x1b[36m"
@@ -11,7 +12,9 @@ const ansiCyan = "\x1b[36m"
 const NoNodeParsed = "CSV 中未解析出任何有效节点，请检查节点文件或内联文本内容"
 
 // ManifestGoneHint 是「`-f` 那格既不是文件、也不像一条记录」时的去路。
-const ManifestGoneHint = "要临时传一台机器，可以直接写一行节点信息，第一个字段是 IP，例如 192.168.1.1,22,root,密码"
+//
+// 两种给法各指一次：路径对不上就查路径，写的是内联记录就查第一列。
+const ManifestGoneHint = "请检查路径是否写对；如果是内联写法，第一列要是合法 IP，例如 192.168.1.1,22,root,密码"
 
 // ManifestHeaderDropped 是「第一行不是 IP，已当表头移除」那一行提示。
 //
