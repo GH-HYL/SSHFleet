@@ -25,22 +25,32 @@ import (
 	"sshfleet2/internal/criterion"
 )
 
-// collect 采集上传源。交回的可传文件表、被过滤的链接、根下一层的条目都装进纸上那一格。
+// materialUploadRoot 是第五层的那一件事：上传源的根在不在、拿不拿得到。
 //
-// 建议并发与总大小在这里算一次（建议值按配置的上传阈值，再按节点数封顶）——
-// 闸门拿纸上那个数问一句，不再自己求和：同一个数只算一处。
-func collect(p *contract.Plan, cfg *settings) *contract.CannotStart {
-	task := p.Task.Upload
-	root := task.Source
-
+// 只做这一件——根读不到是「材料拿不到」；逐个文件的过滤、类型判定与「过滤后一个不剩」
+// 是下一层的「上传源清点」（ADR-0052 决定二）。两件事混在一处时，清点失败会顶掉
+// 还没判的清单文件：清单属第五层，清点属第六层。
+//
+// 交回 FileInfo 给清点那一步用，免得同一份根被 stat 两次。
+func materialUploadRoot(p *contract.Plan) (os.FileInfo, *contract.CannotStart) {
+	root := p.Task.Upload.Source
 	info, err := os.Lstat(root)
 	if err != nil {
-		return collectReason(contract.CannotStartReason{
+		return nil, collectReason(contract.CannotStartReason{
 			Kind:   contract.CannotStartUploadRootMissing,
 			Place:  root,
 			Origin: criterion.SystemReason(err),
 		})
 	}
+	return info, nil
+}
+
+// collect 清点上传源（第六层）。交回的可传文件表、被过滤的链接、根下一层的条目都装进纸上那一格。
+//
+// 根的那一份 FileInfo 由上面那一步递进来：同一个根只 stat 一次。
+func collect(p *contract.Plan, cfg *settings, info os.FileInfo) *contract.CannotStart {
+	task := p.Task.Upload
+	root := task.Source
 
 	if !info.IsDir() {
 		// 单文件：根路径本身是链接时同样过滤（没有可传目标 → 报错）。
@@ -61,7 +71,7 @@ func collect(p *contract.Plan, cfg *settings) *contract.CannotStart {
 	task.RootIsDir = true
 	task.TopEntries = topEntries(root)
 
-	err = filepath.Walk(root, func(path string, fi os.FileInfo, walkErr error) error {
+	err := filepath.Walk(root, func(path string, fi os.FileInfo, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}

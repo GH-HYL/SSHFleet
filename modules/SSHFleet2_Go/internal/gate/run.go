@@ -55,18 +55,28 @@ func Run(p *contract.Plan, skipConfirm bool) (Refusal, message.Line) {
 	if r, note := fallbackQuestion(p); r != nil || note.Text() != "" {
 		return r, note
 	}
-	if r, note := dangerRefusal(p); r != nil || note.Text() != "" {
+	// 判决：禁止档是结论（当场退），提醒档是结论后紧跟一问。**它的留痕不能提前返回**——
+	// 提醒档在 --yes 下放行之后还要往下走，走到确认段那半句「跳过确认」；早先这里
+	// 一 `return` 就丢了一行（审计 D 族）。
+	var notes message.Line
+	if r, note := dangerRefusal(p); r != nil {
 		return r, note
+	} else {
+		notes = message.JoinLines(notes, note)
 	}
 	// 信封合法性排在最后一道：前面几条判的都是「这次给的东西对不对」，
 	// 这一条判的是「纸本身有没有被造错」——它不该抢在人的毛病前面报。
 	if r := envelopeRefusal(p); r != nil {
-		return r, message.Line{}
+		return r, notes
 	}
+	// 一至四层都过了：工具对这次输入做过的事，现在说得出口了（ADR-0052 决定九）。
+	// 放在「别出屏」之前——那关的是确认段，不是这些事实。
+	showNotices(p)
 	if skipConfirm {
-		return nil, message.Line{}
+		return nil, notes
 	}
-	return confirmRefusal(p)
+	r, note := confirmRefusal(p)
+	return r, message.JoinLines(notes, note)
 }
 
 // envelopeRefusal 验信封：标签说是哪一种活，载荷就得是那一份、而且只有那一份。

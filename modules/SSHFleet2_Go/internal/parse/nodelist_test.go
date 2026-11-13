@@ -72,19 +72,6 @@ func TestReadManifestRejectsEmptyFile(t *testing.T) {
 	}
 }
 
-func TestReadManifestRejectsMissingF(t *testing.T) {
-	_, fail := readManifest("")
-	if fail == nil {
-		t.Fatal("没有 -f 应当起不来")
-	}
-	if fail.Where != "nodelist" {
-		t.Fatalf("环节标签应当是 nodelist，拿到 %q", fail.Where)
-	}
-	if say := message.CannotStartText(*fail); !strings.Contains(say, "读取内容时发生错误:") {
-		t.Fatalf("话不对：%s", say)
-	}
-}
-
 // 既不是文件、也不像一条记录：报「文件读不到」，并给一条去路。
 func TestReadManifestRejectsNeitherFileNorRecord(t *testing.T) {
 	_, fail := readManifest("这不是文件也不是记录")

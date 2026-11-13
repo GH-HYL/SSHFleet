@@ -37,9 +37,12 @@ func collectPlan(t *testing.T, source string) (*contract.Plan, *contract.CannotS
 			{IP: "10.0.0.4"}, {IP: "10.0.0.5"}, {IP: "10.0.0.6"},
 		},
 	}
-	fail := collect(p, cfg)
+	// 生产里这三步在同一条次序上：根的第五层判定 → 第六层清点 → 建议（它要节点数）。
+	info, fail := materialUploadRoot(p)
 	if fail == nil {
-		// 生产里这两步都在材料那一段：采集之后才轮到建议（它要节点数）。
+		fail = collect(p, cfg, info)
+	}
+	if fail == nil {
 		applyUploadAdvice(p, cfg)
 	}
 	return p, fail
@@ -320,7 +323,11 @@ func TestCollectSuggestionCappedByNodes(t *testing.T) {
 		Task:  contract.Task{Upload: &contract.UploadTask{Source: root}, Path: "/tmp/"},
 		Nodes: []contract.Node{{IP: "10.0.0.1"}, {IP: "10.0.0.2"}},
 	}
-	if fail := collect(p, cfg); fail != nil {
+	info, fail := materialUploadRoot(p)
+	if fail != nil {
+		t.Fatalf("不该报错：%v", message.CannotStartText(*fail))
+	}
+	if fail := collect(p, cfg, info); fail != nil {
 		t.Fatalf("不该报错：%v", message.CannotStartText(*fail))
 	}
 	applyUploadAdvice(p, cfg)

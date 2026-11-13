@@ -56,8 +56,8 @@ var orderRows = []orderRow{
 	{13, "1", []string{"--key-status", "extra"}, "出现多余的参数", []string{"只能给一个"}, "", "", nil},
 
 	// 第三层：搭配、取值与必填
-	{14, "3", []string{"-c", "ls", "-p", "/opt/app/", "-f", "ok.csv"}, "不能搭配 -c 或 -s",
-		[]string{"文件读不到", "读取内容时发生错误"}, "", "", nil},
+	{14, "3", []string{"-c", "ls", "-p", "/opt/app/"}, "不能搭配 -c 或 -s",
+		[]string{"这次没有节点清单"}, "", "", nil},
 	{15, "3", []string{"-c", " "}, "-c 参数不能为空", []string{"读取内容时发生错误"}, "", "", nil},
 	{16, "3", []string{"-u", "."}, "-u 参数必须搭配 -p", []string{"读取内容时发生错误"}, "", "", nil},
 	{17, "3", []string{"-u", ".", "-p", "rel"}, "必须是绝对路径", []string{"读取内容时发生错误"}, "", "", nil},
@@ -128,6 +128,43 @@ var orderRows = []orderRow{
 		[]string{"执行选项/参数确认"}, "", "n", nil},
 	{55, "7", []string{"-c", "ls", "-f", "hdr.csv", "--yes"}, "已移除表头",
 		nil, "跳过", "", nil},
+
+	// 补的：审计后补齐那 39 条里原先没落的输入（A 组 8、B 组 1、C 组 1、D 组 5），
+	// 外加 5/6 那一对相邻层的底线，以及「--yes × 延后项」那个交点。
+	{56, "3", []string{"--no-shell", "-s", "./hello.sh"}, "--no-shell 只能和 -c 一起使用",
+		[]string{"读取内容时发生错误"}, "", "", nil},
+	{57, "3", []string{"--no-shell", "-u", ".", "-p", "/tmp/"}, "--no-shell 只能和 -c 一起使用",
+		[]string{"读取内容时发生错误"}, "", "", nil},
+	{58, "3", []string{"-c", "rm -rf /opt", "--yes"}, "这次没有节点清单",
+		[]string{"发现危险命令"}, "", "", nil},
+	{59, "3", []string{"-c", "echo hi", "-p", "/tmp", "-f", "/nope.csv"}, "不能搭配 -c 或 -s",
+		[]string{"文件读不到"}, "", "", nil},
+	{60, "3", []string{"-c", "echo hi", "-p", "/tmp", "-f", "bad.csv"}, "不能搭配 -c 或 -s",
+		[]string{"双引号"}, "", "", nil},
+	{61, "3", []string{"-c", "echo hi", "-p", "/tmp", "-f", "empty.csv"}, "不能搭配 -c 或 -s",
+		[]string{"CSV 文件为空"}, "", "", nil},
+	{62, "3", []string{"--change-password", "pw", "-k", "-f", "/nope.csv"}, "不能和 -k 一起用",
+		[]string{"文件读不到"}, "", "", nil},
+	{63, "3", []string{"--change-password", " ", "-f", "/nope.csv"}, "新密码不能为空",
+		[]string{"文件读不到"}, "", "", nil},
+	{64, "3", []string{"-n", "abc", "-c", "echo hi", "-f", "/nope.csv"}, "-n 参数格式错误",
+		[]string{"文件读不到"}, "", "", nil},
+	{65, "5", []string{"-c", "echo hi", "-a", "/nope.csv", "-f", "/nope.csv"},
+		"-f 参数指定的文件读不到", []string{"-a 参数指定的文件读不到"}, "", "", nil},
+	{66, "4", []string{"-c", "rm -rf /", "-f", "hdr.csv"}, "发现禁止命令",
+		[]string{"已移除表头"}, "", "", nil},
+	{67, "4", []string{"-s", "./danger.sh", "-f", "hdr.csv"}, "发现禁止命令",
+		[]string{"已移除表头"}, "", "", nil},
+	{68, "4", []string{"-c", "rm -rf /opt", "-f", "hdr.csv", "--yes"}, "发现危险命令",
+		nil, "已移除表头", "", nil},
+	{69, "4", []string{"-c", "rm -rf /opt", "-f", "ok.csv", "--yes"}, "发现危险命令",
+		nil, "跳过", "", nil},
+	{70, "7", []string{"-u", ".", "-p", "/tmp/", "-f", "hdr.csv", "--yes"}, "已移除表头",
+		nil, "跳过", "", nil},
+	{71, "5", []string{"-u", "/nope", "-p", "/opt/app/", "-f", "bad.csv"}, "上传文件或目录读不到",
+		[]string{"双引号"}, "", "", nil},
+	{72, "5", []string{"-c", "ls", "-f", "badip-hdr.csv", "--yes"}, "已移除表头",
+		nil, "IP格式不正确", "", nil},
 }
 
 // orderSandbox 是二进制与临时目录的落点：`build/` 下当天的沙盒，不出工作区。
@@ -187,7 +224,7 @@ func stageOrderDir(t *testing.T, module string, r orderRow) string {
 	if err := os.MkdirAll(cfg, 0o755); err != nil {
 		t.Fatalf("建配置目录失败：%v", err)
 	}
-	for _, name := range []string{"keywords_dangerous.conf", "keywords_error.conf", "keywords_passwd.conf"} {
+	for _, name := range orderKeywordFiles {
 		data, err := os.ReadFile(filepath.Join(module, "config", name))
 		if err != nil {
 			t.Fatalf("读判据表 %s 失败：%v", name, err)
@@ -196,21 +233,25 @@ func stageOrderDir(t *testing.T, module string, r orderRow) string {
 			t.Fatalf("写判据表 %s 失败：%v", name, err)
 		}
 	}
-	if err := os.WriteFile(filepath.Join(cfg, "SSHFleet.conf"), []byte(orderConfig), 0o644); err != nil {
+	if err := os.WriteFile(orderConfigFile(dir), []byte(orderConfig), 0o644); err != nil {
 		t.Fatalf("写主配置失败：%v", err)
 	}
 
 	// 夹具：行里点名的那几份。「./nope」故意不建——它就是要不存在。
 	for name, body := range map[string]string{
-		"ok.csv":       "192.0.2.10,10022,root,pw\n",
-		"hdr.csv":      "ip,port,user,password\n192.0.2.10,10022,root,pw\n",
-		"bad.csv":      "192.0.2.10,10022,\"root,pw\n",
-		"empty.csv":    "",
-		"bin.csv":      "192.0.2.10,10022,root,pw\x00bin\n",
-		"bad-ip.csv":   "192.0.2.10,10022,root,pw\n999.1.1.1,10022,root,pw\n",
-		"bad-cred.csv": "192.0.2.10,10022,root,/nope/cipher\n",
+		"ok.csv":        "192.0.2.10,10022,root,pw\n",
+		"hdr.csv":       "ip,port,user,password\n192.0.2.10,10022,root,pw\n",
+		"bad.csv":       "192.0.2.10,10022,\"root,pw\n",
+		"empty.csv":     "",
+		"bin.csv":       "192.0.2.10,10022,root,pw\x00bin\n",
+		"bad-ip.csv":    "192.0.2.10,10022,root,pw\n999.1.1.1,10022,root,pw\n",
+		"badip-hdr.csv": "ip,port,user,password\n192.0.2.10,10022,root,pw\n999.1.1.1,10022,root,pw\n",
+		"bad-cred.csv":  "192.0.2.10,10022,root,/nope/cipher\n",
 		// x.xyz 的正文要命中危险规则：回退那一问与判决的先后，只有正文危险时才看得出来。
 		"x.xyz": "#!/bin/bash\nrm -rf /\n",
+		// hello.sh 干净、danger.sh 命中禁止档：两行拉开「后缀配了与没配」。
+		"hello.sh":  "#!/bin/bash\necho hi\n",
+		"danger.sh": "#!/bin/bash\nrm -rf /\n",
 	} {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
 			t.Fatalf("写夹具 %s 失败：%v", name, err)
@@ -226,11 +267,22 @@ func stageOrderDir(t *testing.T, module string, r orderRow) string {
 	return dir
 }
 
+// orderPassword 是这一族用例的统一口令：主配置里写的就是它，改加密那一步也按它找那一行。
+const orderPassword = "pw"
+
+// orderConfigFile 这一族用例的主配置落点：三处改配置的各走这一处，不各拼一遍路径。
+func orderConfigFile(dir string) string {
+	return filepath.Join(dir, "config", "SSHFleet.conf")
+}
+
+// orderKeywordFiles 是三份判据表的名字：拷进来与临时移走都用这一份名单。
+var orderKeywordFiles = []string{"keywords_dangerous.conf", "keywords_error.conf", "keywords_passwd.conf"}
+
 // orderConfig 是这一族用例的主配置：加密关（主密钥不掺和）、English 关、口令明文。
 const orderConfig = `[account]
 port = 10022
 user = "root"
-password = "pw"
+password = "` + orderPassword + `"
 
 [credential]
 encrypt = false
@@ -274,7 +326,8 @@ medium_parallel = 4
 // dropDangerRules 把危险规则表移走：判据不全时该报「工具没能力判断」，不是「你参数错了」。
 func dropDangerRules(t *testing.T, dir string) {
 	t.Helper()
-	if err := os.Remove(filepath.Join(dir, "config", "keywords_dangerous.conf")); err != nil {
+	path := filepath.Join(dir, "config", orderKeywordFiles[0])
+	if err := os.Remove(path); err != nil {
 		t.Fatalf("移走危险规则表失败：%v", err)
 	}
 }
@@ -282,7 +335,7 @@ func dropDangerRules(t *testing.T, dir string) {
 // englishOn 把提示语切成英文：english 开着而代填值里有汉字，一定失配。
 func englishOn(t *testing.T, dir string) {
 	t.Helper()
-	path := filepath.Join(dir, "config", "SSHFleet.conf")
+	path := orderConfigFile(dir)
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("读主配置失败：%v", err)
@@ -312,7 +365,7 @@ func encryptOn(t *testing.T, dir string) {
 		t.Fatalf("读主配置失败：%v", err)
 	}
 	turned := strings.Replace(string(data), "encrypt = false", "encrypt = true", 1)
-	turned = strings.Replace(turned, `password = "pw"`, `password = "`+missing+`"`, 1)
+	turned = strings.Replace(turned, `password = "`+orderPassword+`"`, `password = "`+missing+`"`, 1)
 	if turned == string(data) {
 		t.Fatalf("主配置里没有 encrypt = false 这一行")
 	}

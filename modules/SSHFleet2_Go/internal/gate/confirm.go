@@ -17,16 +17,27 @@ import (
 	"sshfleet2/internal/message"
 )
 
-// confirmFlow 是确认那一段的全流程（第七层：人点头）。
-func confirmFlow(p *contract.Plan) (Refusal, message.Line) {
-	// 零、解析站路上攒下的那几句提示（表头被移除、清单里配了私钥却没加 -k）。
-	//
-	// 它们说的是「工具动了你的输入」，不该抢在结论前面：被拒绝的那次、或者这一趟根本不出屏
-	// 的那次，确认段整段走不到，屏上也就不会先冒出「已移除表头」再报别的（ADR-0052 决定五）。
-	// `--yes` 下照印——那关闭的是「问」，不是「说」（决定九）。
+// showNotices 印解析站路上攒下的那几句提示（表头被移除、清单里配了私钥却没加 -k）。
+//
+// 位置在一至四层判完之后、第七层之前：被拒绝的那次走不到这里，屏上就不会先冒出
+// 「已移除表头」（ADR-0052 决定五）；而「这次别出屏」关的是确认段本身，不是这些事实——
+// `--yes` 与带延后项两种情形下都照说（决定九：只关「问」，不关「说」）。
+func showNotices(p *contract.Plan) {
 	for _, n := range p.Notices {
 		ask.Show(message.NoticeLine(n))
 	}
+}
+
+// showSkipped 印「非交互跳过确认」那一行。
+//
+// 一句话、一处印法：`--yes` 有三条路走到这里（普通、带回退、带并发建议），各印一遍
+// 就会各改一遍。
+func showSkipped() {
+	ask.Show(message.ConfirmSkippedLine())
+}
+
+// confirmFlow 是确认那一段的全流程（第七层：人点头）。
+func confirmFlow(p *contract.Plan) (Refusal, message.Line) {
 	// 一、脚本后缀没配到解释器、又走了非交互那条路：那一问在第三层尾就问过了（`--yes`
 	// 不问），这里只剩「跳过确认」那半句与留痕。
 	if r, note := fallbackSkipped(p); r != nil || note.Text() != "" {
@@ -43,11 +54,11 @@ func confirmFlow(p *contract.Plan) (Refusal, message.Line) {
 
 	// 四、非交互（--yes）：不出参数屏、不提问，但上传并发建议照旧生效。
 	if p.Run.Yes {
-		if note := applyConcurrencyAdvice(p); note.Text() != "" {
-			ask.Ask(message.ConfirmSkippedLine(), true, true)
+		note := applyConcurrencyAdvice(p)
+		showSkipped()
+		if note.Text() != "" {
 			return nil, note
 		}
-		ask.Ask(message.ConfirmSkippedLine(), true, true)
 		return nil, message.ConfirmSkippedTrace()
 	}
 
@@ -88,6 +99,14 @@ func maskedNewPassword(p *contract.Plan) string {
 	return mask.Secret(p.Task.Passwd.NewPassword)
 }
 
+// fallbackPending 这次有没有「脚本后缀没配到解释器」这件事。
+//
+// 问与印各在一处（第三层问、第七层印 --yes 那半句），但**触发条件只有这一个**：
+// 两处各判一遍，加一条条件就得改两处，漏一处时两条路各按一半判据走。
+func fallbackPending(p *contract.Plan) bool {
+	return p.Task.Script != nil && p.Run.FallbackExt != ""
+}
+
 // fallbackQuestion 是脚本后缀没配到解释器时那一问，住第三层尾。
 //
 // 判据是「答案改变后面判什么」（ADR-0052 决定二）：答是就回退到那个解释器，下发行跟着变，
@@ -97,7 +116,7 @@ func maskedNewPassword(p *contract.Plan) string {
 // 非交互（--yes）不问：那半句「跳过确认」与留痕在第七层（`fallbackSkipped`），
 // 不该因为这里而提前。
 func fallbackQuestion(p *contract.Plan) (Refusal, message.Line) {
-	if p.Task.Script == nil || p.Run.FallbackExt == "" || p.Run.Yes {
+	if !fallbackPending(p) || p.Run.Yes {
 		return nil, message.Line{}
 	}
 	switch ask.AskQuestion(message.FallbackHint(p.Run.FallbackExt), message.FallbackQuestion(p.Run.Interpreter), false) {
@@ -114,10 +133,10 @@ func fallbackQuestion(p *contract.Plan) (Refusal, message.Line) {
 //
 // 老版在 --yes 里跳过了那一问，屏上只剩「跳过确认」这一行（ADR-0042 的次序不变）。
 func fallbackSkipped(p *contract.Plan) (Refusal, message.Line) {
-	if p.Task.Script == nil || p.Run.FallbackExt == "" || !p.Run.Yes {
+	if !fallbackPending(p) || !p.Run.Yes {
 		return nil, message.Line{}
 	}
-	ask.Ask(message.ConfirmSkippedLine(), true, true)
+	showSkipped()
 	return nil, message.FallbackTrace(p.Run.FallbackExt, p.Run.Interpreter)
 }
 
