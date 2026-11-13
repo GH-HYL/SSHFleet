@@ -101,11 +101,8 @@ func main() {
 			lg.Warn(message.KeyPrecheckTrace(facts.State).Plain())
 		}
 
-		// 解析站路上攒下的提示先打出去：老版的次序也是「读清单的提示在前、确认屏在后」。
-		// 纸上是种类与事实，句子向 message 要。
-		for _, n := range plan.Notices {
-			console.Print(message.NoticeLine(n))
-		}
+		// 解析站路上攒下的提示不在这里打：它们随纸递到闸门，由确认段开头印——被拒绝的那次、
+		// 或者这一趟根本不出屏的那次，屏幕上不该先冒出「已移除表头」（ADR-0052 决定五）。
 		refusal, note := gate.Run(plan, later != nil)
 		if note.Text() != "" {
 			lg.Warn(note.Text()) // 非交互放行危险命令的留痕：闸门不持有日志，交上来由这里落盘

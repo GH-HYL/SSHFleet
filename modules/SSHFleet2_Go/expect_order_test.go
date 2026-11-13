@@ -124,11 +124,11 @@ var orderRows = []orderRow{
 
 	// 提示的位置（跨层，单列）
 	{53, "3", []string{"-c", "ls", "-p", "/opt/app/", "-f", "hdr.csv"}, "不能搭配 -c 或 -s",
-		[]string{"已移除表头"}, "", "", "04", nil},
+		[]string{"已移除表头"}, "", "", "", nil},
 	{54, "7", []string{"-c", "ls", "-f", "hdr.csv"}, "已移除表头",
-		[]string{"执行选项/参数确认"}, "", "n", "04", nil},
+		[]string{"执行选项/参数确认"}, "", "n", "", nil},
 	{55, "7", []string{"-c", "ls", "-f", "hdr.csv", "--yes"}, "已移除表头",
-		nil, "跳过", "", "04", nil},
+		nil, "跳过", "", "", nil},
 }
 
 // orderSandbox 是二进制与临时目录的落点：`build/` 下当天的沙盒，不出工作区。
