@@ -73,7 +73,10 @@ func main() {
 	lg.Startup(toolDir, toolFile)
 
 	// 步骤 3 起：解析站给结局，闸门判放不放行。
-	say, plan, krun, fail := parse.Run(os.Args, appVersion)
+	//
+	// 解析站另交一条**延后的**「起不来」（材料读不到、判据表不齐）：那件事要等闸门判完前面
+	// 几层才报得出口，所以它不进纸、也不在这一站用，先接着（ADR-0052 决定五）。
+	say, plan, krun, fail, later := parse.Run(os.Args, appVersion)
 	switch {
 	case fail != nil:
 		logPath := toolPath
@@ -103,7 +106,7 @@ func main() {
 		for _, n := range plan.Notices {
 			console.Print(message.NoticeLine(n))
 		}
-		refusal, note := gate.Run(plan)
+		refusal, note := gate.Run(plan, later != nil)
 		if note.Text() != "" {
 			lg.Warn(note.Text()) // 非交互放行危险命令的留痕：闸门不持有日志，交上来由这里落盘
 		}
@@ -118,6 +121,12 @@ func main() {
 				lg.Fatal(contract.WhereCLI, trace.Plain())
 			}
 			finish(exitcode.Refused)
+		}
+
+		// 放行但带延后项：这一趟注定要退，报它、按「起不来」收场。排在建归档目录之前——
+		// 注定不成的那次不该留下产物。塔尖仍不判断，只认「有没有那一条」。
+		if later != nil {
+			fatal(later.Where, message.CannotStartBody(*later), toolPath)
 		}
 
 		// 交棒：从这一刻起信号只取消、不再收场。位置在建归档目录之前——所以

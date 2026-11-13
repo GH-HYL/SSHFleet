@@ -30,7 +30,7 @@ func TestEnvelopeRefusesMismatch(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			r, _ := Run(c.make())
+			r, _ := Run(c.make(), false)
 			if r == nil {
 				t.Fatal("对不上的信封应当被拒")
 			}
@@ -48,7 +48,7 @@ func TestEnvelopePassesWellFormed(t *testing.T) {
 		Task: contract.Task{Command: &contract.CommandTask{Text: "uptime"}},
 		Run:  contract.RunParams{Yes: true},
 	}
-	if r, _ := Run(p); r != nil && strings.Contains(r.Say().Text(), "载荷对不上") {
+	if r, _ := Run(p, false); r != nil && strings.Contains(r.Say().Text(), "载荷对不上") {
 		t.Fatalf("合法的纸不该被信封那条拦：%s", r.Say().Text())
 	}
 }
@@ -63,7 +63,7 @@ func TestConfirmSkippedWhenYes(t *testing.T) {
 		Task: contract.Task{Command: &contract.CommandTask{Text: "uptime"}},
 		Run:  contract.RunParams{Yes: true},
 	}
-	r, trace := Run(p)
+	r, trace := Run(p, false)
 	if r != nil {
 		t.Fatalf("--yes 不该拒：%s", r.Say().Text())
 	}
@@ -79,7 +79,7 @@ func TestConfirmNotReachedWhenEarlierCheckRefuses(t *testing.T) {
 		Task: contract.Task{Command: &contract.CommandTask{Text: "   "}}, // -c 只有空白
 		Run:  contract.RunParams{Yes: true},
 	}
-	r, _ := Run(p)
+	r, _ := Run(p, false)
 	if r == nil {
 		t.Fatal("空命令应当被拒")
 	}

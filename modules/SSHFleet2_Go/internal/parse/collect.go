@@ -117,8 +117,19 @@ func collect(p *contract.Plan, cfg *settings) *contract.CannotStart {
 		})
 	}
 
-	p.Run.ConcurrencyAdvice = suggestConcurrency(task.TotalBytes, cfg, len(p.Nodes))
+	// 建议并发不在这里算：它按节点数封顶，而清单排在材料之后读（ADR-0052 决定二）。
 	return nil
+}
+
+// applyUploadAdvice 算上传并发建议：按总大小与配置阈值给，再按节点数封顶。
+//
+// 与采集分开一步：它要用节点数，而清单排在材料之后读（ADR-0052 决定二），采集那一刻
+// 还不知道有几台。放在这里而不是让闸门自己求和——同一个数只算一处。
+func applyUploadAdvice(p *contract.Plan, cfg *settings) {
+	if p.Task.Upload == nil {
+		return
+	}
+	p.Run.ConcurrencyAdvice = suggestConcurrency(p.Task.Upload.TotalBytes, cfg, len(p.Nodes))
 }
 
 // topEntries 记下上传根下一层的条目：名字 + 是不是目录。

@@ -26,7 +26,7 @@ func TestRedlineGateRefusesBadCombination(t *testing.T) {
 	bad.Task.Command = nil
 	bad.Problems = []contract.Problem{{Kind: contract.ProblemMultiMode}}
 
-	refusal, _ := gate.Run(bad)
+	refusal, _ := gate.Run(bad, false)
 	if refusal == nil {
 		t.Fatalf("给了多个模式应当返回一个拒绝")
 	}
@@ -36,7 +36,7 @@ func TestRedlineGateRefusesBadCombination(t *testing.T) {
 }
 
 func TestRedlineGatePassesCleanPaper(t *testing.T) {
-	refusal, _ := gate.Run(redlinePaper())
+	refusal, _ := gate.Run(redlinePaper(), false)
 	if refusal != nil {
 		t.Fatalf("一张干净的纸不该被拒：%s", refusal.Say().Text())
 	}

@@ -168,7 +168,7 @@ func TestRefuseArguments(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			r, note := Run(c.plan)
+			r, note := Run(c.plan, false)
 			if r == nil {
 				t.Fatalf("应当拒绝，实际放行")
 			}
@@ -190,7 +190,7 @@ func TestPassesCleanPlan(t *testing.T) {
 	plan := planOf(contract.ModeCommand, func(p *contract.Plan) {
 		p.Task.Command = &contract.CommandTask{Text: "echo hi"}
 	})
-	if r, _ := Run(plan); r != nil {
+	if r, _ := Run(plan, false); r != nil {
 		t.Fatalf("干净的命令不该拒：%q", r.Say().Text())
 	}
 
@@ -198,7 +198,7 @@ func TestPassesCleanPlan(t *testing.T) {
 		p.Task.Upload = &contract.UploadTask{Source: "."}
 		p.Task.Path = "/tmp/"
 	})
-	if r, _ := Run(plan); r != nil {
+	if r, _ := Run(plan, false); r != nil {
 		t.Fatalf("干净的上传不该拒：%q", r.Say().Text())
 	}
 
@@ -206,7 +206,7 @@ func TestPassesCleanPlan(t *testing.T) {
 		p.Task.Download = &contract.DownloadTask{RemotePath: "/etc/passwd"}
 		p.Task.Path = "/tmp"
 	})
-	if r, _ := Run(plan); r != nil {
+	if r, _ := Run(plan, false); r != nil {
 		t.Fatalf("干净的下载不该拒：%q", r.Say().Text())
 	}
 }

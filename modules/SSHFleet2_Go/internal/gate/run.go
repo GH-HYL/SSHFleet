@@ -18,6 +18,11 @@ import (
 
 // Run 判这张纸放不放行。
 //
+// skipConfirm 是「这次别出屏」：解析站带上来一条延后的「起不来」时，塔尖把它递进来——
+// 这一趟注定要退，第七层确认段整段走不到（屏、`--yes` 那行、上传内容树、并发建议都不出）。
+// 闸门不知道那条失败是什么，也不需要知道：它只认「这一趟不问人」这一件事实
+// （ADR-0052 决定五）。
+//
 // **这一棒等宽，不造新纸**：放行时塔尖把递进来的同一张 `contract.Plan` 交给执行站，
 // 闸门既不新增数据格，也不另外包一层。它按纪律一格数据都不许加，放行又没实质结论，
 // 正是 ADR-0032 决定三那条边界的原句——「两张纸一样宽……就不该造两次，直接递上一份」；
@@ -27,10 +32,9 @@ import (
 // 第二个返回值是「留给日志的一句话」：非交互（--yes）跳过危险命令确认时要留痕，而日志句柄
 // 在塔尖手里（闸门不持有它），所以闸门把这个事实交上去，由塔尖落盘。
 //
-// 判的先后照老版 CheckArguments：解析层的错先报，模式其次，逐条搭配检查按老版顺序来，
-// 三个数值选项放在最后（老版把 -n／-t／-T 的取值检查放在整段末尾）。同一份命令里错两处时，
-// 使用者先看到哪一句由这个顺序定。
-func Run(p *contract.Plan) (Refusal, message.Line) {
+// 判的先后照 ADR-0052 决定二那张表：词法、结构、搭配取值必填、判决、人点头。同一份命令里
+// 错两处时，使用者先看到哪一句由这个顺序定。
+func Run(p *contract.Plan, skipConfirm bool) (Refusal, message.Line) {
 	if r := parseRefusal(p); r != nil {
 		return r, message.Line{}
 	}
@@ -50,6 +54,9 @@ func Run(p *contract.Plan) (Refusal, message.Line) {
 	// 这一条判的是「纸本身有没有被造错」——它不该抢在人的毛病前面报。
 	if r := envelopeRefusal(p); r != nil {
 		return r, message.Line{}
+	}
+	if skipConfirm {
+		return nil, message.Line{}
 	}
 	return confirmRefusal(p)
 }
