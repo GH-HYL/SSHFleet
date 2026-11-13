@@ -11,10 +11,16 @@ const ansiCyan = "\x1b[36m"
 // NoNodeParsed 是「一行都没读出来」那句话。老版在三个位置都用它，一字不差。
 const NoNodeParsed = "CSV 中未解析出任何有效节点，请检查节点文件或内联文本内容"
 
+// InlineNodeExample 是「一条内联记录长什么样」的那个样例。
+//
+// 一句样例只许有一个出处：`-f` 的去路提示与「没给 -f」那句都要举例，各拼一遍就会
+// 各教一种写法。
+const InlineNodeExample = "192.168.1.1,22,root,密码"
+
 // ManifestGoneHint 是「`-f` 那格既不是文件、也不像一条记录」时的去路。
 //
 // 两种给法各指一次：路径对不上就查路径，写的是内联记录就查第一列。
-const ManifestGoneHint = "请检查路径是否写对；如果是内联写法，第一列要是合法 IP，例如 192.168.1.1,22,root,密码"
+const ManifestGoneHint = "请检查路径是否写对；如果是内联写法，第一列要是合法 IP，例如 " + InlineNodeExample
 
 // ManifestHeaderDropped 是「第一行不是 IP，已当表头移除」那一行提示。
 //

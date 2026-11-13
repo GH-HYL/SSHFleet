@@ -194,10 +194,13 @@ func RefuseSudoConflict() FatalBody {
 //
 // 主语是 `-f`，不是某份文件——**这是参数缺失，不是清单校验**：那一刻清单还不存在，
 // 谈不上校验（ADR-0052 决定二把它放在第三层必填末尾）。
+//
+// 三句齐（ADR-0052 决定六）：哪一格、为什么（它是必填）、下一步往哪走。
 func RefuseManifestMissing() FatalBody {
-	return Shell(HeadCompliance, ProblemHint(
+	return Shell(HeadCompliance, Problem(
 		"-f 参数没有给：这次没有节点清单",
-		"补一份 CSV 用 -f 指过去，或直接写一条内联记录，例如 -f \"192.168.1.1,22,root,密码\""))
+		"清单是必填项——没有它，工具不知道这次要对哪几台机器做",
+		"补一份 CSV 用 -f 指过去，或直接写一条内联记录，例如 -f \""+InlineNodeExample+"\""))
 }
 
 // RefuseCommandEmpty `-c` 给了但只有空白。

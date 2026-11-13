@@ -44,17 +44,8 @@ func materialScript(p *contract.Plan, vals map[string]string) *contract.CannotSt
 			Origin: criterion.SystemReason(rerr),
 		})
 	}
-	if len(data) == 0 {
-		return cliReason(contract.CannotStartReason{
-			Kind:  contract.CannotStartScriptEmpty,
-			Place: script,
-		})
-	}
-	if bytes.IndexByte(data, 0) >= 0 {
-		return cliReason(contract.CannotStartReason{
-			Kind:  contract.CannotStartScriptBinary,
-			Place: script,
-		})
+	if fail := textMaterial(data, contract.CannotStartScriptEmpty, contract.CannotStartScriptBinary, script); fail != nil {
+		return fail
 	}
 	if !utf8ValidExceptBOM(data) {
 		return cliReason(contract.CannotStartReason{
@@ -70,58 +61,40 @@ func materialScript(p *contract.Plan, vals map[string]string) *contract.CannotSt
 	return nil
 }
 
+// textMaterial 判一份「文本料」的两件共同事：非空、非二进制。
+//
+// 脚本与清单都要过这两条，判据同一处成形——各拼一遍会各漏一遍；两份料的检查项本来
+// 还可以再加（脚本另有 UTF-8 一条），加在调用点，不在这里。
+func textMaterial(data []byte, emptyKind, binaryKind contract.CannotStartKind, place string) *contract.CannotStart {
+	switch {
+	case len(data) == 0:
+		return cliReason(contract.CannotStartReason{Kind: emptyKind, Place: place})
+	case bytes.IndexByte(data, 0) >= 0:
+		return cliReason(contract.CannotStartReason{Kind: binaryKind, Place: place})
+	}
+	return nil
+}
+
 // materialDownloadDir 查 `-d` 的 `-p`：本机目录，要先建好。
-func materialDownloadDir(vals map[string]string) *contract.CannotStart {
-	if vals["--download"] == "" || vals["--path"] == "" {
+//
+// 读纸上那一格（`p.Task.Path`），不读命令行的原值：纸上的值是去过首尾空白的，
+// 自检要是另读原值，同一个 `-p` 会出现「纸面通过、自检说读不到」。
+func materialDownloadDir(p *contract.Plan, vals map[string]string) *contract.CannotStart {
+	if vals["--download"] == "" || p.Task.Path == "" {
 		return nil
 	}
-	info, err := os.Stat(vals["--path"])
+	info, err := os.Stat(p.Task.Path)
 	if err != nil {
 		return cliReason(contract.CannotStartReason{
 			Kind:   contract.CannotStartDownloadPathUnreadable,
-			Place:  vals["--path"],
+			Place:  p.Task.Path,
 			Origin: criterion.SystemReason(err),
 		})
 	}
 	if !info.IsDir() {
 		return cliReason(contract.CannotStartReason{
 			Kind:  contract.CannotStartDownloadPathNotDir,
-			Place: vals["--path"],
-		})
-	}
-	return nil
-}
-
-// materialManifestFile 查 `-f`：是个文件就读得了、非空、非二进制；不是文件就当一条内联记录。
-//
-// 内容层（按 CSV 规则读出行来）归 nodelist.go，不在这里。
-func materialManifestFile(vals map[string]string) *contract.CannotStart {
-	csv := vals["--csv-file"]
-	if csv == "" {
-		return nil
-	}
-	info, err := os.Stat(csv)
-	if err != nil || info.IsDir() {
-		return nil
-	}
-	data, rerr := os.ReadFile(csv)
-	if rerr != nil {
-		return cliReason(contract.CannotStartReason{
-			Kind:   contract.CannotStartCSVUnreadable,
-			Place:  csv,
-			Origin: criterion.SystemReason(rerr),
-		})
-	}
-	if len(data) == 0 {
-		return cliReason(contract.CannotStartReason{
-			Kind:  contract.CannotStartCSVEmpty,
-			Place: csv,
-		})
-	}
-	if bytes.IndexByte(data, 0) >= 0 {
-		return cliReason(contract.CannotStartReason{
-			Kind:  contract.CannotStartCSVBinary,
-			Place: csv,
+			Place: p.Task.Path,
 		})
 	}
 	return nil

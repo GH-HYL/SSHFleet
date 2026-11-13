@@ -24,6 +24,20 @@ type Line struct {
 // Text 是这句话的字，含色码。只有 console 该调它——别处拿到它也只是个字符串，打不出去。
 func (l Line) Text() string { return l.s }
 
+// JoinLines 把两句话接成一句，给「两件事都要落日志、而交接口只有一个」的场合用。
+//
+// 只接字，不接判断：谁先谁后由调用点定。两句话各自是完整的一行，接缝补一个换行，
+// 日志里读起来仍是两行。任一侧是空话时原样返回另一侧。
+func JoinLines(first, second Line) Line {
+	switch {
+	case first.s == "":
+		return second
+	case second.s == "":
+		return first
+	}
+	return Line{s: first.s + "\n" + second.s, toErr: first.toErr || second.toErr}
+}
+
 // Plain 是同一句话去掉色码、去掉结尾换行的样子：给日志用。
 //
 // 日志是纯文本文件，色码写进去只会变成 `\x1b[31m` 这样的乱码；换行也由日志那一行自己加。

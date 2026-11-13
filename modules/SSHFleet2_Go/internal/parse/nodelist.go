@@ -63,13 +63,8 @@ func readManifest(raw string) (manifest, *contract.CannotStart) {
 // 报错的三段话（问题 / 原因 / 提示）逐字照老版：原因取系统那一句——「找不到」与
 // 「没权限」系统比我们分得清（ADR-0025 决定 6）。
 func manifestText(raw string) (string, bool, *contract.CannotStart) {
-	if raw == "" {
-		// 老版这里也是把空串当路径交给系统，报的就是系统那一句
-		// （`读取内容时发生错误: open : no such file or directory`）。照办，不另写一句话。
-		_, err := os.ReadFile(raw)
-		return "", false, cannotStartReason("nodelist", contract.CannotStartReason{Kind: contract.CannotStartManifestRead, Origin: err.Error()})
-	}
-
+	// 空串不在这里报：没给 `-f` 是第三层的必填，由闸门说自己的话（ADR-0052 决定二）。
+	// 本站只在拿到一个值时判它是文件还是内联记录——空值压根走不到这里。
 	info, statErr := os.Stat(raw)
 	if statErr == nil && !info.IsDir() {
 		data, err := os.ReadFile(raw)
@@ -80,11 +75,8 @@ func manifestText(raw string) (string, bool, *contract.CannotStart) {
 				Origin: criterion.SystemReason(err),
 			})
 		}
-		if len(data) == 0 {
-			return "", false, cliReason(contract.CannotStartReason{
-				Kind:  contract.CannotStartCSVEmpty,
-				Place: raw,
-			})
+		if fail := textMaterial(data, contract.CannotStartCSVEmpty, contract.CannotStartCSVBinary, raw); fail != nil {
+			return "", false, fail
 		}
 		return string(data), false, nil
 	}

@@ -1,6 +1,7 @@
 package parse
 
 import (
+	"os"
 	"path"
 	"path/filepath"
 	"strconv"
@@ -304,18 +305,19 @@ func materials(p *contract.Plan, cfg *settings, given map[string]bool, vals map[
 	if fail := materialScript(p, vals); fail != nil {
 		return fail
 	}
+	// 上传源的根（第五层）与它的清点（第六层）拆开：中间隔着下载目录、清单与节点，
+	// 否则清点失败会顶掉还没判的清单（ADR-0052 决定二）。
+	var uploadRoot os.FileInfo
 	if p.Task.Upload != nil {
-		if fail := collect(p, cfg); fail != nil {
+		info, fail := materialUploadRoot(p)
+		if fail != nil {
 			return fail
 		}
+		uploadRoot = info
 	}
-	if fail := materialDownloadDir(vals); fail != nil {
+	if fail := materialDownloadDir(p, vals); fail != nil {
 		return fail
 	}
-	if fail := materialManifestFile(vals); fail != nil {
-		return fail
-	}
-
 	// 缺 `-f` 不在这里报：那是第三层的「必填」，由闸门说一句自己的话（ADR-0052 决定二）。
 	// 本站只在给了清单时读它。
 	if p.Resources.Manifest != "" {
@@ -337,6 +339,13 @@ func materials(p *contract.Plan, cfg *settings, given map[string]bool, vals map[
 	// 改密值（建站 05 的 07 号单）：按加密开关解释成明文，形态不对当场拦下。
 	if p.Task.Passwd != nil {
 		if fail := passwdValue(p, cfg.credentialCfg.Encrypt); fail != nil {
+			return fail
+		}
+	}
+
+	// 上传源清点（第六层）：逐项可读、特殊文件、过滤后一个不剩——排在清单之后。
+	if p.Task.Upload != nil {
+		if fail := collect(p, cfg, uploadRoot); fail != nil {
 			return fail
 		}
 	}
