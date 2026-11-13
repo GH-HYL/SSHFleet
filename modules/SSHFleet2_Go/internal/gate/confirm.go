@@ -19,6 +19,14 @@ import (
 
 // confirmFlow 是确认那一段的全流程（第七层：人点头）。
 func confirmFlow(p *contract.Plan) (Refusal, message.Line) {
+	// 零、解析站路上攒下的那几句提示（表头被移除、清单里配了私钥却没加 -k）。
+	//
+	// 它们说的是「工具动了你的输入」，不该抢在结论前面：被拒绝的那次、或者这一趟根本不出屏
+	// 的那次，确认段整段走不到，屏上也就不会先冒出「已移除表头」再报别的（ADR-0052 决定五）。
+	// `--yes` 下照印——那关闭的是「问」，不是「说」（决定九）。
+	for _, n := range p.Notices {
+		ask.Show(message.NoticeLine(n))
+	}
 	// 一、脚本后缀没配到解释器、又走了非交互那条路：那一问在第三层尾就问过了（`--yes`
 	// 不问），这里只剩「跳过确认」那半句与留痕。
 	if r, note := fallbackSkipped(p); r != nil || note.Text() != "" {
