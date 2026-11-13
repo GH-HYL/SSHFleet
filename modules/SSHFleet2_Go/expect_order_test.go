@@ -26,109 +26,108 @@ import (
 
 // orderRow 是期望表的一行。
 type orderRow struct {
-	n          int      // 表里的行号（与 spec 那张表同号）
-	layer      string   // 层号，报错时带上
-	args       []string // 这次喂给二进制的 argv
-	want       string   // 该先出现的那一格的特征串
-	notEarlier []string // 其余各格：出现也不许比 want 更早
-	after      string   // 要在 want 之后才出现（延后的那一句）
-	stdin      string   // 要回答的输入（不写就是读到输入结束）
-	awaiting   string   // 还没做：留给哪条工单；非空时只记现状，判不了红
-	stage      func(t *testing.T, dir string)
+	n          int                            // 表里的行号（与 spec 那张表同号）
+	layer      string                         // 层号，报错时带上
+	args       []string                       // 这次喂给二进制的 argv
+	want       string                         // 该先出现的那一格的特征串
+	notEarlier []string                       // 其余各格：出现也不许比 want 更早
+	after      string                         // 要在 want 之后才出现（延后的那一句）
+	stdin      string                         // 要回答的输入（不写就是读到输入结束）
+	stage      func(t *testing.T, dir string) // 要改配置才触发的行，自己布场
 }
 
-// orderRows 是整张表。清空一行的 awaiting，就是那条工单把它接过去了。
+// orderRows 是整张表：55 行，一行都不许跳——没有「先记现状」这档，红就是红。
 var orderRows = []orderRow{
 	// 第一层：词法
-	{1, "1", []string{"--zzz"}, "不认识的选项", nil, "", "", "", nil},
-	{2, "1", []string{"--gen-key", "--zzz"}, "不认识的选项", []string{"只能给一个"}, "", "", "", nil},
-	{3, "1", []string{"-c"}, "缺少值", nil, "", "", "", nil},
-	{4, "1", []string{"-c", "ls", "extra"}, "后面还有一段没法识别", nil, "", "", "", nil},
-	{5, "1", []string{"-h", "--bogus"}, "批量 SSH 运维工具", []string{"不认识的选项"}, "", "", "", nil},
-	{6, "1", []string{"--bogus", "-h"}, "不认识的选项", []string{"批量 SSH 运维工具"}, "", "", "", nil},
-	{7, "1", []string{"--command=ls", "-h"}, "批量 SSH 运维工具", []string{"不认识的选项"}, "", "", "", nil},
+	{1, "1", []string{"--zzz"}, "不认识的选项", nil, "", "", nil},
+	{2, "1", []string{"--gen-key", "--zzz"}, "不认识的选项", []string{"只能给一个"}, "", "", nil},
+	{3, "1", []string{"-c"}, "缺少值", nil, "", "", nil},
+	{4, "1", []string{"-c", "ls", "extra"}, "后面还有一段没法识别", nil, "", "", nil},
+	{5, "1", []string{"-h", "--bogus"}, "批量 SSH 运维工具", []string{"不认识的选项"}, "", "", nil},
+	{6, "1", []string{"--bogus", "-h"}, "不认识的选项", []string{"批量 SSH 运维工具"}, "", "", nil},
+	{7, "1", []string{"--command=ls", "-h"}, "批量 SSH 运维工具", []string{"不认识的选项"}, "", "", nil},
 
 	// 第二层：结构
-	{8, "2", []string{"-f", "ok.csv"}, "你没有指定任何模式", nil, "", "", "", nil},
-	{9, "2", []string{"-c", "ls", "-d", "/etc/passwd"}, "只能指定一个", nil, "", "", "", nil},
-	{10, "2", []string{"--gen-key", "--key-status"}, "只能给一个", nil, "", "", "", nil},
-	{11, "2", []string{"--gen-key", "-c", "ls"}, "不能和批量执行选项一起用", nil, "", "", "", nil},
-	{12, "2", []string{"--gen-key", "-f", "ok.csv"}, "不能和批量执行选项一起用", nil, "", "", "", nil},
-	{13, "1", []string{"--key-status", "extra"}, "出现多余的参数", []string{"只能给一个"}, "", "", "", nil},
+	{8, "2", []string{"-f", "ok.csv"}, "你没有指定任何模式", nil, "", "", nil},
+	{9, "2", []string{"-c", "ls", "-d", "/etc/passwd"}, "只能指定一个", nil, "", "", nil},
+	{10, "2", []string{"--gen-key", "--key-status"}, "只能给一个", nil, "", "", nil},
+	{11, "2", []string{"--gen-key", "-c", "ls"}, "不能和批量执行选项一起用", nil, "", "", nil},
+	{12, "2", []string{"--gen-key", "-f", "ok.csv"}, "不能和批量执行选项一起用", nil, "", "", nil},
+	{13, "1", []string{"--key-status", "extra"}, "出现多余的参数", []string{"只能给一个"}, "", "", nil},
 
 	// 第三层：搭配、取值与必填
 	{14, "3", []string{"-c", "ls", "-p", "/opt/app/", "-f", "ok.csv"}, "不能搭配 -c 或 -s",
-		[]string{"文件读不到", "读取内容时发生错误"}, "", "", "", nil},
-	{15, "3", []string{"-c", " "}, "-c 参数不能为空", []string{"读取内容时发生错误"}, "", "", "", nil},
-	{16, "3", []string{"-u", "."}, "-u 参数必须搭配 -p", []string{"读取内容时发生错误"}, "", "", "", nil},
-	{17, "3", []string{"-u", ".", "-p", "rel"}, "必须是绝对路径", []string{"读取内容时发生错误"}, "", "", "", nil},
-	{18, "3", []string{"-u", ".", "-p", "/opt/app"}, "以 / 结尾", []string{"读取内容时发生错误"}, "", "", "", nil},
-	{19, "3", []string{"-d", "/etc/passwd"}, "-d 参数必须搭配 -p", []string{"读取内容时发生错误"}, "", "", "", nil},
-	{20, "3", []string{"-d", "rel", "-p", "./logs/"}, "必须是绝对路径", []string{"读取内容时发生错误"}, "", "", "", nil},
+		[]string{"文件读不到", "读取内容时发生错误"}, "", "", nil},
+	{15, "3", []string{"-c", " "}, "-c 参数不能为空", []string{"读取内容时发生错误"}, "", "", nil},
+	{16, "3", []string{"-u", "."}, "-u 参数必须搭配 -p", []string{"读取内容时发生错误"}, "", "", nil},
+	{17, "3", []string{"-u", ".", "-p", "rel"}, "必须是绝对路径", []string{"读取内容时发生错误"}, "", "", nil},
+	{18, "3", []string{"-u", ".", "-p", "/opt/app"}, "以 / 结尾", []string{"读取内容时发生错误"}, "", "", nil},
+	{19, "3", []string{"-d", "/etc/passwd"}, "-d 参数必须搭配 -p", []string{"读取内容时发生错误"}, "", "", nil},
+	{20, "3", []string{"-d", "rel", "-p", "./logs/"}, "必须是绝对路径", []string{"读取内容时发生错误"}, "", "", nil},
 	{21, "3", []string{"--sudo", "--no-sudo", "-c", "ls"}, "--sudo 与 --no-sudo 只能给一个",
-		[]string{"读取内容时发生错误"}, "", "", "", nil},
+		[]string{"读取内容时发生错误"}, "", "", nil},
 	{22, "3", []string{"--change-password", "pw", "-p", "/opt/app/"}, "不能和 -p 一起用",
-		[]string{"读取内容时发生错误"}, "", "", "", nil},
+		[]string{"读取内容时发生错误"}, "", "", nil},
 	{23, "3", []string{"--change-password", "pw", "-a", "y,x"}, "不能和 -a 一起用",
-		[]string{"读取内容时发生错误"}, "", "", "", nil},
+		[]string{"读取内容时发生错误"}, "", "", nil},
 	{24, "3", []string{"--change-password", "pw", "-k"}, "不能和 -k 一起用",
-		[]string{"读取内容时发生错误"}, "", "", "", nil},
+		[]string{"读取内容时发生错误"}, "", "", nil},
 	{25, "3", []string{"--change-password", " "}, "新密码不能为空",
-		[]string{"读取内容时发生错误"}, "", "", "", nil},
-	{26, "3", []string{"-n", "abc", "-c", "ls"}, "-n 参数格式错误", nil, "", "", "", nil},
+		[]string{"读取内容时发生错误"}, "", "", nil},
+	{26, "3", []string{"-n", "abc", "-c", "ls"}, "-n 参数格式错误", nil, "", "", nil},
 	{27, "3", []string{"-t", "abc", "-c", "ls", "-f", "/nope.csv"}, "-t 参数格式错误",
-		[]string{"文件读不到"}, "", "", "", nil},
+		[]string{"文件读不到"}, "", "", nil},
 	{28, "3", []string{"-T", "abc", "-c", "ls", "-f", "/nope.csv"}, "-T 参数格式错误",
-		[]string{"文件读不到"}, "", "", "", nil},
-	{29, "3", []string{"-c", "ls"}, "这次没有节点清单", []string{"读取内容时发生错误"}, "", "", "", nil},
+		[]string{"文件读不到"}, "", "", nil},
+	{29, "3", []string{"-c", "ls"}, "这次没有节点清单", []string{"读取内容时发生错误"}, "", "", nil},
 	{30, "3", []string{"-s", "./x.xyz", "-f", "ok.csv"}, "继续用 bash",
-		[]string{"发现禁止命令"}, "", "n", "", nil},
+		[]string{"发现禁止命令"}, "", "n", nil},
 	{31, "3", []string{"-c", "rm -rf /", "-p", "/opt/app/", "-f", "ok.csv"}, "不能搭配 -c 或 -s",
-		[]string{"发现禁止命令"}, "", "", "", nil},
+		[]string{"发现禁止命令"}, "", "", nil},
 
 	// 第四层：判决
-	{32, "4", []string{"-c", "rm -rf /", "-f", "ok.csv"}, "发现禁止命令", nil, "", "", "", nil},
+	{32, "4", []string{"-c", "rm -rf /", "-f", "ok.csv"}, "发现禁止命令", nil, "", "", nil},
 	{33, "4", []string{"-c", "rm -rf /", "-f", "/nope.csv"}, "发现禁止命令",
-		[]string{"文件读不到"}, "", "", "", nil},
+		[]string{"文件读不到"}, "", "", nil},
 	{34, "4", []string{"-c", "rm -rf /", "-f", "bad.csv"}, "发现禁止命令",
-		[]string{"双引号"}, "", "", "", nil},
-	{35, "4", []string{"-c", "RM -RF /etc", "-f", "ok.csv"}, "发现禁止命令", nil, "", "", "", nil},
-	{36, "4", []string{"-c", "rm -rf //", "-f", "ok.csv"}, "发现禁止命令", nil, "", "", "", nil},
+		[]string{"双引号"}, "", "", nil},
+	{35, "4", []string{"-c", "RM -RF /etc", "-f", "ok.csv"}, "发现禁止命令", nil, "", "", nil},
+	{36, "4", []string{"-c", "rm -rf //", "-f", "ok.csv"}, "发现禁止命令", nil, "", "", nil},
 	{37, "4", []string{"-c", "rm -rf /opt", "-f", "ok.csv"}, "发现危险命令",
-		[]string{"发现禁止命令"}, "", "", "", nil},
+		[]string{"发现禁止命令"}, "", "", nil},
 	{38, "4", []string{"-c", "rm -rf /opt", "-f", "/nope.csv"}, "发现危险命令",
-		[]string{"文件读不到"}, "文件读不到", "y", "", nil},
-	{39, "4", []string{"-c", "ls", "-f", "ok.csv"}, "读取危险命令检测规则", nil, "", "", "05", dropDangerRules},
+		[]string{"文件读不到"}, "文件读不到", "y", nil},
+	{39, "4", []string{"-c", "ls", "-f", "ok.csv"}, "读取危险命令检测规则", nil, "", "", dropDangerRules},
 
 	// 第五层：材料可达
-	{40, "5", []string{"-s", "/nope.sh", "-f", "ok.csv"}, "脚本文件读不到", nil, "", "", "", nil},
-	{41, "5", []string{"-u", "/nope", "-p", "/opt/app/", "-f", "ok.csv"}, "上传文件或目录读不到", nil, "", "", "", nil},
+	{40, "5", []string{"-s", "/nope.sh", "-f", "ok.csv"}, "脚本文件读不到", nil, "", "", nil},
+	{41, "5", []string{"-u", "/nope", "-p", "/opt/app/", "-f", "ok.csv"}, "上传文件或目录读不到", nil, "", "", nil},
 	{42, "5", []string{"-u", "/nope", "-p", "/opt/app/", "-f", "/nope.csv"}, "上传文件或目录读不到",
-		[]string{"-f 参数指定的文件读不到"}, "", "", "", nil},
-	{43, "5", []string{"-d", "/x", "-p", "./nope", "-f", "ok.csv"}, "本地目录读不到", nil, "", "", "", nil},
-	{44, "5", []string{"-c", "ls", "-f", "/nope.csv"}, "-f 参数指定的文件读不到", nil, "", "", "", nil},
-	{45, "5", []string{"-c", "ls", "-f", "empty.csv"}, "CSV 文件为空", nil, "", "", "", nil},
-	{46, "5", []string{"-c", "ls", "-f", "bin.csv"}, "清单是二进制文件", nil, "", "", "", nil},
+		[]string{"-f 参数指定的文件读不到"}, "", "", nil},
+	{43, "5", []string{"-d", "/x", "-p", "./nope", "-f", "ok.csv"}, "本地目录读不到", nil, "", "", nil},
+	{44, "5", []string{"-c", "ls", "-f", "/nope.csv"}, "-f 参数指定的文件读不到", nil, "", "", nil},
+	{45, "5", []string{"-c", "ls", "-f", "empty.csv"}, "CSV 文件为空", nil, "", "", nil},
+	{46, "5", []string{"-c", "ls", "-f", "bin.csv"}, "清单是二进制文件", nil, "", "", nil},
 
 	// 第六层：材料内容
-	{47, "6", []string{"-c", "ls", "-f", "bad.csv"}, "双引号要成对", nil, "", "", "", nil},
-	{48, "6", []string{"-c", "ls", "-f", "bad-ip.csv"}, "IP格式不正确", nil, "", "", "", nil},
-	{49, "6", []string{"-c", "ls", "-f", "bad-cred.csv"}, "凭据", nil, "", "", "05", nil},
+	{47, "6", []string{"-c", "ls", "-f", "bad.csv"}, "双引号要成对", nil, "", "", nil},
+	{48, "6", []string{"-c", "ls", "-f", "bad-ip.csv"}, "IP格式不正确", nil, "", "", nil},
+	{49, "6", []string{"-c", "ls", "-f", "bad-cred.csv"}, "凭据预检", nil, "", "", encryptOn},
 
 	// 第七层：人点头
 	{50, "7", []string{"--sudo", "--no-shell", "-c", "ls", "-f", "ok.csv"}, "--no-shell 是原样下发",
-		nil, "", "n", "", nil},
-	{51, "7", []string{"-a", "确认,y", "-c", "ls", "-f", "ok.csv"}, "汉字",
-		nil, "", "n", "05", englishOn},
-	{52, "7", []string{"-c", "ls", "-f", "ok.csv"}, "执行选项/参数确认", nil, "", "n", "", nil},
+		nil, "", "n", nil},
+	{51, "7", []string{"-a", "确认,y", "-c", "ls", "-f", "ok.csv"}, "代填值里有中文",
+		nil, "", "n", englishOn},
+	{52, "7", []string{"-c", "ls", "-f", "ok.csv"}, "执行选项/参数确认", nil, "", "n", nil},
 
 	// 提示的位置（跨层，单列）
 	{53, "3", []string{"-c", "ls", "-p", "/opt/app/", "-f", "hdr.csv"}, "不能搭配 -c 或 -s",
-		[]string{"已移除表头"}, "", "", "", nil},
+		[]string{"已移除表头"}, "", "", nil},
 	{54, "7", []string{"-c", "ls", "-f", "hdr.csv"}, "已移除表头",
-		[]string{"执行选项/参数确认"}, "", "n", "", nil},
+		[]string{"执行选项/参数确认"}, "", "n", nil},
 	{55, "7", []string{"-c", "ls", "-f", "hdr.csv", "--yes"}, "已移除表头",
-		nil, "跳过", "", "", nil},
+		nil, "跳过", "", nil},
 }
 
 // orderSandbox 是二进制与临时目录的落点：`build/` 下当天的沙盒，不出工作区。
@@ -297,6 +296,36 @@ func englishOn(t *testing.T, dir string) {
 	}
 }
 
+// encryptOn 把加密打开：从那以后凭据那一列写的是**路径**，统一口令也是。清单第 4 列指一份
+// 不存在的密文，凭据预检就有一处可报——第 49 行要的正是那一句。
+//
+// 路径按本机形态给：配置里的路径必须是本机绝对路径，Windows 要盘符。
+func encryptOn(t *testing.T, dir string) {
+	t.Helper()
+	missing := "/nope/cipher"
+	if runtime.GOOS == "windows" {
+		missing = "C:/nope/cipher"
+	}
+	path := filepath.Join(dir, "config", "SSHFleet.conf")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("读主配置失败：%v", err)
+	}
+	turned := strings.Replace(string(data), "encrypt = false", "encrypt = true", 1)
+	turned = strings.Replace(turned, `password = "pw"`, `password = "`+missing+`"`, 1)
+	if turned == string(data) {
+		t.Fatalf("主配置里没有 encrypt = false 这一行")
+	}
+	if err := os.WriteFile(path, []byte(turned), 0o644); err != nil {
+		t.Fatalf("写主配置失败：%v", err)
+	}
+
+	row := "192.0.2.10,10022,root," + missing + "\n"
+	if err := os.WriteFile(filepath.Join(dir, "bad-cred.csv"), []byte(row), 0o644); err != nil {
+		t.Fatalf("写坏凭据清单失败：%v", err)
+	}
+}
+
 // TestOrderExpectedFirstMessage 是整张期望表：一行一组输入，判「哪一句先说」。
 func TestOrderExpectedFirstMessage(t *testing.T) {
 	module, err := os.Getwd()
@@ -327,11 +356,6 @@ func TestOrderExpectedFirstMessage(t *testing.T) {
 			}
 			out := buf.String()
 
-			if r.awaiting != "" {
-				// 还没做的那几行：只记现状，不判红。清空 awaiting 才算接手。
-				t.Logf("第 %d 行（第 %s 层）留给 %s 号单，现状：%s", r.n, r.layer, r.awaiting, orderVerdict(r, out))
-				return
-			}
 			if why := orderVerdict(r, out); why != "" {
 				t.Fatalf("第 %d 行（第 %s 层）：%s\n输入：%v\n输出：\n%s", r.n, r.layer, why, r.args, out)
 			}
