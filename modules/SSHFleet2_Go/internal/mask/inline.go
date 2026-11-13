@@ -41,9 +41,11 @@ func InlineRecordIf(s string) string {
 
 // looksLikeInlineList 是不是「带凭据段的内联清单」：恰好一条记录、首列是 IPv4、
 // 且第 4 或第 6 段写了东西。裸 IP 没有凭据可遮，不遮。
+//
+// 记录的形状（恰好一条、首列是 IPv4）由 `criterion` 判——取值判定用的是同一条；这里只补段号。
 func looksLikeInlineList(s string) bool {
-	fields, ok := singleRecord(s)
-	if !ok || len(fields) == 0 || !criterion.IsIPv4(fields[0]) {
+	fields, ok := criterion.SingleNodeRecord(s)
+	if !ok {
 		return false
 	}
 	for _, idx := range credentialColumns {
@@ -55,14 +57,12 @@ func looksLikeInlineList(s string) bool {
 }
 
 // singleRecord 把文本读成唯一的一条记录；读不出、或不止一条时返回 false。
+//
+// 读法与取值判定同一份（`criterion.ReadCSVRows`），不另开口径。
 func singleRecord(text string) ([]string, bool) {
-	r := newCSVReader(text, true)
-	rec, err := r.Read()
-	if err != nil {
+	rows, _, err := criterion.ReadCSVRows(text)
+	if err != nil || len(rows) != 1 {
 		return nil, false
 	}
-	if _, err := r.Read(); err == nil {
-		return nil, false // 不止一条：那不是一个内联值
-	}
-	return rec, true
+	return rows[0], true
 }

@@ -69,7 +69,7 @@ func textMaterial(data []byte, emptyKind, binaryKind contract.CannotStartKind, p
 	switch {
 	case len(data) == 0:
 		return cliReason(contract.CannotStartReason{Kind: emptyKind, Place: place})
-	case bytes.IndexByte(data, 0) >= 0:
+	case isBinaryContent(data):
 		return cliReason(contract.CannotStartReason{Kind: binaryKind, Place: place})
 	}
 	return nil

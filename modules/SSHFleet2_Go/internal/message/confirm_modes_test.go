@@ -42,6 +42,21 @@ func TestConfirmScreenScript(t *testing.T) {
 	}
 }
 
+// 本机路径写法不算 bash：解释器跑在目标机上，`\` 不是它的分隔符。
+//
+// 这一格曾经是两处两结论：显示侧把它当成 bash（省掉这一行），解析站归不出来
+// （`-a` 那条判据说「不支持解释器」）。现在两处按同一条判：照实印出原值、也照实说不认。
+func TestConfirmScreenInterpreterWindowsPathIsNotBash(t *testing.T) {
+	p := plainPlan(contract.ModeScript)
+	p.Task.Script = &contract.ScriptTask{Path: "deploy.sh"}
+	p.Run.Interpreter = `C:\Python\bash`
+
+	got := stripANSI(ConfirmScreen(p, "ok.csv", "", false).Text())
+	if !strings.Contains(got, "▶ 解释器  -→   C:\\Python\\bash") {
+		t.Fatalf("归不出 bash 时这一行要照实印出配置里的原值：\n%s", got)
+	}
+}
+
 // --no-shell 下解释器不参与执行：那一行的值改成提示。
 func TestConfirmScreenInterpreterLineForNoShell(t *testing.T) {
 	p := plainPlan(contract.ModeCommand)

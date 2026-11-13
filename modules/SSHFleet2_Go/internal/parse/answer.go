@@ -6,7 +6,7 @@ package parse
 // （`-f` 那一路在 nodelist.go 的 manifestText，`-a` 这一路在这里，判定口径相同），
 // `;;` 与字面 `\n` 都只是普通字符（ADR-0023）。
 //
-// 行读法与清单共用 `csvRows`：`#` 注释行、空行、BOM、双引号、变长列的口径全部一致，
+// 行读法与清单共用 `criterion.ReadCSVRows`：`#` 注释行、空行、BOM、双引号、变长列的口径全部一致，
 // 没有第二套规则。
 //
 // 列语义是代填自己的：第 1 列是代填内容，第 2 列起是触发词，列数自适应。
@@ -51,7 +51,7 @@ func answerTable(raw string, regex, caseSensitive bool) ([]contract.Answer, *con
 		text = string(data)
 	}
 
-	rows, lines, err := csvRows(text)
+	rows, lines, err := criterion.ReadCSVRows(text)
 	if err != nil {
 		var parseErr *csv.ParseError
 		if errors.As(err, &parseErr) {
@@ -174,14 +174,4 @@ func validateAnswers(answers []contract.Answer, regex, caseSensitive bool) *cont
 		}
 	}
 	return nil
-}
-
-// isBinaryContent 内容里有没有 NUL 字节：有就按二进制处理，不硬当文本读。
-func isBinaryContent(data []byte) bool {
-	for _, b := range data {
-		if b == 0 {
-			return true
-		}
-	}
-	return false
 }

@@ -106,8 +106,8 @@ func TestDownlinkScriptGoesThroughStdin(t *testing.T) {
 	}
 	got, stdin := downlinkOf(plan)
 	// 内层那几个单引号会被外壳那对单引号按 '\'' 转义——老版拼出来的就是这一条。
-	want := "sh -c " + shellQuote(encodingFragment+" sudo bash -c "+
-		shellQuote(". /dev/stdin")+" "+shellQuote("deploy.sh"))
+	// 老版二进制实际打出来的那一行（逐字照抄，不拿被测代码拼）。
+	want := "sh -c 'case \"$(locale charmap 2>/dev/null)\" in C|POSIX|ANSI_X3.4-1968|US-ASCII) set -- $(locale -a 2>/dev/null | grep -Eixm1 \"c\\.utf-?8|en_us\\.utf-?8\" 2>/dev/null); [ -n \"$1\" ] && export LC_CTYPE=\"$1\";; esac; sudo bash -c '\\''. /dev/stdin'\\'' '\\''deploy.sh'\\'''"
 	if got != want {
 		t.Fatalf("脚本模式的下发行不对\n期望：%s\n实际：%s", want, got)
 	}
@@ -173,7 +173,7 @@ func TestDownlinkAnswerWithScriptKeepsName(t *testing.T) {
 	got, _ := downlinkOf(plan)
 	encoded := base64.StdEncoding.EncodeToString([]byte("echo"))
 	// 内层单引号被外层那对转义过一次，这里按转义后的形态比。
-	nameArg := strings.ReplaceAll(shellQuote("deploy.sh"), "'", `'\''`)
+	nameArg := "'\\''deploy.sh'\\''"
 	if !strings.HasSuffix(got, `| base64 -d)" `+nameArg+`'`) {
 		t.Fatalf("脚本名没补回 $0：%s", got)
 	}
@@ -200,18 +200,11 @@ func TestExportPrefixSortsAndQuotes(t *testing.T) {
 
 // TestEncodingFragmentHasNoSingleQuote 片段里不许出现单引号。
 //
-// 理由：整段内层命令要被 shellQuote 包进一对单引号，片段自己再带单引号就得转义，
+// 理由：整段内层命令要被 criterion.SingleQuoted 包进一对单引号，片段自己再带单引号就得转义，
 // 转义一多，量的串与发出去的串就不容易对上了。老版把这条写成不变式，这里守住它。
 func TestEncodingFragmentHasNoSingleQuote(t *testing.T) {
 	if strings.ContainsRune(encodingFragment, '\'') {
 		t.Fatalf("编码判断片段里出现了单引号：%s", encodingFragment)
-	}
-}
-
-// TestShellQuoteEscapesSingleQuote 内层有单引号时按 '\” 转义，整段仍是一个参数。
-func TestShellQuoteEscapesSingleQuote(t *testing.T) {
-	if got := shellQuote("a'b"); got != `'a'\''b'` {
-		t.Fatalf("转义不对：%q", got)
 	}
 }
 

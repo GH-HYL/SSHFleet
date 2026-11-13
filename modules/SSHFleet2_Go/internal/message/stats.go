@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"sshfleet2/internal/contract"
+	"sshfleet2/internal/criterion"
 )
 
 // 跑没跑齐那两个结论字。结算站算出来、报告站照着分岔，字只在这里。
@@ -233,28 +234,9 @@ func ReportText(l contract.Ledger, body contract.RunMetaBody, maskedArgv []strin
 func DisplayCommand(argv []string) string {
 	parts := make([]string, 0, len(argv))
 	for _, s := range argv {
-		parts = append(parts, quoteForShell(s))
+		parts = append(parts, criterion.QuoteForShell(s))
 	}
 	return strings.Join(parts, " ")
-}
-
-// shellSafeChars 不被 shell 二次解释的字符集：字母数字与 `_-./:=+,@%^`。
-const shellSafeChars = "_-./:=+,@%^"
-
-// quoteForShell 该加引号才加。
-func quoteForShell(s string) string {
-	if s == "" {
-		return `''`
-	}
-	for _, r := range s {
-		switch {
-		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
-		case strings.ContainsRune(shellSafeChars, r):
-		default:
-			return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
-		}
-	}
-	return s
 }
 
 // categoryTipLines 汇总「提示：」块的内容：本次出现过的失败分类里写了解释的各出一行
