@@ -112,6 +112,10 @@ func (s scanned) withExtraOwner(argv []string) scanned {
 }
 
 // buildPlan 把扫出来的事实认成一张纸。认不了的照样记在纸上的 Problems 里。
+// buildPlan 把扫出来的事实认成一张纸。认不了的照样记在纸上的 Problems 里。
+//
+// 第三个返回值是「延后的起不来」：判据表不齐、材料读不到，这两类都要等到闸门判完前面
+// 几层才说得出口（ADR-0052 决定五）。它不进纸，与纸一起交给塔尖。
 func buildPlan(cfg *settings, s scanned) (*contract.Plan, *contract.KeyRun, *contract.CannotStart) {
 	// 三条密钥命令先认一次：它们是独立功能，不进流水线（开发者 2026-11-06 裁定）。
 	// 词法有问题时不进这一支——未知选项、缺值仍归闸门拒，与 0x 定的先后一致。
@@ -250,22 +254,26 @@ func buildPlan(cfg *settings, s scanned) (*contract.Plan, *contract.KeyRun, *con
 		p.Run.Interpreter, p.Run.FallbackExt = interpreterFor(p.Task.Script.Path, cfg.interpreter.Command, cfg.interpreter.Script)
 	}
 
-	// 材料自检（-s／-u／-d／-f）：读不到、不能当文本用，都属于「起不来」。
-	//
-	// 只在「这次干什么」已经定死、且纸上一个问题都没有时才做。有问题的纸一律先交给闸门：
-	// 老版 pflag 解析完、CheckArguments 判完，才轮到读清单与 stat 材料（main.go 的步骤 5
-	// 在读清单之前）。这一条守住那个次序——否则「-p 不能搭配 -c」会被「清单读不到」顶掉，
-	// 使用者看到的是别的一件事。
-	proceed := len(modes) == 1 && len(p.Problems) == 0
-	if proceed {
-		if fail := checkMaterial(p, given, vals); fail != nil {
-			return nil, nil, fail
-		}
-	}
-
 	// 执行资源：这次用到的原料在哪。清单这一格是 `-f` 的原值，两种形态（文件路径、
 	// 内联记录）都照原样装着；脚本与代填随阶段 05 加。
 	p.Resources.Manifest = vals["--csv-file"]
+
+	// 判据表：解析读一次、校验一次，随纸交给闸门。
+	//
+	// 第四层要用它（判决），所以读不成的这件事要排在一至三层之后才说得出口——失败记成
+	// 一条延后项，纸照样交上去；闸门拿到的是零值的表，危险检测不会命中，塔尖报这一条。
+	tables, tableFail := loadTables(mode)
+	p.Tables = tables
+
+	// 第五、六层：脚本、上传源、下载目录、清单、节点、改密值、代填表。
+	//
+	// 只在「这次干什么」已经定死、且纸上一个问题都没有时才读。有问题的纸一律先交给闸门：
+	// 「-p 不能搭配 -c」不该被「清单读不到」顶掉。失败同样不当场报，另交一条延后项。
+	proceed := len(modes) == 1 && len(p.Problems) == 0
+	var materialFail *contract.CannotStart
+	if proceed {
+		materialFail = materials(p, cfg, given, vals)
+	}
 
 	// 备注：没给 -r 就自动生成（命令取首词，脚本与上传取文件名，下载按远端规则切），
 	// 生成过之后照样过平台过滤——它要当归档目录名的一段，也要原样显示在确认屏上。
@@ -273,46 +281,65 @@ func buildPlan(cfg *settings, s scanned) (*contract.Plan, *contract.KeyRun, *con
 		p.Run.Remark = defaultRemark(p)
 	}
 
-	// 判据表：解析读一次、校验一次，随纸交给闸门。
-	tables, fail := loadTables(mode)
+	// 下发行（建站 05 的 02 号单）：拼装只这一处，拼完装进纸上那两格。
+	// 放在最后——脚本正文要先读出来、解释器要先定下来，两者都在前面。
+	sealDownlink(p)
+
+	// 延后项只交一条，按层序取最早的那个：判据表（第四层）先于材料（第五、六层）。
+	deferred := tableFail
+	if deferred == nil {
+		deferred = materialFail
+	}
+	return p, nil, deferred
+}
+
+// materials 按第五、六层的次序读这一趟的材料，交回第一个失败。
+//
+// 次序照 ADR-0052 决定二那张表：脚本 → 上传源 → 下载目录 → 清单（这一层证「拿得到」），
+// 再是清单的语法与逐行、改密值、代填表（下一层证「内容对」）。层内这个先后不按使用者
+// 敲写的次序，也不按老版的实现顺序。
+//
+// 交回失败只交一条：再往后读也没有意义，而且塔尖一次只报一句。
+func materials(p *contract.Plan, cfg *settings, given map[string]bool, vals map[string]string) *contract.CannotStart {
+	if fail := materialScript(p, vals); fail != nil {
+		return fail
+	}
+	if p.Task.Upload != nil {
+		if fail := collect(p, cfg); fail != nil {
+			return fail
+		}
+	}
+	if fail := materialDownloadDir(vals); fail != nil {
+		return fail
+	}
+	if fail := materialManifestFile(vals); fail != nil {
+		return fail
+	}
+
+	// 读清单：第一张纸的「对谁做」那一格。
+	m, fail := readManifest(p.Resources.Manifest)
 	if fail != nil {
-		return nil, nil, fail
+		return fail
 	}
-	p.Tables = tables
+	if m.headerDropped {
+		p.Notices = append(p.Notices, contract.Notice{Kind: contract.NoticeManifestHeader})
+	}
+	nodes, notices, fail := buildNodes(m.rows, cfg, given["--key"])
+	if fail != nil {
+		return fail
+	}
+	p.Nodes = nodes
+	p.Notices = append(p.Notices, notices...)
 
-	// 读清单：第一张纸的「对谁做」那一格。只在模式已定死、且没有多余参数时读——
-	// 给了多个模式时先让闸门报「互斥」，有多余段时先让它报「多余的参数」，与材料自检
-	// 同一条次序（老版就是这个顺序）。
-	if proceed {
-		m, nfail := readManifest(p.Resources.Manifest)
-		if nfail != nil {
-			return nil, nil, nfail
-		}
-		if m.headerDropped {
-			p.Notices = append(p.Notices, contract.Notice{Kind: contract.NoticeManifestHeader})
-		}
-		nodes, notices, nfail := buildNodes(m.rows, cfg, given["--key"])
-		if nfail != nil {
-			return nil, nil, nfail
-		}
-		p.Nodes = nodes
-		p.Notices = append(p.Notices, notices...)
-
-		// 改密值（建站 05 的 07 号单）：按加密开关解释成明文，形态不对当场拦下。
-		if p.Task.Passwd != nil {
-			if fail := passwdValue(p, cfg.credentialCfg.Encrypt); fail != nil {
-				return nil, nil, fail
-			}
-		}
-
-		// 上传源严格采集（建站 05 的 06 号单）：确认屏之前清点一遍。排在读清单之后，
-		// 与老版同一个次序（清单读不通先报清单）。
-		if p.Task.Upload != nil {
-			if fail := collect(p, cfg); fail != nil {
-				return nil, nil, fail
-			}
+	// 改密值（建站 05 的 07 号单）：按加密开关解释成明文，形态不对当场拦下。
+	if p.Task.Passwd != nil {
+		if fail := passwdValue(p, cfg.credentialCfg.Encrypt); fail != nil {
+			return fail
 		}
 	}
+
+	// 上传并发建议：按总大小与配置阈值算，再按节点数封顶——所以它排在读清单之后。
+	applyUploadAdvice(p, cfg)
 
 	// 代填表（建站 05 的 05 号单）：`-a` 的值读成一行一条的表，装进命令／脚本载荷。
 	//
@@ -321,7 +348,7 @@ func buildPlan(cfg *settings, s scanned) (*contract.Plan, *contract.KeyRun, *con
 	if p.Run.Answer != "" && (p.Task.Command != nil || p.Task.Script != nil) {
 		answers, afail := answerTable(p.Run.Answer, p.Run.MatchRegex, p.Run.MatchCaseSensitive)
 		if afail != nil {
-			return nil, nil, afail
+			return afail
 		}
 		if p.Task.Command != nil {
 			p.Task.Command.Answers = answers
@@ -329,11 +356,7 @@ func buildPlan(cfg *settings, s scanned) (*contract.Plan, *contract.KeyRun, *con
 			p.Task.Script.Answers = answers
 		}
 	}
-
-	// 下发行（建站 05 的 02 号单）：拼装只这一处，拼完装进纸上那两格。
-	// 放在最后——脚本正文要先读出来、解释器要先定下来，两者都在前面。
-	sealDownlink(p)
-	return p, nil, nil
+	return nil
 }
 
 // copyEnv 把 `[env]` 拷进纸里那张表。

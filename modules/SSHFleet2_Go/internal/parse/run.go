@@ -16,9 +16,13 @@ import (
 // Run 吃整条 argv 与那行版本常量，吐四种结局里的某一种：一屏话（帮助）、一张纸（进流水线）、
 // 一条小命令（交给密钥包）、是不是起不来。塔尖认这四样，自己不判断「这次该干嘛」。
 //
+// 第五个返回值是**延后的**「起不来」：判据表不齐、材料读不到这一类，解析站照旧读、也照旧
+// 判，但报出的时机在闸门判完前面几层之后（ADR-0052 决定五）。它不进纸，与纸一起交给塔尖；
+// 没有这种事时为空。前一个「起不来」仍是当场就报的那种（配置读不到、密钥命令自己的错）。
+//
 // 配置、判据表、终端宽度都由本站自己取——塔尖除了 argv 和号，什么都不递
 // （ADR-0032 第五条：它只搬，不看配置、不看文件在不在）。
-func Run(argv []string, version string) (message.Line, *contract.Plan, *contract.KeyRun, *contract.CannotStart) {
+func Run(argv []string, version string) (message.Line, *contract.Plan, *contract.KeyRun, *contract.CannotStart, *contract.CannotStart) {
 	cfg, err := load()
 	if err != nil {
 		// 配置这一步失败时日志还没建起来（老版步骤 1 在步骤 2 之前），所以那一屏不带「日志：」行。
@@ -26,7 +30,7 @@ func Run(argv []string, version string) (message.Line, *contract.Plan, *contract
 			Kind:   contract.CannotStartConfigLoad,
 			Place:  shownConfigPath,
 			Origin: err.Error(),
-		})
+		}), nil
 	}
 
 	name := "sshfleet2"
@@ -41,25 +45,23 @@ func Run(argv []string, version string) (message.Line, *contract.Plan, *contract
 	if s.help {
 		rev, tm, dirty := buildInfo()
 		screen := message.HelpScreen(name, versionString(version, rev, tm, dirty), console.Width(), helpEntries(cfg.Execution))
-		return screen, nil, nil, nil
+		return screen, nil, nil, nil, nil
 	}
 
-	plan, krun, fail := buildPlan(cfg, s)
-	if fail != nil {
-		return message.Line{}, nil, nil, fail
-	}
-	if krun != nil {
-		// 一条小命令：不封运行上下文、不建纸——它不是流水线那一路（ADR-0032 第五条）。
-		return message.Line{}, nil, krun, nil
+	plan, krun, ending := buildPlan(cfg, s)
+	if plan == nil {
+		// 密钥命令那一支：成功交出 krun，失败交出它自己的那条「起不来」。两者都不进流水线，
+		// 也都不读材料，所以没有延后项。
+		return message.Line{}, nil, krun, ending, nil
 	}
 	// 运行上下文：把这次的原值封进纸上那一格。封不起来就是内部写死的密钥或格式坏了，
 	// 按「起不来」报——不静默降级成明文，那等于把这一格的意义抹掉。
 	sealed, reason, bad := sealRunMeta(runMetaBodyOf(plan, argv, cfg))
 	if bad {
-		return message.Line{}, nil, nil, cannotStartReasonBeforeLog("cli", reason)
+		return message.Line{}, nil, nil, cannotStartReasonBeforeLog("cli", reason), nil
 	}
 	plan.RunMeta = sealed
-	return message.Line{}, plan, nil, nil
+	return message.Line{}, plan, nil, nil, ending
 }
 
 // cannotStartReasonBeforeLog 是配置那一步的「起不来」：老版读配置时日志还没建起来，

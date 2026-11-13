@@ -66,7 +66,7 @@ func TestRefuseExclusivePairs(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			r, _ := Run(c.plan)
+			r, _ := Run(c.plan, false)
 			if r == nil {
 				t.Fatal("应当拒绝，实际放行")
 			}
@@ -83,7 +83,7 @@ func TestPasswdWithConfigRootPasses(t *testing.T) {
 		p.Task.Passwd = &contract.PasswdTask{Raw: "pw"}
 		p.Run.Sudo = true // 配置里的值，命令行没给
 	})
-	if r, _ := Run(plan); r != nil {
+	if r, _ := Run(plan, false); r != nil {
 		t.Fatalf("配置默认是 root 不该算「给了身份开关」：%q", r.Say().Text())
 	}
 }
@@ -95,7 +95,7 @@ func TestRefuseAnswerTooLong(t *testing.T) {
 		p.Run.Answer = "y,继续"
 		p.Run.Downlink = strings.Repeat("x", answerLimit+1)
 	})
-	r, _ := Run(plan)
+	r, _ := Run(plan, false)
 	if r == nil {
 		t.Fatal("超长应当拒绝")
 	}
@@ -114,7 +114,7 @@ func TestAnswerAtLimitPasses(t *testing.T) {
 		p.Run.Answer = "y,继续"
 		p.Run.Downlink = strings.Repeat("x", answerLimit)
 	})
-	if r, _ := Run(plan); r != nil {
+	if r, _ := Run(plan, false); r != nil {
 		t.Fatalf("等于上限不该拒：%q", r.Say().Text())
 	}
 }
@@ -130,7 +130,7 @@ func TestRefuseAnswerUnsupportedInterpreter(t *testing.T) {
 			Raw:    "tclsh",
 		})
 	})
-	r, _ := Run(plan)
+	r, _ := Run(plan, false)
 	if r == nil {
 		t.Fatal("表外解释器应当拒绝")
 	}
@@ -152,7 +152,7 @@ func TestUploadAdviceAdoptedUnderYes(t *testing.T) {
 		p.Nodes = []contract.Node{{IP: "a"}, {IP: "b"}, {IP: "c"}, {IP: "d"}, {IP: "e"}}
 		p.Run.ConcurrencyAdvice = 4
 	})
-	r, note := Run(plan)
+	r, note := Run(plan, false)
 	if r != nil {
 		t.Fatalf("有建议也不该拒：%q", r.Say().Text())
 	}
@@ -172,7 +172,7 @@ func TestUploadAdviceSilentWhenEqual(t *testing.T) {
 		p.Nodes = []contract.Node{{IP: "a"}, {IP: "b"}, {IP: "c"}, {IP: "d"}}
 		p.Run.ConcurrencyAdvice = 4
 	})
-	if _, note := Run(plan); strings.Contains(note.Text(), "并发建议") {
+	if _, note := Run(plan, false); strings.Contains(note.Text(), "并发建议") {
 		t.Fatalf("建议值等于当前值不该留痕：%q", note.Text())
 	}
 	if plan.Run.Concurrency != 0 {
@@ -187,7 +187,7 @@ func TestFallbackAdoptedUnderYes(t *testing.T) {
 		p.Run.Interpreter = "bash"
 		p.Run.FallbackExt = ".bin"
 	})
-	r, note := Run(plan)
+	r, note := Run(plan, false)
 	if r != nil {
 		t.Fatalf("非交互该按确认放行：%q", r.Say().Text())
 	}
@@ -203,7 +203,7 @@ func TestNoShellDropsSudoUnderYes(t *testing.T) {
 		p.Run.Sudo = true
 		p.Run.NoShell = true
 	})
-	r, note := Run(plan)
+	r, note := Run(plan, false)
 	if r != nil {
 		t.Fatalf("不该拒：%q", r.Say().Text())
 	}
@@ -221,7 +221,7 @@ func TestChineseAnswerCancelledUnderYes(t *testing.T) {
 		}
 		p.Run.English = true
 	})
-	r, note := Run(plan)
+	r, note := Run(plan, false)
 	if r == nil {
 		t.Fatal("中文代填值配 english 应当取消")
 	}
@@ -239,7 +239,7 @@ func TestChineseTriggerIsFine(t *testing.T) {
 		}
 		p.Run.English = true
 	})
-	if r, _ := Run(plan); r != nil {
+	if r, _ := Run(plan, false); r != nil {
 		t.Fatalf("触发词里出现中文不该拦：%q", r.Say().Text())
 	}
 }

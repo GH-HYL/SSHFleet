@@ -37,7 +37,12 @@ func collectPlan(t *testing.T, source string) (*contract.Plan, *contract.CannotS
 			{IP: "10.0.0.4"}, {IP: "10.0.0.5"}, {IP: "10.0.0.6"},
 		},
 	}
-	return p, collect(p, cfg)
+	fail := collect(p, cfg)
+	if fail == nil {
+		// 生产里这两步都在材料那一段：采集之后才轮到建议（它要节点数）。
+		applyUploadAdvice(p, cfg)
+	}
+	return p, fail
 }
 
 // 普通文件与目录：目录递归、相对路径按 POSIX 斜杠、总大小求和。
@@ -318,6 +323,7 @@ func TestCollectSuggestionCappedByNodes(t *testing.T) {
 	if fail := collect(p, cfg); fail != nil {
 		t.Fatalf("不该报错：%v", message.CannotStartText(*fail))
 	}
+	applyUploadAdvice(p, cfg)
 	if p.Run.ConcurrencyAdvice != 2 {
 		t.Fatalf("建议应当按节点数封顶到 2，实际 %d", p.Run.ConcurrencyAdvice)
 	}

@@ -19,7 +19,7 @@ import (
 // traceOf 走站入口（递纸收拒绝），拿这一拒报给日志的正文。
 func traceOf(t *testing.T, p *contract.Plan) string {
 	t.Helper()
-	r, _ := Run(p)
+	r, _ := Run(p, false)
 	if r == nil {
 		t.Fatal("这一张纸应当被拒，却放行了")
 	}

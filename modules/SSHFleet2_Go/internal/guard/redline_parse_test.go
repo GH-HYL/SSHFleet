@@ -11,7 +11,7 @@ import (
 
 func TestRedlineParseSaysOrFail(t *testing.T) {
 	t.Chdir(writeRedlineConfig(t)) // 配置在：按本机形态造一份（假件只住测试）
-	say, _, _, fail := parse.Run([]string{"sshfleet2", "-h"}, "9.9.9")
+	say, _, _, fail, _ := parse.Run([]string{"sshfleet2", "-h"}, "9.9.9")
 	if fail != nil {
 		t.Errorf("配置在时不应是起不来")
 	}
@@ -20,7 +20,7 @@ func TestRedlineParseSaysOrFail(t *testing.T) {
 	}
 
 	t.Chdir(t.TempDir()) // 配置不在
-	_, _, _, fail = parse.Run([]string{"sshfleet2", "-h"}, "9.9.9")
+	_, _, _, fail, _ = parse.Run([]string{"sshfleet2", "-h"}, "9.9.9")
 	if fail == nil {
 		t.Errorf("配置不在应是起不来")
 	}
