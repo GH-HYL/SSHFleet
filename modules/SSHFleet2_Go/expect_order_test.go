@@ -80,9 +80,9 @@ var orderRows = []orderRow{
 		[]string{"文件读不到"}, "", "", "", nil},
 	{28, "3", []string{"-T", "abc", "-c", "ls", "-f", "/nope.csv"}, "-T 参数格式错误",
 		[]string{"文件读不到"}, "", "", "", nil},
-	{29, "3", []string{"-c", "ls"}, "没有给节点清单", []string{"读取内容时发生错误"}, "", "", "03", nil},
+	{29, "3", []string{"-c", "ls"}, "这次没有节点清单", []string{"读取内容时发生错误"}, "", "", "", nil},
 	{30, "3", []string{"-s", "./x.xyz", "-f", "ok.csv"}, "继续用 bash",
-		[]string{"发现禁止命令"}, "", "n", "03", nil},
+		[]string{"发现禁止命令"}, "", "n", "", nil},
 	{31, "3", []string{"-c", "rm -rf /", "-p", "/opt/app/", "-f", "ok.csv"}, "不能搭配 -c 或 -s",
 		[]string{"发现禁止命令"}, "", "", "", nil},
 

@@ -47,6 +47,14 @@ func Run(p *contract.Plan, skipConfirm bool) (Refusal, message.Line) {
 	if r := valueRefusal(p); r != nil {
 		return r, message.Line{}
 	}
+	if r := manifestRefusal(p); r != nil {
+		return r, message.Line{}
+	}
+	// 第三层收尾：脚本后缀没配到解释器时那一问。它的答案改变下发行（回退到哪个解释器），
+	// 所以它是取值的一部分，排在判决之前（ADR-0052 决定二）。
+	if r, note := fallbackQuestion(p); r != nil || note.Text() != "" {
+		return r, note
+	}
 	if r, note := dangerRefusal(p); r != nil || note.Text() != "" {
 		return r, note
 	}
@@ -303,6 +311,17 @@ func valueRefusal(p *contract.Plan) Refusal {
 		}
 	}
 	return nil
+}
+
+// manifestRefusal 缺清单：`-f` 是必填，这一次连它都没给。
+//
+// 属第三层必填的末尾——取值都过了，才轮得到「连清单都没有」。它不是清单校验：那一刻
+// 清单还不存在，谈不上校验（ADR-0052 决定二；ADR-0032 决定一不动）。
+func manifestRefusal(p *contract.Plan) Refusal {
+	if p.Resources.Manifest != "" {
+		return nil
+	}
+	return refuse(message.RefuseManifestMissing())
 }
 
 // dangerRefusal 危险命令：禁止档直接拒，提醒档问人，答否算当场喊停。

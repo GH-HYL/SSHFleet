@@ -17,10 +17,11 @@ import (
 	"sshfleet2/internal/message"
 )
 
-// confirmFlow 是确认那一段的全流程。
+// confirmFlow 是确认那一段的全流程（第七层：人点头）。
 func confirmFlow(p *contract.Plan) (Refusal, message.Line) {
-	// 一、脚本后缀没配到解释器：当场问一句是否用回退解释器继续。
-	if r, note := fallbackConfirm(p); r != nil || note.Text() != "" {
+	// 一、脚本后缀没配到解释器、又走了非交互那条路：那一问在第三层尾就问过了（`--yes`
+	// 不问），这里只剩「跳过确认」那半句与留痕。
+	if r, note := fallbackSkipped(p); r != nil || note.Text() != "" {
 		return r, note
 	}
 	// 二、`--sudo` 与 `--no-shell` 同给：sudo 不生效，先说清再问一句。
@@ -79,19 +80,17 @@ func maskedNewPassword(p *contract.Plan) string {
 	return mask.Secret(p.Task.Passwd.NewPassword)
 }
 
-// fallbackConfirm 脚本后缀没配到解释器时那一问。
+// fallbackQuestion 是脚本后缀没配到解释器时那一问，住第三层尾。
 //
-// 非交互（--yes）下按确认放行并留痕（老版就是这个缺省）。答否 ⇒ 拒绝、当场退出、
-// **不留归档目录**——所以它是拒绝，不是起不来。
-func fallbackConfirm(p *contract.Plan) (Refusal, message.Line) {
-	if p.Task.Script == nil || p.Run.FallbackExt == "" {
+// 判据是「答案改变后面判什么」（ADR-0052 决定二）：答是就回退到那个解释器，下发行跟着变，
+// 所以它算取值的一部分，必须排在判决之前——否则一条命中危险规则的脚本会先出禁止框，
+// 而使用者连「按什么解释器跑」都还没答。
+//
+// 非交互（--yes）不问：那半句「跳过确认」与留痕在第七层（`fallbackSkipped`），
+// 不该因为这里而提前。
+func fallbackQuestion(p *contract.Plan) (Refusal, message.Line) {
+	if p.Task.Script == nil || p.Run.FallbackExt == "" || p.Run.Yes {
 		return nil, message.Line{}
-	}
-	if p.Run.Yes {
-		// 非交互下整屏不出：老版在 --yes 里跳过了这一问，屏上只剩「跳过确认」那一行，
-		// 回退到 bash 这件事只留痕。
-		ask.Ask(message.ConfirmSkippedLine(), true, true)
-		return nil, message.FallbackTrace(p.Run.FallbackExt, p.Run.Interpreter)
 	}
 	switch ask.AskQuestion(message.FallbackHint(p.Run.FallbackExt), message.FallbackQuestion(p.Run.Interpreter), false) {
 	case ask.NoInput:
@@ -101,6 +100,17 @@ func fallbackConfirm(p *contract.Plan) (Refusal, message.Line) {
 		return newRefusal(message.Line{}), message.CancelTrace()
 	}
 	return nil, message.Line{}
+}
+
+// fallbackSkipped 是非交互那条路上「回退到哪个解释器」的收尾：一行提示加一条留痕。
+//
+// 老版在 --yes 里跳过了那一问，屏上只剩「跳过确认」这一行（ADR-0042 的次序不变）。
+func fallbackSkipped(p *contract.Plan) (Refusal, message.Line) {
+	if p.Task.Script == nil || p.Run.FallbackExt == "" || !p.Run.Yes {
+		return nil, message.Line{}
+	}
+	ask.Ask(message.ConfirmSkippedLine(), true, true)
+	return nil, message.FallbackTrace(p.Run.FallbackExt, p.Run.Interpreter)
 }
 
 // noShellSudoGate `--sudo` 与 `--no-shell` 同给时那道门（04 漏下的一道，本阶段补齐）。

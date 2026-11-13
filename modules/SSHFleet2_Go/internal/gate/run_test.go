@@ -18,7 +18,7 @@ import (
 
 func planOf(mode contract.Mode, edit func(*contract.Plan)) *contract.Plan {
 	// Yes 为真：这些用例判的是「拦不拦」，不该真去等一行输入（确认屏由 07 号单的用例管）。
-	p := &contract.Plan{Mode: mode, Run: contract.RunParams{Yes: true}}
+	p := &contract.Plan{Mode: mode, Run: contract.RunParams{Yes: true}, Resources: contract.Resources{Manifest: "ok.csv"}}
 	if edit != nil {
 		edit(p)
 	}

@@ -18,6 +18,8 @@ func redlinePaper() *contract.Plan {
 		Task: contract.Task{Command: &contract.CommandTask{Text: "uptime"}},
 		// Yes 为真：这张纸只用来判形状，不该真的去等一行输入。
 		Run: contract.RunParams{Concurrency: 0, TimeoutConnect: 10, TimeoutExecute: 60, TimeoutTransfer: 300, Yes: true},
+		// 清单给了：缺 -f 是另一条判据（第三层必填），不属于这张纸要判的形状。
+		Resources: contract.Resources{Manifest: "ok.csv"},
 	}
 }
 
