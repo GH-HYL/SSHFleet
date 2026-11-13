@@ -316,20 +316,23 @@ func materials(p *contract.Plan, cfg *settings, given map[string]bool, vals map[
 		return fail
 	}
 
-	// 读清单：第一张纸的「对谁做」那一格。
-	m, fail := readManifest(p.Resources.Manifest)
-	if fail != nil {
-		return fail
+	// 缺 `-f` 不在这里报：那是第三层的「必填」，由闸门说一句自己的话（ADR-0052 决定二）。
+	// 本站只在给了清单时读它。
+	if p.Resources.Manifest != "" {
+		m, fail := readManifest(p.Resources.Manifest)
+		if fail != nil {
+			return fail
+		}
+		if m.headerDropped {
+			p.Notices = append(p.Notices, contract.Notice{Kind: contract.NoticeManifestHeader})
+		}
+		nodes, notices, fail := buildNodes(m.rows, cfg, given["--key"])
+		if fail != nil {
+			return fail
+		}
+		p.Nodes = nodes
+		p.Notices = append(p.Notices, notices...)
 	}
-	if m.headerDropped {
-		p.Notices = append(p.Notices, contract.Notice{Kind: contract.NoticeManifestHeader})
-	}
-	nodes, notices, fail := buildNodes(m.rows, cfg, given["--key"])
-	if fail != nil {
-		return fail
-	}
-	p.Nodes = nodes
-	p.Notices = append(p.Notices, notices...)
 
 	// 改密值（建站 05 的 07 号单）：按加密开关解释成明文，形态不对当场拦下。
 	if p.Task.Passwd != nil {

@@ -16,16 +16,16 @@ func TestEnvelopeRefusesMismatch(t *testing.T) {
 		make func() *contract.Plan
 	}{
 		{"标签是命令，载荷是空的", func() *contract.Plan {
-			return &contract.Plan{Mode: contract.ModeCommand, Run: contract.RunParams{Yes: true}}
+			return &contract.Plan{Mode: contract.ModeCommand, Run: contract.RunParams{Yes: true}, Resources: contract.Resources{Manifest: "ok.csv"}}
 		}},
 		{"标签是命令，装的却是脚本", func() *contract.Plan {
-			return &contract.Plan{Mode: contract.ModeCommand, Task: contract.Task{Script: &contract.ScriptTask{Path: "a.sh"}}, Run: contract.RunParams{Yes: true}}
+			return &contract.Plan{Mode: contract.ModeCommand, Task: contract.Task{Script: &contract.ScriptTask{Path: "a.sh"}}, Run: contract.RunParams{Yes: true}, Resources: contract.Resources{Manifest: "ok.csv"}}
 		}},
 		{"同时装了两份载荷", func() *contract.Plan {
 			return &contract.Plan{Mode: contract.ModeCommand, Task: contract.Task{
 				Command: &contract.CommandTask{Text: "uptime"},
 				Script:  &contract.ScriptTask{Path: "a.sh"},
-			}, Run: contract.RunParams{Yes: true}}
+			}, Run: contract.RunParams{Yes: true}, Resources: contract.Resources{Manifest: "ok.csv"}}
 		}},
 	}
 	for _, c := range cases {
@@ -47,6 +47,8 @@ func TestEnvelopePassesWellFormed(t *testing.T) {
 		Mode: contract.ModeCommand,
 		Task: contract.Task{Command: &contract.CommandTask{Text: "uptime"}},
 		Run:  contract.RunParams{Yes: true},
+		// 清单给了：这张纸判的不是「缺 -f」，那一句会让所有用例红成同一条。
+		Resources: contract.Resources{Manifest: "ok.csv"},
 	}
 	if r, _ := Run(p, false); r != nil && strings.Contains(r.Say().Text(), "载荷对不上") {
 		t.Fatalf("合法的纸不该被信封那条拦：%s", r.Say().Text())
@@ -62,6 +64,8 @@ func TestConfirmSkippedWhenYes(t *testing.T) {
 		Mode: contract.ModeCommand,
 		Task: contract.Task{Command: &contract.CommandTask{Text: "uptime"}},
 		Run:  contract.RunParams{Yes: true},
+		// 清单给了：这张纸判的不是「缺 -f」，那一句会让所有用例红成同一条。
+		Resources: contract.Resources{Manifest: "ok.csv"},
 	}
 	r, trace := Run(p, false)
 	if r != nil {
@@ -78,6 +82,8 @@ func TestConfirmNotReachedWhenEarlierCheckRefuses(t *testing.T) {
 		Mode: contract.ModeCommand,
 		Task: contract.Task{Command: &contract.CommandTask{Text: "   "}}, // -c 只有空白
 		Run:  contract.RunParams{Yes: true},
+		// 清单给了：这张纸判的不是「缺 -f」，那一句会让所有用例红成同一条。
+		Resources: contract.Resources{Manifest: "ok.csv"},
 	}
 	r, _ := Run(p, false)
 	if r == nil {
