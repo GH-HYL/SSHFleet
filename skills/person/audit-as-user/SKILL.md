@@ -1,7 +1,6 @@
 ---
 name: audit-as-user
 description: 【用户视角审计】由没有上下文的读者代读，判一处表达的自足性：脱离作者的语境是否仍成立、读者能否只凭所见复述出对象与后果。凡写给人读的内容皆适用，落成一张改写表。
-disable-model-invocation: true
 ---
 
 # 用户视角审计
