@@ -143,33 +143,23 @@ func load() (*settings, error) {
 	}
 	lines, err := tokenize(data)
 	if err != nil {
-		return nil, fmt.Errorf("%s", message.ProblemHint(
-			message.TOMLParseFailed(err.Error()),
-			"多数是引号或方括号没配对，照随包的配置文件核一遍"))
+		return nil, fmt.Errorf("%s", message.TOMLParseFailed(err.Error()))
 	}
 	raw := rawView(lines)
 
 	// 已移除的段：给一句能照做的说明，不混进「未识别字段」。
 	if _, ok := raw["paths"]; ok {
-		return nil, fmt.Errorf("%s", message.ProblemHint(
-			"配置里不允许出现 [paths] 段",
-			"把 [paths] 整段删掉即可，其余字段不用动"))
+		return nil, fmt.Errorf("%s", message.ConfigPathsSectionForbidden())
 	}
 	if _, ok := raw["execution.env"]; ok {
-		return nil, fmt.Errorf("%s", message.ProblemHint(
-			"配置里不再有 [execution.env] 段",
-			"把段名改成 [env] 即可——挪到顶层，里面一个个变量不用动"))
+		return nil, fmt.Errorf("%s", message.ConfigExecutionEnvSectionRenamed())
 	}
 
 	if unknown := unknownKeys(raw); len(unknown) > 0 {
-		return nil, fmt.Errorf("%s", message.ProblemHint(
-			"配置包含未识别字段："+strings.Join(unknown, ", "),
-			"请使用随包提供的配置文件，不要增删任何字段"))
+		return nil, fmt.Errorf("%s", message.ConfigUnknownFields(strings.Join(unknown, ", ")))
 	}
 	if missing := missingKeys(raw); len(missing) > 0 {
-		return nil, fmt.Errorf("%s", message.ProblemHint(
-			"配置缺少必填字段："+strings.Join(missing, ", "),
-			"请使用随包提供的配置文件，不要删掉里面的任何一行"))
+		return nil, fmt.Errorf("%s", message.ConfigMissingFields(strings.Join(missing, ", ")))
 	}
 
 	cfg, err := decode(raw)
@@ -188,11 +178,7 @@ func load() (*settings, error) {
 // missingConfigError 对位老实现 config.Load 的缺失文案（系统原话那句不翻新）。
 func missingConfigError() error {
 	wd, _ := os.Getwd()
-	return fmt.Errorf("%s", message.ProblemHint(
-		"这个位置没有配置文件\n"+
-			"      应该在这里："+shownConfigPath+"\n"+
-			"      当前目录："+wd,
-		"请在本工具的解压目录下执行；配置文件必须放在该目录的 config 文件夹里"))
+	return fmt.Errorf("%s", message.ConfigNotInWorkDir(shownConfigPath, wd))
 }
 
 // unknownKeys 列出不认识的键；开放表里的键名不校验。
@@ -362,9 +348,7 @@ func stringOf(raw rawConfig, section, key string) (string, error) {
 	if isQuoted(v) {
 		return unquote(v), nil
 	}
-	return "", fmt.Errorf("%s", message.ProblemHint(
-		message.ValueInvalidBecause(section+"."+key, v, message.ReasonNotQuoted),
-		"给这一格的值加上成对的引号（'…' 或 \"…\"）即可；数字与布尔不用加"))
+	return "", fmt.Errorf("%s", message.ConfigStringValueUnquoted(section+"."+key, v))
 }
 
 // validateValues 取值合规性：端口、三个超时、上传阈值、[env]、[interpreter]。
@@ -509,19 +493,13 @@ func normalizeConfigPath(name, raw string) (string, error) {
 		p = strings.ToUpper(p[:1]) + p[1:]
 	}
 
-	example, absHint := "/home/ops/.keys", "写成以 / 开头的本机路径"
-	if isWindows() {
-		example, absHint = "D:/Keys", "写成带盘符的本机路径"
-	}
-	pathErr := func(head, reason string) error {
-		return fmt.Errorf("%s", message.Problem(
-			message.CurrentValue(name+" "+head, raw),
-			reason,
-			fmt.Sprintf("%s，例如 %s", absHint, example)))
+	// 这一族的话按「哪一种毛病」分：字与例子都在 message，这里只挑那一种。
+	pathErr := func(kind message.PathProblemKind) error {
+		return fmt.Errorf("%s", message.ConfigPathProblem(name, raw, kind, isWindows()))
 	}
 
 	if strings.HasPrefix(p, "~") {
-		return "", pathErr("不支持 ~", "~ 不会被展开，写什么就按什么找")
+		return "", pathErr(message.PathTilde)
 	}
 
 	if isWindows() {
@@ -529,21 +507,21 @@ func normalizeConfigPath(name, raw string) (string, error) {
 			return p, nil
 		}
 		if strings.HasPrefix(p, "/") {
-			return "", pathErr("不是本机的绝对路径", "本机是 Windows，这个写法没有盘符")
+			return "", pathErr(message.PathNoDrive)
 		}
-		return "", pathErr("必须是绝对路径", "配置里的路径一律写全路径；相对路径只在清单里能用")
+		return "", pathErr(message.PathRelative)
 	}
 
 	if hasDrive {
-		return "", pathErr("不是本机的绝对路径", "本机是 Unix 系系统，这是 Windows 盘符写法")
+		return "", pathErr(message.PathDriveOnUnix)
 	}
 	if strings.HasPrefix(p, "//") {
-		return "", pathErr("不是本机的绝对路径", "本机是 Unix 系系统，这是 Windows 网络路径（UNC）写法")
+		return "", pathErr(message.PathUncOnUnix)
 	}
 	if filepath.IsAbs(p) {
 		return p, nil
 	}
-	return "", pathErr("必须是绝对路径", "配置里的路径一律写全路径；相对路径只在清单里能用")
+	return "", pathErr(message.PathRelative)
 }
 
 // isWindows 决定路径形态的判定口径与报错措辞。

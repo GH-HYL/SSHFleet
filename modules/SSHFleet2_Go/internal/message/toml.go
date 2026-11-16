@@ -38,11 +38,13 @@ func TOMLDuplicateKey(line int, key, section string, arrayItem int) string {
 	return tomlLine(line) + "的键 " + key + " 在 " + tomlSectionWhere(section, arrayItem) + " 里写了两次"
 }
 
-// TOMLParseFailed 是配置读不动那一屏的头一句：「解析 TOML 失败：<原因>」。
+// TOMLParseFailed 是配置读不动那一屏：问题行「解析 TOML 失败：<原因>」加一句提示。
 //
-// 原因就是上面那几句之一，原样接在后面。
+// 原因就是上面那几句之一，原样接在后面；提示是固定的——能写错的就那几处。
 func TOMLParseFailed(reason string) string {
-	return "解析 TOML 失败：" + reason
+	return ProblemHint(
+		"解析 TOML 失败："+reason,
+		"多数是引号或方括号没配对，照随包的配置文件核一遍")
 }
 
 // tomlLine 是那几句共用的行号前缀：「第 N 行」。

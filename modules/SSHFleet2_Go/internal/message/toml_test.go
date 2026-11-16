@@ -23,7 +23,9 @@ func TestTOMLErrorText(t *testing.T) {
 		}
 	}
 
-	if got := TOMLParseFailed(TOMLKeyNameEmpty(12)); got != "解析 TOML 失败：第 12 行的键名是空的" {
-		t.Fatalf("配置那一屏的头一句：%q", got)
+	if got := TOMLParseFailed(TOMLKeyNameEmpty(12)); got !=
+		"解析 TOML 失败：第 12 行的键名是空的\n"+
+			"提示：多数是引号或方括号没配对，照随包的配置文件核一遍" {
+		t.Fatalf("配置那一屏：%q", got)
 	}
 }
