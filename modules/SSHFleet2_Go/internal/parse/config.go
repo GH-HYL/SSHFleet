@@ -414,16 +414,10 @@ func validateEnv(env map[string]string) error {
 			continue
 		}
 		if !envNameRe.MatchString(name) {
-			return fmt.Errorf("%s", message.Problem(
-				fmt.Sprintf("env 里的 %q 不是合法的环境变量名", name),
-				"shell 的 export 只认「字母或下划线开头，后接字母、数字、下划线」的名字，写别的到远端会报 not a valid identifier、变量不生效",
-				"改成一个合法名字，例如 MY_VAR"))
+			return fmt.Errorf("%s", message.EnvNameInvalid(name))
 		}
 		if trailingBackslashes(value)%2 == 1 {
-			return fmt.Errorf("%s", message.Problem(
-				message.CurrentValue(fmt.Sprintf("env 里的 %q 取值不能以反斜杠结尾", name), fmt.Sprintf("%q", value)),
-				"值会被包进双引号下发，结尾的反斜杠会吃掉那个收尾引号，远端整条命令变成语法错",
-				"要一个反斜杠就写两个"))
+			return fmt.Errorf("%s", message.EnvValueTrailingBackslash(name, value))
 		}
 	}
 	return nil
@@ -442,17 +436,13 @@ func trailingBackslashes(s string) int {
 func validateInterpreter(it *interpreter) error {
 	it.Command = strings.TrimSpace(it.Command)
 	if it.Command == "" {
-		return fmt.Errorf("%s", message.ProblemHint(
-			"interpreter.command 不能为空",
-			"写命令模式（-c）要用的解释器，例如 bash"))
+		return fmt.Errorf("%s", message.InterpreterCommandEmpty())
 	}
 	if strings.ContainsAny(it.Command, "\r\n") {
-		return fmt.Errorf("%s", message.CurrentValue("interpreter.command 不能含换行", fmt.Sprintf("%q", it.Command)))
+		return fmt.Errorf("%s", message.InterpreterCommandNewline(it.Command))
 	}
 	if len(it.Script) == 0 {
-		return fmt.Errorf("%s", message.ProblemHint(
-			"interpreter.script 至少要配一条",
-			"写成 \".sh\" = \"bash\" 这样，后缀带点、等号两边都要有值"))
+		return fmt.Errorf("%s", message.InterpreterScriptMissing())
 	}
 	norm := make(map[string]string, len(it.Script))
 	seen := make(map[string]string, len(it.Script))
@@ -460,28 +450,20 @@ func validateInterpreter(it *interpreter) error {
 		key := strings.TrimSpace(rawKey)
 		val := strings.TrimSpace(rawVal)
 		if key == "" {
-			return fmt.Errorf("%s", message.ProblemHint(
-				"interpreter.script 里有一条后缀是空的",
-				"每条都要写成 \".sh\" = \"bash\"，后缀带点、等号两边都要有值"))
+			return fmt.Errorf("%s", message.InterpreterSuffixBlank())
 		}
 		if !strings.HasPrefix(key, ".") {
-			return fmt.Errorf("%s", message.ProblemHint(
-				message.CurrentValue("interpreter.script 的后缀要以点开头", fmt.Sprintf("%q", key)),
-				"写成 \".sh\"，不要写成 \"sh\""))
+			return fmt.Errorf("%s", message.InterpreterSuffixNotDotted(key))
 		}
 		if val == "" {
-			return fmt.Errorf("%s", message.ProblemHint(
-				fmt.Sprintf("interpreter.script 里 %q 没有配解释器", key),
-				"等号右边要写解释器，例如 \".sh\" = \"bash\""))
+			return fmt.Errorf("%s", message.InterpreterValueMissing(key))
 		}
 		if strings.ContainsAny(val, "\r\n") {
-			return fmt.Errorf("%s", message.CurrentValue(fmt.Sprintf("interpreter.script 里 %q 的解释器不能含换行", key), fmt.Sprintf("%q", val)))
+			return fmt.Errorf("%s", message.InterpreterValueNewline(key, val))
 		}
 		lower := strings.ToLower(key)
 		if prev, dup := seen[lower]; dup {
-			return fmt.Errorf("%s", message.ProblemHint(
-				fmt.Sprintf("interpreter.script 里后缀重复：%q 与 %q 是同一个后缀（大小写不区分）", prev, key),
-				"一个后缀只能配一个解释器"))
+			return fmt.Errorf("%s", message.InterpreterSuffixDuplicate(prev, key))
 		}
 		seen[lower] = key
 		norm[lower] = val
