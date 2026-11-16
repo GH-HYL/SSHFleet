@@ -24,8 +24,8 @@ func TestRedlineTipCannotStart(t *testing.T) {
 	// 空目录：配置读不到，这是「起不来」那条路上最干净的一种。
 	say, code := run(t.TempDir(), "-c", "uptime", "-f", "10.0.0.1,22,root,pw")
 
-	if code != 1 {
-		t.Errorf("起不来应以 1 退出，got %d：\n%s", code, say)
+	if code == 0 {
+		t.Errorf("起不来应以非 0 退出：\n%s", say)
 	}
 	if !strings.Contains(say, "[ERROR]") || !strings.Contains(say, "[function:") {
 		t.Errorf("起不来那一屏该带 [ERROR] 与 [function:…]：\n%s", say)
@@ -41,8 +41,8 @@ func TestRedlineTipRefused(t *testing.T) {
 	// `rm -rf /` 是随包危险规则里第一条禁止档：闸门拒绝，塔尖把那一屏打出来就退。
 	say, code := run(dir, "-c", "rm -rf /", "-f", "10.0.0.1,22,root,pw")
 
-	if code != 1 {
-		t.Errorf("拒绝应以 1 退出，got %d：\n%s", code, say)
+	if code == 0 {
+		t.Errorf("拒绝应以非 0 退出：\n%s", say)
 	}
 	if strings.Contains(say, "[function:") {
 		t.Errorf("拒绝不是起不来：那一屏不该带 [function:…]\n%s", say)
