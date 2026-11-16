@@ -25,6 +25,16 @@ func TestOptionTableShape(t *testing.T) {
 	}
 }
 
+// 每个长选项都取得到说明（04 号单的验收判据）：说明按长名住 `message`，漏配一条屏上就少
+// 一行——那种缺不是报错，是悄悄少一行，所以由这条断言拦下。
+func TestEveryLongOptionHasDesc(t *testing.T) {
+	for _, o := range options {
+		if _, ok := message.HelpDesc(o.long, true); !ok {
+			t.Errorf("%s 在 message 里没有说明", o.long)
+		}
+	}
+}
+
 func TestHelpEntriesGroups(t *testing.T) {
 	entries := helpEntries(execution{Sudo: true, TimeoutConnect: 10, TimeoutExecute: 60, TimeoutTransfer: 300})
 
