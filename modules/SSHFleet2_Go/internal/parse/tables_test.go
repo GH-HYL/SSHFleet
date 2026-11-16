@@ -3,9 +3,11 @@ package parse
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"sshfleet2/internal/contract"
+	"sshfleet2/internal/message"
 )
 
 // 判据表的编译口径（自定义区）：老版编译危险规则时统一加 `(?i)`（对位旧实现的
@@ -26,6 +28,20 @@ func TestBuildRuleCompilesCaseInsensitive(t *testing.T) {
 		if !rule.Patterns[0].MatchString(s) {
 			t.Fatalf("%q 应当命中", s)
 		}
+	}
+}
+
+// 「出处」那句点名的六个键就是本包认的六个（自定义区）：那句字住 message，认哪些键的判据
+// 住本包，两处各有一份。这条把两份钉在一起——加第七项时这里先红，屏上就不会继续说「六项」。
+func TestDangerRuleKnownFieldsCoverEveryKey(t *testing.T) {
+	sentence := message.DangerRuleKnownFields()
+	for key := range dangerRuleKeys {
+		if !strings.Contains(sentence, key) {
+			t.Fatalf("「出处」那句里没有 %q：\n%s", key, sentence)
+		}
+	}
+	if len(dangerRuleKeys) != 6 {
+		t.Fatalf("认的键有 %d 个，那句还说着六项——加一项要连那句字一起改：\n%s", len(dangerRuleKeys), sentence)
 	}
 }
 

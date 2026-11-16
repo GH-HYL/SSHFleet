@@ -12,6 +12,7 @@ import (
 	"sshfleet2/internal/credential"
 	"sshfleet2/internal/criterion"
 	"sshfleet2/internal/mask"
+	"sshfleet2/internal/message"
 )
 
 // 逐台补全：清单那一行 → 一台能连的机器。
@@ -267,7 +268,8 @@ func resolveSecret(raw string, cfg *settings) (string, error) {
 }
 
 // errNoSecretDir 写的是相对名、配置里却没有 secret_dir：这是配置缺项，不是这一行的写法问题。
-var errNoSecretDir = errors.New("写的是相对路径，但配置里没配 credential.secret_dir（提示：在配置的 [credential] 段配上 secret_dir，或这一格改写本机绝对路径）")
+// 那句话住 `message`，这里只留一个能认出「是这一种」的值。
+var errNoSecretDir = errors.New(message.CredentialRelativeWithoutSecretDir())
 
 // padRow 把短行列补到六列：缺的列按空值处理，由各自的补全规则去兜底。
 func padRow(row []string) []string {
