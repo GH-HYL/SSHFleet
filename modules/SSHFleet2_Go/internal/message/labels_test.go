@@ -109,3 +109,31 @@ func scanBare(t *testing.T, path string, labels []string) error {
 	}
 	return nil
 }
+
+// 取值非法那几句：理由与括号都归这里，期望值写死字面量。
+func TestValueInvalidBecause(t *testing.T) {
+	cases := []struct {
+		name, value string
+		reason      ValueInvalidReason
+		want        string
+	}{
+		{"a.b", "x", ReasonNotInt, "a.b 取值非法：x（须为整数）"},
+		{"a.b", "maybe", ReasonNotBool, "a.b 取值非法：maybe（只认 true / false）"},
+		{"a.b", "vw", ReasonNotQuoted, "a.b 取值非法：vw（字符串值要带引号）"},
+		{"account.port", "0", ReasonPort, "account.port 取值非法：0（须为 1-65535）"},
+		{"execution.timeout_execute", "0", ReasonPositiveSeconds, "execution.timeout_execute 取值非法：0（须为正整数，单位秒）"},
+		{"upload.small_file", "0", ReasonPositiveBytes, "upload.small_file 取值非法：0（须为正整数，单位字节）"},
+		{"upload.medium_parallel", "0", ReasonPositive, "upload.medium_parallel 取值非法：0（须为正整数）"},
+	}
+	for _, c := range cases {
+		if got := ValueInvalidBecause(c.name, c.value, c.reason); got != c.want {
+			t.Fatalf("取值非法那一句：%q，该是 %q", got, c.want)
+		}
+	}
+}
+
+func TestUploadThresholdOrder(t *testing.T) {
+	if got := UploadThresholdOrder(9, 10); got != "large_file(9) 不能小于 small_file(10)" {
+		t.Fatalf("上传阈值先后那句：%q", got)
+	}
+}
