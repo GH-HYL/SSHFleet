@@ -1,5 +1,7 @@
 package message
 
+import "fmt"
+
 // 两个取值标签：「当前值：」与「取值非法：」。
 //
 // 它们原先散在十来处 `fmt.Sprintf` 里：同一句话有好几个写入点，改一个说法就得逐处找，
@@ -27,6 +29,39 @@ func ValueInvalid(name, value string) string {
 // 「自己数一下要不要空格」这种活。
 func ValueInvalidTight(subject, value string) string {
 	return subject + "取值非法：" + value
+}
+
+// ValueInvalidReason 是「取值非法」那句括号里的理由。理由本身也是字，所以归这里；
+// 站里只挑一个枚举值，不再自己拼括号与措辞。
+type ValueInvalidReason string
+
+const (
+	// ReasonNotInt 「（须为整数）」。
+	ReasonNotInt ValueInvalidReason = "须为整数"
+	// ReasonNotBool 「（只认 true / false）」。
+	ReasonNotBool ValueInvalidReason = "只认 true / false"
+	// ReasonNotQuoted 「（字符串值要带引号）」。
+	ReasonNotQuoted ValueInvalidReason = "字符串值要带引号"
+	// ReasonPort 「（须为 1-65535）」。
+	ReasonPort ValueInvalidReason = "须为 1-65535"
+	// ReasonPositiveSeconds 「（须为正整数，单位秒）」。
+	ReasonPositiveSeconds ValueInvalidReason = "须为正整数，单位秒"
+	// ReasonPositiveBytes 「（须为正整数，单位字节）」。
+	ReasonPositiveBytes ValueInvalidReason = "须为正整数，单位字节"
+	// ReasonPositive 「（须为正整数）」。
+	ReasonPositive ValueInvalidReason = "须为正整数"
+)
+
+// ValueInvalidBecause 拼「<项名> 取值非法：<值>（<理由>）」——括号是全角，紧贴值。
+func ValueInvalidBecause(name, value string, reason ValueInvalidReason) string {
+	return ValueInvalid(name, value) + "（" + string(reason) + "）"
+}
+
+// UploadThresholdOrder 上传阈值那两句的先后：「large_file(9) 不能小于 small_file(10)」。
+//
+// 括号里的键名与数字一起成形：站里只递两个值，不拼键名。
+func UploadThresholdOrder(large, small int) string {
+	return fmt.Sprintf("large_file(%d) 不能小于 small_file(%d)", large, small)
 }
 
 // tagLabel 是那句话开头那个方括号标签（`[ERROR]` / `[警告]`）唯一的成形处：

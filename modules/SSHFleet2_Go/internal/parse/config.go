@@ -336,7 +336,7 @@ func intOf(raw rawConfig, section, key string) (int, error) {
 	v := raw[section][key]
 	n, err := strconv.Atoi(strings.TrimSpace(v))
 	if err != nil {
-		return 0, fmt.Errorf("%s（须为整数）", message.ValueInvalid(section+"."+key, v))
+		return 0, fmt.Errorf("%s", message.ValueInvalidBecause(section+"."+key, v, message.ReasonNotInt))
 	}
 	return n, nil
 }
@@ -350,7 +350,7 @@ func boolOf(raw rawConfig, section, key string) (bool, error) {
 	case "false":
 		return false, nil
 	}
-	return false, fmt.Errorf("%s（只认 true / false）", message.ValueInvalid(section+"."+key, v))
+	return false, fmt.Errorf("%s", message.ValueInvalidBecause(section+"."+key, v, message.ReasonNotBool))
 }
 
 // stringOf 取一个字符串键：值必须写成带引号的字符串（'…' 或 "…"）。
@@ -363,14 +363,14 @@ func stringOf(raw rawConfig, section, key string) (string, error) {
 		return unquote(v), nil
 	}
 	return "", fmt.Errorf("%s", message.ProblemHint(
-		fmt.Sprintf("%s（字符串值要带引号）", message.ValueInvalid(section+"."+key, v)),
+		message.ValueInvalidBecause(section+"."+key, v, message.ReasonNotQuoted),
 		"给这一格的值加上成对的引号（'…' 或 \"…\"）即可；数字与布尔不用加"))
 }
 
 // validateValues 取值合规性：端口、三个超时、上传阈值、[env]、[interpreter]。
 func validateValues(cfg *settings) error {
 	if cfg.account.Port < 1 || cfg.account.Port > 65535 {
-		return fmt.Errorf("%s（须为 1-65535）", message.ValueInvalid("account.port", strconv.Itoa(cfg.account.Port)))
+		return fmt.Errorf("%s", message.ValueInvalidBecause("account.port", strconv.Itoa(cfg.account.Port), message.ReasonPort))
 	}
 	for _, x := range []struct {
 		name string
@@ -381,21 +381,21 @@ func validateValues(cfg *settings) error {
 		{"execution.timeout_transfer", cfg.Execution.TimeoutTransfer},
 	} {
 		if x.val < 1 {
-			return fmt.Errorf("%s（须为正整数，单位秒）", message.ValueInvalid(x.name, strconv.Itoa(x.val)))
+			return fmt.Errorf("%s", message.ValueInvalidBecause(x.name, strconv.Itoa(x.val), message.ReasonPositiveSeconds))
 		}
 	}
 	if cfg.upload.SmallFile < 1 {
-		return fmt.Errorf("%s（须为正整数，单位字节）", message.ValueInvalid("upload.small_file", strconv.Itoa(cfg.upload.SmallFile)))
+		return fmt.Errorf("%s", message.ValueInvalidBecause("upload.small_file", strconv.Itoa(cfg.upload.SmallFile), message.ReasonPositiveBytes))
 	}
 	if cfg.upload.LargeFile < 1 {
-		return fmt.Errorf("%s（须为正整数，单位字节）", message.ValueInvalid("upload.large_file", strconv.Itoa(cfg.upload.LargeFile)))
+		return fmt.Errorf("%s", message.ValueInvalidBecause("upload.large_file", strconv.Itoa(cfg.upload.LargeFile), message.ReasonPositiveBytes))
 	}
 	if cfg.upload.LargeFile < cfg.upload.SmallFile {
 		return fmt.Errorf("%s", message.ValueInvalidTight("上传阈值",
-			fmt.Sprintf("large_file(%d) 不能小于 small_file(%d)", cfg.upload.LargeFile, cfg.upload.SmallFile)))
+			message.UploadThresholdOrder(cfg.upload.LargeFile, cfg.upload.SmallFile)))
 	}
 	if cfg.upload.MediumParallel < 1 {
-		return fmt.Errorf("%s（须为正整数）", message.ValueInvalid("upload.medium_parallel", strconv.Itoa(cfg.upload.MediumParallel)))
+		return fmt.Errorf("%s", message.ValueInvalidBecause("upload.medium_parallel", strconv.Itoa(cfg.upload.MediumParallel), message.ReasonPositive))
 	}
 	if err := validateEnv(cfg.Env); err != nil {
 		return err
