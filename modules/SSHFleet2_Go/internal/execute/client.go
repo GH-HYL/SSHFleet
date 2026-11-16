@@ -21,6 +21,7 @@ import (
 	"golang.org/x/crypto/ssh"
 
 	"sshfleet2/internal/contract"
+	"sshfleet2/internal/message"
 )
 
 // handshakeGrace 握手宽限：拨号按纸上那个连接超时，握手再给 2 秒
@@ -179,7 +180,7 @@ func (c *client) authMethods() ([]ssh.AuthMethod, error) {
 
 	if len(methods) == 0 {
 		// 老版原话，一个字不改：这一句不是报文（它没有环节名好挂），是工具在说「没法开认证」。
-		return nil, fmt.Errorf("未提供有效的认证方式（密码或密钥至少提供一种）")
+		return nil, errors.New(message.NoAuthMethod())
 	}
 	return methods, nil
 }

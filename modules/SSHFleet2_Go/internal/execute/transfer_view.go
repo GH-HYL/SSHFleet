@@ -246,7 +246,7 @@ func (m transferModel) View() string { return m.render() + "\n" }
 
 // render 界面正文。
 func (m transferModel) render() string {
-	label := message.ActionName(m.mode) + "进度"
+	label := message.ActionProgress(m.mode)
 
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s%s  %s  %s  %s/%s\n",
@@ -255,10 +255,10 @@ func (m transferModel) render() string {
 		message.Bytes(m.bytesDone), message.Bytes(m.bytesTotal))
 
 	fmt.Fprintf(&b, "%s%s  %s  %s  %d/%d  %s  %s\n",
-		indent, styleTitle.Render("节点进度"), m.nodeBar.ViewAs(m.nodeProgressRatio()),
-		styleDim.Render(elapsedText(time.Since(m.start))), m.completed, m.total,
-		styleOK.Render(fmt.Sprintf("成功 %d", m.succeeded)),
-		styleFail.Render(fmt.Sprintf("失败 %d", m.failed)))
+		indent, styleTitle.Render(message.NodeProgressLabel()), m.nodeBar.ViewAs(m.nodeProgressRatio()),
+		styleDim.Render(message.Elapsed(time.Since(m.start))), m.completed, m.total,
+		styleOK.Render(message.CountOK(m.succeeded)),
+		styleFail.Render(message.CountFail(m.failed)))
 
 	fmt.Fprintf(&b, "%s\n", styleSep.Render(indent+strings.Repeat("─", separatorWidth)))
 
@@ -269,7 +269,7 @@ func (m transferModel) render() string {
 		fmt.Fprintf(&b, "%s%s  %s  %s  %s\n",
 			indent, m.nodeBar.ViewAs(nodePercent(*n)), styleDim.Render(message.FormatSpeed(n.speed)),
 			styleDim.Render(n.ip),
-			fmt.Sprintf("共 %d 个文件  成功 %d  失败 %d", n.totalFiles, n.successFiles, n.failedFiles))
+			message.FileCounts(n.totalFiles, n.successFiles, n.failedFiles))
 	}
 	return strings.TrimRight(b.String(), "\n")
 }

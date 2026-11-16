@@ -6,8 +6,8 @@ package execute
 // 上面自由滚结果行——`bubbletea` 的 `Println` 往上插行、`View` 原地重绘，正是老版那套观感。
 //
 // **屏幕的流从 `console` 拿**（`console.Writer`），执行站是唯一可以拿它的包；画帧与结果行
-// 走同一条流，才不会互相盖。字本身仍只有两个来源：结果行由 `message` 造，进度帧的标签是
-// 面板的一部分（老版也住在呈现层，不在句子那一处）。
+// 走同一条流，才不会互相盖。字只从一个来源来：结果行与进度帧上那几个词都由 `message` 造，
+// 这里只管着色与摆位——「改一句口吻只翻一处」才在进度条上也成立。
 //
 // 非终端（重定向、管道）不出界面，结果行直接落流——老版按 `isatty(os.Stdout)` 判同一件事。
 
@@ -17,6 +17,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"sshfleet2/internal/message"
 
 	"github.com/charmbracelet/bubbles/progress"
 	tea "github.com/charmbracelet/bubbletea"
@@ -113,11 +115,11 @@ func (m progressModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m progressModel) View() string { return m.render() + "\n" }
 
 func (m progressModel) render() string {
-	return fmt.Sprintf("%s%s  %s  已完成 %d/%d  %s  %s  %s",
-		indent, styleTitle.Render("总进度"), m.bar.ViewAs(m.percent()),
-		m.completed, m.total, styleDim.Render(elapsedText(time.Since(m.start))),
-		styleOK.Render(fmt.Sprintf("成功 %d", m.succeeded)),
-		styleFail.Render(fmt.Sprintf("失败 %d", m.failed)))
+	return fmt.Sprintf("%s%s  %s  %s  %s  %s  %s",
+		indent, styleTitle.Render(message.TotalProgressLabel()), m.bar.ViewAs(m.percent()),
+		message.DoneRatio(m.completed, m.total), styleDim.Render(message.Elapsed(time.Since(m.start))),
+		styleOK.Render(message.CountOK(m.succeeded)),
+		styleFail.Render(message.CountFail(m.failed)))
 }
 
 // percent 总进度：已完成台数 / 总台数。没开工时是 0，不会先冲满再回落。
@@ -130,12 +132,6 @@ func (m progressModel) percent() float64 {
 		return 1
 	}
 	return p
-}
-
-// elapsedText 耗时写成 `0:00:12`（老版同一格式）。
-func elapsedText(d time.Duration) string {
-	total := int(d.Seconds() + 0.5)
-	return fmt.Sprintf("%d:%02d:%02d", total/3600, (total%3600)/60, total%60)
 }
 
 // screen 屏幕那一路：一个流，加一个懒起来的进度界面。
