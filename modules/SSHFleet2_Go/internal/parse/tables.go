@@ -42,7 +42,8 @@ func loadTables(mode contract.Mode) (contract.Tables, *contract.CannotStart) {
 
 	// 那条唯一的行为例外：改密模式下，「密码过期」这一分类没有关键词就是起不来，启动即报。
 	// 老版跑到改密那一步才说；这一处是定过的行为变化（ADR-0034 决定七）。
-	if mode == contract.ModePasswd && len(keywordsOf(cats, "密码过期")) == 0 && len(keywordsOf(exitCats, "密码过期")) == 0 {
+	// 分类名取自 `message` 的常量，不写第二份字面量——改名前后的两处要一起动（审计 04-H1）。
+	if mode == contract.ModePasswd && len(keywordsOf(cats, message.CategoryPasswdExpired)) == 0 && len(keywordsOf(exitCats, message.CategoryPasswdExpired)) == 0 {
 		return contract.Tables{}, cannotStartReason("ssh",
 			contract.CannotStartReason{Kind: contract.CannotStartPasswdNoSignal})
 	}
