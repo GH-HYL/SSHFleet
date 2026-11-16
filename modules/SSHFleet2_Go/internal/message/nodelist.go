@@ -22,6 +22,14 @@ const InlineNodeExample = "192.168.1.1,22,root,密码"
 // 两种给法各指一次：路径对不上就查路径，写的是内联记录就查第一列。
 const ManifestGoneHint = "请检查路径是否写对；如果是内联写法，第一列要是合法 IP，例如 " + InlineNodeExample
 
+// CredentialRelativeWithoutSecretDir 是凭据那一格写的是相对名、配置里却没配 secret_dir 时那句。
+//
+// 这一处不是「这一行的写法错了」，是配置缺了一项：所以句子只说找谁配、或改写成绝对路径，
+// 不催使用者去改清单。
+func CredentialRelativeWithoutSecretDir() string {
+	return "写的是相对路径，但配置里没配 credential.secret_dir（提示：在配置的 [credential] 段配上 secret_dir，或这一格改写本机绝对路径）"
+}
+
 // ManifestHeaderDropped 是「第一行不是 IP，已当表头移除」那一行提示。
 //
 // 老版形态：青色 [INFO] + 黄色 [function:read_nodes_infos] + 正文，后跟一个换行。

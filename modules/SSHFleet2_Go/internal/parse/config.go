@@ -144,7 +144,7 @@ func load() (*settings, error) {
 	lines, err := tokenize(data)
 	if err != nil {
 		return nil, fmt.Errorf("%s", message.ProblemHint(
-			fmt.Sprintf("解析 TOML 失败：%v", err),
+			message.TOMLParseFailed(err.Error()),
 			"多数是引号或方括号没配对，照随包的配置文件核一遍"))
 	}
 	raw := rawView(lines)

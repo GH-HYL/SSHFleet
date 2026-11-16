@@ -1,9 +1,10 @@
 package parse
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
+
+	"sshfleet2/internal/message"
 )
 
 // TOML 的一小块：只认随包六份配置真用到的形态。
@@ -22,6 +23,53 @@ type tomlLine struct {
 	array   bool   // 来自 [[…]]
 	key     string
 	value   string
+}
+
+// tomlProblemKind 是词法器认不出的那几种毛病。
+//
+// 只是「哪一种」，字不在这里：那五句住 `message/toml.go`（措辞迁移 03 号单）。
+type tomlProblemKind string
+
+const (
+	tomlSectionNameEmpty      tomlProblemKind = "section_name_empty"
+	tomlNotSectionNorKeyValue tomlProblemKind = "not_section_nor_key_value"
+	tomlKeyNameEmpty          tomlProblemKind = "key_name_empty"
+	tomlKeyBeforeAnySection   tomlProblemKind = "key_before_any_section"
+	tomlDuplicateKey          tomlProblemKind = "duplicate_key"
+)
+
+// tomlProblem 是「词法器读不动」那件事：第几行、哪种毛病、牵到哪个名字。
+//
+// 它实现 error 只是为了让调用点照旧 `if err != nil`、让 `err.Error()` 仍拿得到那句话；
+// 那句话本身向 `message` 要，这里一个字都不拼。屏上经「原因：」那一行原样贴出，
+// 所以迁过来的时候一个字节都没改。
+type tomlProblem struct {
+	kind      tomlProblemKind
+	line      int
+	key       string
+	section   string
+	arrayItem int    // 0 表示普通节 `[x]`；大于 0 表示 `[[x]]` 第几条
+	value     string // 「既不是节也不是键值对」时那一行的原文
+}
+
+// Error 交出那句话，供沿用 `err.Error()` 的调用点与用例。
+func (p *tomlProblem) Error() string { return p.text() }
+
+// text 按类别取那一句：挑哪一句在这里，字全在 `message`。
+func (p *tomlProblem) text() string {
+	switch p.kind {
+	case tomlSectionNameEmpty:
+		return message.TOMLSectionNameEmpty(p.line)
+	case tomlNotSectionNorKeyValue:
+		return message.TOMLNotSectionNorKeyValue(p.line, p.value)
+	case tomlKeyNameEmpty:
+		return message.TOMLKeyNameEmpty(p.line)
+	case tomlKeyBeforeAnySection:
+		return message.TOMLKeyBeforeAnySection(p.line, p.key)
+	case tomlDuplicateKey:
+		return message.TOMLDuplicateKey(p.line, p.key, p.section, p.arrayItem)
+	}
+	panic("词法器：没见过的毛病类别 " + string(p.kind))
 }
 
 // tokenize 把一份 TOML 文本切成上面的行。
@@ -43,7 +91,7 @@ func tokenize(data []byte) ([]tomlLine, error) {
 		}
 		if name, array, ok := sectionName(trimmed); ok {
 			if name == "" {
-				return nil, fmt.Errorf("第 %d 行的节名是空的", i+1)
+				return nil, &tomlProblem{kind: tomlSectionNameEmpty, line: i + 1}
 			}
 			section, isArray = name, array
 			if array {
@@ -54,27 +102,33 @@ func tokenize(data []byte) ([]tomlLine, error) {
 		}
 		eq := strings.Index(trimmed, "=")
 		if eq < 0 {
-			return nil, fmt.Errorf("第 %d 行既不是节也不是键值对：%s", i+1, trimmed)
+			return nil, &tomlProblem{kind: tomlNotSectionNorKeyValue, line: i + 1, value: trimmed}
 		}
 		key := strings.TrimSpace(trimmed[:eq])
 		if key == "" {
-			return nil, fmt.Errorf("第 %d 行的键名是空的", i+1)
+			return nil, &tomlProblem{kind: tomlKeyNameEmpty, line: i + 1}
 		}
 		if section == "" {
-			return nil, fmt.Errorf("第 %d 行的键 %s 出现在任何节之前", i+1, key)
+			return nil, &tomlProblem{kind: tomlKeyBeforeAnySection, line: i + 1, key: key}
 		}
 		scope := section
-		where := "[" + section + "]"
+		arrayItem := 0
 		if isArray {
 			scope = section + "#" + strconv.Itoa(arraySeq[section])
-			where = fmt.Sprintf("[[%s]] 第 %d 条", section, arraySeq[section])
+			arrayItem = arraySeq[section]
 		}
 		name := unquote(key)
 		if seenKeys[scope] == nil {
 			seenKeys[scope] = map[string]bool{}
 		}
 		if seenKeys[scope][name] {
-			return nil, fmt.Errorf("第 %d 行的键 %s 在 %s 里写了两次", i+1, name, where)
+			return nil, &tomlProblem{
+				kind:      tomlDuplicateKey,
+				line:      i + 1,
+				key:       name,
+				section:   section,
+				arrayItem: arrayItem,
+			}
 		}
 		seenKeys[scope][name] = true
 		value := strings.TrimSpace(trimmed[eq+1:])

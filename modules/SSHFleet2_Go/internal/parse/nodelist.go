@@ -3,7 +3,6 @@ package parse
 import (
 	"encoding/csv"
 	"errors"
-	"fmt"
 	"os"
 	"strings"
 
@@ -98,15 +97,6 @@ func manifestText(raw string) (string, bool, *contract.CannotStart) {
 		return "", true, cliReason(reason)
 	}
 	return raw, true, nil
-}
-
-// readFailure 是「读清单这一步栽了」的那一句：系统原话照贴，不自己另写一句
-// （ADR-0025 决定六）。
-//
-// 一处成形：空串当路径交给系统那一句、CSV 读不下去又不是语法错的那一句，本来就是同一句话，
-// 分开各拼一次，改口径就会改漏一处。
-func readFailure(err error) string {
-	return fmt.Sprintf("读取内容时发生错误: %v", err)
 }
 
 // manifestSyntaxError 是 CSV 语法错的那句话：说清哪一行、引号要成对。

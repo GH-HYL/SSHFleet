@@ -106,11 +106,10 @@ func loadDangerRules() ([]contract.DangerRule, *contract.CannotStart) {
 	for i, item := range items {
 		if unknown := unknownRuleKeys(item); len(unknown) > 0 {
 			return nil, dangerFail(contract.CannotStartReason{
-				Kind:  contract.CannotStartTableUnknownField,
-				Place: "危险命令检测规则",
-				Value: strings.Join(unknown, ", "),
-				Origin: "规则只认 name / example / reason / regex / risk_level / enabled 六项，" +
-					"把它删掉或改成这六项之一",
+				Kind:   contract.CannotStartTableUnknownField,
+				Place:  "危险命令检测规则",
+				Value:  strings.Join(unknown, ", "),
+				Origin: message.DangerRuleKnownFields(),
 			})
 		}
 		rule, bad := buildRule(item, i+1)
@@ -122,12 +121,20 @@ func loadDangerRules() ([]contract.DangerRule, *contract.CannotStart) {
 	return out, nil
 }
 
+// dangerRuleKeys 是危险规则条目认的六个键。
+//
+// 这就是「认哪些键」那条判据的唯一一份；`message.DangerRuleKnownFields` 里那句「出处」说的是
+// 同一件事，`tables_test.go` 有一条把它钉在一起——加一项要两处一起改。
+var dangerRuleKeys = map[string]bool{
+	"name": true, "example": true, "reason": true,
+	"regex": true, "risk_level": true, "enabled": true,
+}
+
 // unknownRuleKeys 规则条目里不认识的键。
 func unknownRuleKeys(item map[string]string) []string {
-	known := map[string]bool{"name": true, "example": true, "reason": true, "regex": true, "risk_level": true, "enabled": true}
 	var out []string
 	for k := range item {
-		if !known[k] {
+		if !dangerRuleKeys[k] {
 			out = append(out, k)
 		}
 	}
