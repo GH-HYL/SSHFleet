@@ -15,20 +15,19 @@ import (
 //
 // 只在 POSIX 上跑：要一个 rc 文件当现场，Windows 那一侧是注册表（会真改使用者的环境变量）。
 
-// buildBinary 把模块编成一个二进制，放 build/ 下当天沙盒（产物不出工作区）。
+// buildBinary 把主包编成一个二进制，放本包的 build/tmp 沙盒（产物不出工作区）。
+//
+// 按模块路径编、不设 `Dir`：`go build sshfleet2` 从模块内任何目录都认得出主包，于是不必
+// 先算出「模块根在哪」——那个算法要么抄 `buildTmp` 那段上溯，要么把仓库布局写进测试，
+// 两头都是多一个会漂的说法（2026-11-16，取舍 11-J8）。
 func buildBinary(t *testing.T) string {
 	t.Helper()
-	repoRoot, err := filepath.Abs(filepath.Join("..", "..", "..", ".."))
-	if err != nil {
-		t.Fatalf("定位仓库根失败：%v", err)
-	}
-	sandbox := filepath.Join(repoRoot, "build", "建站09_AB_2026-11-06_1535")
-	if err := os.MkdirAll(sandbox, 0o755); err != nil {
-		t.Fatalf("建沙盒失败：%v", err)
+	sandbox := buildTmp()
+	if sandbox == "" {
+		t.Fatalf("定位不到 build/tmp 沙盒：找不到 go.mod，或建不出目录")
 	}
 	bin := filepath.Join(sandbox, "sshfleet2_keytool_test")
-	build := exec.Command("go", "build", "-o", bin, ".")
-	build.Dir = filepath.Join(repoRoot, "modules", "SSHFleet2_Go")
+	build := exec.Command("go", "build", "-o", bin, "sshfleet2")
 	if out, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("编二进制失败：%v\n%s", err, out)
 	}
@@ -59,13 +58,10 @@ func copyDir(t *testing.T, src, dst string) {
 // genKeyScene 造一个「本机已有密钥」的现场：一份随包的配置，加临时 HOME 里带主密钥行的 .bashrc。
 func genKeyScene(t *testing.T) (dir, home string) {
 	t.Helper()
-	repoRoot, err := filepath.Abs(filepath.Join("..", "..", "..", ".."))
-	if err != nil {
-		t.Fatalf("定位仓库根失败：%v", err)
-	}
 	dir = t.TempDir()
 	home = t.TempDir()
-	copyDir(t, filepath.Join(repoRoot, "modules", "SSHFleet2_Go", "config"), filepath.Join(dir, "config"))
+	// 随包配置在模块根下：两段相对路径，不出模块，所以与仓库布局无关。
+	copyDir(t, filepath.Join("..", "..", "config"), filepath.Join(dir, "config"))
 	rc := "# SSHFleet 主密钥\nexport SSHFLEET_KEY='OLD-KEY-FOR-CONFIRM'\n"
 	if err := os.WriteFile(filepath.Join(home, ".bashrc"), []byte(rc), 0o644); err != nil {
 		t.Fatalf("写 rc 失败：%v", err)
