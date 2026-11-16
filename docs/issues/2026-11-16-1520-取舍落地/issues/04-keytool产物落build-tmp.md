@@ -19,3 +19,5 @@
 **2026-11-16 落地**：`buildBinary` 改用本包 `buildTmp()`，按模块路径编（`go build -o … sshfleet2`，不设 `Dir`）；`genKeyScene` 读随包配置改成 `../../config`（两段相对、不出模块）。`build/建站09_AB_2026-11-06_1535` 里的旧产物一个没动。
 
 **本机验到哪一步**：Windows 上那三条进程级用例按文件开头的规定 skip（`TestGenKeyConfirmYesOverwrites` 等三条），所以本机只到编译与 vet；「产物落 `build/tmp/test/keytool`」要等 POSIX 侧跑一次才算验过。WSL 里没装 Go，这台机器上补不了——已记进 `docs/issues/未收尾清单.md` 的「要复核」。
+
+**2026-11-16 POSIX 侧跑过**（WSL Ubuntu 26.04；Go 1.26.10 解到 `~/sdk/go`，没装进系统）：`go test -count=1 -v ./internal/keytool` 全绿，三条进程级用例 `TestGenKeyConfirmYesOverwrites`／`…NoKeeps`／`…InputEndKeeps` 是 **PASS 不是 SKIP**（在 Windows 上它们是 skip 的）。产物落在 `build/tmp/test/keytool/sshfleet2_keytool_test`（17:44 新建）；`build/建站09_AB_2026-11-06_1535/` 里今天没有新文件——那里躺着的 `sshfleet2_keytool_test` 是 11-11 的旧残留，正好是改落点之前留下的。
