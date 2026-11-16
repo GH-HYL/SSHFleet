@@ -13,21 +13,17 @@ import (
 // 措辞对不对不归这里判——那是自定义区与 A/B 比对的事。
 
 func TestRedlineTipRunsHelp(t *testing.T) {
-	repoRoot, err := filepath.Abs(filepath.Join("..", "..", "..", ".."))
-	if err != nil {
-		t.Fatalf("定位仓库根失败：%v", err)
-	}
-	moduleRoot := filepath.Join(repoRoot, "modules", "SSHFleet2_Go")
-
-	// 产物落 build/ 下当天的沙盒：可执行文件不许出工作区，也不许落在模块根。
-	sandbox := filepath.Join(repoRoot, "build", "建站02红线_2026-11-01")
-	if err := os.MkdirAll(sandbox, 0o755); err != nil {
-		t.Fatalf("建沙盒失败：%v", err)
+	// 产物落本包的 build/tmp 沙盒：可执行文件不许出工作区，也不许落在模块根。
+	sandbox := buildTmp()
+	if sandbox == "" {
+		t.Fatalf("定位不到 build/tmp 沙盒：找不到 go.mod，或建不出目录")
 	}
 	bin := filepath.Join(sandbox, "sshfleet2_redline_bin.exe")
 
-	build := exec.Command("go", "build", "-o", bin, ".")
-	build.Dir = moduleRoot
+	// 按模块路径编、不设 `Dir`：`go build sshfleet2` 从模块内任何目录都认得出主包，于是
+	// 不必先算出「仓库根／模块根在哪」——那两样正是模块一复制就红、且红得与真破坏同形的
+	// 来处（ADR-0053）。
+	build := exec.Command("go", "build", "-o", bin, "sshfleet2")
 	if out, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("编二进制失败：%v\n%s", err, out)
 	}

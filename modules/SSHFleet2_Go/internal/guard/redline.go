@@ -76,7 +76,8 @@ var redline = []RedLineEntry{
 	{"TestProjectIsClean", []string{"CheckAll", "DefaultFailures", "Load", "LoadLedger", "RedLine", "Report", "Rules", "Target"}, 4},
 
 	// 02 阶段：帮助与版本——三种接缝上长出来的头三条（新增不算改，ADR-0037 决定五）
-	{"TestRedlineTipRunsHelp", []string{}, 8},
+	// 取舍落地 01 号单（ADR-0053）：同上，两句环境失败并为一句。
+	{"TestRedlineTipRunsHelp", []string{}, 7},
 	// 04 阶段收尾（2026-11-03）：塔尖的另外两个结局——起不来、拒绝（新增不算改）
 	{"TestRedlineTipCannotStart", []string{}, 2},
 	{"TestRedlineTipRefused", []string{}, 4},
@@ -94,8 +95,10 @@ var redline = []RedLineEntry{
 	{"TestRedlineSettleFillsLedger", []string{"contract.Extra", "contract.ModeCommand", "contract.NodeResult", "contract.ResultPaper", "settle.Run"}, 7},
 	// 04 阶段 12 号单：那一行真的落到盘上（新增不算改）
 	{"TestRedlineExecuteWritesResultLine", []string{"contract.CommandTask", "contract.ModeCommand", "contract.Node", "contract.Plan", "contract.Task", "execute.Run"}, 4},
-	// 04 阶段 15 号单：报告站的屏幕那一段是「话」，落点由别人给（新增不算改）
-	{"TestRedlineReportScreenAndPath", []string{"contract.Ledger", "message.Line", "message.StatisticsLine", "report.Run"}, 6},
+	// 04 阶段 15 号单：报告站的入口形状与落点来源（新增不算改）
+	// 取舍落地 02 号单（ADR-0054）：撤回射程——不再钉 message.StatisticsLine 的签名，
+	// 那一条已由 console.Print 的形参类型管住；符号少一个、喊失败少一次。
+	{"TestRedlineReportScreenAndPath", []string{"contract.Ledger", "message.Line", "report.Run"}, 5},
 	// 07 阶段 02 号单：遮的构造点只有一个（新增一条，不算改名单）
 	{"TestCheckMask", []string{"CheckMask", "ClassMask", "Report"}, 4},
 	// 检查器自反补硬 01 号单：入口登记（新增不算改）
@@ -140,8 +143,10 @@ var helperAsserts = []HelperEntry{
 	// 以下五个是落地时扫全包才露出来的：几条红线的边界测试各自带了一个喊失败的 helper。
 	{"closedPort", 3},
 	{"readText", 1},
-	{"tipEndingsProbe", 4},
-	{"copyRedlineDangerRules", 3},
+	// 取舍落地 01 号单（ADR-0053）：这两处砍掉了「定位仓库根」「建沙盒」两句失败，
+	// 换成一句「定位不到 build/tmp 沙盒」——喊失败的次数因此各少一次。
+	{"tipEndingsProbe", 3},
+	{"copyRedlineDangerRules", 2},
 	{"writeRedlineConfig", 2},
 }
 
