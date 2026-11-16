@@ -15,6 +15,7 @@
 #### Changed
 
 - **配置里用了旧段名 `[execution.env]` 时的报错换了说法**：原来写「配置里不再有 `[execution.env]` 段」，那是一句沿革；现在直接写「要改名为 `[env]`」，提示仍是原来那句改法。
+- **README 里「自行编译」那段指的路对了**：原来写源码在 `modules/SSHFleet_Go/`——包里根本没有 `modules/` 这一层，照着找找不到；现在写的是 `modules/SSHFleet2_Go/`，Go 版本也照 `go.mod` 的 1.26 说。
 
 #### Fixed
 
