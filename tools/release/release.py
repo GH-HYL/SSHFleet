@@ -161,8 +161,11 @@ def bump(base: tuple[int, int, int], tier: int) -> tuple[int, int, int]:
 
 
 def pick_go() -> str:
+    # 最后那个是本机实测的落点：装在 ~/.local/opt 下的 go 不进 PATH，
+    # 只按 which 找会在发布那一步才报「未找到 go」（审计 12-J3）。
     cands = [shutil.which("go"), "/snap/go/current/bin/go",
-             "/usr/local/go/bin/go", "/usr/lib/go/bin/go"]
+             "/usr/local/go/bin/go", "/usr/lib/go/bin/go",
+             os.path.expanduser("~/.local/opt/go/bin/go")]
     for c in cands:
         if not c:
             continue
