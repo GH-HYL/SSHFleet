@@ -68,21 +68,17 @@ func TestRedlineTipRefused(t *testing.T) {
 func tipEndingsProbe(t *testing.T) func(dir string, args ...string) (string, int) {
 	t.Helper()
 
-	repoRoot, err := filepath.Abs(filepath.Join("..", "..", "..", ".."))
-	if err != nil {
-		t.Fatalf("定位仓库根失败：%v", err)
-	}
-	// 产物落 build/ 下沙盒：可执行文件不许出工作区，也不许落在模块根。
-	sandbox := filepath.Join(repoRoot, "build", "建站04红线_2026-11-03")
-	if err := os.MkdirAll(sandbox, 0o755); err != nil {
-		t.Fatalf("建沙盒失败：%v", err)
+	// 产物落本包的 build/tmp 沙盒：可执行文件不许出工作区，也不许落在模块根。
+	sandbox := buildTmp()
+	if sandbox == "" {
+		t.Fatalf("定位不到 build/tmp 沙盒：找不到 go.mod，或建不出目录")
 	}
 	// Windows 上可执行文件要带 .exe：`go build -o` 不会自己补，而 exec 找不带扩展名的
 	// 路径会直接报 `executable file not found in %PATH%`（找的是 PATHEXT，不是这个文件）。
 	bin := filepath.Join(sandbox, "sshfleet2_endings_bin"+exeSuffix())
 
-	build := exec.Command("go", "build", "-o", bin, ".")
-	build.Dir = filepath.Join(repoRoot, "modules", "SSHFleet2_Go")
+	// 按模块路径编、不设 `Dir`（ADR-0053）。
+	build := exec.Command("go", "build", "-o", bin, "sshfleet2")
 	if out, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("编二进制失败：%v\n%s", err, out)
 	}
@@ -111,11 +107,8 @@ func tipEndingsProbe(t *testing.T) func(dir string, args ...string) (string, int
 func copyRedlineDangerRules(t *testing.T, dir string) {
 	t.Helper()
 
-	repoRoot, err := filepath.Abs(filepath.Join("..", "..", "..", ".."))
-	if err != nil {
-		t.Fatalf("定位仓库根失败：%v", err)
-	}
-	src := filepath.Join(repoRoot, "modules", "SSHFleet2_Go", "config")
+	// 随包判据表在模块根下：两段相对路径，不出模块，所以与仓库布局无关（ADR-0053）。
+	src := filepath.Join("..", "..", "config")
 	for _, name := range []string{"keywords_dangerous.conf", "keywords_error.conf", "keywords_passwd.conf"} {
 		data, err := os.ReadFile(filepath.Join(src, name))
 		if err != nil {
