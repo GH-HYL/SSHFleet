@@ -10,14 +10,15 @@ package mask
 
 import "strings"
 
-// Marker 是遮掉之后顶替那几个字符的东西。
+// marker 是遮掉之后顶替那几个字符的东西。
 //
 // 屏幕、内联清单、`report.txt`、清单副本四处遮出来的样子必须是同一串，所以只许这一份：
 // 各处各写一次的话，改一处漏两处，同一个密码在屏上是一个样、在报告里是另一个样。
 //
-// 导出只为结构检查类七：它要认得这个记号才找得到「别处自己拼星号」的地方。别处不该用它
-// 拼东西——要遮就调本包的整件事。
-const Marker = "****"
+// **不导出**：类七认得这个记号靠的是「构造四个连续星号」（`guard/check_mask.go` 的
+// `mate`），刻意不引用这个常量——抄一份字面量就多一个出处。包外也没有任何使用者要它，
+// 要遮东西就调 `Secret` 那几件事（2026-11-16，取舍 08-7）。
+const marker = "****"
 
 // Secret 把一个秘密遮成认得出形状、看不出内容的样子。
 //
@@ -26,9 +27,9 @@ const Marker = "****"
 func Secret(s string) string {
 	r := []rune(s)
 	if len(r) <= 4 {
-		return Marker
+		return marker
 	}
-	return string(r[:2]) + Marker + string(r[len(r)-2:])
+	return string(r[:2]) + marker + string(r[len(r)-2:])
 }
 
 // credentialColumns 是凭据在一条节点记录里的段号（0 起）：第 4 段密码、第 6 段口令。
