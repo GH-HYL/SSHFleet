@@ -68,7 +68,6 @@ var paperFields = []PaperField{
 	{"DangerMatch", "Example", PaperConfig},
 	{"DangerMatch", "Reason", PaperConfig},
 	{"DangerReport", "ScriptPath", PaperFact},
-	{"DangerVerdict", "Highest", PaperFact},
 
 	// 密钥管理（key.go）：路径与指纹都是事实
 	{"KeyRun", "Path", PaperFact},
