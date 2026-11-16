@@ -120,6 +120,13 @@ cd /mnt/c/<repo>/modules/SSHFleet2_Go && go test -count=1 -v ./internal/keytool
 
 `build/` 不进版本控制，按天清（当天的与昨天的留着，第三天开工扫一眼删更早的）。**唯一例外是这份交接文档**：开发者点名临时追踪，用完即删——所以它是 `git add -f` 进来的，**别把这个做法推广到别的文件**（规范一.1 第三条禁绕 `.gitignore`）。
 
+**用完这样删**（先取消追踪，再删文件，两件都要做）：
+
+```bash
+git rm --cached "build/SSHFleet-handoff-2026-11-16-1753.md"
+rm "build/SSHFleet-handoff-2026-11-16-1753.md"
+```
+
 ---
 
 ## 六、会咬人的坑
