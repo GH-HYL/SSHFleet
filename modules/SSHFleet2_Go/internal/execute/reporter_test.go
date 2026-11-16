@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"sshfleet2/internal/contract"
-	"sshfleet2/internal/message"
 )
 
 // TestReporterWritesThreePlaces 一条结果三个去处：屏幕与文件同一段字，日志是节点明细。
@@ -44,7 +43,15 @@ func TestReporterWritesThreePlaces(t *testing.T) {
 	}
 	rep.result(res, "sshfleet")
 
-	want := message.ResultLine(res, contract.ModeCommand).Text()
+	// 期望值写死这一段（取自真跑那一次），不拿 message.ResultLine 现算——拿被测代码算一遍，
+	// 两侧一起改就恒绿，等于没断言。
+	want := "【10.0.0.1】 连接: 成功 - 0.123s\n" +
+		"【10.0.0.1】 执行: 失败 - 0.456s\n" +
+		"【10.0.0.1】 错误详情: sshfleet.run.rejected: rejected by remote\n" +
+		"【10.0.0.1】 分类: 执行失败(退出码3)\n" +
+		"line one\n" +
+		"line two\n" +
+		strings.Repeat("=", 50) + "\n"
 
 	// 一、屏幕与终端输出文件：两处都是那一段字，连末尾那个换行一起。
 	if got := readAll(t, term); got != want {
