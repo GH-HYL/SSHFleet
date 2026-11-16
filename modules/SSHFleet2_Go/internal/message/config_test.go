@@ -77,3 +77,56 @@ func TestConfigProblemText(t *testing.T) {
 		}
 	}
 }
+
+// 配置那一屏剩下的六句（06 号单）：问题行加一句提示，逐字照迁移前 `parse/config.go` 的字面量。
+func TestConfigScreenText(t *testing.T) {
+	cases := []struct {
+		name string
+		got  string
+		want string
+	}{
+		{
+			name: "[paths] 段",
+			got:  ConfigPathsSectionForbidden(),
+			want: "配置里不允许出现 [paths] 段\n" +
+				"提示：把 [paths] 整段删掉即可，其余字段不用动",
+		},
+		{
+			name: "[execution.env] 段",
+			got:  ConfigExecutionEnvSectionRenamed(),
+			want: "配置里不再有 [execution.env] 段\n" +
+				"提示：把段名改成 [env] 即可——挪到顶层，里面一个个变量不用动",
+		},
+		{
+			name: "未识别字段",
+			got:  ConfigUnknownFields("account.bogus"),
+			want: "配置包含未识别字段：account.bogus\n" +
+				"提示：请使用随包提供的配置文件，不要增删任何字段",
+		},
+		{
+			name: "缺少必填字段",
+			got:  ConfigMissingFields("upload.medium_parallel"),
+			want: "配置缺少必填字段：upload.medium_parallel\n" +
+				"提示：请使用随包提供的配置文件，不要删掉里面的任何一行",
+		},
+		{
+			name: "配置文件不在当前目录",
+			got:  ConfigNotInWorkDir("config/SSHFleet.conf", `C:\work`),
+			want: "这个位置没有配置文件\n" +
+				"      应该在这里：config/SSHFleet.conf\n" +
+				"      当前目录：C:\\work\n" +
+				"提示：请在本工具的解压目录下执行；配置文件必须放在该目录的 config 文件夹里",
+		},
+		{
+			name: "字符串值没带引号",
+			got:  ConfigStringValueUnquoted("account.user", "root"),
+			want: "account.user 取值非法：root（字符串值要带引号）\n" +
+				"提示：给这一格的值加上成对的引号（'…' 或 \"…\"）即可；数字与布尔不用加",
+		},
+	}
+	for _, c := range cases {
+		if c.got != c.want {
+			t.Fatalf("%s：\n got  %q\n want %q", c.name, c.got, c.want)
+		}
+	}
+}
