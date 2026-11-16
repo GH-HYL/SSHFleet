@@ -76,6 +76,12 @@ APP_NAME = "SSHFleet"
 PLATFORMS = ("windows", "linux")
 DEFAULT_VER = "1.0.0"
 
+# 包里要放哪几份配置：**一处定**，前置检查与打包都读它。
+# 漏一份的下场不一样：前置检查没查到的，打包时 shutil.copy2 抛 traceback，
+# 屏上不是 [失败] 那一条，作者得自己猜是哪个文件（12-J2）。
+PKG_KEYWORDS = ("keywords_dangerous.conf", "keywords_error.conf", "keywords_passwd.conf")
+PKG_PROFILE = "SSHFleet-for-{platform}.conf"
+
 RE_HEAD = re.compile(r"^## \[(\d+)\.(\d+)\.(\d+)\]", re.M)
 RE_UNDONE = re.compile(r"^## 未发布\s*$", re.M)
 RE_NEXT_H2 = re.compile(r"^## ", re.M)
@@ -171,10 +177,12 @@ def pick_go() -> str:
 def precheck() -> None:
     if run(["git", "status", "--porcelain"]):
         die("工作区有未提交的改动，先提交或还原再发布")
-    for p in (MOD, DOCS_SRC, CFG / "keywords_dangerous.conf",
-              CFG / "SSHFleet-for-windows.conf", CFG / "SSHFleet-for-linux.conf"):
+    for p in (MOD, DOCS_SRC):
         if not p.exists():
             die(f"找不到：{p}")
+    for f in PKG_KEYWORDS + tuple(PKG_PROFILE.format(platform=x) for x in PLATFORMS):
+        if not (CFG / f).exists():
+            die(f"找不到：{CFG / f}")
     if not list(DOCS_SRC.glob("[0-9]-*.md")):
         die(f"手册目录里没有「数字-名称.md」形态的文件：{DOCS_SRC}")
     if not MAIN_GO.exists():
@@ -231,21 +239,28 @@ def build_bins(go: str) -> None:
     step(f"[完成] {OUT / 'SSHFleet'}")
 
 
+def copy_or_die(src: Path, dst: Path) -> None:
+    """拷一份；缺了就说 [失败] 说清是哪个文件，不让 traceback 顶上来。"""
+    if not src.exists():
+        die(f"找不到：{src}")
+    shutil.copy2(src, dst)
+
+
 def stage_pkg(pkg: Path, platform: str) -> None:
     (pkg / "config").mkdir(parents=True, exist_ok=True)
     (pkg / "docs").mkdir(parents=True, exist_ok=True)
 
     for f in ("README.md", "CHANGELOG.md"):
-        shutil.copy2(ROOT / f, pkg / f)
-    for f in ("keywords_dangerous.conf", "keywords_error.conf", "keywords_passwd.conf"):
-        shutil.copy2(CFG / f, pkg / "config" / f)
+        copy_or_die(ROOT / f, pkg / f)
+    for f in PKG_KEYWORDS:
+        copy_or_die(CFG / f, pkg / "config" / f)
     for f in DOCS_SRC.glob("[0-9]-*.md"):
         shutil.copy2(f, pkg / "docs" / f.name)
 
     binname = "SSHFleet.exe" if platform == "windows" else "SSHFleet"
     shutil.copy2(OUT / binname, pkg / binname)
     # 出厂配置按平台取模板；工作区里那份 config/SSHFleet.conf 是作者本机在用的，不随包发布
-    shutil.copy2(CFG / f"SSHFleet-for-{platform}.conf", pkg / "config" / "SSHFleet.conf")
+    copy_or_die(CFG / PKG_PROFILE.format(platform=platform), pkg / "config" / "SSHFleet.conf")
 
 
 def make_zip(src: Path, dst: Path) -> None:
