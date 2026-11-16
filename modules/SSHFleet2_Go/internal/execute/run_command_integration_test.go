@@ -9,12 +9,12 @@ package execute
 import (
 	"context"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
 
 	"sshfleet2/internal/contract"
-	"sshfleet2/internal/message"
 )
 
 // TestRunCommandSucceeds 干净退出：退出码 0、输出是命令的输出、没有报错原文。
@@ -180,9 +180,14 @@ func TestRunCommandWritesResultLine(t *testing.T) {
 		t.Fatalf("干净成功该归「执行成功」，实际 %q", item.Category)
 	}
 
-	want := message.ResultLine(item, contract.ModeCommand).Text()
-	if got := readAll(t, term); got != want {
-		t.Fatalf("terminal-output.txt 与那一行不一样。\n期望：\n%s\n实际：\n%s", want, got)
+	// 期望是写死的形状（取自真跑那一次）：只有耗时段是变量，其余逐字钉住。
+	// 不拿 message.ResultLine 现算——两侧一起改就恒绿，等于没断言。
+	shape := regexp.MustCompile(`^【` + regexp.QuoteMeta(item.IP) + `】 连接: 成功 - \d+\.\d+s\n` +
+		`【` + regexp.QuoteMeta(item.IP) + `】 执行: 成功 - \d+\.\d+s\n` +
+		`【` + regexp.QuoteMeta(item.IP) + `】 分类: 执行成功\n` +
+		`fleet-ok\n` + strings.Repeat("=", 50) + `\n$`)
+	if got := readAll(t, term); !shape.MatchString(got) {
+		t.Fatalf("terminal-output.txt 不是那一行的形状。\n期望形状：%s\n实际：\n%s", shape, got)
 	}
 
 	// 日志另走一条：成功那台只有一行「成功：连接 …，执行 …」，不是给人看的那一段字。

@@ -106,7 +106,7 @@ func planForTweaked(t *testing.T, nodes []contract.Node, tweak func(string) stri
 	t.Chdir(dir)
 	_, plan, _, fail, _ := parse.Run(append([]string{"sshfleet2", "-f", manifest}, args...), "integration")
 	if fail != nil {
-		t.Fatalf("解析站起不来：%s", fail.Body)
+		t.Fatalf("解析站起不来：%+v", fail)
 	}
 	if plan == nil {
 		t.Fatal("解析站既没给纸也没说起不来")
