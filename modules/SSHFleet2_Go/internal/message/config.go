@@ -15,10 +15,12 @@ func ConfigPathsSectionForbidden() string {
 		"把 [paths] 整段删掉即可，其余字段不用动")
 }
 
-// ConfigExecutionEnvSectionRenamed 是配置里还写着老的 `[execution.env]`：段挪到了顶层。
+// ConfigExecutionEnvSectionRenamed 是配置里的段名还是老写法：段已经挪到顶层。
+//
+// 问题行只说当下（这个段名要写成什么），不带「不再有」那种沿革——规范四.4 那一条（审计 11-J9）。
 func ConfigExecutionEnvSectionRenamed() string {
 	return ProblemHint(
-		"配置里不再有 [execution.env] 段",
+		"配置里的 [execution.env] 段要改名为 [env]",
 		"把段名改成 [env] 即可——挪到顶层，里面一个个变量不用动")
 }
 

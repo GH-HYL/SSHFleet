@@ -94,7 +94,7 @@ func TestConfigScreenText(t *testing.T) {
 		{
 			name: "[execution.env] 段",
 			got:  ConfigExecutionEnvSectionRenamed(),
-			want: "配置里不再有 [execution.env] 段\n" +
+			want: "配置里的 [execution.env] 段要改名为 [env]\n" +
 				"提示：把段名改成 [env] 即可——挪到顶层，里面一个个变量不用动",
 		},
 		{
