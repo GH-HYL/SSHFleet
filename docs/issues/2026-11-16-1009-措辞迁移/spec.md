@@ -1,6 +1,6 @@
 # 规格：措辞迁移（站里自拼的中文收进 message）
 
-**状态**：ready-for-agent
+**状态**：done（规格内六张单全做完；Out of Scope 里「执行期日志那 15 处」仍等开发者定）
 **底本**：`docs/issues/2026-11-12-1454-措辞出口收口/spec.md`（出口已收口，正文没迁）；`docs/issues/2026-11-09-0945-切换前回顾审计/修复面盘点.md` §4.2
 
 ## Problem Statement
