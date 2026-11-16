@@ -148,10 +148,20 @@ func main() {
 		// 脚本后缀回退这几件事原来只躺在工具日志里，归档打开来查不到。执行日志是追加打开，
 		// 所以这一句先写、就落在最前面——它是「这一轮怎么开跑的」，排在节点明细之前。
 		if note.Text() != "" {
-			if execLog, lerr := log.InitExec(paths.ExecLog); lerr == nil {
-				execLog.Warn(note.Text())
-				_ = execLog.Close()
+			execLog, lerr := log.InitExec(paths.ExecLog)
+			if lerr != nil {
+				// 开执行期日志两处现在同一个口径：开不出来就停（审计 09-3）。原先这里把错误吞掉，
+				// 结果是一轮跑完、这几条留痕悄悄没了，事后对账才发现少了一截。
+				fatal(contract.WhereOutput, message.CannotStartBody(contract.CannotStart{
+					Reason: contract.CannotStartReason{
+						Kind:   contract.CannotStartOutputLog,
+						Place:  paths.ExecLog,
+						Origin: lerr.Error(),
+					},
+				}), toolPath)
 			}
+			execLog.Warn(note.Text())
+			_ = execLog.Close()
 		}
 
 		// 步骤 8：执行站连上去跑，跑完交第二张纸。取消经上下文递下去——同一个上下文，
