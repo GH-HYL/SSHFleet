@@ -70,7 +70,9 @@ var redline = []RedLineEntry{
 	{"TestRedlineGateRefusesBadCombination", []string{"Kind", "contract.Problem", "contract.ProblemMultiMode", "gate.Run"}, 2},
 	{"TestRedlineGatePassesCleanPaper", []string{"gate.Run"}, 1},
 	{"TestRedlineAskNonInteractive", []string{"ask.Ask", "ask.Yes", "message.ConfirmPrompt"}, 1},
-	{"TestRedlineExitCodeTable", []string{"Kind", "exitcode.CannotStart", "exitcode.Code", "exitcode.Interrupted", "exitcode.Kind", "exitcode.Refused", "exitcode.Success"}, 1},
+	// ADR-0056：这条原来钉 0／1／1／130 四个数（值），现在只判零／非零与「两种失败同码」；
+	// 数搬进 `internal/exitcode` 的自定义区，符号面没变，喊失败的次数 1 → 3（2026-11-16）。
+	{"TestRedlineExitCodeTable", []string{"Kind", "exitcode.CannotStart", "exitcode.Code", "exitcode.Interrupted", "exitcode.Kind", "exitcode.Refused", "exitcode.Success"}, 3},
 
 	// 真工程整跑
 	{"TestProjectIsClean", []string{"CheckAll", "DefaultFailures", "Load", "LoadLedger", "RedLine", "Report", "Rules", "Target"}, 4},
