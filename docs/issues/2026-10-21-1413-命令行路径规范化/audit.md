@@ -1,6 +1,6 @@
 # Windows 侧基线：路径取名与后缀规则（2026-10-26）
 
-Status: ready-for-human
+Status: done
 
 **这份文件是什么**：工单 02（`issues/02-path-ownership-libs.md`）的验收在 Linux 上验不出来——`path` 与 `filepath` 的差别按 `GOOS` 在**编译期**就定了，交叉编出来的 Windows 二进制在 Ubuntu 上跑不了，`GOOS=windows go test` 只能编译不能执行。所以「验」这一步交给 Windows 环境里的一台机器（同一个仓库，经 git 同步）。
 
@@ -323,3 +323,5 @@ SKIP 用例（上面这条命令不带 `-v`，看不出 SKIP；另跑一次 `go 
 
 - 2026-10-26（第二轮，linux 侧）：WSL 内 `go1.27.0`，`go test ./... -count=1` **11 包 ok、无 SKIP、无 FAIL**——`TestParseDoesNotRewriteWindowsStylePath` 与 `TestConvertSecretEncryptsPlainFile` 这两条在 Windows 上 SKIP，在 linux 上是真跑过的。Windows 本机同样 11 包 ok。
 - 2026-10-26（第二轮，N3 的意外收获）：`-d " /tmp/app.log "` 首次跑出 `d='/tmp/app.log'` 而 `r='app.log '`——备注在解析阶段按原值取名，trim 却发生在合规检查，同一个值出现两个形态。改成解析阶段就过滤（本地 `-p` 不在其列），补 `TestRemotePathOuterSpaceIsTrimmedBeforeRemark`，复测 `r='app.log'` 干净。
+
+- 2026-11-16（Windows 侧复核）：第五、六节与 10-26 第二轮复测的每一格逐条对过 4.3／4.4 的判据，全部满足（D1–D3 路径原样、D4 成功落盘、D5 由「远程路径不存在」变「本机写入失败」且回显原值；E1 被拦且回显原值、E2 原值）。**没有重跑**：复核时 WSL 里的 `wbverify` 账号与 `/tmp` 下那两个远端文件都不在了（发行版重开过），要重跑得先重建账号、重造文件——那是改环境，而这份验证已经两轮全过、老工程只作退路，不值得再花一轮。据此 `Status:` 改 `done`。真要重跑，把 5.5 第 10 条那三步（建账号、配 NOPASSWD、造 `/tmp` 文件）重做一遍即可。
