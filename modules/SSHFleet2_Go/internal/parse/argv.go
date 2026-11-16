@@ -539,19 +539,9 @@ func keyToolsOf(s scanned) []string {
 
 // batchParamsOf 是这次给了哪些批量执行参数（用使用者看到的名字）。
 //
-// 顺序与老版 `batchParamsGiven` 逐项相同：值类按原值非空认，开关类按给没给认。
-// `--yes` 不算批量参数：它对密钥命令也有意义（跳过覆盖确认），且不指向任何节点。
-// batchParamLongs 是「不能和密钥命令一起给」的那批参数，按报错里出现的次序排。
-//
-// 名字不另抄一串，按长名回选项表查（新增一个选项只改选项表那一处）。
-var batchParamLongs = []string{
-	"--command", "--script", "--upload", "--download", "--change-password",
-	"--csv-file", "--path", "--number", "--remark", "--timeout", "--connect-timeout",
-}
-
-// flagParamLongs 是那四个只看「给没给」的开关。
-var flagParamLongs = []string{"--key", "--no-shell", "--sudo", "--no-sudo"}
-
+// 名单与次序都从选项表派生（`options.go` 的 `batchOrder` 那一列，见 `batchParams`）：
+// 名字不另抄一串，新增一个选项只改选项表那一处。值类按原值非空认，开关类按给没给认——
+// 哪一类由表里的 `takesValue` 说，不再靠两份手抄的切片分工。
 // paramName 是报错里怎么写这个参数：有短名写短名，没有就写长名（与帮助里的写法同源）。
 func paramName(long string) string {
 	if o, ok := lookupOption(long); ok && o.short != "" {
@@ -568,18 +558,16 @@ func batchParamsOf(s scanned) []string {
 			s.vals["--upload"] != "" || s.vals["--download"] != "")
 
 	var given []string
-	for _, long := range batchParamLongs {
-		hit := s.vals[long] != ""
-		if long == "--remark" {
-			hit = hit || autoRemark
+	for _, o := range batchParams {
+		hit := s.given[o.long]
+		if o.takesValue {
+			hit = s.vals[o.long] != ""
+			if o.long == "--remark" {
+				hit = hit || autoRemark
+			}
 		}
 		if hit {
-			given = append(given, paramName(long))
-		}
-	}
-	for _, long := range flagParamLongs {
-		if s.given[long] {
-			given = append(given, paramName(long))
+			given = append(given, paramName(o.long))
 		}
 	}
 	return given
