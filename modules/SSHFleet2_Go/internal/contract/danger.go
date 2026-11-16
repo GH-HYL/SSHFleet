@@ -16,10 +16,3 @@ type DangerReport struct {
 	IsScript   bool
 	ScriptPath string
 }
-
-// HasForbidden 报「最高那一档是不是禁止」。契约不许有函数，所以这里是字段——由闸门判定时写好。
-type DangerVerdict struct {
-	Report    DangerReport
-	Forbidden bool
-	Highest   string
-}
