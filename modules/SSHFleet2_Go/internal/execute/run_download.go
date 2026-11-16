@@ -23,6 +23,7 @@ import (
 
 	"sshfleet2/internal/contract"
 	"sshfleet2/internal/criterion"
+	"sshfleet2/internal/message"
 )
 
 // download 一台的下载。
@@ -143,7 +144,7 @@ func (c *client) download(ctx context.Context, p *contract.Plan, res *contract.N
 	var downloadedBytes int64
 	lines := make([]string, 0, len(symlinks)+len(files))
 	for _, s := range symlinks {
-		lines = append(lines, fmt.Sprintf("%s: 已跳过（符号链接）", s))
+		lines = append(lines, message.TransferSkipped(s))
 	}
 
 	for i, file := range files {
@@ -178,7 +179,7 @@ func (c *client) download(ctx context.Context, p *contract.Plan, res *contract.N
 			// 「成功 + 失败」对不上。
 			failed += len(files) - i
 			reason := msg(envTransfer, transferLocalFileFailed, "name not usable as a local file name: "+badName)
-			lines = append(lines, fmt.Sprintf("%s: 下载失败 - %s", badName, reason))
+			lines = append(lines, message.TransferFailure(contract.ModeDownload, badName, reason))
 			res.ErrorText = appendText(res.ErrorText, fmt.Sprintf("%s: %s", badName, reason))
 			break
 		}
@@ -186,7 +187,7 @@ func (c *client) download(ctx context.Context, p *contract.Plan, res *contract.N
 		if err := os.MkdirAll(filepath.Dir(localFilePath), 0o755); err != nil {
 			failed += len(files) - i
 			reason := msg(envTransfer, transferLocalDirFailed, err.Error())
-			lines = append(lines, fmt.Sprintf("%s: 下载失败 - %s", file.Rel, reason))
+			lines = append(lines, message.TransferFailure(contract.ModeDownload, file.Rel, reason))
 			res.ErrorText = appendText(res.ErrorText, fmt.Sprintf("%s: %s", file.Rel, reason))
 			break
 		}
@@ -195,7 +196,7 @@ func (c *client) download(ctx context.Context, p *contract.Plan, res *contract.N
 		if downloadErr != nil {
 			failed++
 			// 「下载失败」只留在输出明细行；报错原文格放报文。
-			lines = append(lines, fmt.Sprintf("%s: 下载失败 - %v", file.Rel, downloadErr))
+			lines = append(lines, message.TransferFailure(contract.ModeDownload, file.Rel, downloadErr))
 			reason := downloadErr.Error()
 			if !isMessage(reason) {
 				reason = msg(envTransfer, transferLocalFileFailed, reason)

@@ -23,6 +23,7 @@ import (
 
 	"sshfleet2/internal/contract"
 	"sshfleet2/internal/criterion"
+	"sshfleet2/internal/message"
 )
 
 // upload 一台的上传。
@@ -96,7 +97,7 @@ func (c *client) upload(ctx context.Context, p *contract.Plan, res *contract.Nod
 	written := make([]string, 0, len(files))
 	lines := make([]string, 0, len(task.Skipped)+len(files))
 	for _, s := range task.Skipped {
-		lines = append(lines, fmt.Sprintf("%s: 已跳过（符号链接）", s))
+		lines = append(lines, message.TransferSkipped(s))
 	}
 	var pacer progressPacer
 
@@ -119,7 +120,7 @@ func (c *client) upload(ctx context.Context, p *contract.Plan, res *contract.Nod
 		if _, err := sftpClient.Stat(remoteFilePath); err == nil {
 			failed++
 			reason := msg(envTransfer, transferRemoteExists, "file already exists on the remote host")
-			lines = append(lines, fmt.Sprintf("%s: 上传失败 - %s", f.Rel, reason))
+			lines = append(lines, message.TransferFailure(contract.ModeUpload, f.Rel, reason))
 			res.ErrorText = appendText(res.ErrorText, fmt.Sprintf("%s: %s", f.Rel, reason))
 			res.ErrorText = appendText(res.ErrorText, c.rollback(sftpClient, written, useSudo))
 			break
@@ -128,7 +129,7 @@ func (c *client) upload(ctx context.Context, p *contract.Plan, res *contract.Nod
 		localInfo, statErr := os.Stat(f.Path)
 		if statErr != nil {
 			failed++
-			lines = append(lines, fmt.Sprintf("%s: 上传失败 - %v", f.Rel, statErr))
+			lines = append(lines, message.TransferFailure(contract.ModeUpload, f.Rel, statErr))
 			res.ErrorText = appendText(res.ErrorText, msg(envTransfer, transferLocalUnreadable, fmt.Sprintf("%s: %v", f.Rel, statErr)))
 			res.ErrorText = appendText(res.ErrorText, c.rollback(sftpClient, written, useSudo))
 			break
@@ -148,7 +149,7 @@ func (c *client) upload(ctx context.Context, p *contract.Plan, res *contract.Nod
 
 		if uploadErr != nil {
 			failed++
-			lines = append(lines, fmt.Sprintf("%s: 上传失败 - %v", f.Rel, uploadErr))
+			lines = append(lines, message.TransferFailure(contract.ModeUpload, f.Rel, uploadErr))
 			reason := uploadErr.Error()
 			if !isMessage(reason) {
 				reason = msg(envTransfer, transferRemoteFileFailed, reason)

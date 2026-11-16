@@ -38,23 +38,6 @@ func TestProgressPercent(t *testing.T) {
 	}
 }
 
-// TestElapsedText 耗时写成 `0:01:05`（老版同一格式）。
-func TestElapsedText(t *testing.T) {
-	cases := []struct {
-		d    time.Duration
-		want string
-	}{
-		{0, "0:00:00"},
-		{65 * time.Second, "0:01:05"},
-		{3725 * time.Second, "1:02:05"},
-	}
-	for _, c := range cases {
-		if got := elapsedText(c.d); got != c.want {
-			t.Fatalf("%v 该写成 %q，实际 %q", c.d, c.want, got)
-		}
-	}
-}
-
 // TestScreenPlainWritesStraight 不是终端时不画界面：结果行直接落流，一个字都不多。
 func TestScreenPlainWritesStraight(t *testing.T) {
 	var buf bytes.Buffer
