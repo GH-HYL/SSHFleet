@@ -83,17 +83,29 @@ func TestKeyRunRefusesWithBatchParams(t *testing.T) {
 		t.Fatalf("配置读不通：%v", err)
 	}
 
-	_, _, fail := buildPlan(cfg, scan([]string{"sshfleet2", "--key-status", "-c", "whoami", "-n", "2"}))
-	if fail == nil {
-		t.Fatalf("密钥命令与批量参数一起给应当是起不来")
+	cases := []struct {
+		name string
+		argv []string
+		both string // 那半句里参数的次序
+	}{
+		// 老版把「没给 -r 时的自动备注」也算作给了，所以这句里会看到 -r。
+		{"带值项加自动备注", []string{"sshfleet2", "--key-status", "-c", "whoami", "-n", "2"}, "-c、-n、-r"},
+		// 次序按老版的枚举排（带值项在前、开关在后，各按老版那一列），**不按选项表行序**：
+		// 表里 --timeout 排在 --number 之前，照行序派生这句会变成「-t、-n」。
+		{"表行序与报错次序相反的一对", []string{"sshfleet2", "--key-status", "-n", "2", "-t", "5"}, "-n、-t"},
 	}
-	// 老版把「没给 -r 时的自动备注」也算作给了，所以这句里会看到 -r。
-	for _, want := range []string{
-		"--key-status 不能和批量执行选项一起用：同时给了 -c、-n、-r",
-		"提示：分成两次执行——先跑密钥管理命令，再跑批量执行",
-	} {
-		if !strings.Contains(message.CannotStartText(*fail), want) {
-			t.Fatalf("那一屏缺「%s」：%q", want, message.CannotStartText(*fail))
+	for _, c := range cases {
+		_, _, fail := buildPlan(cfg, scan(c.argv))
+		if fail == nil {
+			t.Fatalf("%s：密钥命令与批量参数一起给应当是起不来", c.name)
+		}
+		for _, want := range []string{
+			"--key-status 不能和批量执行选项一起用：同时给了 " + c.both,
+			"提示：分成两次执行——先跑密钥管理命令，再跑批量执行",
+		} {
+			if !strings.Contains(message.CannotStartText(*fail), want) {
+				t.Fatalf("%s：那一屏缺「%s」：%q", c.name, want, message.CannotStartText(*fail))
+			}
 		}
 	}
 }
