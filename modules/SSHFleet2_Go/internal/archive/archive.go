@@ -6,7 +6,6 @@
 package archive
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -52,6 +51,10 @@ type Paths struct {
 // root 是历史记录根目录（`history`），由调用方给——本包不记住它，也不设包级变量
 // 记「这次建了哪个目录」：路径是算出来的，不是存下来的。
 //
+// **失败时交回的 Paths 只填 Dir 与 Root**：屏幕要报「哪个目录建不出来」，而那句话由
+// `message` 按类别成形（ADR-0047）——本包按权限表不依赖契约，只把算好的目录与系统原话
+// 交出去，不在这里拼半句中文。
+//
 // 目录名照老版：`<yyyy-MM-dd_HH-mm-ss>_<模式>[_备注]`。备注过了平台过滤——显式 `-r`
 // 与将来自动生成的那条都要过，只在自动生成那条路上过滤会漏掉显式 `-r`（老版 2026-10-15
 // 实测：`-r a/b` 被内核当路径，归档目录平白多出一层）。
@@ -67,7 +70,7 @@ func Create(root, mode, remark string, now time.Time) (Paths, error) {
 	dir := filepath.Join(root, name)
 	assets := filepath.Join(dir, nameAssets)
 	if err := os.MkdirAll(assets, 0o755); err != nil {
-		return Paths{}, fmt.Errorf("建归档目录失败（%s）：%w", dir, err)
+		return Paths{Dir: dir, Root: root}, err
 	}
 
 	return Paths{

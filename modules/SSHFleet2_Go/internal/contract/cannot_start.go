@@ -202,7 +202,7 @@ const (
 	CannotStartKeyEncryptFailed CannotStartKind = "key_encrypt_failed"
 )
 
-// 内部故障那两屏（03 号单）：运行上下文封不起来、两个落点开不出来。
+// 内部故障那两屏（03 号单）：运行上下文封不起来／解不开、两个落点开不出来。
 //
 // 它们原先的正文是别的包用 `fmt.Errorf` 拼好的中文——那是「站里拼句」的另一条暗道。
 // 现在那两个包只交事实（哪一格、系统原话），句子回到这里。
@@ -213,6 +213,13 @@ const (
 	CannotStartRunMetaCipher CannotStartKind = "runmeta_cipher"
 	// CannotStartRunMetaGCM 是建不出 GCM：Origin 是系统原话。
 	CannotStartRunMetaGCM CannotStartKind = "runmeta_gcm"
+
+	// 解的那一侧（报告站）：Index 分别是字节数与版本号那几个值，其余两格 Origin 是系统原话。
+	// 与封侧同形，一个类别一句话——改成「封法漂了」也只需在这里改。
+	CannotStartRunMetaLength  CannotStartKind = "runmeta_length"
+	CannotStartRunMetaVersion CannotStartKind = "runmeta_version"
+	CannotStartRunMetaOpen    CannotStartKind = "runmeta_open"
+	CannotStartRunMetaBody    CannotStartKind = "runmeta_body"
 	// CannotStartOutputTerminal 是终端输出文件开不出来：Place 是路径，Origin 是系统原话。
 	CannotStartOutputTerminal CannotStartKind = "output_terminal_open"
 	// CannotStartOutputLog 是执行期日志开不出来：Place 是路径，Origin 是系统原话。
@@ -245,14 +252,18 @@ const (
 	CannotStartDangerBadRegex       CannotStartKind = "danger_bad_regex"
 )
 
-// CannotStartSystemFault 是站交上来的系统原文，工具一句自己的话都不加：Origin 是那段原文。
-//
-// **这是过渡口子，不是终局**（ADR-0047）。用它的是塔尖那两处——建归档目录失败、报告写不出来。
-// 那两句中文现在由站里自己拼（`archive` 一处、`report` 三处），所以原文本身已经是整句；
-// 站里迁进类别表之后，这里就没有调用者，届时删掉。
-//
-// 它存在的意义是让「往屏上贴系统原文」有个数得出来的入口：谁用了它，审计数得清。
-const CannotStartSystemFault CannotStartKind = "system_fault"
+// 建落点与报告站收尾（ADR-0047 收尾，ADR-0057）：这几句原先由 `archive` 与 `report` 用
+// `fmt.Errorf` 拼好、塔尖原样贴屏，现在站里只交事实，句子回到这里。
+const (
+	// CannotStartArchiveDir 是建归档目录失败：Place 是那个目录，Origin 是系统原话。
+	CannotStartArchiveDir CannotStartKind = "archive_dir_create"
+	// CannotStartReportWrite 是 `report.txt` 写不出来：Place 是那个路径，Origin 是系统原话。
+	CannotStartReportWrite CannotStartKind = "report_write"
+	// CannotStartReportResource 是备份执行资源（脚本、代填）失败：Origin 是系统原话。
+	CannotStartReportResource CannotStartKind = "report_resource_backup"
+	// CannotStartReportManifest 是清单的脱敏副本写不出来：Origin 是系统原话。
+	CannotStartReportManifest CannotStartKind = "report_manifest_copy"
+)
 
 // CannotStartReason 是那一屏要装的全部事实：一个类别，加几个具名格。
 //

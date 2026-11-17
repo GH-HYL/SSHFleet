@@ -45,7 +45,7 @@ func ProblemOrigin(problem, origin string) string {
 // 日志还没建起来时 logPath 传空串，那一行就不出现——老版同一判据。
 //
 // 正文收 `FatalBody` 而不是 `string`：那一屏的字只能由本包成形，站里贴不进自己拼的句子，
-// 也贴不进系统原文（要贴得走「系统原文」那一类别，ADR-0047）。
+// 也贴不进系统原文（要贴得走某个类别带一格 `Origin`，ADR-0047）。
 func Fatal(where string, body FatalBody, logPath string) Line {
 	s := body.Text()
 	if logPath != "" {

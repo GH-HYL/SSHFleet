@@ -261,9 +261,25 @@ func reasonText(r contract.CannotStartReason) string {
 	case contract.CannotStartOutputLog:
 		return "建执行期日志失败（" + r.Place + "）：" + r.Origin
 
-	// 站交上来的系统原文：一句自己的话都不加，原样交出（过渡口子，ADR-0047）。
-	case contract.CannotStartSystemFault:
-		return r.Origin
+	// 运行上下文解不开（报告站那一侧，ADR-0057）：句子与封侧那几句同形。
+	case contract.CannotStartRunMetaLength:
+		return "运行上下文：长度不对（" + strconv.Itoa(r.Index) + " 字节）"
+	case contract.CannotStartRunMetaVersion:
+		return "运行上下文：版本 " + strconv.Itoa(r.Index) + " 认不出"
+	case contract.CannotStartRunMetaOpen:
+		return "运行上下文：解不开（密钥或格式两处漂了）：" + r.Origin
+	case contract.CannotStartRunMetaBody:
+		return "运行上下文：内容认不出：" + r.Origin
+
+	// 建落点与报告站收尾（ADR-0047 收尾，ADR-0057）。
+	case contract.CannotStartArchiveDir:
+		return "建归档目录失败（" + r.Place + "）：" + r.Origin
+	case contract.CannotStartReportWrite:
+		return "写报告文件失败（" + r.Place + "）：" + r.Origin
+	case contract.CannotStartReportResource:
+		return "保存执行资源文件失败：" + r.Origin
+	case contract.CannotStartReportManifest:
+		return "保存清单副本失败：" + r.Origin
 	}
 	panic("起不来：类别 " + string(r.Kind) + " 在 message.CannotStartText 里没有模板")
 }

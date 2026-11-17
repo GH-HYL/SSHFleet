@@ -4,7 +4,6 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"encoding/json"
-	"fmt"
 
 	"sshfleet2/internal/contract"
 )
@@ -26,38 +25,59 @@ var runMetaKey = [32]byte{
 //
 // 解不开只有两种原因：版本不对（封法改过），或两处密钥／格式漂了。**直接报错，不猜、
 // 不拿别处的值顶**——拿别处的值顶，报告就写出一份看着对、其实不是使用者敲的东西。
-func openRunMeta(sealed contract.RunMeta) (contract.RunMetaBody, error) {
+//
+// 交回的是「哪一类坏」而不是一句话：与解析站封侧同形（ADR-0057），句子由 `message` 按
+// 类别成形。第三个返回值是「坏了」这一事实本身。
+func openRunMeta(sealed contract.RunMeta) (contract.RunMetaBody, contract.CannotStartReason, bool) {
 	var body contract.RunMetaBody
 	if len(sealed) < 1+contract.RunMetaNonceSize+contract.RunMetaTagSize {
-		return body, fmt.Errorf("运行上下文：长度不对（%d 字节）", len(sealed))
+		return body, contract.CannotStartReason{
+			Kind:  contract.CannotStartRunMetaLength,
+			Index: len(sealed),
+		}, true
 	}
 	if sealed[0] != contract.RunMetaVersion {
-		return body, fmt.Errorf("运行上下文：版本 %d 认不出", sealed[0])
+		return body, contract.CannotStartReason{
+			Kind:  contract.CannotStartRunMetaVersion,
+			Index: int(sealed[0]),
+		}, true
 	}
-	gcm, err := runMetaGCM()
-	if err != nil {
-		return body, err
+	gcm, reason, bad := runMetaGCM()
+	if bad {
+		return body, reason, true
 	}
 	nonce := sealed[1 : 1+contract.RunMetaNonceSize]
 	plain, err := gcm.Open(nil, nonce, sealed[1+contract.RunMetaNonceSize:], nil)
 	if err != nil {
-		return body, fmt.Errorf("运行上下文：解不开（密钥或格式两处漂了）：%w", err)
+		return body, contract.CannotStartReason{
+			Kind:   contract.CannotStartRunMetaOpen,
+			Origin: err.Error(),
+		}, true
 	}
 	if err := json.Unmarshal(plain, &body); err != nil {
-		return body, fmt.Errorf("运行上下文：内容认不出：%w", err)
+		return body, contract.CannotStartReason{
+			Kind:   contract.CannotStartRunMetaBody,
+			Origin: err.Error(),
+		}, true
 	}
-	return body, nil
+	return body, contract.CannotStartReason{}, false
 }
 
 // runMetaGCM 与解析站那一段同形：密钥长度写死，建不起来说明写死的值错了。
-func runMetaGCM() (cipher.AEAD, error) {
+func runMetaGCM() (cipher.AEAD, contract.CannotStartReason, bool) {
 	block, err := aes.NewCipher(runMetaKey[:])
 	if err != nil {
-		return nil, fmt.Errorf("运行上下文：建不出密码器：%w", err)
+		return nil, contract.CannotStartReason{
+			Kind:   contract.CannotStartRunMetaCipher,
+			Origin: err.Error(),
+		}, true
 	}
 	gcm, err := cipher.NewGCM(block)
 	if err != nil {
-		return nil, fmt.Errorf("运行上下文：建不出 GCM：%w", err)
+		return nil, contract.CannotStartReason{
+			Kind:   contract.CannotStartRunMetaGCM,
+			Origin: err.Error(),
+		}, true
 	}
-	return gcm, nil
+	return gcm, contract.CannotStartReason{}, false
 }
