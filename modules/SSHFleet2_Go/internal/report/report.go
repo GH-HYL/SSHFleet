@@ -9,7 +9,6 @@ package report
 // 为什么它是唯一解得开运行上下文的地方：见 contract/runmeta.go 与 ADR-0035 决定九。
 
 import (
-	"fmt"
 	"os"
 
 	"sshfleet2/internal/archive"
@@ -26,11 +25,14 @@ import (
 //
 // 交回的 warnings 是「打过了、还要记进工具日志」的那几句（今天只有链接那两句）：报告站自己
 // 上屏（ADR-0032 决定四把「报告站上屏」列为四处之一），留痕交塔尖——它不持日志句柄。
-func Run(l contract.Ledger, paths archive.Paths) (warnings []message.Line, err error) {
+//
+// 失败交「起不来」的纸、不交 `error`：句子只由 `message` 按类别成形，站里拼的半句中文
+// 贴不进那一屏（ADR-0047、ADR-0057）。与执行站同形，塔尖那两处接法因此也只剩一种。
+func Run(l contract.Ledger, paths archive.Paths) (warnings []message.Line, cannot *contract.CannotStart) {
 	// 解不开就是封与解两处漂了：直接报，不猜、不拿别处的值顶（15 号单「运行上下文的用法」）。
-	body, err := openRunMeta(l.RunMeta)
-	if err != nil {
-		return nil, err
+	body, reason, bad := openRunMeta(l.RunMeta)
+	if bad {
+		return nil, &contract.CannotStart{Where: contract.WhereOutput, Reason: reason}
 	}
 
 	// 遮在报告站这一侧做，两处产出共用同一份已遮的值：贴出去的命令行与清单只有一个版。
@@ -42,17 +44,27 @@ func Run(l contract.Ledger, paths archive.Paths) (warnings []message.Line, err e
 	console.Print(message.StatisticsLine(l, body.ShowCategoryTips, body.ErrorKeywordsPath))
 
 	if err := os.WriteFile(paths.Report, []byte(message.ReportText(l, body, maskedArgv, maskedManifest, maskedPassword)), 0o644); err != nil {
-		return nil, fmt.Errorf("写报告文件失败（%s）：%w", paths.Report, err)
+		return nil, &contract.CannotStart{Where: contract.WhereOutput, Reason: contract.CannotStartReason{
+			Kind:   contract.CannotStartReportWrite,
+			Place:  paths.Report,
+			Origin: err.Error(),
+		}}
 	}
 
 	// 备份原料：脚本与代填原样复制（归档包的事），清单存脱敏副本（mask 的事）。
 	// 这一步失败算「起不来」——老版就是把它当失败收场的：归档里缺原料，事后没人说得清
 	// 那次到底用了什么。
 	if err := archive.Backup(paths.Assets, body.ScriptPath, body.AnswerRaw); err != nil {
-		return warnings, fmt.Errorf("保存执行资源文件失败：%w", err)
+		return warnings, &contract.CannotStart{Where: contract.WhereOutput, Reason: contract.CannotStartReason{
+			Kind:   contract.CannotStartReportResource,
+			Origin: err.Error(),
+		}}
 	}
 	if err := mask.WriteManifestCopy(l.Resources.Manifest, paths.Assets); err != nil {
-		return warnings, fmt.Errorf("保存清单副本失败：%w", err)
+		return warnings, &contract.CannotStart{Where: contract.WhereOutput, Reason: contract.CannotStartReason{
+			Kind:   contract.CannotStartReportManifest,
+			Origin: err.Error(),
+		}}
 	}
 
 	// 两张表格：开关在密文里（报告站读不到配置），关掉就不生成。失败只留痕、不中断——

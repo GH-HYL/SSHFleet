@@ -100,7 +100,9 @@ var redline = []RedLineEntry{
 	// 04 阶段 15 号单：报告站的入口形状与落点来源（新增不算改）
 	// 取舍落地 02 号单（ADR-0054）：撤回射程——不再钉 message.StatisticsLine 的签名，
 	// 那一条已由 console.Print 的形参类型管住；符号少一个、喊失败少一次。
-	{"TestRedlineReportScreenAndPath", []string{"contract.Ledger", "message.Line", "report.Run"}, 5},
+	// 系统原文类别收口 02 号单（ADR-0057）：出参从 error 换成起不来的纸，符号表加
+	// contract.CannotStart——换掉的是被钉的那个类型，判据条数与喊失败次数都没动。
+	{"TestRedlineReportScreenAndPath", []string{"contract.CannotStart", "contract.Ledger", "message.Line", "report.Run"}, 5},
 	// 07 阶段 02 号单：遮的构造点只有一个（新增一条，不算改名单）
 	{"TestCheckMask", []string{"CheckMask", "ClassMask", "Report"}, 4},
 	// 检查器自反补硬 01 号单：入口登记（新增不算改）

@@ -99,8 +99,8 @@ func TestRunMasksNewPassword(t *testing.T) {
 	}
 
 	paths := runPaths(t)
-	if _, err := Run(l, paths); err != nil {
-		t.Fatalf("写报告失败：%v", err)
+	if _, cannot := Run(l, paths); cannot != nil {
+		t.Fatalf("写报告失败：%v", cannot)
 	}
 	data, err := os.ReadFile(paths.Report)
 	if err != nil {
@@ -118,26 +118,40 @@ func TestRunMasksNewPassword(t *testing.T) {
 
 // TestRunRejectsBrokenRunMeta 运行上下文解不开就报出来：不猜、不拿别处的值顶，
 // 也不留一份「看着对」的报告（15 号单「运行上下文的用法」）。
+//
+// 报的是「哪一类坏」而不是一句话：长度不够走 `runmeta_length`，句子归 message（ADR-0057）。
 func TestRunRejectsBrokenRunMeta(t *testing.T) {
 	l := ledgerForRun(t)
 	l.RunMeta = contract.RunMeta{1, 2, 3}
 
 	paths := runPaths(t)
-	if _, err := Run(l, paths); err == nil {
+	_, cannot := Run(l, paths)
+	if cannot == nil {
 		t.Fatal("解不开的运行上下文应当报错")
+	}
+	if cannot.Reason.Kind != contract.CannotStartRunMetaLength {
+		t.Fatalf("长度不够该走 runmeta_length，实际是 %s", cannot.Reason.Kind)
+	}
+	if cannot.Where != contract.WhereOutput {
+		t.Fatalf("这一屏的环节该是 output，实际是 %s", cannot.Where)
 	}
 	if _, err := os.Stat(paths.Report); err == nil {
 		t.Fatal("解不开时不该落下一份报告：那是「拿别处的值顶」的另一种写法")
 	}
 }
 
-// TestRunFailsWhenPathIsNotWritable 落点写不进去时把路径带回话里——报告站不自己找地方重写。
+// TestRunFailsWhenPathIsNotWritable 落点写不进去时把那条路径交回去——报告站不自己找地方重写。
 func TestRunFailsWhenPathIsNotWritable(t *testing.T) {
 	paths := runPaths(t)
 	paths.Report = filepath.Join(t.TempDir(), "no-such-dir", "report.txt")
-	if _, err := Run(ledgerForRun(t), paths); err == nil {
+	_, cannot := Run(ledgerForRun(t), paths)
+	if cannot == nil {
 		t.Fatal("父目录不存在时应当报错")
-	} else if !strings.Contains(err.Error(), "report.txt") {
-		t.Fatalf("报错里没带上落点：%v", err)
+	}
+	if cannot.Reason.Kind != contract.CannotStartReportWrite {
+		t.Fatalf("写报告失败该走 report_write，实际是 %s", cannot.Reason.Kind)
+	}
+	if cannot.Reason.Place != paths.Report {
+		t.Fatalf("报错里没带上落点：%+v", cannot.Reason)
 	}
 }

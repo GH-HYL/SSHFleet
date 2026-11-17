@@ -133,10 +133,14 @@ func main() {
 		// 步骤 8 前半：建本次的归档目录。本次执行的产物全在它下面，四条落点由它发。
 		paths, aerr := archive.Create(contract.HistoryDir, string(plan.Mode), plan.Run.Remark, time.Now())
 		if aerr != nil {
-			// 站的原文原样上屏：那一句中文现在还在站里（`archive` 一处），迁走之后这一类别就没人用
-			// 了（ADR-0047）。塔尖不替它加壳，也不许把 error 直接交给屏幕。
+			// 站只交事实：哪个目录、系统原话。那一句中文由 `message` 按类别成形（ADR-0047），
+			// 塔尖不替它加壳，更不许把 error 直接交给屏幕。
 			fatal(contract.WhereOutput, message.CannotStartBody(contract.CannotStart{
-				Reason: contract.CannotStartReason{Kind: contract.CannotStartSystemFault, Origin: aerr.Error()},
+				Reason: contract.CannotStartReason{
+					Kind:   contract.CannotStartArchiveDir,
+					Place:  paths.Dir,
+					Origin: aerr.Error(),
+				},
 			}), toolPath)
 		}
 		// 塔尖自己做的动作，自己留痕（老版 `:435`／`:443`）。各站的「解析成功、合规通过、
@@ -191,12 +195,10 @@ func main() {
 			lg.Warn(message.InterruptLog().Text())
 		}
 
-		warns, rerr := report.Run(ledger, paths)
-		if rerr != nil {
-			// 同上：`report` 那四句中文还在站里，这一屏只把原文接过来（ADR-0047）。
-			fatal(contract.WhereOutput, message.CannotStartBody(contract.CannotStart{
-				Reason: contract.CannotStartReason{Kind: contract.CannotStartSystemFault, Origin: rerr.Error()},
-			}), toolPath)
+		warns, cannot := report.Run(ledger, paths)
+		if cannot != nil {
+			// 与执行站同一接法：站交纸，句子由 message 成形（ADR-0057）。
+			fatal(cannot.Where, message.CannotStartBody(*cannot), toolPath)
 		}
 		// 报告站已经把这几句打上屏了；这里只管留痕——它不持日志句柄。
 		for _, w := range warns {

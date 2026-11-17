@@ -17,9 +17,9 @@ func TestOpenRunMetaFromRecordedVector(t *testing.T) {
 	if err != nil {
 		t.Fatalf("样本本身解不开：%v", err)
 	}
-	got, err := openRunMeta(contract.RunMeta(sealed))
-	if err != nil {
-		t.Fatalf("开不开：%v", err)
+	got, reason, bad := openRunMeta(contract.RunMeta(sealed))
+	if bad {
+		t.Fatalf("开不开：%s", reason.Kind)
 	}
 	want := contract.RunMetaBody{
 		Argv:              []string{"sshfleet2", "-f", "nodes.csv", "-c", "uptime"},
@@ -37,23 +37,35 @@ func TestOpenRunMetaFromRecordedVector(t *testing.T) {
 }
 
 func TestOpenRunMetaRejectsShort(t *testing.T) {
-	if _, err := openRunMeta(contract.RunMeta{1, 2, 3}); err == nil {
+	_, reason, bad := openRunMeta(contract.RunMeta{1, 2, 3})
+	if !bad {
 		t.Fatal("长度不够的那一段应当报错，不能当成空内容糊过去")
+	}
+	if reason.Kind != contract.CannotStartRunMetaLength {
+		t.Fatalf("长度不够该走 runmeta_length，实际是 %s", reason.Kind)
 	}
 }
 
 func TestOpenRunMetaRejectsWrongVersion(t *testing.T) {
 	sealed, _ := base64.StdEncoding.DecodeString(runMetaVector)
 	sealed[0] = 0x7f
-	if _, err := openRunMeta(contract.RunMeta(sealed)); err == nil {
+	_, reason, bad := openRunMeta(contract.RunMeta(sealed))
+	if !bad {
 		t.Fatal("认不出的版本号应当报错")
+	}
+	if reason.Kind != contract.CannotStartRunMetaVersion {
+		t.Fatalf("版本认不出该走 runmeta_version，实际是 %s", reason.Kind)
 	}
 }
 
 func TestOpenRunMetaRejectsTampered(t *testing.T) {
 	sealed, _ := base64.StdEncoding.DecodeString(runMetaVector)
 	sealed[len(sealed)-1] ^= 0xff
-	if _, err := openRunMeta(contract.RunMeta(sealed)); err == nil {
+	_, reason, bad := openRunMeta(contract.RunMeta(sealed))
+	if !bad {
 		t.Fatal("改过一个字节的那一段应当报错——改密钥漂了也走这条")
+	}
+	if reason.Kind != contract.CannotStartRunMetaOpen {
+		t.Fatalf("解不开该走 runmeta_open，实际是 %s", reason.Kind)
 	}
 }
