@@ -69,6 +69,10 @@ var paperFields = []PaperField{
 	{"DangerMatch", "Reason", PaperConfig},
 	{"DangerReport", "ScriptPath", PaperFact},
 
+	// 执行站的两个落点（landing.go）：路径是事实
+	{"Landings", "Terminal", PaperFact},
+	{"Landings", "ExecLog", PaperFact},
+
 	// 密钥管理（key.go）：路径与指纹都是事实
 	{"KeyRun", "Path", PaperFact},
 	{"KeyFacts", "EnvName", PaperFact},

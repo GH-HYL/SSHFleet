@@ -143,7 +143,7 @@ func ReportText(l contract.Ledger, body contract.RunMetaBody, maskedArgv []strin
 	b.WriteString(reportHeadline + "\n")
 	fmt.Fprintf(&b, "执行开始时间： %s\n", l.StartedAt.Format(reportTimeLayout))
 	fmt.Fprintf(&b, "执行结束时间： %s\n", l.StoppedAt.Format(reportTimeLayout))
-	fmt.Fprintf(&b, "\n【执行命令】 \n  %s\n", DisplayCommand(maskedArgv))
+	fmt.Fprintf(&b, "\n【执行命令】 \n  %s\n", displaycommand(maskedArgv))
 
 	b.WriteString("\n【执行参数】\n")
 	fmt.Fprintf(&b, "  %s： %s\n", modeRowLabel, modeTitle(body.Mode))
@@ -231,7 +231,7 @@ func ReportText(l contract.Ledger, body contract.RunMetaBody, maskedArgv []strin
 //
 // 与执行站拼下发行那处**不是同一份**：那边一律整体单引号包起来、交给 `sh -c`；这一处
 // 能省就省（逗号在内联清单里是分隔符，加了引号反而失真），为的是让人看着能照着敲。
-func DisplayCommand(argv []string) string {
+func displaycommand(argv []string) string {
 	parts := make([]string, 0, len(argv))
 	for _, s := range argv {
 		parts = append(parts, criterion.QuoteForShell(s))

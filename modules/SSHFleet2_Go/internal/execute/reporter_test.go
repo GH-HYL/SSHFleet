@@ -136,7 +136,7 @@ func TestResultLineKeepsNoSecret(t *testing.T) {
 	dir := t.TempDir()
 	term := filepath.Join(dir, "terminal-output.txt")
 	execLog := filepath.Join(dir, "SSHFleetExec.log")
-	if _, fail := Run(context.Background(), p, term, execLog); fail != nil {
+	if _, fail := Run(context.Background(), p, contract.Landings{Terminal: term, ExecLog: execLog}); fail != nil {
 		t.Fatalf("不该起不来：%+v", fail)
 	}
 

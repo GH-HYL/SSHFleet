@@ -11,7 +11,6 @@ package execute
 import (
 	"context"
 	"strconv"
-	"time"
 
 	"sshfleet2/internal/contract"
 	"sshfleet2/internal/message"
@@ -31,27 +30,12 @@ func answersOf(p *contract.Plan) []contract.Answer {
 // runAnswer 走交互分支跑这次的任务。
 func (c *client) runAnswer(ctx context.Context, p *contract.Plan, res *contract.NodeResult) {
 	answers := answersOf(p)
-	session, stdin, err := c.startPTY()
-	if err != nil {
-		res.ErrorText = c.mergeBanner(err.Error())
-		return
-	}
-	defer func() { _ = session.Close() }()
-
 	out := &lockedBuffer{}
 	hook := newAnswerHook(out, answers, MatchOptions{Regex: p.Run.MatchRegex, CaseSensitive: p.Run.MatchCaseSensitive}, c.abortKeywords(p))
-	session.Stdout = hook
-	session.Stderr = hook
-
-	send := make(chan string, len(answers)+1)
-	go pump(send, stdin)
-
-	start := time.Now()
-	outcome := c.driveSession(ctx, sessionDriver{session: session, events: hook.events, send: send},
-		p.Run.Downlink, seconds(p.Run.TimeoutExecute))
-	res.Cost = time.Since(start)
-	close(send)
-	hook.Flush()
+	outcome, ok := c.runPTY(ctx, res, hook, len(answers)+1, p.Run.Downlink, seconds(p.Run.TimeoutExecute))
+	if !ok {
+		return
+	}
 
 	res.Output = trimOuterBlankLines(out.String())
 
@@ -142,6 +126,9 @@ func newAnswerHook(out *lockedBuffer, answers []contract.Answer, opts MatchOptio
 	h.tap = newOutputTap(out, h.match)
 	return h
 }
+
+// Events 是会话骨架要的事件源：钩子在输出里认出触发词、中止词时报给它。
+func (h *answerHook) Events() <-chan hookEvent { return h.events }
 
 func (h *answerHook) Write(p []byte) (int, error) { return h.tap.Write(p) }
 

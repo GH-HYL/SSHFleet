@@ -155,7 +155,7 @@ const (
 // 密钥命令与批量参数并行。
 //
 // 这三族的句子本来就住 `message`（answer.go／passwd.go／keytool.go），站里只是把它塞进纸；
-// 现在纸只装类别与参数，模板不动窝，由 `message.CannotStartText` 转派过去。
+// 现在纸只装类别与参数，模板不动窝，由 `message.CannotStartBody` 转派过去。
 const (
 	CannotStartAnswerFileUnreadable CannotStartKind = "answer_file_unreadable"
 	CannotStartAnswerFileBinary     CannotStartKind = "answer_file_binary"

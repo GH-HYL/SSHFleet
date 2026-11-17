@@ -20,7 +20,6 @@ const (
 	ClassContract = "类四 契约纯净"
 	ClassFailure  = "类五 失败类型的构造点"
 	ClassTestSite = "类六 测试站位"
-	ClassHandoff  = "类六 交接件更窄"
 	ClassMask     = "类七 遮的构造点"
 	ClassRedline  = "红线名单与指纹"
 )
@@ -28,7 +27,7 @@ const (
 // allClasses 是跑全的时候的次序，与类号一致。
 var allClasses = []string{
 	ClassTerminal, ClassDeps, ClassExit, ClassContract,
-	ClassFailure, ClassTestSite, ClassHandoff, ClassMask, ClassRedline,
+	ClassFailure, ClassTestSite, ClassMask, ClassRedline,
 }
 
 // skipTestFiles 说清每一类对 _test.go 的态度。

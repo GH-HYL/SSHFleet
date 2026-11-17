@@ -94,11 +94,11 @@ func TestKeyPrecheckTrace(t *testing.T) {
 
 // 命令不合规那两句：与老版逐字相同。
 func TestKeyToolComplaints(t *testing.T) {
-	if got, want := KeyToolNeedAlone("--gen-key、--key-status"),
+	if got, want := keytoolneedalone("--gen-key、--key-status"),
 		"--gen-key、--key-status 只能给一个——它们是三个独立命令，一次做一件事"; got != want {
 		t.Fatalf("互斥那句不对：\n got %q\nwant %q", got, want)
 	}
-	if got, want := KeyToolWithBatch("--key-status", "-c、-r"),
+	if got, want := keytoolwithbatch("--key-status", "-c、-r"),
 		"--key-status 不能和批量执行选项一起用：同时给了 -c、-r\n"+
 			"提示：分成两次执行——先跑密钥管理命令，再跑批量执行"; got != want {
 		t.Fatalf("与批量参数同给那句不对：\n got %q\nwant %q", got, want)
@@ -118,7 +118,7 @@ func TestKeyGenScreens(t *testing.T) {
 	}
 	want := "检测到已存在主密钥，非交互模式不自动覆盖（覆盖后旧密钥加密的凭据文件将无法解密）。\n" +
 		"如需覆盖：去掉 --yes 后重新执行 --gen-key"
-	if got := KeyGenNoOverwrite(); got != want {
+	if got := keygennooverwrite(); got != want {
 		t.Fatalf("非交互拒绝那句不对：\n got %q\nwant %q", got, want)
 	}
 }
@@ -179,11 +179,11 @@ func TestKeyConvertScreens(t *testing.T) {
 		contract.CredFileMultiline: "凭据文件有多行内容，但密码应为单行，请检查是否误粘贴：/x/sec",
 	}
 	for code, want := range cases {
-		if got := KeyConvertReadProblem(code, "/x/sec", ""); got != want {
+		if got := keyconvertreadproblem(code, "/x/sec", ""); got != want {
 			t.Fatalf("%s 那句不对：\n got %q\nwant %q", code, got, want)
 		}
 	}
-	if got, want := KeyConvertReadProblem(contract.CredFileUnreadable, "/x/sec", "no such file"),
+	if got, want := keyconvertreadproblem(contract.CredFileUnreadable, "/x/sec", "no such file"),
 		"读取凭据文件失败：/x/sec\n原因：no such file"; got != want {
 		t.Fatalf("读不到那句不对：\n got %q\nwant %q", got, want)
 	}
@@ -191,7 +191,7 @@ func TestKeyConvertScreens(t *testing.T) {
 
 // 加密被拦那一屏：先给结论，再给两条出路。
 func TestKeyConvertBlocked(t *testing.T) {
-	got := KeyConvertBlocked(posixFacts(contract.KeyStateDiverged))
+	got := keyconvertblocked(posixFacts(contract.KeyStateDiverged))
 	for _, want := range []string{
 		"已阻止加密。\n",
 		"主密钥来源不一致——这会让凭据解密报「主密钥不匹配」",

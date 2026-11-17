@@ -14,13 +14,13 @@ import "fmt"
 //
 // text 是这句话前半截（到逗号为止，不含逗号）；value 是原值的呈现形态
 // （要不要加引号由调用方决定：它知道那是路径、数字还是一段配置原文）。
-func CurrentValue(text, value string) string {
+func currentvalue(text, value string) string {
 	return text + "，当前值：" + value
 }
 
 // ValueInvalid 拼「<项名> 取值非法：<值>」：项名与标签之间**空一格**，配置键就照键名写
 // （`upload.small_file`、`execution.timeout_execute`）。
-func ValueInvalid(name, value string) string {
+func valueinvalid(name, value string) string {
 	return name + " 取值非法：" + value
 }
 
@@ -54,7 +54,7 @@ const (
 
 // ValueInvalidBecause 拼「<项名> 取值非法：<值>（<理由>）」——括号是全角，紧贴值。
 func ValueInvalidBecause(name, value string, reason ValueInvalidReason) string {
-	return ValueInvalid(name, value) + "（" + string(reason) + "）"
+	return valueinvalid(name, value) + "（" + string(reason) + "）"
 }
 
 // UploadThresholdOrder 上传阈值那两句的先后：「large_file(9) 不能小于 small_file(10)」。

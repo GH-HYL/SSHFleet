@@ -34,7 +34,7 @@ func CredentialRelativeWithoutSecretDir() string {
 //
 // 老版形态：青色 [INFO] + 黄色 [function:read_nodes_infos] + 正文，后跟一个换行。
 // 解站自己不写终端，这一屏挂在纸上，由塔尖打出去（Plan.Notices）。
-func ManifestHeaderDropped() Line {
+func manifestheaderdropped() Line {
 	s := ansiCyan + "[INFO]" + ansiReset +
 		ansiYellow + " [function:read_nodes_infos]" + ansiReset +
 		" 第一行不是IP格式，已移除表头行\n"

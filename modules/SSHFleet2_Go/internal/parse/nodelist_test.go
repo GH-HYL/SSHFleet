@@ -16,7 +16,7 @@ func TestReadManifestFromFile(t *testing.T) {
 
 	m, fail := readManifest(path)
 	if fail != nil {
-		t.Fatalf("读不成器：%s", message.CannotStartText(*fail))
+		t.Fatalf("读不成器：%s", message.CannotStartBody(*fail).Text())
 	}
 	if len(m.rows) != 2 {
 		t.Fatalf("应当读到两行，拿到 %d 行：%v", len(m.rows), m.rows)
@@ -32,7 +32,7 @@ func TestReadManifestFromFile(t *testing.T) {
 func TestReadManifestFromInlineRecord(t *testing.T) {
 	m, fail := readManifest("10.0.0.9,22,root,pw")
 	if fail != nil {
-		t.Fatalf("读不成器：%s", message.CannotStartText(*fail))
+		t.Fatalf("读不成器：%s", message.CannotStartBody(*fail).Text())
 	}
 	if !m.inline {
 		t.Fatal("内联记录应当判成 inline")
@@ -49,7 +49,7 @@ func TestReadManifestDropsHeader(t *testing.T) {
 
 	m, fail := readManifest(path)
 	if fail != nil {
-		t.Fatalf("读不成器：%s", message.CannotStartText(*fail))
+		t.Fatalf("读不成器：%s", message.CannotStartBody(*fail).Text())
 	}
 	if len(m.rows) != 1 {
 		t.Fatalf("表头没被移除：%v", m.rows)
@@ -67,7 +67,7 @@ func TestReadManifestRejectsEmptyFile(t *testing.T) {
 	if fail == nil {
 		t.Fatal("空文件应当起不来")
 	}
-	if say := message.CannotStartText(*fail); !strings.Contains(say, "CSV 文件为空") {
+	if say := message.CannotStartBody(*fail).Text(); !strings.Contains(say, "CSV 文件为空") {
 		t.Fatalf("话不对：%s", say)
 	}
 }
@@ -78,7 +78,7 @@ func TestReadManifestRejectsNeitherFileNorRecord(t *testing.T) {
 	if fail == nil {
 		t.Fatal("应当起不来")
 	}
-	say := message.CannotStartText(*fail)
+	say := message.CannotStartBody(*fail).Text()
 	if !strings.Contains(say, "-f 参数指定的文件读不到：这不是文件也不是记录") {
 		t.Fatalf("话不对：%s", say)
 	}
@@ -92,7 +92,7 @@ func TestReadManifestRejectsNewlineInInline(t *testing.T) {
 	if fail == nil {
 		t.Fatal("内联值里有换行应当起不来")
 	}
-	if say := message.CannotStartText(*fail); !strings.Contains(say, "内联值里不能有换行") {
+	if say := message.CannotStartBody(*fail).Text(); !strings.Contains(say, "内联值里不能有换行") {
 		t.Fatalf("话不对：%s", say)
 	}
 }
@@ -106,7 +106,7 @@ func TestReadManifestReportsSyntaxError(t *testing.T) {
 	if fail == nil {
 		t.Fatal("引号不配对应当起不来")
 	}
-	if say := message.CannotStartText(*fail); !strings.Contains(say, "CSV 的双引号要成对出现") {
+	if say := message.CannotStartBody(*fail).Text(); !strings.Contains(say, "CSV 的双引号要成对出现") {
 		t.Fatalf("话不对：%s", say)
 	}
 }
@@ -118,7 +118,7 @@ func TestBuildNodesFallsBackToConfig(t *testing.T) {
 
 	nodes, _, fail := buildNodes([][]string{{"10.0.0.1"}}, cfg, false)
 	if fail != nil {
-		t.Fatalf("不该起不来：%s", message.CannotStartText(*fail))
+		t.Fatalf("不该起不来：%s", message.CannotStartBody(*fail).Text())
 	}
 	if len(nodes) != 1 {
 		t.Fatalf("应当补出一台：%v", nodes)
@@ -134,7 +134,7 @@ func TestBuildNodesPrefersListColumns(t *testing.T) {
 
 	nodes, _, fail := buildNodes([][]string{{"10.0.0.2", "2222", "root", "list-pw"}}, cfg, false)
 	if fail != nil {
-		t.Fatalf("不该起不来：%s", message.CannotStartText(*fail))
+		t.Fatalf("不该起不来：%s", message.CannotStartBody(*fail).Text())
 	}
 	got := nodes[0]
 	if got.Port != "2222" || got.User != "root" || got.Password != "list-pw" {
@@ -154,7 +154,7 @@ func TestBuildNodesCollectsAllErrors(t *testing.T) {
 	if fail == nil {
 		t.Fatal("三行都坏，应当起不来")
 	}
-	say := message.CannotStartText(*fail)
+	say := message.CannotStartBody(*fail).Text()
 	for _, want := range []string{
 		"发现以下错误:",
 		"行 1 (IP: 10.0.0.1): - 端口必须是1-65535之间的整数",
@@ -175,7 +175,7 @@ func TestBuildNodesNeedsKeyWhenKeyMode(t *testing.T) {
 	if fail == nil {
 		t.Fatal("用了 -k 没私钥应当起不来")
 	}
-	if say := message.CannotStartText(*fail); !strings.Contains(say, "用了 -k，但没有找到可用的私钥") {
+	if say := message.CannotStartBody(*fail).Text(); !strings.Contains(say, "用了 -k，但没有找到可用的私钥") {
 		t.Fatalf("话不对：%s", say)
 	}
 }
@@ -186,7 +186,7 @@ func TestBuildNodesWarnsUnusedKey(t *testing.T) {
 
 	_, notices, fail := buildNodes([][]string{{"10.0.0.1", "22", "root", "pw", "/k/id_rsa"}}, cfg, false)
 	if fail != nil {
-		t.Fatalf("加 -k 之外不该起不来：%s", message.CannotStartText(*fail))
+		t.Fatalf("加 -k 之外不该起不来：%s", message.CannotStartBody(*fail).Text())
 	}
 	// 纸上只装种类与事实：句子由 message 照 Kind 成形（`TestUnusedKeyNotice` 管那句话）。
 	if len(notices) != 1 || notices[0].Kind != contract.NoticeUnusedKey {
@@ -205,7 +205,7 @@ func TestRunFillsNodesAndNotices(t *testing.T) {
 
 	_, plan, _, fail, _ := Run([]string{"sshfleet2", "-f", "nodes.csv", "-c", "uptime"}, "9.9.9")
 	if fail != nil {
-		t.Fatalf("不该起不来：%s", message.CannotStartText(*fail))
+		t.Fatalf("不该起不来：%s", message.CannotStartBody(*fail).Text())
 	}
 	if plan == nil {
 		t.Fatal("没交回纸")

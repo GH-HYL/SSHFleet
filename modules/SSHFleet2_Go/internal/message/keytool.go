@@ -31,12 +31,12 @@ func KeyModeEntered(which contract.KeyTool) Line {
 // KeyToolNeedAlone 是一次给了两条以上密钥命令那句。names 是逗号连起来的命令名。
 //
 // 这句走「起不来」，环节名 cli，外壳句由调用方套（选项/参数合规性检查未通过）。
-func KeyToolNeedAlone(names string) string {
+func keytoolneedalone(names string) string {
 	return names + " 只能给一个——它们是三个独立命令，一次做一件事"
 }
 
 // KeyToolWithBatch 是密钥命令与批量执行参数一起给那句。given 是给出来的那几个选项名。
-func KeyToolWithBatch(name, given string) string {
+func keytoolwithbatch(name, given string) string {
 	return name + " 不能和批量执行选项一起用：同时给了 " + given + "\n" +
 		"提示：分成两次执行——先跑密钥管理命令，再跑批量执行"
 }
@@ -119,7 +119,7 @@ func keyPrecheckText(f contract.KeyFacts) string {
 //
 // 有预检查那一段就附上（它比「去生成一把」更准：本机其实存着，只是终端没读到），
 // 否则给生成指引。老版 `GetMasterKey` 就是这个次序。
-func KeyNoMasterKey(f contract.KeyFacts) string {
+func keynomasterkey(f contract.KeyFacts) string {
 	body := "缺少主密钥，无法解密/加密凭据文件\n"
 	if note := keyPrecheckText(f); note != "" {
 		return body + note
@@ -182,8 +182,8 @@ func keyPersistHint(f contract.KeyFacts) string {
 // 句子本身住这里（密钥包不自己拼字）。
 const ConfigNoEncrypt = "配置里没有 [credential] encrypt 这一格"
 
-func KeyConfigUnreadable(reason string) string {
-	return ProblemReason("读不到配置文件里的加密开关（[credential] encrypt）："+ConfigShownPath, reason)
+func keyconfigunreadable(reason string) string {
+	return problemreason("读不到配置文件里的加密开关（[credential] encrypt）："+ConfigShownPath, reason)
 }
 
 // KeyGenExisting 是本机已有主密钥时开场那一段：现状两处、不一致点明、覆盖的代价。
@@ -206,7 +206,7 @@ func KeyGenExisting(f contract.KeyFacts) Line {
 }
 
 // KeyGenNoOverwrite 是非交互（--yes）下拒绝自动覆盖那一屏的正文：说清代价与怎么覆盖。
-func KeyGenNoOverwrite() string {
+func keygennooverwrite() string {
 	return "检测到已存在主密钥，非交互模式不自动覆盖（覆盖后旧密钥加密的凭据文件将无法解密）。\n" +
 		"如需覆盖：去掉 --yes 后重新执行 --gen-key"
 }
@@ -254,7 +254,7 @@ func KeyGenSaved(regenerated bool, f contract.KeyFacts, res contract.PersistResu
 }
 
 // KeyGenSaveFailed 是持久值写不进去那一屏：说清失败在哪、以及怎么手工补。
-func KeyGenSaveFailed(f contract.KeyFacts, where, reason string) string {
+func keygensavefailed(f contract.KeyFacts, where, reason string) string {
 	if f.Host == contract.KeyHostWindows {
 		return "主密钥自动保存失败：" + reason + "\n可手动保存：执行 setx " + f.EnvName + " 你的随机密钥"
 	}
@@ -272,10 +272,10 @@ func KeyConvertAlreadyPlain(path string) Line {
 }
 
 // KeyConvertReadProblem 是读文件那一步的毛病：哪种毛病决定说哪句、要不要带系统原因。
-func KeyConvertReadProblem(p contract.CredFileProblem, path, reason string) string {
+func keyconvertreadproblem(p contract.CredFileProblem, path, reason string) string {
 	switch p {
 	case contract.CredFileUnreadable:
-		return ProblemReason("读取凭据文件失败："+path, reason)
+		return problemreason("读取凭据文件失败："+path, reason)
 	case contract.CredFileEmpty:
 		return "凭据文件是空的，请先填入密码再转换：" + path
 	case contract.CredFileBinary:
@@ -287,7 +287,7 @@ func KeyConvertReadProblem(p contract.CredFileProblem, path, reason string) stri
 }
 
 // KeyConvertBlocked 是加密方向被硬保护拦下那一屏：为什么拦、两条出路各是什么。
-func KeyConvertBlocked(f contract.KeyFacts) string {
+func keyconvertblocked(f contract.KeyFacts) string {
 	return "已阻止加密。\n" + divergenceNote(f) +
 		"出路：\n  ① " + keyReloadHint(f) + "，然后重试\n" +
 		"  ② 若确定要用本次运行这把密钥：" + keyPersistHint(f) + "，然后重试"
@@ -312,23 +312,23 @@ func divergenceNote(f contract.KeyFacts) string {
 }
 
 // KeyConvertDecryptFailed 是解不开那句：先给最可能的原因，系统原文跟在「原因：」后面。
-func KeyConvertDecryptFailed(path, reason string) string {
-	return ProblemReason("解密失败：主密钥与加密该文件时使用的密钥不一致，或文件已损坏/被修改："+path, reason)
+func keyconvertdecryptfailed(path, reason string) string {
+	return problemreason("解密失败：主密钥与加密该文件时使用的密钥不一致，或文件已损坏/被修改："+path, reason)
 }
 
 // KeyConvertEmpty 是解出来是空串那句：拒绝写回，免得把文件写成一个空文件。
-func KeyConvertEmpty(path string) string {
+func keyconvertempty(path string) string {
 	return "解密结果是空的，拒绝写回：" + path
 }
 
 // KeyConvertWriteFailed 是写回失败那句。
-func KeyConvertWriteFailed(path, reason string) string {
-	return ProblemReason("转换内容写入失败："+path, reason)
+func keyconvertwritefailed(path, reason string) string {
+	return problemreason("转换内容写入失败："+path, reason)
 }
 
 // KeyConvertVerifyFailed 是写完回读不到那句。
-func KeyConvertVerifyFailed(path, reason string) string {
-	return ProblemReason("写入后校验失败，无法读取转换结果："+path, reason)
+func keyconvertverifyfailed(path, reason string) string {
+	return problemreason("写入后校验失败，无法读取转换结果："+path, reason)
 }
 
 // KeyConvertDone 是转换成功那两行：方向与路径、内容长度（不回显内容本体）。

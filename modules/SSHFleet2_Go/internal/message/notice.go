@@ -28,9 +28,9 @@ import (
 func NoticeLine(n contract.Notice) Line {
 	switch n.Kind {
 	case contract.NoticeManifestHeader:
-		return ManifestHeaderDropped()
+		return manifestheaderdropped()
 	case contract.NoticeUnusedKey:
-		return UnusedKeyNotice(n.Rows)
+		return unusedkeynotice(n.Rows)
 	}
 	return Line{}
 }
@@ -39,7 +39,7 @@ func NoticeLine(n contract.Notice) Line {
 //
 // 只说前五行、多于一行的说「共 N 行」——清单可能几百行，一句提示刷满屏没有意义。
 // 逐字照老版，不带颜色（老版这一句就是纯文本，没套 [INFO]）。
-func UnusedKeyNotice(rows []int) Line {
+func unusedkeynotice(rows []int) Line {
 	if len(rows) == 0 {
 		return Line{}
 	}

@@ -302,7 +302,7 @@ func TestDisplayCommandQuotes(t *testing.T) {
 		{[]string{"sshfleet2", ""}, "sshfleet2 ''"},
 	}
 	for _, c := range cases {
-		if got := DisplayCommand(c.argv); got != c.want {
+		if got := displaycommand(c.argv); got != c.want {
 			t.Fatalf("argv=%v\n got=%q\nwant=%q", c.argv, got, c.want)
 		}
 	}

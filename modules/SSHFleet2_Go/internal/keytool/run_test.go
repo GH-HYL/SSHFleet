@@ -99,8 +99,8 @@ func TestGenKeyYesRefusesOverwrite(t *testing.T) {
 	if cannot == nil {
 		t.Fatalf("已有密钥时加 --yes 应当是起不来")
 	}
-	if !strings.Contains(message.CannotStartText(*cannot), "非交互模式不自动覆盖") {
-		t.Fatalf("那一屏要说清非交互不覆盖：%q", message.CannotStartText(*cannot))
+	if !strings.Contains(message.CannotStartBody(*cannot).Text(), "非交互模式不自动覆盖") {
+		t.Fatalf("那一屏要说清非交互不覆盖：%q", message.CannotStartBody(*cannot).Text())
 	}
 	if cannot.Where != "credential" {
 		t.Fatalf("环节名沿用老版 credential，got %q", cannot.Where)
@@ -180,8 +180,8 @@ func TestConvertBlocksEncryptWhenDiverged(t *testing.T) {
 		t.Fatalf("不一致时加密方向应当被拦")
 	}
 	for _, want := range []string{"已阻止加密", "出路", "① 执行 source"} {
-		if !strings.Contains(message.CannotStartText(*cannot), want) {
-			t.Fatalf("那一屏缺「%s」：%q", want, message.CannotStartText(*cannot))
+		if !strings.Contains(message.CannotStartBody(*cannot).Text(), want) {
+			t.Fatalf("那一屏缺「%s」：%q", want, message.CannotStartBody(*cannot).Text())
 		}
 	}
 	if got := readFile(t, path); got != plain {
@@ -199,11 +199,11 @@ func TestConvertReportsMissingFile(t *testing.T) {
 	if cannot == nil {
 		t.Fatalf("文件不在应当起不来")
 	}
-	if !strings.Contains(message.CannotStartText(*cannot), "读取凭据文件失败："+missing) {
-		t.Fatalf("要说清是读不到那个文件：%q", message.CannotStartText(*cannot))
+	if !strings.Contains(message.CannotStartBody(*cannot).Text(), "读取凭据文件失败："+missing) {
+		t.Fatalf("要说清是读不到那个文件：%q", message.CannotStartBody(*cannot).Text())
 	}
-	if strings.Contains(message.CannotStartText(*cannot), "主密钥不匹配") {
-		t.Fatalf("不该把读不到说成密钥不对：%q", message.CannotStartText(*cannot))
+	if strings.Contains(message.CannotStartBody(*cannot).Text(), "主密钥不匹配") {
+		t.Fatalf("不该把读不到说成密钥不对：%q", message.CannotStartBody(*cannot).Text())
 	}
 }
 

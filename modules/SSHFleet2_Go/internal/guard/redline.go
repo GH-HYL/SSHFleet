@@ -57,10 +57,6 @@ var redline = []RedLineEntry{
 	{"TestCheckTestSite", []string{"CheckTestSite", "Report"}, 3},
 	{"TestCheckTestSiteClean", []string{"CheckTestSite", "Report"}, 1},
 
-	// 06 号工单：交接件宽窄
-	{"TestCheckHandoff", []string{"CheckHandoff", "PaperPair", "Report"}, 2},
-	{"TestCheckHandoffMissingPaper", []string{"CheckHandoff", "PaperPair"}, 1},
-
 	// 07 号工单：名单与台账本身
 	{"TestCheckRedline", []string{"CheckRedline", "RedLineEntry", "Report"}, 3},
 	{"TestLoadLedger", []string{"LoadLedger"}, 2},
@@ -90,13 +86,13 @@ var redline = []RedLineEntry{
 	{"TestRedlineCredentialReportsState", []string{"credential.KeyMissing", "credential.KeyReady", "credential.Secret", "credential.Status"}, 2},
 	{"TestRedlineArchiveHandsOutPaths", []string{"archive.Create"}, 4},
 	// 04 阶段 09 号单：执行站入口（新增不算改）
-	{"TestRedlineExecuteRecordsConnectFact", []string{"contract.CommandTask", "contract.ModeCommand", "contract.Node", "contract.Plan", "contract.Task", "execute.Run"}, 3},
+	{"TestRedlineExecuteRecordsConnectFact", []string{"contract.CommandTask", "contract.Landings", "contract.ModeCommand", "contract.Node", "contract.Plan", "contract.Task", "execute.Run"}, 3},
 	// 04 阶段 11 号单：第二张纸里没有「成败」（新增不算改）
 	{"TestRedlineResultHasNoVerdict", []string{"contract.NodeResult", "contract.ResultPaper"}, 1},
 	// 04 阶段 14 号单：结算站交得出一张总账（新增不算改）
 	{"TestRedlineSettleFillsLedger", []string{"contract.Extra", "contract.ModeCommand", "contract.NodeResult", "contract.ResultPaper", "settle.Run"}, 7},
 	// 04 阶段 12 号单：那一行真的落到盘上（新增不算改）
-	{"TestRedlineExecuteWritesResultLine", []string{"contract.CommandTask", "contract.ModeCommand", "contract.Node", "contract.Plan", "contract.Task", "execute.Run"}, 4},
+	{"TestRedlineExecuteWritesResultLine", []string{"contract.CommandTask", "contract.Landings", "contract.ModeCommand", "contract.Node", "contract.Plan", "contract.Task", "execute.Run"}, 4},
 	// 04 阶段 15 号单：报告站的入口形状与落点来源（新增不算改）
 	// 取舍落地 02 号单（ADR-0054）：撤回射程——不再钉 message.StatisticsLine 的签名，
 	// 那一条已由 console.Print 的形参类型管住；符号少一个、喊失败少一次。

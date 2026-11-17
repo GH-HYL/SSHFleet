@@ -23,13 +23,6 @@ func CannotStartBody(c contract.CannotStart) FatalBody {
 	return bodyOf(cannotStartText(c))
 }
 
-// CannotStartText 是同一段正文的字：测试与日志拿它比对、落盘，不上屏。
-//
-// 上屏走 `CannotStartBody`——两者同一实现，不各拼一遍（ADR-0047）。
-func CannotStartText(c contract.CannotStart) string {
-	return cannotStartText(c)
-}
-
 // cannotStartText 是正文本体：类别那一句，加可选的外壳句。
 func cannotStartText(c contract.CannotStart) string {
 	r := c.Reason
@@ -186,65 +179,65 @@ func reasonText(r contract.CannotStartReason) string {
 
 	// 提交前那几处取值不对（03 号单最后一批）：模板仍住各自的文件，这里只转派。
 	case contract.CannotStartAnswerFileUnreadable:
-		return AnswerFileUnreadable(r.Place, r.Origin)
+		return answerfileunreadable(r.Place, r.Origin)
 	case contract.CannotStartAnswerFileBinary:
-		return AnswerFileIsBinary(r.Place)
+		return answerfileisbinary(r.Place)
 	case contract.CannotStartAnswerInlineNewline:
-		return AnswerInlineHasNewline()
+		return answerinlinehasnewline()
 	case contract.CannotStartAnswerGone:
-		return AnswerGone(r.Place, r.Origin)
+		return answergone(r.Place, r.Origin)
 	case contract.CannotStartAnswerSyntax:
-		return AnswerSyntaxError(r.Place, r.Index)
+		return answersyntaxerror(r.Place, r.Index)
 	case contract.CannotStartAnswerRowInvalid:
-		return AnswerRowInvalid(r.Place, r.Index, r.Value, r.Origin)
+		return answerrowinvalid(r.Place, r.Index, r.Value, r.Origin)
 	case contract.CannotStartAnswerEmpty:
-		return AnswerEmpty(r.Place)
+		return answerempty(r.Place)
 	case contract.CannotStartAnswerMissingTrigger:
-		return AnswerMissingTrigger(r.Index, r.Value)
+		return answermissingtrigger(r.Index, r.Value)
 	case contract.CannotStartAnswerBadRegex:
-		return AnswerBadRegex(r.Index, r.Value, r.Origin)
+		return answerbadregex(r.Index, r.Value, r.Origin)
 
 	case contract.CannotStartPasswdCipherEncrypted:
-		return PasswdValueIsCipherEncrypted()
+		return passwdvalueiscipherencrypted()
 	case contract.CannotStartPasswdCipherPlain:
-		return PasswdValueIsCipherPlain()
+		return passwdvalueiscipherplain()
 	case contract.CannotStartPasswdUnreadable:
-		return PasswdValueUnreadable(r.Place, r.Origin)
+		return passwdvalueunreadable(r.Place, r.Origin)
 	case contract.CannotStartPasswdUndecodable:
-		return PasswdValueUndecodable(r.Origin)
+		return passwdvalueundecodable(r.Origin)
 	case contract.CannotStartPasswdProblems:
-		return PasswdValueProblems(r.Value)
+		return passwdvalueproblems(r.Value)
 	case contract.CannotStartPasswdNewline:
-		return PasswdHasNewline()
+		return passwdhasnewline()
 	case contract.CannotStartPasswdOuterSpace:
-		return PasswdHasOuterSpace()
+		return passwdhasouterspace()
 
 	case contract.CannotStartKeyToolAlone:
-		return KeyToolNeedAlone(r.Value)
+		return keytoolneedalone(r.Value)
 	case contract.CannotStartKeyToolWithBatch:
-		return KeyToolWithBatch(r.Place, r.Value)
+		return keytoolwithbatch(r.Place, r.Value)
 
 	// 密钥管理那十三屏（03 号单）：模板仍住 keytool.go，这里只转派。
 	case contract.CannotStartKeyNoMasterKey:
-		return KeyNoMasterKey(r.Key)
+		return keynomasterkey(r.Key)
 	case contract.CannotStartKeyConvertBlocked:
-		return KeyConvertBlocked(r.Key)
+		return keyconvertblocked(r.Key)
 	case contract.CannotStartKeyConfigUnreadable:
-		return KeyConfigUnreadable(r.Origin)
+		return keyconfigunreadable(r.Origin)
 	case contract.CannotStartKeyGenNoOverwrite:
-		return KeyGenNoOverwrite()
+		return keygennooverwrite()
 	case contract.CannotStartKeyGenSaveFailed:
-		return KeyGenSaveFailed(r.Key, r.Place, r.Origin)
+		return keygensavefailed(r.Key, r.Place, r.Origin)
 	case contract.CannotStartKeyConvertReadProblem:
-		return KeyConvertReadProblem(contract.CredFileProblem(r.Value), r.Place, r.Origin)
+		return keyconvertreadproblem(contract.CredFileProblem(r.Value), r.Place, r.Origin)
 	case contract.CannotStartKeyConvertDecryptFail:
-		return KeyConvertDecryptFailed(r.Place, r.Origin)
+		return keyconvertdecryptfailed(r.Place, r.Origin)
 	case contract.CannotStartKeyConvertEmpty:
-		return KeyConvertEmpty(r.Place)
+		return keyconvertempty(r.Place)
 	case contract.CannotStartKeyConvertWriteFail:
-		return KeyConvertWriteFailed(r.Place, r.Origin)
+		return keyconvertwritefailed(r.Place, r.Origin)
 	case contract.CannotStartKeyConvertVerifyFail:
-		return KeyConvertVerifyFailed(r.Place, r.Origin)
+		return keyconvertverifyfailed(r.Place, r.Origin)
 	// 这两条就是那一句系统原话，没有半句工具自己的话可加。
 	case contract.CannotStartKeyGenFailed, contract.CannotStartKeyEncryptFailed:
 		return r.Origin

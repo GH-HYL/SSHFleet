@@ -44,8 +44,8 @@ func ConfigPathProblem(field, raw string, kind PathProblemKind, windows bool) st
 	if !ok {
 		panic("配置路径：没见过的毛病类别 " + string(kind))
 	}
-	return Problem(
-		CurrentValue(field+" "+p.head, raw),
+	return problem(
+		currentvalue(field+" "+p.head, raw),
 		p.reason,
 		pathFixHint(windows))
 }

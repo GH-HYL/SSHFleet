@@ -36,9 +36,18 @@ func (c *client) download(ctx context.Context, p *contract.Plan, res *contract.N
 	localPath := p.Task.Path
 	useSudo := p.Run.Sudo && c.node.User != "root"
 
+	// 早退时也要记账（与上传同口径）：这几格在枚举之前就声明，任何一条 return
+	// 都能交出一份「这次打算传几个、成了几个」。
+	var (
+		files      []fileEntry
+		symlinks   []string // 被过滤的软链接（相对路径），只用于在结果里提示
+		totalBytes int64
+	)
+
 	sftpClient, err := sftp.NewClient(c.conn)
 	if err != nil {
 		res.ErrorText = appendText(res.ErrorText, msg(envTransfer, transferClientFailed, err.Error()))
+		failTransfer(res, files)
 		return
 	}
 	defer func() { _ = sftpClient.Close() }()
@@ -52,6 +61,7 @@ func (c *client) download(ctx context.Context, p *contract.Plan, res *contract.N
 		// 预检查是中间步骤：它自己的退出码进 Steps，不顶成结果退出码。
 		stepsOf(res, contract.StepPrecheck, err)
 		res.ErrorText = appendText(res.ErrorText, msg(envTransfer, transferRemoteMissing, "remote path not found: "+remotePath))
+		failTransfer(res, files)
 		return
 	}
 	stepsOf(res, contract.StepPrecheck, nil)
@@ -59,14 +69,9 @@ func (c *client) download(ctx context.Context, p *contract.Plan, res *contract.N
 	fi, err := sftpClient.Stat(remotePath)
 	if err != nil {
 		res.ErrorText = appendText(res.ErrorText, msg(envTransfer, transferRemoteUnreachable, "remote path not accessible: "+remotePath))
+		failTransfer(res, files)
 		return
 	}
-
-	var (
-		files      []fileEntry
-		symlinks   []string // 被过滤的软链接（相对路径），只用于在结果里提示
-		totalBytes int64
-	)
 
 	// 远端路径本身即软链接：过滤（不下载、不当失败）。
 	rootIsLink := false
@@ -91,6 +96,7 @@ func (c *client) download(ctx context.Context, p *contract.Plan, res *contract.N
 		if err != nil {
 			stepsOf(res, contract.StepEnumerate, err)
 			res.ErrorText = appendText(res.ErrorText, msg(envTransfer, transferListFailed, err.Error()))
+			failTransfer(res, files)
 			return
 		}
 		stepsOf(res, contract.StepEnumerate, nil)
@@ -137,6 +143,7 @@ func (c *client) download(ctx context.Context, p *contract.Plan, res *contract.N
 	ipDir := filepath.Join(localPath, c.node.IP)
 	if err := os.MkdirAll(ipDir, 0o755); err != nil {
 		res.ErrorText = appendText(res.ErrorText, msg(envTransfer, transferLocalDirFailed, err.Error()))
+		failTransfer(res, files)
 		return
 	}
 

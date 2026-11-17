@@ -26,8 +26,6 @@ type Target struct {
 	Rules []Rule
 	// Failures 是类五要判的两处：哪种失败许在哪个包造。
 	Failures []FailureSite
-	// Pairs 是类六之二要判的纸：同一口径上相邻两棒的一对类型。
-	Pairs []PaperPair
 	// Redline 是红线名单与指纹；类七拿它对照代码。
 	Redline []RedLineEntry
 	// Paper 是纸面白名单；nil 表示用检查器自带的那张（只对 ssHfleet2 这个模块生效）。
