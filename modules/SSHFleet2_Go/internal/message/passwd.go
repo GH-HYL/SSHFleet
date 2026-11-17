@@ -6,24 +6,24 @@ package message
 // 使用者照着做的那一步不一样——有的去看文件，有的去改配置，有的换一个密码。
 
 // PasswdValueIsCipherEncrypted 开了加密，但这一格贴的是密文内容本身。
-func PasswdValueIsCipherEncrypted() string {
-	return Problem(
+func passwdvalueiscipherencrypted() string {
+	return problem(
 		"--change-password 写的是密文内容，不是文件路径",
 		"开了加密时，这一格要写密文文件的本机绝对路径",
 		"把这段密文存成文件，这里改写成该文件的绝对路径（用 --convert-secret 转出来的那个文件）")
 }
 
 // PasswdValueIsCipherPlain 没开加密，但这一格贴的是密文内容。
-func PasswdValueIsCipherPlain() string {
-	return Problem(
+func passwdvalueiscipherplain() string {
+	return problem(
 		"--change-password 写的是密文内容，不是新密码",
 		"当前没开加密，这一格要写新密码本身；密文只能装进文件、由路径指过来",
 		"要用密文，先把配置的 encrypt 改成 true，再把密文存成文件、这里写该文件的绝对路径")
 }
 
 // PasswdValueUnreadable 开了加密，但那个密文文件读不到。原因取系统原文。
-func PasswdValueUnreadable(path, reason string) string {
-	return Problem(
+func passwdvalueunreadable(path, reason string) string {
+	return problem(
 		"--change-password 的值读不到："+path,
 		reason,
 		"打开加密时这里写密文文件的本机绝对路径（用 --convert-secret 转出来的那个文件）")
@@ -32,13 +32,13 @@ func PasswdValueUnreadable(path, reason string) string {
 // PasswdValueUndecodable 读到了，但解不出新密码（主密钥没读到、密文坏了）。
 //
 // 与「值有问题」分开说：这一条要人去看主密钥或那个文件，不是去改命令行。
-func PasswdValueUndecodable(reason string) string {
-	return ProblemReason("--change-password 的值读不出新密码", reason)
+func passwdvalueundecodable(reason string) string {
+	return problemreason("--change-password 的值读不出新密码", reason)
 }
 
 // PasswdValueProblems 值读到了，但内容不对：problems 是逐个毛病拼起来的一句。
-func PasswdValueProblems(problems string) string {
-	return ProblemHint(
+func passwdvalueproblems(problems string) string {
+	return problemhint(
 		"--change-password 的值有问题："+problems,
 		"也可以把配置的 encrypt 改成 false，直接在这一格写新密码")
 }
@@ -46,8 +46,8 @@ func PasswdValueProblems(problems string) string {
 // PasswdHasNewline 新密码里有换行或回车。
 //
 // 改密是逐行喂进远端终端的，换行等于回车：提交上去是半截密码，而且看不出来。
-func PasswdHasNewline() string {
-	return Problem(
+func passwdhasnewline() string {
+	return problem(
 		"--change-password 的新密码里有换行符或回车",
 		"参数被换行截断，或复制粘贴时带进了换行",
 		"把整串写成一行（或换一个密码）后重跑")
@@ -56,8 +56,8 @@ func PasswdHasNewline() string {
 // PasswdHasOuterSpace 新密码首尾有空白（全空白的值也落在这里）。
 //
 // 远端看不见这些字符：设上去以后自己也敲不出来。
-func PasswdHasOuterSpace() string {
-	return Problem(
+func passwdhasouterspace() string {
+	return problem(
 		"--change-password 的新密码开头或结尾有空白",
 		"多半是多打或复制粘贴时带进来的空格、制表符",
 		"换一个不带首尾空白的密码后重跑；远端看不见这些字符，设上去以后你自己也敲不出来")

@@ -30,7 +30,7 @@ import (
 // 第二个返回值是「起不来」：本阶段只有一处会走到它——两个落点开不出来（目录没建、没权限）。
 // 别的前提缺失（配置、清单、凭据）都在上游判过；站与站之间递东西的形状就两种，一张纸或者
 // 起不来（ADR-0034 决定三）。
-func Run(ctx context.Context, p *contract.Plan, termPath, execLogPath string) (contract.ResultPaper, *contract.CannotStart) {
+func Run(ctx context.Context, p *contract.Plan, landings contract.Landings) (contract.ResultPaper, *contract.CannotStart) {
 	paper := contract.ResultPaper{
 		Total:     len(p.Nodes),
 		Extra:     contract.Extra{Mode: p.Mode},
@@ -44,7 +44,7 @@ func Run(ctx context.Context, p *contract.Plan, termPath, execLogPath string) (c
 	scr := newScreen(console.Writer())
 	defer scr.stop()
 
-	rep, reason, bad := newReporter(scr, termPath, execLogPath, p.Mode)
+	rep, reason, bad := newReporter(scr, landings.Terminal, landings.ExecLog, p.Mode)
 	if bad {
 		return contract.ResultPaper{}, &contract.CannotStart{Where: contract.WhereOutput, Reason: reason}
 	}
@@ -198,8 +198,21 @@ func visit(ctx context.Context, p *contract.Plan, idx int, ag *aggregator) contr
 
 	// 事实收齐了才定分类：两条路都要定，不然连不上的那些台在结算站那里没有名字。
 	// 哪一截提示不参与匹配由本站定，判定层只管照它剔（见 client.ignoredHint）。
-	res.Category = categoryOf(p.Mode, p.Tables, &res, c.ignoredHint())
+	closeNode(p, idx, &res, ag, c.ignoredHint())
 	return res
+}
+
+// closeNode 是一台收口的两件事：定分类，把结果交回聚合器（传输类才有聚合器）。
+//
+// 面板的「完成／成功／失败」靠这一次回填，不回填它就永远是 0。成败用的是分类那一步
+// 已经在用的同一个干净判据：判成功 ⇔ 分类落在本模式的成功那一类，所以面板与结算对
+// 同一台不会给出两个答案。结算仍拿分类去对（ADR-0035 决定四），不读这一格。
+func closeNode(p *contract.Plan, idx int, res *contract.NodeResult, ag *aggregator, ignoredHint string) {
+	res.Category = categoryOf(p.Mode, p.Tables, res, ignoredHint)
+	if ag == nil {
+		return
+	}
+	ag.onResult(idx, res.IP, ranClean(p.Mode, res), res.Transfer)
 }
 
 // seconds 把纸上按秒写的超时换成 time.Duration。

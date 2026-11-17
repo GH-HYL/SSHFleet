@@ -39,7 +39,7 @@ func TestCannotStartDuplicateCategoryText(t *testing.T) {
 		},
 	}
 	for _, c := range cases {
-		if got := CannotStartText(c.c); got != c.want {
+		if got := CannotStartBody(c.c).Text(); got != c.want {
 			t.Fatalf("%s：\n got  %q\n want %q", c.name, got, c.want)
 		}
 	}

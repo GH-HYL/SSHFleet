@@ -170,7 +170,7 @@ func main() {
 
 		// 步骤 8：执行站连上去跑，跑完交第二张纸。取消经上下文递下去——同一个上下文，
 		// 启动段就建好了，执行站不必另造一个。
-		paper, cannot := execute.Run(intr.Context(), plan, paths.Terminal, paths.ExecLog)
+		paper, cannot := execute.Run(intr.Context(), plan, contract.Landings{Terminal: paths.Terminal, ExecLog: paths.ExecLog})
 		if cannot != nil {
 			fatal(cannot.Where, message.CannotStartBody(*cannot), toolPath)
 		}

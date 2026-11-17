@@ -307,6 +307,48 @@ type sessionDriver struct {
 	send    chan<- string
 }
 
+// ptyHook 是 PTY 会话的输出钩子：字节写进去、事件报出来、收尾时把余下的行吐出来。
+//
+// 代填与改密各有一种实现；会话骨架只认这三样——它们之外的事（未送出的条目、过期信号、
+// 脱敏）留在各自的模式里。
+type ptyHook interface {
+	io.Writer
+	Events() <-chan hookEvent
+	Flush()
+}
+
+// runPTY 跑一次 PTY 会话的公共骨架：开会话 → 装钩子 → 起泵 → 驱动 → 计时 → 关闸 → 冲刷。
+//
+// 走这条路的只有代填与改密（命令模式给了 `-a` 时转代填，上传下载走 sftp）。两个模式的
+// 差异恰好三样：钩子怎么造、发送通道给多大、下发行是什么——都在入参里。开会话失败时
+// 这里已经写好报错，调用方看第二个返回值决定要不要继续。
+//
+// 它只管骨架：钩子收尾之后的判断（代填没送完、改密见过入场信号）仍归各自的模式——
+// 那是业务，不是协议。
+func (c *client) runPTY(ctx context.Context, res *contract.NodeResult, hook ptyHook,
+	sendCap int, downlink string, timeout time.Duration) (interactiveOutcome, bool) {
+	session, stdin, err := c.startPTY()
+	if err != nil {
+		res.ErrorText = c.mergeBanner(err.Error())
+		return interactiveOutcome{}, false
+	}
+	defer func() { _ = session.Close() }()
+
+	session.Stdout = hook
+	session.Stderr = hook
+
+	send := make(chan string, sendCap)
+	go pump(send, stdin)
+
+	start := time.Now()
+	outcome := c.driveSession(ctx, sessionDriver{session: session, events: hook.Events(), send: send},
+		downlink, timeout)
+	res.Cost = time.Since(start)
+	close(send)
+	hook.Flush()
+	return outcome, true
+}
+
 // driveSession 边跑边喂：Start + 事件循环 + Wait。代填与改密共用这一份。
 //
 // 必须用 Start：Run 等价于 Start + Wait，会占住调用方直到命令结束，没有机会边跑边填。

@@ -20,7 +20,7 @@ const (
 
 // 起不来那一屏：红 [ERROR]、黄环节标签、正文，末尾附日志路径。
 func TestFatalScreen(t *testing.T) {
-	got := Fatal("cli", bodyOf(ProblemHint("问题一", "提示一")), `D:\logs\tool.log`).Text()
+	got := Fatal("cli", bodyOf(problemhint("问题一", "提示一")), `D:\logs\tool.log`).Text()
 	want := escRed + "[ERROR]" + escReset + escYellow + " [function:cli]" + escReset +
 		" 问题一\n提示：提示一\n日志：D:\\logs\\tool.log\n"
 	if got != want {
@@ -38,10 +38,10 @@ func TestFatalScreen(t *testing.T) {
 // 三种三段话：问题+原因+提示、问题+原因、问题+提示、问题+出处。
 func TestProblemShapes(t *testing.T) {
 	cases := []struct{ got, want string }{
-		{Problem("问题", "原因", "提示"), "问题\n原因：原因\n提示：提示"},
-		{ProblemReason("问题", "原因"), "问题\n原因：原因"},
-		{ProblemHint("问题", "提示"), "问题\n提示：提示"},
-		{ProblemOrigin("问题", "出处"), "问题\n出处：出处"},
+		{problem("问题", "原因", "提示"), "问题\n原因：原因\n提示：提示"},
+		{problemreason("问题", "原因"), "问题\n原因：原因"},
+		{problemhint("问题", "提示"), "问题\n提示：提示"},
+		{problemorigin("问题", "出处"), "问题\n出处：出处"},
 	}
 	for _, c := range cases {
 		if c.got != c.want {

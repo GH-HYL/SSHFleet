@@ -2,7 +2,7 @@ package guard
 
 import "testing"
 
-// 真工程：十九个包、零违规。交接件对账表本阶段 0 对——三张纸随阶段 04 落地。
+// 真工程：十九个包、零违规。
 func TestProjectIsClean(t *testing.T) {
 	ledger, err := LoadLedger("exceptions.md")
 	if err != nil {
@@ -14,7 +14,6 @@ func TestProjectIsClean(t *testing.T) {
 		ModulePath: "sshfleet2",
 		Rules:      Rules(),
 		Failures:   DefaultFailures(),
-		Pairs:      nil,
 		Redline:    RedLine(),
 		Ledger:     ledger,
 	})
@@ -27,8 +26,8 @@ func TestProjectIsClean(t *testing.T) {
 	}
 
 	vs := CheckAll(m)
-	t.Logf("包清单 %d 个；当前放行 %d 条；红线 %d 条；交接件对账 %d 对",
-		len(m.Packages), len(ledger), len(RedLine()), len(m.Pairs))
+	t.Logf("包清单 %d 个；当前放行 %d 条；红线 %d 条",
+		len(m.Packages), len(ledger), len(RedLine()))
 	if len(vs) != 0 {
 		t.Fatalf("真工程应当零违规，got %d 条：\n%s", len(vs), Report(vs))
 	}

@@ -37,12 +37,12 @@ func tagged(ip, rest string) string {
 
 // ResultLine 一台的结果，末尾带换行：屏幕与 `terminal-output.txt` 拿的是它。
 func ResultLine(res contract.NodeResult, mode contract.Mode) Line {
-	return Line{s: ResultLineText(res, mode) + "\n"}
+	return Line{s: resultlinetext(res, mode) + "\n"}
 }
 
 // ResultLineText 同一段字，不带结尾换行：执行期日志按自己的格式收尾，多一个换行就在日志里
 // 留一条空行。
-func ResultLineText(res contract.NodeResult, mode contract.Mode) string {
+func resultlinetext(res contract.NodeResult, mode contract.Mode) string {
 	ip := res.IP
 	lines := make([]string, 0, 6)
 	lines = append(lines, tagged(ip, connStatus(res)))

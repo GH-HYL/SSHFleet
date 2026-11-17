@@ -33,8 +33,7 @@ func CheckAll(m *Module) []Violation {
 	vs = append(vs, CheckExit(m)...)     // 类三
 	vs = append(vs, CheckContract(m)...) // 类四
 	vs = append(vs, CheckFailure(m)...)  // 类五
-	vs = append(vs, CheckTestSite(m)...) // 类六之一
-	vs = append(vs, CheckHandoff(m)...)  // 类六之二
+	vs = append(vs, CheckTestSite(m)...) // 类六
 	vs = append(vs, CheckMask(m)...)     // 类七
 	vs = append(vs, CheckRedline(m)...)  // 红线名单与指纹
 

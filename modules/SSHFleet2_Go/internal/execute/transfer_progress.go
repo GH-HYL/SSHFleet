@@ -252,3 +252,13 @@ func reportTransfer(cb onProgressN, seq int, ip string, uploaded, totalBytes int
 		TotalFiles: totalFiles, SuccessFiles: success, FailedFiles: failed,
 	})
 }
+
+// failTransfer 是一次传输没能跑成时的记账：这次打算传的文件全都算没传成。
+//
+// 上传与下载共用这一处：早退的路各五六条，各写一遍必有一边漏——下载侧此前一条都没写，
+// 报告与日志里的文件数、字节数永远印 0。判定不靠这四个数兜底（成功规则要求成功项大于 0），
+// 这里补的是「这一台到底打算传几个、成了几个」这个事实。
+func failTransfer(res *contract.NodeResult, files []fileEntry) {
+	res.Transfer.TotalFiles = len(files)
+	res.Transfer.FailFiles = len(files)
+}

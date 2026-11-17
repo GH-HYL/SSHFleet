@@ -51,7 +51,7 @@ func (c *client) upload(ctx context.Context, p *contract.Plan, res *contract.Nod
 	sftpClient, err := sftp.NewClient(c.conn)
 	if err != nil {
 		res.ErrorText = appendText(res.ErrorText, msg(envTransfer, transferClientFailed, err.Error()))
-		res.Transfer.FailFiles = len(files)
+		failTransfer(res, files)
 		return
 	}
 	defer func() { _ = sftpClient.Close() }()
@@ -66,19 +66,19 @@ func (c *client) upload(ctx context.Context, p *contract.Plan, res *contract.Nod
 	if err != nil {
 		// 措辞与下载侧同名——分类按报错原文匹配关键字，两处各写一套就会有一条永远归不了类。
 		res.ErrorText = appendText(res.ErrorText, msg(envTransfer, transferRemoteMissing, "remote path not found: "+remotePath))
-		res.Transfer.FailFiles = len(files)
+		failTransfer(res, files)
 		return
 	}
 	if !fi.IsDir() {
 		res.ErrorText = appendText(res.ErrorText, msg(envTransfer, transferRemoteNotDir, "remote target is not a directory: "+remotePath))
-		res.Transfer.FailFiles = len(files)
+		failTransfer(res, files)
 		return
 	}
 
 	// 本地文件预检：本地读不了是更近、更确定的原因，不该被「磁盘满」抢先报出来。
 	for _, f := range files {
 		if _, err := os.Stat(f.Path); err != nil {
-			res.Transfer.FailFiles = len(files)
+			failTransfer(res, files)
 			res.ErrorText = appendText(res.ErrorText, msg(envTransfer, transferLocalUnreadable, fmt.Sprintf("%s: %v", f.Rel, err)))
 			return
 		}
@@ -87,7 +87,7 @@ func (c *client) upload(ctx context.Context, p *contract.Plan, res *contract.Nod
 	// 空间预检：装不下就停在写第一个文件之前，目标机上不会有任何本次的东西。
 	if m := spaceShort(sftpProbe(sftpClient), remotePath, useSudo, totalBytes, maxFileSize(files), true); m != "" {
 		res.ErrorText = appendText(res.ErrorText, m)
-		res.Transfer.FailFiles = len(files)
+		failTransfer(res, files)
 		return
 	}
 

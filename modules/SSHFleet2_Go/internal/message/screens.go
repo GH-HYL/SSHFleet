@@ -19,24 +19,24 @@ const (
 )
 
 // Problem 拼「问题 / 原因 / 提示」三行：说得出为什么、也有怎么改可写的报错用这个。
-func Problem(problem, reason, hint string) string {
+func problem(problem, reason, hint string) string {
 	return problem + reasonLabel + reason + hintLabel + hint
 }
 
 // ProblemReason 拼「问题 / 原因」两行：有系统原文、写不出有意义的提示时用。
-func ProblemReason(problem, reason string) string {
+func problemreason(problem, reason string) string {
 	return problem + reasonLabel + reason
 }
 
 // ProblemHint 拼「问题 / 提示」两行：纯形态判定、没有系统原文可借时用。
-func ProblemHint(problem, hint string) string {
+func problemhint(problem, hint string) string {
 	return problem + hintLabel + hint
 }
 
 // ProblemOrigin 拼「问题 / 出处」两行：判据文件里某一条写坏时用，出处指到那一项该怎么写。
 //
 // 老版这一处用的就是「出处：」这个标签（不是「原因：」也不是「提示：」），逐字照搬。
-func ProblemOrigin(problem, origin string) string {
+func problemorigin(problem, origin string) string {
 	return problem + "\n出处：" + origin
 }
 
@@ -88,7 +88,7 @@ func ConfirmPrompt() Line {
 
 // AskHint 是问句后面那个红色方括号：缺省答是写 [Y/n]，缺省答否写 [y/N]。
 // 使用者看方括号就知道敲回车会怎样——这不是装饰。
-func AskHint(defaultYes bool) string {
+func askhint(defaultYes bool) string {
 	if defaultYes {
 		return ansiRed + "[Y/n]" + ansiReset
 	}
@@ -98,10 +98,10 @@ func AskHint(defaultYes bool) string {
 // PromptWith 把一句问句拼成「问句 [Y/n]: 」——空格、方括号、结尾冒号只在这里成形。
 //
 // 单独开这个口子，是因为 `ask` 过去自己拿问句的字去接方括号（`contract.Text{S: question.S
-// + " " + AskHint(...) + ": "}`）——那是「横切包自己拼一句塞给屏幕」的活标本：它读得到字，
+// + " " + askhint(...) + ": "}`）——那是「横切包自己拼一句塞给屏幕」的活标本：它读得到字，
 // 是因为当时的载体字段是导出的。Line 之后它读不到字，只能走这里。
 func PromptWith(question Line, defaultYes bool) Line {
-	return Line{s: question.Text() + " " + AskHint(defaultYes) + ": "}
+	return Line{s: question.Text() + " " + askhint(defaultYes) + ": "}
 }
 
 // LogInitFailed 排「工具日志建不起来」那一屏。此时日志还没建起来，屏上不带「日志：」行。

@@ -12,7 +12,6 @@ package execute
 import (
 	"context"
 	"strings"
-	"time"
 
 	"sshfleet2/internal/contract"
 	"sshfleet2/internal/mask"
@@ -29,27 +28,12 @@ const passwdCommand = ":"
 
 // passwd 一台的改密。
 func (c *client) passwd(ctx context.Context, p *contract.Plan, res *contract.NodeResult) {
-	session, stdin, err := c.startPTY()
-	if err != nil {
-		res.ErrorText = c.mergeBanner(err.Error())
-		return
-	}
-	defer func() { _ = session.Close() }()
-
 	out := &lockedBuffer{}
 	hook := newPasswdHook(out, p, c.node.Password)
-	session.Stdout = hook
-	session.Stderr = hook
-
-	send := make(chan string, hook.budget()+1)
-	go pump(send, stdin)
-
-	start := time.Now()
-	outcome := c.driveSession(ctx, sessionDriver{session: session, events: hook.events, send: send},
-		passwdCommand, seconds(p.Run.TimeoutExecute))
-	res.Cost = time.Since(start)
-	close(send)
-	hook.Flush()
+	outcome, ok := c.runPTY(ctx, res, hook, hook.budget()+1, passwdCommand, seconds(p.Run.TimeoutExecute))
+	if !ok {
+		return
+	}
 
 	// 见过入场信号这一格只服务分类：见过的会话里，那句「密码必须马上改」是前提而不是失败
 	// 原因，不该拿它认分类（ADR-0005 修订段）。判定那一步在 `visit`，事实从这里递出去。
@@ -237,6 +221,9 @@ func newPasswdHook(out *lockedBuffer, p *contract.Plan, currentPassword string) 
 
 // budget 全表最多会喂多少次（送信通道的容量按它给，保证钩子永不阻塞）。
 func (h *passwdHook) budget() int { return cap(h.events) }
+
+// Events 是会话骨架要的事件源：钩子在输出里认出提示词时报给它。
+func (h *passwdHook) Events() <-chan hookEvent { return h.events }
 
 func (h *passwdHook) Write(p []byte) (int, error) { return h.tap.Write(p) }
 

@@ -123,11 +123,6 @@ func Precheck(encrypted bool) (contract.KeyFacts, bool) {
 	return DefaultKeySource().Precheck(encrypted)
 }
 
-// Inspect 是默认来源上的同一件事（三条命令里 `--key-status` 用它）。
-func Inspect() contract.KeyFacts {
-	return DefaultKeySource().Inspect()
-}
-
 // stateOf 按老版 `InspectKey` 的次序判状态。
 func stateOf(src Sources) contract.KeyState {
 	switch {

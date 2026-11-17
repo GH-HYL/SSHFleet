@@ -19,7 +19,8 @@ import (
 // 拨过去立刻被拒。
 //
 // 两个落点给临时目录里的路径：12 号单起，执行站边跑边往 `terminal-output.txt` 与执行期日志
-// 里写，入口因此多要两条路径。**引用面没变**（还是 `execute.Run` 加纸的字），指纹不动。
+// 里写，入口因此多要两条路径。**2026-11-17 起这两条并成一张落点纸**（ADR-0060），引用面
+// 多一个 `contract.Landings`，指纹按改红线留痕。
 func TestRedlineExecuteRecordsConnectFact(t *testing.T) {
 	dir := t.TempDir()
 	node := contract.Node{IP: "127.0.0.1", Port: closedPort(t), User: "u", Password: "p"}
@@ -27,7 +28,7 @@ func TestRedlineExecuteRecordsConnectFact(t *testing.T) {
 		Mode:  contract.ModeCommand,
 		Task:  contract.Task{Command: &contract.CommandTask{Text: "uptime"}},
 		Nodes: []contract.Node{node},
-	}, filepath.Join(dir, "terminal-output.txt"), filepath.Join(dir, "SSHFleetExec.log"))
+	}, contract.Landings{Terminal: filepath.Join(dir, "terminal-output.txt"), ExecLog: filepath.Join(dir, "SSHFleetExec.log")})
 	if fail != nil {
 		t.Fatalf("不该起不来：%+v", fail)
 	}

@@ -64,7 +64,7 @@ func TestCollectFilesAndDirs(t *testing.T) {
 
 	p, fail := collectPlan(t, root)
 	if fail != nil {
-		t.Fatalf("不该报错：%v", message.CannotStartText(*fail))
+		t.Fatalf("不该报错：%v", message.CannotStartBody(*fail).Text())
 	}
 	if len(p.Task.Upload.Files) != 2 {
 		t.Fatalf("应当采到两个文件：%+v", p.Task.Upload.Files)
@@ -92,7 +92,7 @@ func TestCollectSingleFile(t *testing.T) {
 	}
 	p, fail := collectPlan(t, file)
 	if fail != nil {
-		t.Fatalf("不该报错：%v", message.CannotStartText(*fail))
+		t.Fatalf("不该报错：%v", message.CannotStartBody(*fail).Text())
 	}
 	if len(p.Task.Upload.Files) != 1 || p.Task.Upload.Files[0].Rel != "app.bin" {
 		t.Fatalf("单文件的相对路径应当是文件名：%+v", p.Task.Upload.Files)
@@ -138,7 +138,7 @@ func TestCollectSkipsSymlinks(t *testing.T) {
 
 	p, fail := collectPlan(t, root)
 	if fail != nil {
-		t.Fatalf("软链接不该报错：%v", message.CannotStartText(*fail))
+		t.Fatalf("软链接不该报错：%v", message.CannotStartBody(*fail).Text())
 	}
 	if len(p.Task.Upload.Files) != 1 {
 		t.Fatalf("链接不该进可传文件表：%+v", p.Task.Upload.Files)
@@ -193,8 +193,8 @@ func TestCollectAllFilteredFails(t *testing.T) {
 	if fail == nil {
 		t.Fatal("一个可传文件都不剩时应当报错")
 	}
-	if want := "已过滤 1 个：only.txt"; !strings.Contains(message.CannotStartText(*fail), want) {
-		t.Fatalf("报错要说清滤掉了谁：%s", message.CannotStartText(*fail))
+	if want := "已过滤 1 个：only.txt"; !strings.Contains(message.CannotStartBody(*fail).Text(), want) {
+		t.Fatalf("报错要说清滤掉了谁：%s", message.CannotStartBody(*fail).Text())
 	}
 }
 
@@ -232,7 +232,7 @@ func TestCollectUnreadableFileFails(t *testing.T) {
 	if fail == nil {
 		t.Fatal("不可读的文件应当当场报错")
 	}
-	if say := message.CannotStartText(*fail); !strings.Contains(say, "文件不可读") {
+	if say := message.CannotStartBody(*fail).Text(); !strings.Contains(say, "文件不可读") {
 		t.Fatalf("话里要说清是不可读：%s", say)
 	}
 }
@@ -249,7 +249,7 @@ func TestCollectTopEntriesIncludeEmptyDir(t *testing.T) {
 	}
 	p, fail := collectPlan(t, root)
 	if fail != nil {
-		t.Fatalf("不该报错：%v", message.CannotStartText(*fail))
+		t.Fatalf("不该报错：%v", message.CannotStartBody(*fail).Text())
 	}
 	found := false
 	for _, e := range p.Task.Upload.TopEntries {
@@ -279,7 +279,7 @@ func TestCollectSuggestsConcurrency(t *testing.T) {
 	// 小于 small_file（1024）：不限制，0。
 	p, fail := collectPlan(t, mk(10))
 	if fail != nil {
-		t.Fatalf("不该报错：%v", message.CannotStartText(*fail))
+		t.Fatalf("不该报错：%v", message.CannotStartBody(*fail).Text())
 	}
 	if p.Run.ConcurrencyAdvice != 0 {
 		t.Fatalf("小文件不该有建议，实际 %d", p.Run.ConcurrencyAdvice)
@@ -287,7 +287,7 @@ func TestCollectSuggestsConcurrency(t *testing.T) {
 
 	// 中间那段：取 medium_parallel（4），节点 6 台不封顶。
 	if p, fail = collectPlan(t, mk(4096)); fail != nil {
-		t.Fatalf("不该报错：%v", message.CannotStartText(*fail))
+		t.Fatalf("不该报错：%v", message.CannotStartBody(*fail).Text())
 	}
 	if p.Run.ConcurrencyAdvice != 4 {
 		t.Fatalf("中等大小应当建议 4，实际 %d", p.Run.ConcurrencyAdvice)
@@ -295,7 +295,7 @@ func TestCollectSuggestsConcurrency(t *testing.T) {
 
 	// 大于 large_file（1MiB）：一次一个。
 	if p, fail = collectPlan(t, mk(2*1024*1024)); fail != nil {
-		t.Fatalf("不该报错：%v", message.CannotStartText(*fail))
+		t.Fatalf("不该报错：%v", message.CannotStartBody(*fail).Text())
 	}
 	if p.Run.ConcurrencyAdvice != 1 {
 		t.Fatalf("大文件应当建议 1，实际 %d", p.Run.ConcurrencyAdvice)
@@ -325,10 +325,10 @@ func TestCollectSuggestionCappedByNodes(t *testing.T) {
 	}
 	info, fail := materialUploadRoot(p)
 	if fail != nil {
-		t.Fatalf("不该报错：%v", message.CannotStartText(*fail))
+		t.Fatalf("不该报错：%v", message.CannotStartBody(*fail).Text())
 	}
 	if fail := collect(p, cfg, info); fail != nil {
-		t.Fatalf("不该报错：%v", message.CannotStartText(*fail))
+		t.Fatalf("不该报错：%v", message.CannotStartBody(*fail).Text())
 	}
 	applyUploadAdvice(p, cfg)
 	if p.Run.ConcurrencyAdvice != 2 {

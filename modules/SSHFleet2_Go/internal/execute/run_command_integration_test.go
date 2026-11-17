@@ -161,7 +161,7 @@ func runOneInto(t *testing.T, ctx context.Context, p *contract.Plan) (contract.N
 	dir := t.TempDir()
 	term := filepath.Join(dir, "terminal-output.txt")
 	execLog := filepath.Join(dir, "SSHFleetExec.log")
-	paper, fail := Run(ctx, p, term, execLog)
+	paper, fail := Run(ctx, p, contract.Landings{Terminal: term, ExecLog: execLog})
 	if fail != nil {
 		t.Fatalf("不该起不来：%+v", fail)
 	}
@@ -243,7 +243,7 @@ func TestRunCommandManyNodes(t *testing.T) {
 	term := filepath.Join(dir, "terminal-output.txt")
 	execLog := filepath.Join(dir, "SSHFleetExec.log")
 
-	paper, fail := Run(context.Background(), p, term, execLog)
+	paper, fail := Run(context.Background(), p, contract.Landings{Terminal: term, ExecLog: execLog})
 	if fail != nil {
 		t.Fatalf("不该起不来：%+v", fail)
 	}
