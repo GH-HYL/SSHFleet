@@ -15,7 +15,7 @@ GO=/home/ubuntu/.local/opt/go/bin/go
 
 mkdir -p "$SB/gotmp" "$SB/old" "$SB/new"
 
-cd "$ROOT/modules/SSHFleet_Go"
+cd "$ROOT/modules/SSHFleet_Go_bak"
 "$GO" build -o "$SB/old/sshfleet" .
 cd "$ROOT/modules/SSHFleet2_Go"
 "$GO" build -o "$SB/new/sshfleet" .

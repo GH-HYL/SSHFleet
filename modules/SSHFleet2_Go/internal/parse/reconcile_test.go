@@ -25,7 +25,7 @@ func configDirPair(t *testing.T) (string, string) {
 	}
 	repoRoot := filepath.Join(filepath.Dir(thisFile), "..", "..", "..", "..")
 	return filepath.Join(repoRoot, "modules", "SSHFleet2_Go", "config"),
-		filepath.Join(repoRoot, "modules", "SSHFleet_Go", "config")
+		filepath.Join(repoRoot, "modules", "SSHFleet_Go_bak", "config")
 }
 
 // sectionRenames 新工程相对老工程改过名的节：文件名 → 新名 → 老名。
