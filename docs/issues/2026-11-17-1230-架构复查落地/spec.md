@@ -59,7 +59,7 @@
 - 回填统一：下载侧的早退路径各一条用例，断言四个数与上传同口径。
 - 骨架收拢：从 `Run` 进的两条用例（代填一次、改密一次）在改前改后都绿；不加「内部调用了几次」的断言。
 - 公开面收回：`go build ./...` 与 `go test ./...` 全绿即证；另加一条机械核对（包外引用清单为空）。
-- 具名纸：编译过即证写反不可能；`TestRedlineExecuteRecordsConnectFact` 与 `TestRedlineExecuteWritesResultLine` 两条红线改调用形状，按改红线办。
+- 具名纸：**编译过证的是「位置写反」不可能**，证不了「名字配错值」（两格同型，互换值仍编译得过）——那一类看塔尖那一个调用点是名字对名字的摘格，再加上两条钉入口的红线。`TestRedlineExecuteRecordsConnectFact` 与 `TestRedlineExecuteWritesResultLine` 两条红线改调用形状，按改红线办。
 
 ## Out of Scope
 
@@ -69,6 +69,8 @@
 - **17 份 `tmpdir_test.go` 收成一份。** 它是测试基础设施，收益是 767 行降到 48 行；与上面六条不同类，另起议题再定。
 - **`guard/check_deps.go` 一个文件五条判据拆分。** 同上，另起。
 - **`exitcode` 并回 `contract` 或升 ADR。** 同上，另起。
+- **`criterion.ReadCSVRows` 放宽、收掉 `internal/mask` 那份 CSV 切分。** findings 记的是「真重复实现」，复核后判为两回事：`internal/mask/csv.go` 的 `fieldSpans` 要的是「这段在原行第几个字节」（就地替换、引号与 BOM 原样留着），判据包交的是字段值与行号，且认多行引号与 `#` 注释；合成一个入口等于把按字节定位的切分器搬进判据包。留到有人真要合并两份口径时再议。
+- **`internal/log` 的十个导出方法不在任何白名单里。** 检查器只数包级导出，而 `*Logger` 的方法面才是这个包对外的真接口；要不要把方法面纳入白名单口径（扩检查器），另议。今天靠人读。
 
 ## Further Notes
 
