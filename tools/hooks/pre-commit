@@ -1,0 +1,17 @@
+#!/bin/sh
+# 提交前闸门：暂存区里有 .go 就把格式、vet、结构检查跑一遍，没有就放行（只改文档不必等这几十秒）。
+#
+# 装在 .git/hooks/ 里才生效（bash tools/install-hooks.sh），本文件是它可追踪的那一份。
+
+set -e
+
+if ! git diff --cached --name-only | grep -q '\.go$'; then
+	exit 0
+fi
+
+export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*'
+
+root="$(git rev-parse --show-toplevel)"
+wsl_root="$(printf '%s' "$root" | sed -E 's|^/([A-Za-z])/|/mnt/\L\1/|')"
+
+exec wsl.exe -d "${SSHFLEET_WSL_DISTRO:-Ubuntu-26.04}" -- bash "$wsl_root/tools/check.sh"

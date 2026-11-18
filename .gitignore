@@ -68,6 +68,15 @@ docs/越界记录/
 !tools/约束文档检查经验/
 !tools/约束文档检查经验/**
 
+# 跑测试与提交闸门（2026-11-18 开发者点名要留）：一个测试入口、一个闸门脚本，
+# 外加两个 git 钩子的可追踪副本与安装脚本——钩子本体在 .git/hooks/ 里，不进版本库，
+# 换台机器 clone 下来跑一次 `bash tools/install-hooks.sh` 就装上了。
+!tools/test.sh
+!tools/check.sh
+!tools/install-hooks.sh
+!tools/hooks/
+!tools/hooks/**
+
 # 跑脚本生成的字节码缓存属产物：上一行的通配会把它一并放行，这里显式排除（写在放行之后才生效）
 tools/skill-manager/__pycache__/
 tools/release/__pycache__/
