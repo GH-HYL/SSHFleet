@@ -34,7 +34,7 @@ func runWithLandings(t *testing.T, p *contract.Plan) (contract.ResultPaper, stri
 	paper, fail := Run(context.Background(), p, contract.Landings{
 		Terminal: termPath,
 		ExecLog:  filepath.Join(dir, "SSHFleetExec.log"),
-	})
+	}, nil)
 	if fail != nil {
 		t.Fatalf("不该起不来：%+v", fail)
 	}

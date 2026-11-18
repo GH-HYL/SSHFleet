@@ -193,7 +193,7 @@ func deadPort(t *testing.T) string {
 func TestRunCannotStartWhenPlaceMissing(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "没有这个目录")
 	_, fail := Run(context.Background(), plan("127.0.0.1", deadPort(t)),
-		contract.Landings{Terminal: filepath.Join(dir, "terminal-output.txt"), ExecLog: filepath.Join(dir, "SSHFleetExec.log")})
+		contract.Landings{Terminal: filepath.Join(dir, "terminal-output.txt"), ExecLog: filepath.Join(dir, "SSHFleetExec.log")}, nil)
 	if fail == nil {
 		t.Fatal("落点开不出来，却没交「起不来」")
 	}
@@ -209,5 +209,5 @@ func runPlan(t *testing.T, ctx context.Context, p *contract.Plan) (contract.Resu
 	return Run(ctx, p, contract.Landings{
 		Terminal: filepath.Join(dir, "terminal-output.txt"),
 		ExecLog:  filepath.Join(dir, "SSHFleetExec.log"),
-	})
+	}, nil)
 }

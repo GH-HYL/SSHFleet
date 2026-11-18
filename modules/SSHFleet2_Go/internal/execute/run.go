@@ -14,10 +14,10 @@ package execute
 
 import (
 	"context"
+	"io"
 	"sync"
 	"time"
 
-	"sshfleet2/internal/console"
 	"sshfleet2/internal/contract"
 	"sshfleet2/internal/message"
 )
@@ -30,7 +30,12 @@ import (
 // 第二个返回值是「起不来」：本阶段只有一处会走到它——两个落点开不出来（目录没建、没权限）。
 // 别的前提缺失（配置、清单、凭据）都在上游判过；站与站之间递东西的形状就两种，一张纸或者
 // 起不来（ADR-0034 决定三）。
-func Run(ctx context.Context, p *contract.Plan, landings contract.Landings) (contract.ResultPaper, *contract.CannotStart) {
+//
+// 第四个参数是屏幕出口：零值（nil）＝生产那一路，流从 `console` 拿、按「是不是终端」决定
+// 画不画面板。递一个流进来＝写那个流并且照画，非终端也画——那是给用例留的唯一一格，
+// 让「面板上的完成台数是怎么来的」在 `go test` 里看得见（ADR-0061）。它不是落点，
+// 所以不进 `Landings`：落点是路径，这个是「谁在看」。
+func Run(ctx context.Context, p *contract.Plan, landings contract.Landings, screen io.Writer) (contract.ResultPaper, *contract.CannotStart) {
 	paper := contract.ResultPaper{
 		Total:     len(p.Nodes),
 		Extra:     contract.Extra{Mode: p.Mode},
@@ -41,7 +46,7 @@ func Run(ctx context.Context, p *contract.Plan, landings contract.Landings) (con
 	}
 
 	// 屏幕那一路：流从 console 拿（执行站是唯一可以拿它的包），进度界面懒起来。
-	scr := newScreen(console.Writer())
+	scr := newScreen(screen)
 	defer scr.stop()
 
 	rep, reason, bad := newReporter(scr, landings.Terminal, landings.ExecLog, p.Mode)
