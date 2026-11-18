@@ -50,7 +50,7 @@
 
 ## Out of Scope
 
-- **「谁在调收口」这一环。** 默认套件观测不到面板（见 Implementation Decisions 第七条），要守住它就得给入口带一个屏幕出口，属改入口形状，另起一轮并写 ADR。
+- **「谁在调收口」这一环。** 默认套件观测不到面板（见 Implementation Decisions 第七条），要守住它就得给入口带一个屏幕出口，属改入口形状，另起一轮并写 ADR。（已另起：`docs/issues/2026-11-18-1430-面板守卫/`，决策见 `docs/adr/0061`。）
 - **改密与代填的成功路径。** 要远端 shell、PTY 与提示回放，假件会变成半个远端系统。
 - **sudo 上传与下载。** 要走远端 shell 语义，本轮只保普通路径。
 - **替身插口与两个适配器。** 见 Implementation Decisions 第二条。

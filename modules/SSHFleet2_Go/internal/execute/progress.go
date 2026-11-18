@@ -154,9 +154,13 @@ type screen struct {
 	hasSnap   bool
 }
 
-// newScreen 造屏幕那一路。流由 `console` 发，是不是终端也由它判。
-func newScreen(w io.Writer) *screen {
-	return &screen{w: w, plain: !console.IsTerminal()}
+// newScreen 造屏幕那一路。流由 `console` 发，是不是终端也由它判（out 为零值时的默认）；
+// 递了一个流进来，就写那个流并且照画——非终端也画，是给用例留的那一格（见 `Run` 的注释）。
+func newScreen(out io.Writer) *screen {
+	if out != nil {
+		return &screen{w: out}
+	}
+	return &screen{w: console.Writer(), plain: !console.IsTerminal()}
 }
 
 // above 把一段字打在进度界面上方：界面起来了走它的 `Println`，没起来（非终端、或还没有

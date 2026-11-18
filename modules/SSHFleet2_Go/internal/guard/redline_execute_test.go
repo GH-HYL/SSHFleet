@@ -28,7 +28,7 @@ func TestRedlineExecuteRecordsConnectFact(t *testing.T) {
 		Mode:  contract.ModeCommand,
 		Task:  contract.Task{Command: &contract.CommandTask{Text: "uptime"}},
 		Nodes: []contract.Node{node},
-	}, contract.Landings{Terminal: filepath.Join(dir, "terminal-output.txt"), ExecLog: filepath.Join(dir, "SSHFleetExec.log")})
+	}, contract.Landings{Terminal: filepath.Join(dir, "terminal-output.txt"), ExecLog: filepath.Join(dir, "SSHFleetExec.log")}, nil)
 	if fail != nil {
 		t.Fatalf("不该起不来：%+v", fail)
 	}

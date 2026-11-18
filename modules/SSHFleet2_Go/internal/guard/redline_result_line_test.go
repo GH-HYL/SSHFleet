@@ -29,7 +29,7 @@ func TestRedlineExecuteWritesResultLine(t *testing.T) {
 		Task: contract.Task{Command: &contract.CommandTask{Text: "uptime"}},
 		// 连不上也是「跑完一台」：那一行照样要出去，否则失败的那批在盘上一个字都不留。
 		Nodes: []contract.Node{{IP: "127.0.0.1", Port: closedPort(t), User: "u", Password: "p"}},
-	}, contract.Landings{Terminal: term, ExecLog: execLog})
+	}, contract.Landings{Terminal: term, ExecLog: execLog}, nil)
 	if fail != nil {
 		t.Fatalf("不该起不来：%+v", fail)
 	}
