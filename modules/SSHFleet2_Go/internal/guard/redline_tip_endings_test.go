@@ -69,9 +69,9 @@ func tipEndingsProbe(t *testing.T) func(dir string, args ...string) (string, int
 	t.Helper()
 
 	// 产物落本包的 build/tmp 沙盒：可执行文件不许出工作区，也不许落在模块根。
-	sandbox := buildTmp()
+	sandbox := os.Getenv("TMPDIR")
 	if sandbox == "" {
-		t.Fatalf("定位不到 build/tmp 沙盒：找不到 go.mod，或建不出目录")
+		t.Fatalf("TMPDIR 没指到 build/tmp 沙盒：testtmp 找不到 go.mod，或建不出目录")
 	}
 	// Windows 上可执行文件要带 .exe：`go build -o` 不会自己补，而 exec 找不带扩展名的
 	// 路径会直接报 `executable file not found in %PATH%`（找的是 PATHEXT，不是这个文件）。
