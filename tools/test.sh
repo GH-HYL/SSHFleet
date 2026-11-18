@@ -13,13 +13,15 @@ root="$(cd "$here/.." && pwd)"
 
 case "$(uname -s)" in
 MINGW* | MSYS* | CYGWIN*)
-	# Windows 侧：换成 WSL 的路径形状（/c/… → /mnt/c/…），再交给同一个脚本在 WSL 里跑。
+	# Windows 侧：交给 WSL 里同一个脚本跑。
 	#
-	# 关掉 MSYS 的路径改写：不关的话，`/mnt/c/…` 会被当成 Unix 路径改写成
-	# `C:/Program Files/Git/mnt/c/…`，wsl 里找不到文件。
+	# 不做路径换算——`wsl --cd` 直接收 Windows 形状的路径（`C:/…` 或 `C:\…` 都行），
+	# 进去就是仓库根。以前拿 sed 自己换，`/c/…` 与 `C:/…` 只认一种，认错时报的是
+	# 「bash: …: No such file or directory」，看着像文件没了。
+	#
+	# 关掉 MSYS 的路径改写：不关的话，`--cd` 后面那个路径会被改成 `C:/Program Files/Git/…`。
 	export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*'
-	wsl_root="$(printf '%s' "$root" | sed -E 's|^/([A-Za-z])/|/mnt/\L\1/|')"
-	exec wsl.exe -d "${SSHFLEET_WSL_DISTRO:-Ubuntu-26.04}" -- bash "$wsl_root/tools/test.sh" "$@"
+	exec wsl.exe -d "${SSHFLEET_WSL_DISTRO:-Ubuntu-26.04}" --cd "$(cygpath -w "$root")" -- bash tools/test.sh "$@"
 	;;
 esac
 
