@@ -4,8 +4,13 @@ package main
 //
 // **怎么到达那一支**：它只在「有留痕要写进执行日志」时才走——`--yes` 跳过确认本身不算
 // 留痕，危险命令的提醒档放行才算；而只有执行日志打不开才会触发。归档目录名是
-// 「秒级时间戳_模式_备注」拼的，所以先把接下来几秒的目录全建好，每个里面放一个**同名
-// 目录**顶住 `SSHFleetExec.log`：`os.OpenFile` 打不开一个目录。进程落在哪一秒都命中。
+// 「秒级时间戳_模式_备注」拼的，所以先把前后一段秒数的目录全建好，每个里面放一个**同名
+// 目录**顶住 `SSHFleetExec.log`：`os.OpenFile` 打不开一个目录。
+//
+// **窗口取宽（前 5 秒到后 30 秒），而且过期了会重布一次**：布场到进程真的走到建目录那一步
+// 之间，隔着进程启动与几份判据表的读取；机器忙的时候这段能拖上十几秒，窗口窄了就落在外头，
+// 现象是「进程正常跑完、退 0」——2026-11-18 在全量里撞到过一次。落在外头是布场没踩到，
+// 不是被测行为，所以重布；两次都过期就明说机器太慢，不再装作行为不对。
 //
 // **接缝用现成的进程出入口**，不为这一支给塔尖加口子（ADR-0055）：加一个「可替换的退出
 // 值」正是类三禁的那种写法（`os.Exit` 存成函数值再调，检查器看不见），而给生产代码加
@@ -36,15 +41,56 @@ func TestExecLogCannotOpenStopsAtStartup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("取当前目录失败：%v", err)
 	}
-	dir := stageOrderDir(t, module, orderRow{})
 
-	// 布场：接下来几秒的归档目录全建好，每个用同名目录顶住执行日志那个文件名。
+	// 两轮：第一轮落在窗口外（布场没踩到）就重布一次。
+	for attempt := 1; attempt <= 2; attempt++ {
+		dir := stageOrderDir(t, module, orderRow{})
+		blocked := blockExecLogDirs(t, dir)
+
+		code, out := runExecLogProbe(t, bin, dir)
+		if code == 0 {
+			// 退 0 有两种可能：行为不对，或者进程没落在布场的那几秒里。后者能查出来：
+			// history 下冒出没顶住的目录，就说明它自己建了一个新的。
+			if stray := strayArchiveDirs(t, dir, blocked); len(stray) > 0 {
+				t.Logf("布场窗口过期：进程落在 %v，重布一次", stray)
+				continue
+			}
+			t.Fatalf("执行日志开不出来，不该退 0：\n%s", out)
+		}
+		// 那一屏要说清是执行日志开不出来，而不是含混的「出错了」。
+		for _, want := range []string{"[ERROR]", "建执行期日志失败"} {
+			if !strings.Contains(out, want) {
+				t.Fatalf("那一屏缺「%s」：\n%s", want, out)
+			}
+		}
+		// 停在启动段：本次归档目录里没有报告、没有终端记录——一个节点都没连。
+		for _, at := range blocked {
+			archiveDir := filepath.Dir(at)
+			for _, name := range []string{"report.txt", "terminal.txt"} {
+				if _, err := os.Stat(filepath.Join(archiveDir, name)); err == nil {
+					t.Fatalf("停在启动段，不该产出 %s：%s", name, archiveDir)
+				}
+			}
+		}
+		return
+	}
+	t.Fatalf("两次布场都过期：这台机器从起进程到建归档目录要超过 30 秒，先查负载")
+}
+
+// blockExecLogDirs 布场：把前 5 秒到后 30 秒的归档目录全建好，每个用**同名目录**顶住
+// 执行日志那个文件名（`os.OpenFile` 打不开一个目录）。交回那些被顶住的路径。
+//
+// 窗口往宽了取，是因为布场到进程建目录之间隔着进程启动与几份判据表的读取：机器忙时
+// 这段能拖上十几秒，窗口窄了就落在外头。
+func blockExecLogDirs(t *testing.T, dir string) []string {
+	t.Helper()
+
 	hist := filepath.Join(dir, "history")
 	if err := os.MkdirAll(hist, 0o755); err != nil {
 		t.Fatalf("建历史目录失败：%v", err)
 	}
-	blocked := make([]string, 0, 12)
-	for i := -2; i <= 8; i++ {
+	blocked := make([]string, 0, 36)
+	for i := -5; i <= 30; i++ {
 		name := time.Now().Add(time.Duration(i)*time.Second).Format("2006-01-02_15-04-05") +
 			"_" + execLogProbeMode + "_" + execLogProbeRemark
 		at := filepath.Join(hist, name, "SSHFleetExec.log")
@@ -53,8 +99,14 @@ func TestExecLogCannotOpenStopsAtStartup(t *testing.T) {
 		}
 		blocked = append(blocked, at)
 	}
+	return blocked
+}
 
-	// 提醒档的危险命令 + --yes：放行之后留痕，才走到「写进执行日志」那一步。
+// runExecLogProbe 起进程跑那一趟：提醒档的危险命令 + `--yes`，放行之后留痕，才走到
+// 「写进执行日志」那一步。交回退出码与整屏输出。
+func runExecLogProbe(t *testing.T, bin, dir string) (int, string) {
+	t.Helper()
+
 	cmd := exec.Command(bin, "-c", "chmod 777 file.sh", "-f", "ok.csv", "--yes", "-r", execLogProbeRemark)
 	cmd.Dir = dir
 	var buf strings.Builder
@@ -63,31 +115,40 @@ func TestExecLogCannotOpenStopsAtStartup(t *testing.T) {
 	runErr := cmd.Run()
 	out := buf.String()
 
-	code := 0
 	if exit, ok := runErr.(*exec.ExitError); ok {
-		code = exit.ExitCode()
-	} else if runErr != nil {
+		return exit.ExitCode(), out
+	}
+	if runErr != nil {
 		t.Fatalf("起二进制失败：%v", runErr)
 	}
+	return 0, out
+}
 
-	if code == 0 {
-		t.Fatalf("执行日志开不出来，不该退 0：\n%s", out)
-	}
-	// 那一屏要说清是执行日志开不出来，而不是含混的「出错了」。
-	for _, want := range []string{"[ERROR]", "建执行期日志失败"} {
-		if !strings.Contains(out, want) {
-			t.Fatalf("那一屏缺「%s」：\n%s", want, out)
-		}
-	}
-	// 停在启动段：本次归档目录里没有报告、没有终端记录——一个节点都没连。
+// strayArchiveDirs 找出本次运行自己建的归档目录：布场顶住的那些之外还算存在的。
+//
+// 有就说明进程没落在窗口里——那不是被测的行为，是布场过期。
+func strayArchiveDirs(t *testing.T, dir string, blocked []string) []string {
+	t.Helper()
+
+	ours := map[string]bool{}
 	for _, at := range blocked {
-		archiveDir := filepath.Dir(at)
-		for _, name := range []string{"report.txt", "terminal.txt"} {
-			if _, err := os.Stat(filepath.Join(archiveDir, name)); err == nil {
-				t.Fatalf("停在启动段，不该产出 %s：%s", name, archiveDir)
-			}
+		ours[filepath.Dir(at)] = true
+	}
+	entries, err := os.ReadDir(filepath.Join(dir, "history"))
+	if err != nil {
+		t.Fatalf("读历史目录失败：%v", err)
+	}
+	var stray []string
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		at := filepath.Join(dir, "history", e.Name())
+		if !ours[at] {
+			stray = append(stray, e.Name())
 		}
 	}
+	return stray
 }
 
 // 上面那条判的是「撞上就打不开时会停」；这一条判「撞上之后不会改成继续跑」。
