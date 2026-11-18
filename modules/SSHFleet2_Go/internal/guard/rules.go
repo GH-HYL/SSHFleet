@@ -7,7 +7,7 @@ type Kind string
 
 const (
 	KindStation  Kind = "站"    // 五站：解析、闸门、执行、结算、报告
-	KindCrosscut Kind = "横切"   // 十个叶子包：不产业务数据，人人可依赖
+	KindCrosscut Kind = "横切"   // 十一个叶子包：不产业务数据；除 testtmp 外人人可依赖
 	KindContract Kind = "契约"   // 只放类型与常量
 	KindKeyTool  Kind = "密钥管理" // 三条不进流水线的小命令
 	KindCheck    Kind = "检查"   // 结构检查本体与红线区
@@ -28,7 +28,8 @@ type Rule struct {
 	Deps    []string
 }
 
-// contractAndCrosscut 是契约加十个横切包：五站与密钥管理包共用的那份清单。
+// contractAndCrosscut 是契约加十个流水线上的横切包：五站与密钥管理包共用的那份清单。
+// testtmp 不在里面——它只给测试用，生产文件一律依赖不到（见表末那一段注释）。
 // 站之间不许互相依赖，所以站的那几行里没有别的站。
 var contractAndCrosscut = []string{
 	"contract",
@@ -75,7 +76,7 @@ var clockReaders = []string{"Now", "Since", "Until"}
 // 因为塔尖在表里写的是模块名 `sshfleet2`，不是 `main`（见 checkClock、clockHome）。
 var clockHomes = []string{"execute", "log"}
 
-// tipDeps 是塔尖的整张清单：五站、十个横切包、契约、密钥管理包。
+// tipDeps 是塔尖的整张清单：五站、十个流水线上的横切包、契约、密钥管理包。
 var tipDeps = []string{
 	"parse", "gate", "execute", "settle", "report",
 	"contract",
@@ -84,7 +85,7 @@ var tipDeps = []string{
 	"keytool",
 }
 
-// rules 是包清单规则表本体，十九条，一条不少。
+// rules 是包清单规则表本体，二十条，一条不少。
 var rules = []Rule{
 	// 五站
 	{"parse", KindStation, contractAndCrosscut},
@@ -96,7 +97,7 @@ var rules = []Rule{
 	// 契约
 	{"contract", KindContract, nil},
 
-	// 十个横切。console 那行多一条 message：Print 收的是 `message.Line`——那个类型的
+	// 十个流水线上的横切。console 那行多一条 message：Print 收的是 `message.Line`——那个类型的
 	// 字段不导出，「话只能由 message 造」才成立（2026-11-02 的这一笔，见 ADR-0032 末尾
 	// 追加的更新记录）。message 依赖契约，console 依赖 message，不成环。
 	{"console", KindCrosscut, []string{"contract", "message", "criterion"}},
@@ -117,6 +118,11 @@ var rules = []Rule{
 
 	// 检查：只读源码，不 import 任何一站，也不 import 契约
 	{"guard", KindCheck, nil},
+
+	// testtmp 只服务测试：把测试二进制的临时根钉进工作区的 build/tmp（规范三.1）。
+	// 依赖空着是有意的——生产文件 import 它会红，只有 _test.go 的依赖方向豁免
+	// （类二）让测试进得来。它不进任何一行的依赖清单。
+	{"testtmp", KindCrosscut, nil},
 
 	// 塔尖：在模块根上，所以这一格写模块名，不写 main
 	{"sshfleet2", KindTip, tipDeps},

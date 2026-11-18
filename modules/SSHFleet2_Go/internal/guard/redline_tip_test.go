@@ -14,9 +14,9 @@ import (
 
 func TestRedlineTipRunsHelp(t *testing.T) {
 	// 产物落本包的 build/tmp 沙盒：可执行文件不许出工作区，也不许落在模块根。
-	sandbox := buildTmp()
+	sandbox := os.Getenv("TMPDIR")
 	if sandbox == "" {
-		t.Fatalf("定位不到 build/tmp 沙盒：找不到 go.mod，或建不出目录")
+		t.Fatalf("TMPDIR 没指到 build/tmp 沙盒：testtmp 找不到 go.mod，或建不出目录")
 	}
 	bin := filepath.Join(sandbox, "sshfleet2_redline_bin.exe")
 

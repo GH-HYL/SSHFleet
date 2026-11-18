@@ -18,13 +18,13 @@ import (
 // buildBinary 把主包编成一个二进制，放本包的 build/tmp 沙盒（产物不出工作区）。
 //
 // 按模块路径编、不设 `Dir`：`go build sshfleet2` 从模块内任何目录都认得出主包，于是不必
-// 先算出「模块根在哪」——那个算法要么抄 `buildTmp` 那段上溯，要么把仓库布局写进测试，
+// 先算出「模块根在哪」——那个算法要么抄 testtmp 那段上溯，要么把仓库布局写进测试，
 // 两头都是多一个会漂的说法（2026-11-16，取舍 11-J8）。
 func buildBinary(t *testing.T) string {
 	t.Helper()
-	sandbox := buildTmp()
+	sandbox := os.Getenv("TMPDIR")
 	if sandbox == "" {
-		t.Fatalf("定位不到 build/tmp 沙盒：找不到 go.mod，或建不出目录")
+		t.Fatalf("TMPDIR 没指到 build/tmp 沙盒：testtmp 找不到 go.mod，或建不出目录")
 	}
 	bin := filepath.Join(sandbox, "sshfleet2_keytool_test")
 	build := exec.Command("go", "build", "-o", bin, "sshfleet2")

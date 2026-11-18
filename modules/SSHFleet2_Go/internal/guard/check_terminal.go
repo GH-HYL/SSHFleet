@@ -15,6 +15,9 @@ const (
 	writerHome  = "execute"
 )
 
+// consolePkg 是唯一许往终端写字的包。
+const consolePkg = "console"
+
 // printFamily 是「写终端」那一类的点名：fmt 里不指定写入对象、直接落标准输出的三个。
 // 带 F 的那几个要指定写入对象，写到内存缓冲不算，所以不在这儿——写到屏幕的那种必然引用
 // os.Stdout／os.Stderr，被下面那条抓住。

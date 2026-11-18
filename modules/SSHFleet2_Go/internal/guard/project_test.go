@@ -2,7 +2,7 @@ package guard
 
 import "testing"
 
-// 真工程：十九个包、零违规。
+// 真工程：二十个包、零违规。
 func TestProjectIsClean(t *testing.T) {
 	ledger, err := LoadLedger("exceptions.md")
 	if err != nil {
@@ -21,8 +21,8 @@ func TestProjectIsClean(t *testing.T) {
 		t.Fatalf("读真模块失败：%v", err)
 	}
 
-	if n := len(Rules()); n != 19 {
-		t.Fatalf("规则表 want 19 行，got %d", n)
+	if n := len(Rules()); n != 20 {
+		t.Fatalf("规则表 want 20 行，got %d", n)
 	}
 
 	vs := CheckAll(m)
