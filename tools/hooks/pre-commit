@@ -12,6 +12,7 @@ fi
 export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*'
 
 root="$(git rev-parse --show-toplevel)"
-wsl_root="$(printf '%s' "$root" | sed -E 's|^/([A-Za-z])/|/mnt/\L\1/|')"
+# Git Bash 下 rev-parse 交回 `C:/…`，WSL 里的是 `/c/…`：两种形态都要认。
+wsl_root="$(printf '%s' "$root" | sed -E 's|^/([A-Za-z])/|/mnt/\L\1/|; s|^([A-Za-z]):/|/mnt/\L\1/|')"
 
 exec wsl.exe -d "${SSHFLEET_WSL_DISTRO:-Ubuntu-26.04}" -- bash "$wsl_root/tools/check.sh"
