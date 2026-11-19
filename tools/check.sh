@@ -33,13 +33,19 @@ staged_all="$(git -C "$root" -c core.quotepath=false diff --cached --name-only)"
 staged_md="$(git -C "$root" -c core.quotepath=false diff --cached --name-only --diff-filter=ACM -- '*.md')"
 
 doc_check() {
+	# 谁不进文档检查：技能正文（路径常是举例）、脚本与个人工具（不承载文档）、
+	# 以及约束类文件（照 doc-guide 零节，它们指名道姓写路径，不受本节管）。
+	doc_scope_filter() {
+		grep -vE '^(skills|mattpocock-skills|\.dsh|tools|personal|docs/agents)/|^(AGENTS\.md|docs/个人开发规范\.md)$' || true
+	}
+
 	local scope
 	if [ -n "$staged_all" ]; then
-		scope="$staged_md"
+		scope="$(printf '%s\n' "$staged_md" | doc_scope_filter)"
 	else
-		# skills/、mattpocock-skills/ 是技能正文，里面的路径常是举例；tools/ 放脚本不承载文档。
-		scope="$(git -C "$root" -c core.quotepath=false ls-files '*.md' | grep -vE '^(skills|mattpocock-skills|\.dsh|tools)/' || true)"
+		scope="$(git -C "$root" -c core.quotepath=false ls-files '*.md' | doc_scope_filter)"
 	fi
+	scope="$(printf '%s\n' "$scope" | grep -v '^$' || true)"
 	[ -n "$scope" ] || return 0
 
 	local problems="" f p line refs hits
