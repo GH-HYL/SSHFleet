@@ -70,13 +70,13 @@ type RunParams struct {
 	// Interpreter 是命令交给谁解释：配置 `interpreter.command` 的原值（例如 bash），
 	// 命令模式下恒有、脚本模式按后缀另取（随阶段 05）。
 	//
-	// 它是**原值**，不是拼好的下发行：拼法全在执行站一处（ADR-0015），纸只负责把配置
-	// 里的东西原样带到执行站——执行侧不回头读配置（ADR-0014、ADR-0015 的更新记录）。
+	// 它是**原值**，不是拼好的下发行：成品串在 `Downlink` 那一格（拼装只此一处），
+	// 纸只负责把配置里的东西原样带到下游——执行侧不回头读配置（ADR-0014、ADR-0015 的更新记录）。
 	Interpreter string
 
 	// Env 是要导入目标机的环境变量：配置 `[env]` 原样（名字 → 值），键名已由解析站校验过。
 	//
-	// 与 Interpreter 同一条理由：纸上是事实，`export …;` 那段怎么拼归执行站。
+	// 与 Interpreter 同一条理由：纸上是事实，`export …;` 那段的拼装也在解析站，结果落进 `Downlink`。
 	// 出厂配置带 PATH 与 TERM=dumb——少了它们，sudo 与解释器会 command not found，
 	// 远端程序还会上色出转义序列，与发布版的行为对不上。
 	Env map[string]string
