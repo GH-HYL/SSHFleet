@@ -275,7 +275,7 @@ def main() -> int:
     wb = common.workbuddy_skills_dir()
     broken = [n for n in common.GROUPS if not (wb / n).is_dir()]
     if broken:
-        print(f"\n  注意：workbuddy 侧看不到 {', '.join(broken)}；先跑建链脚本（link_skills_建链_windows.py / link_skills_linux_建链.py）。")
+        print(f"\n  注意：workbuddy 侧看不到 {', '.join(broken)}；先跑建链脚本（link_skills_windows_建链.py / link_skills_linux_建链.py）。")
 
     print(f"\n  完成，工作区技能已更新到 {described}")
     return 0
