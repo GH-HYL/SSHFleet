@@ -36,7 +36,7 @@ def main() -> int:
         return 1
 
     if os.name == "nt":
-        print("提示：当前不是 Linux，跑出来的会是 Windows 那套链接形态；本机请用 link_skills_建链_windows.py。\n")
+        print("提示：当前不是 Linux，跑出来的会是 Windows 那套链接形态；本机请用 link_skills_windows_建链.py。\n")
 
     print(f"对齐 {workspace}/skills/ 与 workbuddy 技能目录：")
     results = common.apply_links(workspace)

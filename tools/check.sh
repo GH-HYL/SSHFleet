@@ -16,8 +16,8 @@
 # 文档查哪些文件：提交时只查本次改动的，手动跑时查全部 tracked。
 # 只查改动的，是为了不让历史欠账把新提交堵死。
 #
-# ①③ 查整个文件，②④ 只查本次新增的行：存量里「第 X 节」有几十处，
-# 按整份文件判会让碰一下就红，按新增行判只挡新写的。
+# ①③ 查整个文件，手动跑也查；②④ 只在提交时做——② 看本次新增的 ADR 文件，
+# ④ 只看本次新增的行。存量里「第 X 节」有几十处，按整份文件判会让碰一下就红。
 #
 # 为什么不放进 tools/test.sh：那是跑测试的入口，参数要原样交给 go test；
 # 这里是固定几样、不许带参数，两件事别混在一个脚本里。
@@ -86,7 +86,7 @@ doc_check() {
 		added="$(git -C "$root" -c core.quotepath=false diff --cached -U0 -- "$f" 2>/dev/null |
 			grep -E '^\+' | grep -vE '^\+\+\+' || true)"
 		[ -n "$added" ] || continue
-		newpos="$(printf '%s\n' "$added" | grep -E '第[[:space:]]*[0-9一二三四五六七八九十]+[[:space:]]*节|(详见|依据见)[^。；]{0,20}(docs/|[A-Za-z0-9_./-]+\.md|`[^`]+`)' || true)"
+		newpos="$(printf '%s\n' "$added" | grep -E '第[[:space:]]*[0-9一二三四五六七八九十]+[[:space:]]*节|见上表第[[:space:]]*[0-9几]+[[:space:]]*行|(详见|依据见)[^。；]{0,20}(docs/|[A-Za-z0-9_./-]+\.md|`[^`]+`)' || true)"
 		while IFS= read -r line; do
 			[ -n "$line" ] || continue
 			problems+="新增的行按位置/路径指路：$f：${line#+}"$'\n'
