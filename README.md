@@ -404,7 +404,7 @@ sh -c 'export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 它是**单一程序**：没有子进程、没有本地端口，目标机上也不需要装额外的东西。
 
 - **执行**：本机直接连上目标机的 SSH 干活，传文件走 SFTP
-- **并发**：按清单节点数并行，可用 `-n` 限流；中断（Ctrl+C）时停止派发新任务，已经完成的节点结果照常整理归档
+- **并发**：按清单节点数并行，可用 `-n` 限流；中断（Ctrl+C）时不再派发新任务，没开工的节点计入「未执行」，正在建连的被取消并单列「建连被取消」，已经连上的跑完照常整理归档
 - **危险命令分析**：按命令原文比对规则，写进脚本里的危险命令不论用什么语言写都认得出
 - **配置与规则**：配置文件用 TOML 写法，启动时校验，问题一次报清
 
@@ -438,15 +438,12 @@ sh -c 'export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 **运行依赖**：无——一个可执行文件。
 
-**自行编译的依赖**：Go 1.27+。第三方库：
+**自行编译的依赖**：Go 1.26+。第三方库：
 
 - `golang.org/x/crypto`（SSH）、`github.com/pkg/sftp`（SFTP）
-- `go.uber.org/zap`、`gopkg.in/natefinch/lumberjack.v2`（日志与轮转）
-- `github.com/BurntSushi/toml`（配置）
-- `github.com/spf13/pflag`（命令行解析）
-- `github.com/xuri/excelize`（Excel）
-- `golang.org/x/term`（终端宽度）
-- `charmbracelet/bubbletea`、`bubbles`、`lipgloss`（进度界面）
+- `github.com/xuri/excelize/v2`（Excel）
+- `github.com/charmbracelet/bubbletea`、`bubbles`、`lipgloss`（进度界面）
+- `golang.org/x/sys`（终端与系统调用）
 
 **仓库**：
 
