@@ -2,18 +2,22 @@
 # 提交前的闸门。提交那一步由 tools/hooks/pre-commit 转进来，也可直接跑。
 #
 # 两段：
-#   一、文档检查——三样字符串级判断，判据见 docs/agents/doc-guide.md 的「零」：
+#   一、文档检查——四样字符串级判断，判据见 docs/agents/doc-guide.md 的「零」：
 #       ① 引用指向不存在的 docs 路径（写路径等于承诺它明天还在）
 #       ② 新写的 ADR 有「决策人」段却没有身份标注（证据与要求混排）
 #       ③ 写了「共 N 条」这类会被正文证伪的计数
+#       ④ 本次新增的行里写了「第 X 节」「详见 <路径>」（给人指路的写法）
 #   二、代码闸门——格式、静态检查、结构总闸。结构总闸就是那条「真工程整跑」，
 #       一次把包清单、依赖方向、红线指纹、放行台账全数一遍，是这套约束的总开关。
 #
-# 跑哪段：暂存区只有 .md 就跑第一段；有 .go、或什么都没暂存（手动跑）就跑两段。
+# 跑哪段：暂存区只有文档就跑第一段；有 .go、或什么都没暂存（手动跑）就跑两段。
 # 纯文档提交因此不必等 go vet 那几十秒。
 #
 # 文档查哪些文件：提交时只查本次改动的，手动跑时查全部 tracked。
 # 只查改动的，是为了不让历史欠账把新提交堵死。
+#
+# ①③ 查整个文件，②④ 只查本次新增的行：存量里「第 X 节」有几十处，
+# 按整份文件判会让碰一下就红，按新增行判只挡新写的。
 #
 # 为什么不放进 tools/test.sh：那是跑测试的入口，参数要原样交给 go test；
 # 这里是固定几样、不许带参数，两件事别混在一个脚本里。
@@ -30,8 +34,9 @@ export TMP="$sandbox"
 export TEMP="$sandbox"
 
 staged_all="$(git -C "$root" -c core.quotepath=false diff --cached --name-only)"
-staged_md="$(git -C "$root" -c core.quotepath=false diff --cached --name-only --diff-filter=ACM -- '*.md')"
+staged_docs="$(git -C "$root" -c core.quotepath=false diff --cached --name-only --diff-filter=ACM -- '*.md' '*.txt')"
 
+doc_scope_empty=""
 doc_check() {
 	# 谁不进文档检查：技能正文（路径常是举例）、脚本与个人工具（不承载文档）、
 	# 以及约束类文件（照 doc-guide 零节，它们指名道姓写路径，不受本节管）。
@@ -41,14 +46,17 @@ doc_check() {
 
 	local scope
 	if [ -n "$staged_all" ]; then
-		scope="$(printf '%s\n' "$staged_md" | doc_scope_filter)"
+		scope="$(printf '%s\n' "$staged_docs" | doc_scope_filter)"
 	else
-		scope="$(git -C "$root" -c core.quotepath=false ls-files '*.md' | doc_scope_filter)"
+		scope="$(git -C "$root" -c core.quotepath=false ls-files '*.md' '*.txt' | doc_scope_filter)"
 	fi
 	scope="$(printf '%s\n' "$scope" | grep -v '^$' || true)"
-	[ -n "$scope" ] || return 0
+	if [ -z "$scope" ]; then
+		doc_scope_empty=1
+		return 0
+	fi
 
-	local problems="" f p line refs hits
+	local problems="" f p line refs hits added newpos
 	while IFS= read -r f; do
 		[ -n "$f" ] || continue
 		[ -f "$root/$f" ] || continue
@@ -60,11 +68,21 @@ doc_check() {
 			[ -e "$root/$p" ] || problems+="引用了不存在的路径：$f → $p"$'\n'
 		done <<<"$refs"
 
-		hits="$(grep -nE '共[0-9]+条|共[一二三四五六七八九十]+条' "$root/$f" 2>/dev/null || true)"
+		hits="$(grep -nE '共[[:space:]]*[0-9]+[[:space:]]*条|共[[:space:]]*[一二三四五六七八九十]+[[:space:]]*条' "$root/$f" 2>/dev/null || true)"
 		while IFS= read -r line; do
 			[ -n "$line" ] || continue
 			problems+="写了会被正文证伪的计数：$f:${line%%:*}"$'\n'
 		done <<<"$hits"
+
+		# 只判本次新增的行：给人指路的两种写法。
+		added="$(git -C "$root" -c core.quotepath=false diff --cached -U0 -- "$f" 2>/dev/null |
+			grep -E '^\+' | grep -vE '^\+\+\+' || true)"
+		[ -n "$added" ] || continue
+		newpos="$(printf '%s\n' "$added" | grep -E '第[[:space:]]*[0-9一二三四五六七八九十]+[[:space:]]*节|(详见|依据见)[^。；]{0,20}(docs/|[A-Za-z0-9_./-]+\.md|`[^`]+`)' || true)"
+		while IFS= read -r line; do
+			[ -n "$line" ] || continue
+			problems+="新增的行按位置/路径指路：$f：${line#+}"$'\n'
+		done <<<"$newpos"
 	done <<<"$scope"
 
 	# 身份标注只查新写的 ADR；存量按碰到再补，不追溯。
@@ -96,7 +114,11 @@ fi
 
 # 只改了文档就到此为止，不进 Go 那一段。删掉 .go 不算改了 .go——那不用过 vet。
 if [ -n "$staged_all" ] && [ -z "$(git -C "$root" -c core.quotepath=false diff --cached --name-only --diff-filter=ACMR -- '*.go')" ]; then
-	echo "闸门：文档检查过了（本次没改 .go，代码那段跳过）"
+	if [ -n "$doc_scope_empty" ]; then
+		echo "闸门：本次改动没有要查的文档（技能正文、个人工具、约束类文件不在范围内），代码那段跳过"
+	else
+		echo "闸门：文档检查过了（本次没改 .go，代码那段跳过）"
+	fi
 	exit 0
 fi
 
