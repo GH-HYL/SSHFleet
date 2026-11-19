@@ -65,7 +65,7 @@ fatal: Access denied for user sftest2 by PAM account configuration [preauth]
 ## 2026-09-29 修订：提示独立成字段（`ServerBanner`），不再并入 `Error`
 
 本 ADR 的《决定》（追加进 `Result.Error`、不新增字段）被**结果统一重构**推翻
-（`docs/issues/2026-10-12-1150-结果统一判定/spec.md` D34）。推翻的根由是本轮立的更高一条规矩——
+（已清空的议题档案 D34）。推翻的根由是本轮立的更高一条规矩——
 **执行侧只写事实，已写下的值不许再改**：往已写好的 `Error` 里追加内容，正是"改已写的值"。
 
 - `BannerCallback` 接住提示这部分**不变**；变的只是落点：写入独立字段 `Result.ServerBanner`，**无条件写**
@@ -80,4 +80,4 @@ fatal: Access denied for user sftest2 by PAM account configuration [preauth]
 
 ## 更新记录
 
-- 2026-11-01：上文的老工程路径已按迁移地图换到新落点（建连与认证、含 `BannerCallback` 那一段，全归 `execute`）；决策内容一字未动，映射见 `docs/issues/2026-10-30-2134-架构重构/issues/04-legacy-package-mapping.md` 的迁移地图。
+- 2026-11-01：上文的老工程路径已按迁移地图换到新落点（建连与认证、含 `BannerCallback` 那一段，全归 `execute`）；决策内容一字未动，映射见 已清空的议题档案里的迁移地图。

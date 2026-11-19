@@ -29,6 +29,8 @@
 !docs/
 !docs/adr/
 !docs/adr/**
+!docs/adr-archive/
+!docs/adr-archive/**
 !docs/agents/
 !docs/agents/**
 !docs/issues/
@@ -53,43 +55,13 @@ docs/越界记录/
 !.dsh/skills/**
 !.dsh/skills/**/
 
-# 工具脚本：tools/ 整体默认不跟踪（辅助脚本、离线依赖包一律除外），
-# 只有开发者点名要留的才单独放行——目前是 skill-manager（技能软链接与上游更新脚本）、
-# release（打包发布脚本）、ab（A/B 比对车架）与 约束文档检查经验（改东西前必看的检查清单）。
-# 父目录被 * 排除时子文件无法重新纳入，故逐层放行；
-# 将来再点名别的子目录，照这三行加。
+# 工具脚本：tools/ 只放工程部件（提交闸门、测试入口、打包发布、A/B 车架），整体放行。
+# 本机自用的东西不进这里——挪到 local/，那里被上面的 * 默认忽略，不必另配。
 !tools/
-!tools/skill-manager/
-!tools/skill-manager/**
-!tools/release/
-!tools/release/**
-!tools/ab/
-!tools/ab/**
-!tools/约束文档检查经验/
-!tools/约束文档检查经验/**
+!tools/**
 
-# 跑测试与提交闸门（2026-11-18 开发者点名要留）：一个测试入口、一个闸门脚本，
-# 外加两个 git 钩子的可追踪副本与安装脚本——钩子本体在 .git/hooks/ 里，不进版本库，
-# 换台机器 clone 下来跑一次 `bash tools/install-hooks.sh` 就装上了。
-!tools/test.sh
-!tools/check.sh
-!tools/install-hooks.sh
-!tools/hooks/
-!tools/hooks/**
-
-# 跑脚本生成的字节码缓存属产物：上一行的通配会把它一并放行，这里显式排除（写在放行之后才生效）
-tools/skill-manager/__pycache__/
-tools/release/__pycache__/
-tools/ab/__pycache__/
-
-# ---- 重构期临时追踪（2026-11-02 开发者点名留，用完即删）----
-# 这是**专门给「新工程建站」这次重构用的临时追踪文件**，不是工程内容、也不是要交付的东西：
-# 2026-11-02 换到 Ubuntu 开发环境，build/ 下沙盒不进版本控制、换机器就没了，而这两样
-# 重建一次不划算——A/B 参数矩阵（阶段 09 逐字比对还要用）、终端宽度区间表生成器
-# （width.go 的注释指着它）。**重构完成（阶段 10 切换之后）连同本段一起删掉**，
-# 文件内的说明见 tools/refactor/README.md。
-!tools/refactor/
-!tools/refactor/**
+# 跑脚本生成的字节码缓存属产物。写在放行之后才生效。
+tools/**/__pycache__/
 
 # 个人技能：工作区 skills/person 是技能实体（~/.workbuddy/skills/person 链过来），随仓库跟踪。
 # engineering / productivity 不在其内——它们是 mattpocock/skills 的上游副本，update_skills.py
@@ -116,7 +88,7 @@ modules/build/
 
 # ---- 以下为个人使用内容，刻意不纳入追踪（白名单已天然排除，此处仅作说明）----
 #   审计交接.md                    本地过渡文档（重构完成后即失效，不进对外仓库）
-#   tools/                        辅助脚本、离线依赖包等默认不纳入；点名要留的按上方「工具脚本」逐层放行
+#   local/                        本机自用的脚本与笔记（原 tools/ 下那批），不进对外仓库
 #   skills/                       本地 Agent 技能（tools/audit 并入此处）
 #   test/                         本地测试语料与样本
 #   build/  release/              构建中间产物与发布产物
