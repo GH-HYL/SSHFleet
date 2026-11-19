@@ -27,7 +27,7 @@ import (
 
 // appVersion 是版本号的唯一出处：发布脚本按这一行改号（release.py 认这个字面量）。
 // 初值取老工程当前发布号；两套并存期间脚本只改老工程那一行，这里不许自己编号。
-const appVersion = "1.0.0"
+const appVersion = "1.0.1"
 
 func main() {
 	// 步骤 0：适配控制台。Windows 出厂控制台是 936 码页，我们写出去的是 UTF-8 字节。
