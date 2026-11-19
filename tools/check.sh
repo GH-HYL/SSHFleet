@@ -3,7 +3,7 @@
 #
 # 两段：
 #   一、文档检查——四样字符串级判断，判据见 docs/agents/doc-guide.md 的「零」：
-#       ① 引用指向不存在的 docs 路径（写路径等于承诺它明天还在）
+#       ① 引用指向不存在的 docs 路径或目录（写路径等于承诺它明天还在）
 #       ② 新写的 ADR 有「决策人」段却没有身份标注（证据与要求混排）
 #       ③ 写了「共 N 条」这类会被正文证伪的计数
 #       ④ 本次新增的行里写了「第 X 节」「详见 <路径>」（给人指路的写法）
@@ -56,7 +56,7 @@ doc_check() {
 		return 0
 	fi
 
-	local problems="" f p line refs hits added newpos
+	local problems="" f p line refs dirrefs hits added newpos
 	while IFS= read -r f; do
 		[ -n "$f" ] || continue
 		[ -f "$root/$f" ] || continue
@@ -67,6 +67,14 @@ doc_check() {
 			case "$p" in *'<'* | *'>'* | *'*'*) continue ;; esac
 			[ -e "$root/$p" ] || problems+="引用了不存在的路径：$f → $p"$'\n'
 		done <<<"$refs"
+
+		# 目录级引用单独捞一遍：正则以 .md 结尾，指整份议题目录的写法全漏。
+		dirrefs="$(grep -oE 'docs/[^[:space:]`"'"'"'）)，。；、]+/' "$root/$f" 2>/dev/null || true)"
+		while IFS= read -r p; do
+			[ -n "$p" ] || continue
+			case "$p" in *'<'* | *'>'* | *'*'*) continue ;; esac
+			[ -d "$root/${p%/}" ] || problems+="引用了不存在的目录：$f → $p"$'\n'
+		done <<<"$dirrefs"
 
 		hits="$(grep -nE '共[[:space:]]*[0-9]+[[:space:]]*条|共[[:space:]]*[一二三四五六七八九十]+[[:space:]]*条' "$root/$f" 2>/dev/null || true)"
 		while IFS= read -r line; do
