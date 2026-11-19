@@ -2,7 +2,7 @@
 
 用法::
 
-    python tools/skill-manager/update_skills_拉上游更新.py [--repo URL] [--branch main] [--keep]
+    python personal/skill-manager/update_skills_拉上游更新.py [--repo URL] [--branch main] [--keep]
 
 流程：问一次 API 拿到分支当前提交 → 下载该提交的归档包到 ``build/skill-manager/`` → 两组都在才动手 →
 把新的铺到临时位置（按文件开头的 ``EXCLUDED`` 去掉不装的）→ 全部铺好后逐组换入 → 按本仓需要改回几个技能的调用开关 → 清掉临时文件。

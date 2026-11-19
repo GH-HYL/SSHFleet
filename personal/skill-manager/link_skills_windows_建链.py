@@ -2,7 +2,7 @@
 
 用法::
 
-    python tools/skill-manager/link_skills_建链_windows.py
+    python personal/skill-manager/link_skills_windows_建链.py
 
 做完之后 ``%USERPROFILE%\\.workbuddy\\skills\\{person,engineering,productivity}`` 都是指向
 ``<工作区>\\skills\\`` 下同名目录的链接，改哪边都同时生效。
