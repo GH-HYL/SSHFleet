@@ -30,7 +30,7 @@ _is_junction = getattr(os.path, "isjunction", lambda _path: False)
 
 
 def workspace_root() -> Path:
-    """``tools/skill-manager/common.py`` 上溯三级即工作区根。"""
+    """``personal/skill-manager/common.py`` 上溯三级即工作区根。"""
     return Path(__file__).resolve().parents[2]
 
 

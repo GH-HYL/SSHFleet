@@ -2,8 +2,8 @@
 
 用法::
 
-    python3 tools/skill-manager/link_skills_linux_建链.py
-    python3 tools/skill-manager/link_skills_linux_建链.py --workspace ~/code/SSHFleet
+    python3 personal/skill-manager/link_skills_linux_建链.py
+    python3 personal/skill-manager/link_skills_linux_建链.py --workspace ~/code/SSHFleet
 
 映射与安全规则跟 Windows 版同一个（都走 common.py），差别只在：这里建的是真符号链接，
 不搞目录联接；另外会先把 ``~/.workbuddy/skills`` 建出来——Ubuntu 上首次装 workbuddy 时它可能还不存在。
