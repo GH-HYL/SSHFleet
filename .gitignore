@@ -60,9 +60,15 @@ docs/越界记录/
 !tools/
 !tools/**
 
-# 个人工具：只给开发者自己用，不属于工程部件，与 tools/ 分开。要追踪，故单独点名放行。
+# 个人工具：只给开发者自己用，不属于工程部件，与 tools/ 分开。
+# 整个 personal/ 不进版本库，要留的逐个点名——加一项就写两行，没写的不追踪。
 !personal/
-!personal/**
+!personal/command-description/
+!personal/command-description/**
+!personal/skill-manager/
+!personal/skill-manager/**
+!personal/Workbuddy后台子Agent特殊记录/
+!personal/Workbuddy后台子Agent特殊记录/**
 
 # 跑脚本生成的字节码缓存属产物。写在放行之后才生效。
 tools/**/__pycache__/
