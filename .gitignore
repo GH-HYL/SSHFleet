@@ -56,12 +56,17 @@ docs/越界记录/
 !.dsh/skills/**/
 
 # 工具脚本：tools/ 只放工程部件（提交闸门、测试入口、打包发布、A/B 车架），整体放行。
-# 本机自用的东西不进这里——挪到 local/，那里被上面的 * 默认忽略，不必另配。
+# 个人工具不在这里，见下方 personal/。
 !tools/
 !tools/**
 
+# 个人工具：只给开发者自己用，不属于工程部件，与 tools/ 分开。要追踪，故单独点名放行。
+!personal/
+!personal/**
+
 # 跑脚本生成的字节码缓存属产物。写在放行之后才生效。
 tools/**/__pycache__/
+personal/**/__pycache__/
 
 # 个人技能：工作区 skills/person 是技能实体（~/.workbuddy/skills/person 链过来），随仓库跟踪。
 # engineering / productivity 不在其内——它们是 mattpocock/skills 的上游副本，update_skills.py
@@ -88,7 +93,6 @@ modules/build/
 
 # ---- 以下为个人使用内容，刻意不纳入追踪（白名单已天然排除，此处仅作说明）----
 #   审计交接.md                    本地过渡文档（重构完成后即失效，不进对外仓库）
-#   local/                        本机自用的脚本与笔记（原 tools/ 下那批），不进对外仓库
 #   skills/                       本地 Agent 技能（tools/audit 并入此处）
 #   test/                         本地测试语料与样本
 #   build/  release/              构建中间产物与发布产物

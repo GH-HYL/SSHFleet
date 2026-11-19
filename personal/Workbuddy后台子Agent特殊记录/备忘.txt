@@ -1,0 +1,1 @@
+起子 Agent 必须带 run_in_background: true，派完立刻往下走，不要在同一轮里等结果（不写“等它”、不调阻塞式取结果），下一轮再收。被打断报 Tool ran without output or errors 时先翻 subagents/agent-*.jsonl 捞已产出内容，别原样重发。
