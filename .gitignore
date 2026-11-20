@@ -21,6 +21,10 @@
 # 许可证：仓库根保留供查看（README 的「License / 许可」段指向它），不随发布包分发
 !LICENSE
 
+# CodeGraph 索引配置：排除清单属换机器要跟着走的东西，随仓库跟踪。
+# 索引本体 .codegraph/ 不入库——init --local-only 让它自我忽略，重建只要十来秒。
+!codegraph.json
+
 # 文档（决策：ADR；仓库级说明与词表；面向用户的手册；个人开发规范）
 !GLOSSARY.md
 !AGENTS.md
