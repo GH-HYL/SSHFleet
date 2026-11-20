@@ -1,6 +1,6 @@
 #!/bin/sh
-# 提交前闸门：一律交给 tools/check.sh，跑哪一段由它自己判断——
-# 只改了 .md 就跑文档检查，有 .go 或手动跑就跑全套。
+# 提交前闸门：一律交给 tools/check.sh，并且必须传 --all——提交这一步不许挑档跑。
+# 全量里「只改了文档就不进 Go 那一段」由 check.sh 自己判断，这里不管。
 #
 # 装在 .git/hooks/ 里才生效（bash tools/install-hooks.sh），本文件是它可追踪的那一份。
 
@@ -9,4 +9,4 @@ set -e
 export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*'
 
 root="$(git rev-parse --show-toplevel)"
-exec wsl.exe -d "${SSHFLEET_WSL_DISTRO:-Ubuntu-26.04}" --cd "$(cygpath -w "$root")" -- bash tools/check.sh
+exec wsl.exe -d "${SSHFLEET_WSL_DISTRO:-Ubuntu-26.04}" --cd "$(cygpath -w "$root")" -- bash tools/check.sh --all
