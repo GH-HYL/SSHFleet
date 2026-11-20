@@ -353,7 +353,7 @@ ADR-0015 的「影响」一节原文写着：
 
 ## 七、影响
 
-- **配置**：出厂值写在**三份**文件里，三份都要改——`config/SSHFleet.conf`（作者本机在用，**不随包发布**）、`config/SSHFleet-for-linux.conf`、`config/SSHFleet-for-windows.conf`。发布脚本 `tools/release/release.py:235` 按平台把后两份**改名成包内的 `config/SSHFleet.conf`**（原来那两个手动打包脚本 `build-linux.sh` / `build-windows.bat` 已在 `015219c` 删掉），所以只改第一份会做出「工作区变了、发出去的包没变」。改的是 `[env]` 段里 `LANG` 与 `LC_ALL` 两行（`"en_US.UTF-8"` → `"C"`）及其行内注释（现在的「统一字符集与排序」不再准确，因为 `C` 不提供 UTF-8 字符语义）。验收要同时看仓库与包内：`grep -rn 'en_US.UTF-8' modules/SSHFleet_Go/config/` 应 0 命中；`tar -xzOf <linux包> <顶层>/config/SSHFleet.conf | grep -A4 '^\[env\]'` 与 `unzip -p <win包> <顶层>/config/SSHFleet.conf` 同样应是 `C`。**包内那一步要跑 `release.py`，那是发布动作，由作者执行**（规范四·2：版本号与发布不归执行者）。
+- **配置**：出厂值写在**三份**文件里，三份都要改——`config/SSHFleet.conf`（作者本机在用，**不随包发布**）、`config/SSHFleet-for-linux.conf`、`config/SSHFleet-for-windows.conf`。发布脚本 `tools/release/release.py:235` 按平台把后两份**改名成包内的 `config/SSHFleet.conf`**（原来那两个手动打包脚本 `build-linux.sh` / `build-windows.bat` 已在 `015219c` 删掉），所以只改第一份会做出「工作区变了、发出去的包没变」。改的是 `[env]` 段里 `LANG` 与 `LC_ALL` 两行（`"en_US.UTF-8"` → `"C"`）及其行内注释（现在的「统一字符集与排序」不再准确，因为 `C` 不提供 UTF-8 字符语义）。验收要同时看仓库与包内：`grep -rn 'en_US.UTF-8' modules/SSHFleet_Go/config/` 应 0 命中；`tar -xzOf <linux包> <顶层>/config/SSHFleet.conf | grep -A4 '^\[env\]'` 与 `unzip -p <win包> <顶层>/config/SSHFleet.conf` 同样应是 `C`。**包内那一步要跑 `release.py`，那是发布动作，由作者执行**（`docs/agents/按需-交付与提交.md`「CHANGELOG 与版本号」：版本号与发布不归执行者）。
 - **老配置**：使用者的既有配置里若仍写着 `en_US.UTF-8`，本 ADR 不影响其行为——取值由配置决定，不是代码写死。是否改随使用者。**不提供自动迁移**。
 - **下发形态**：**不变**。日志与报告里的「命令行」一行形态不变，`DescribeCommand` 不用改。
 - **字符语义**：`awk` / `cut -c` / `${#s}` / `sort` 在处理中文时按字节（3.7、3.8），须写进配置手册，否则下一个写 `cut -c1-4` 切中文的人会踩到。
