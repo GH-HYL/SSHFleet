@@ -7,7 +7,7 @@ package parse
 //
 // **三件链接类用例在 Windows 上一律跳过**：Windows 默认没有建符号链接的特权
 // （`CreateSymbolicLink` 回 1314），要「开发人员模式」或管理员；而每次尝试都会让 360 弹窗
-// 要人放行。要看它们：开开发者模式后设 `SSHFLEET_TEST_SYMLINK=1` 再跑。跳过不算绿（规范三.3）。
+// 要人放行。要看它们：开开发者模式后设 `SSHFLEET_TEST_SYMLINK=1` 再跑。跳过不算绿（`docs/agents/按需-写代码.md`「测试怎么写」）。
 
 import (
 	"fmt"
@@ -110,7 +110,7 @@ func TestCollectSingleFile(t *testing.T) {
 //
 // 在开了开发者模式、或想强制验这三条的机器上，设 `SSHFLEET_TEST_SYMLINK=1` 再跑。
 //
-// **跳过不算绿**（规范三.3）：读到这一行说明这三条用例没验，别当成过了。
+// **跳过不算绿**（`docs/agents/按需-写代码.md`「测试怎么写」）：读到这一行说明这三条用例没验，别当成过了。
 func symlinkOrSkip(t *testing.T) {
 	t.Helper()
 	if runtime.GOOS != "windows" || os.Getenv("SSHFLEET_TEST_SYMLINK") == "1" {
