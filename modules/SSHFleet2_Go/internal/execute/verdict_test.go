@@ -18,6 +18,7 @@ func classifyTables() contract.Tables {
 		Categories: []contract.Category{
 			{Name: "连接失败", Keywords: []string{"sshfleet.connect."}},
 			{Name: "认证失败", Keywords: []string{"permission denied"}},
+			{Name: "传输后大小不符", Keywords: []string{"sshfleet.transfer.size_mismatch"}},
 			{Name: "执行超时", Keywords: []string{"sshfleet.run.timeout"}},
 			{Name: "命令失败", Keywords: []string{"ssh: command * failed"}},
 			{Name: "代填中止", Keywords: []string{"sshfleet.answer."}},
@@ -61,6 +62,11 @@ func TestCategoryOfCommandMode(t *testing.T) {
 			name: "超时：报文进第一组",
 			res:  contract.NodeResult{TimedOut: true, ErrorText: "sshfleet.run.timeout: exceeded 30s"},
 			want: "执行超时",
+		},
+		{
+			name: "写完核大小不符：按报文归类",
+			res:  contract.NodeResult{ErrorText: "sshfleet.transfer.size_mismatch: local 2048 bytes, remote 1024 bytes"},
+			want: "传输后大小不符",
 		},
 		{
 			name: "关键词里带星号：按片段顺序查找",

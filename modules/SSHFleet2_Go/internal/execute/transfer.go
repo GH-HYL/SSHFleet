@@ -6,10 +6,13 @@ package execute
 // 失败落到「未归类」。写法纪律同报文那一条——只陈述「哪一步、什么现象」，不下结论。
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"strconv"
 	"strings"
+
+	"github.com/pkg/sftp"
 )
 
 // 传输一摊的环节名。
@@ -26,6 +29,7 @@ const (
 	transferLocalFileFailed   = "local_file_failed"  // 下载侧建本地文件 / 写本地失败
 	transferRemoteExists      = "remote_exists"      // 目标机上已有同名文件
 	transferTargetSpaceShort  = "target_space_short" // 目标目录所在分区的可用量不够
+	transferSizeMismatch      = "size_mismatch"      // 写完核大小不一致
 	transferRolledBack        = "rolled_back"        // 上传失败后，本次写进去的文件已清干净
 	transferRollbackPartial   = "rollback_partial"   // 回滚没清干净：还剩哪些路径
 	transferPartialLeft       = "partial_left"       // 写到一半的文件没删掉（上传，远端）
@@ -53,6 +57,62 @@ func appendText(existing, msg string) string {
 		return msg
 	}
 	return existing + "\n" + msg
+}
+
+// transferError 一条传输失败：给使用者看的那句，外加原始错误。
+//
+// 原始错误要留着：判「重来一次有没有意义」看的是 SFTP 状态码，不是那句话的措辞。
+type transferError struct {
+	text string
+	err  error
+}
+
+func (e *transferError) Error() string { return e.text }
+
+// Unwrap 让上层能用 `errors.As` 摸到库给的那个状态错误。
+func (e *transferError) Unwrap() error { return e.err }
+
+// transferFail 把一次远端失败编成报文，原始错误挂在里面。
+func transferFail(stage string, err error) error {
+	return &transferError{text: msg(envTransfer, stage, err.Error()), err: err}
+}
+
+// permanentError 标注「重来一次还是同一个结果」的失败：本机读不了、本机建不了文件。
+//
+// 只影响要不要重试，不影响报文——Error() 原样交回里面那句。
+type permanentError struct{ err error }
+
+func (e *permanentError) Error() string { return e.err.Error() }
+
+func (e *permanentError) Unwrap() error { return e.err }
+
+// noRetry 把一条失败标成不必重试。
+func noRetry(err error) error { return &permanentError{err: err} }
+
+// sizeMismatchMessage 写完核大小不符那句：两个数，不带结论。
+func sizeMismatchMessage(local, remote int64) string {
+	return msg(envTransfer, transferSizeMismatch, fmt.Sprintf("local %d bytes, remote %d bytes", local, remote))
+}
+
+// retryableTransferError 这个失败重来一次有没有意义（ADR-0063 决定 10）。
+//
+// 按 SFTP 状态码判，不按文案判：没有权限、文件不存在、操作不支持这三类，重试只是把
+// 同一个结果再等一遍。目标盘满认不出状态码（协议 v3 只有笼统的 failure），由上层那次
+// 空间探测负责挡掉。
+func retryableTransferError(err error) bool {
+	var perm *permanentError
+	if errors.As(err, &perm) {
+		return false
+	}
+	var status *sftp.StatusError
+	if !errors.As(err, &status) {
+		return true
+	}
+	switch status.Code {
+	case uint32(sftp.ErrSSHFxNoSuchFile), uint32(sftp.ErrSSHFxPermissionDenied), uint32(sftp.ErrSSHFxOpUnsupported):
+		return false
+	}
+	return true
 }
 
 // openFailureText 开传输通道失败时进报错原文的那句。

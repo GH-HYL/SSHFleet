@@ -164,6 +164,9 @@ func TestReadRealConfig(t *testing.T) {
 	if f.Sudo != true || f.TimeoutConnect != 10 || f.TimeoutExecute != 60 || f.TimeoutTransfer != 300 {
 		t.Errorf("真配置四格与出厂值不符：%+v", f)
 	}
+	if f.TransferRetry != 1 {
+		t.Errorf("出厂配置的重试次数该是 1，实际 %d", f.TransferRetry)
+	}
 }
 
 // 真配置不在（切到一个空目录）：readRawConfig 报「这个位置没有配置文件」那套话。
@@ -176,6 +179,55 @@ func TestReadMissingConfig(t *testing.T) {
 	for _, want := range []string{"这个位置没有配置文件", shownConfigPath, "当前目录："} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("缺失文案缺一句 %q：\n%s", want, err.Error())
+		}
+	}
+}
+
+// 传输重试次数是可选格：不写按 1，写 0 合法（不重试），写负数起不来。
+//
+// 可选而不是必填，是为了不让存量配置因为少这一行就启动即报「缺字段」。
+func TestTransferRetryOptional(t *testing.T) {
+	cases := []struct {
+		line    string
+		want    int
+		wantErr bool
+	}{
+		{"", defaultTransferRetry, false},
+		{"transfer_retry = 0", 0, false},
+		{"transfer_retry = 3", 3, false},
+		{"transfer_retry = -1", 0, true},
+	}
+	for _, c := range cases {
+		dir := writeTempConfig(t)
+		if c.line != "" {
+			path := dir + string(os.PathSeparator) + "config" + string(os.PathSeparator) + "SSHFleet.conf"
+			data, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatalf("读不到临时配置：%v", err)
+			}
+			body := strings.Replace(string(data), "timeout_transfer = 300",
+				"timeout_transfer = 300\n"+c.line, 1)
+			if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+				t.Fatalf("写临时配置失败：%v", err)
+			}
+		}
+		t.Chdir(dir)
+
+		cfg, err := load()
+		if c.wantErr {
+			if err == nil {
+				t.Fatalf("写 %q 应起不来", c.line)
+			}
+			if !strings.Contains(err.Error(), "execution.transfer_retry") {
+				t.Fatalf("报错要点明是哪一格，实际 %q", err.Error())
+			}
+			continue
+		}
+		if err != nil {
+			t.Fatalf("写 %q 应读得到，实际 %v", c.line, err)
+		}
+		if cfg.Execution.TransferRetry != c.want {
+			t.Fatalf("写 %q 时该取 %d，实际 %d", c.line, c.want, cfg.Execution.TransferRetry)
 		}
 	}
 }

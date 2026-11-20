@@ -135,8 +135,24 @@ func (c *client) upload(ctx context.Context, p *contract.Plan, res *contract.Nod
 			writtenBytes int64
 			uploadErr    error
 			halfWrites   []string
+			spaceNote    string
 		)
-		writtenBytes, uploadErr, halfWrites = c.putFile(sftpClient, f.Path, remoteFilePath, perm, idx, totalBytes, len(files), onProg)
+		// 单个文件失败只重传它自己：已传好的文件一个字节都不重发（ADR-0063 决定 9）。
+		// putFile 每次重来之前都会删掉它自己的半成品，所以这里只管再调一次。
+		attempts := 1 + p.Run.TransferRetry
+		for attempt := 1; attempt <= attempts; attempt++ {
+			writtenBytes, uploadErr, halfWrites = c.putFile(sftpClient, f.Path, remoteFilePath, perm, idx, totalBytes, len(files), onProg)
+			if uploadErr == nil {
+				break
+			}
+			// 失败后再查一次空间：满不是唯一的原因，只有探出来确实不够才改口。
+			// **必须在回滚之前问**：回滚会把空间还回去，那时再探永远是「够」。
+			// 它同时决定要不要重传——目标盘装不下，重试只是把同一个结果再等一遍。
+			spaceNote = spaceShort(sftpProbe(sftpClient), remotePath, useSudo, totalBytes-uploadedBytes, false)
+			if attempt == attempts || spaceNote != "" || !retryableTransferError(uploadErr) {
+				break
+			}
+		}
 
 		if uploadErr != nil {
 			failed++
@@ -146,10 +162,7 @@ func (c *client) upload(ctx context.Context, p *contract.Plan, res *contract.Nod
 				reason = msg(envTransfer, transferRemoteFileFailed, reason)
 			}
 			res.ErrorText = appendText(res.ErrorText, fmt.Sprintf("%s: %s", f.Rel, reason))
-			// 失败后再查一次空间：满不是唯一的原因，只有探出来确实不够才改口。
-			// **必须在回滚之前问**：回滚会把空间还回去，那时再探永远是「够」。
-			res.ErrorText = appendText(res.ErrorText,
-				spaceShort(sftpProbe(sftpClient), remotePath, useSudo, totalBytes-uploadedBytes, false))
+			res.ErrorText = appendText(res.ErrorText, spaceNote)
 			res.ErrorText = appendText(res.ErrorText, c.rollback(sftpClient, written, useSudo))
 			// 半成品没删掉时照实说：它们不在回滚清单里，混进回滚计数会失真。
 			res.ErrorText = appendText(res.ErrorText, partialLeft(halfWrites))
@@ -185,28 +198,53 @@ func (c *client) putFile(sftpClient *sftpConn, localPath, remoteFilePath string,
 
 	src, err := os.Open(localPath)
 	if err != nil {
-		return 0, errors.New(msg(envTransfer, transferLocalUnreadable, err.Error())), nil
+		return 0, noRetry(errors.New(msg(envTransfer, transferLocalUnreadable, err.Error()))), nil
 	}
 	defer func() { _ = src.Close() }()
+	// 本机这一份多大：写完要拿它跟目标机对（ADR-0063 决定 11）。
+	info, err := src.Stat()
+	if err != nil {
+		return 0, noRetry(errors.New(msg(envTransfer, transferLocalUnreadable, err.Error()))), nil
+	}
 
 	dst, err := sftpClient.Create(remoteFilePath)
 	if err != nil {
-		return 0, errors.New(msg(envTransfer, transferRemoteFileFailed, err.Error())), nil
+		// 原始错误要留着：没有权限、文件不存在这类状态码决定要不要重试。
+		return 0, transferFail(transferRemoteFileFailed, err), nil
 	}
-	defer func() { _ = dst.Close() }()
 
-	n, err := copyUpload(dst, src, onProg, seq, c.node.IP, totalBytes, totalFiles)
-	if err != nil {
-		var leftovers []string
-		if rmErr := sftpClient.Remove(remoteFilePath); rmErr != nil {
-			// 删不掉就照实说：它在目标机上占着路径，下次重传会撞「远程文件已存在」。
-			leftovers = append(leftovers, remoteFilePath)
-		}
-		return 0, errors.New(msg(envTransfer, transferRemoteFileFailed, err.Error())), leftovers
+	n, copyErr := copyUpload(dst, src, onProg, seq, c.node.IP, totalBytes, totalFiles)
+	// 先关再问大小：没关掉之前，目标机那边的写入可能还挂在缓冲里。
+	closeErr := dst.Close()
+
+	if copyErr != nil {
+		return 0, transferFail(transferRemoteFileFailed, copyErr), leftoverOf(sftpClient, remoteFilePath)
 	}
+	if closeErr != nil {
+		return 0, transferFail(transferRemoteFileFailed, closeErr), leftoverOf(sftpClient, remoteFilePath)
+	}
+
+	// 写完核大小：只比字节数，不比内容（ADR-0063 决定 11 的取舍）。
+	remoteInfo, err := sftpClient.Stat(remoteFilePath)
+	if err != nil {
+		return 0, transferFail(transferRemoteFileFailed, fmt.Errorf("stat after write: %w", err)), leftoverOf(sftpClient, remoteFilePath)
+	}
+	if remoteInfo.Size() != info.Size() {
+		// 删掉它自己：留着会让这次重传撞「远程文件已存在」。
+		return 0, errors.New(sizeMismatchMessage(info.Size(), remoteInfo.Size())), leftoverOf(sftpClient, remoteFilePath)
+	}
+
 	// 权限设置失败不阻断（老版同口径）。
 	_ = sftpClient.Chmod(remoteFilePath, perm)
 	return n, nil, nil
+}
+
+// leftoverOf 删掉本次写坏的那个远端文件；删不掉就把它交回去，照实写进报文。
+func leftoverOf(sftpClient *sftpConn, remoteFilePath string) []string {
+	if err := sftpClient.Remove(remoteFilePath); err != nil {
+		return []string{remoteFilePath}
+	}
+	return nil
 }
 
 // rollback 上传失败后删掉本次已写成功的文件。

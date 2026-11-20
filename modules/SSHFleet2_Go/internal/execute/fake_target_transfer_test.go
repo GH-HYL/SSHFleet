@@ -152,3 +152,44 @@ func TestRunDownloadOverFakeTarget(t *testing.T) {
 		t.Fatalf("终端输出档案里没有这一台：%q", term)
 	}
 }
+
+// 下载：枚举给的大小与真实内容不符——重试用完就失败，分类是「大小不符」，本机不留半成品。
+//
+// 只造得出「一直不符」这一种：期望大小来自枚举，重试不会再枚举一次（那是这一格的设计），
+// 所以「第一次不符、第二次对上」在本机造不出来——真实文件系统写不短，服务端也没有截断开关。
+func TestRunDownloadFailsWhenSizeNeverMatches(t *testing.T) {
+	ft := startFakeTarget(t)
+	node := fakeNode(t, ft)
+
+	remoteDir := ft.path("mismatch-always")
+	if err := os.MkdirAll(ft.local(remoteDir), 0o755); err != nil {
+		t.Fatalf("建目标机上的目录失败：%v", err)
+	}
+	if err := os.WriteFile(filepath.Join(ft.local(remoteDir), "b.txt"), []byte("beta\n"), 0o644); err != nil {
+		t.Fatalf("在目标机上造文件失败：%v", err)
+	}
+	ft.lieAboutSize(100, 99)
+
+	localDir := t.TempDir()
+	p := &contract.Plan{
+		Mode: contract.ModeDownload,
+		Task: contract.Task{
+			Path:     localDir,
+			Download: &contract.DownloadTask{RemotePath: filepath.ToSlash(remoteDir)},
+		},
+		Nodes: []contract.Node{node},
+		Run:   contract.RunParams{TimeoutExecute: 30, TransferRetry: 1},
+	}
+
+	paper, _ := runWithLandings(t, p)
+	it := paper.Items[0]
+	if !strings.Contains(it.ErrorText, "sshfleet.transfer.size_mismatch") {
+		t.Fatalf("该报大小不符，实际 %q", it.ErrorText)
+	}
+	if it.Transfer.FailFiles != 1 {
+		t.Fatalf("该计一个失败，实际 %+v", it.Transfer)
+	}
+	if _, err := os.Stat(filepath.Join(localDir, node.IP, "b.txt")); err == nil {
+		t.Fatal("大小不符的文件该删掉，本机不该留着")
+	}
+}

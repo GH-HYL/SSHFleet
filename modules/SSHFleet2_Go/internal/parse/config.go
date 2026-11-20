@@ -24,6 +24,10 @@ import (
 const (
 	configPath      = "./config/SSHFleet.conf"
 	shownConfigPath = message.ConfigShownPath
+
+	// defaultTransferRetry 传输重试次数的默认值：一个文件失败后再试 1 次（ADR-0063 决定 9）。
+	// 0 表示不重试；配置文件里不写这一项时取它。
+	defaultTransferRetry = 1
 )
 
 // account 登录账号。
@@ -48,6 +52,7 @@ type execution struct {
 	TimeoutConnect  int
 	TimeoutExecute  int
 	TimeoutTransfer int
+	TransferRetry   int
 }
 
 // enable 功能开关。
@@ -98,7 +103,7 @@ type settings struct {
 var knownKeys = map[string]map[string]bool{
 	"account":     {"port": true, "user": true, "password": true},
 	"credential":  {"encrypt": true, "key": true, "key_password": true, "secret_dir": true},
-	"execution":   {"sudo": true, "timeout_connect": true, "timeout_execute": true, "timeout_transfer": true},
+	"execution":   {"sudo": true, "timeout_connect": true, "timeout_execute": true, "timeout_transfer": true, "transfer_retry": true},
 	"enable":      {"output_to_xlsx": true, "results_to_xlsx": true, "show_category_tips": true},
 	"interactive": {"regex": true, "case_sensitive": true},
 	"locale":      {"english": true},
@@ -246,6 +251,13 @@ func decode(raw rawConfig) (*settings, error) {
 	if cfg.Execution.TimeoutTransfer, err = intOf(raw, "execution", "timeout_transfer"); err != nil {
 		return nil, err
 	}
+	// 可选：不写就按默认 1 次。写进 required 会让所有存量配置启动即报「缺字段」。
+	cfg.Execution.TransferRetry = defaultTransferRetry
+	if _, ok := raw["execution"]["transfer_retry"]; ok {
+		if cfg.Execution.TransferRetry, err = intOf(raw, "execution", "transfer_retry"); err != nil {
+			return nil, err
+		}
+	}
 
 	if cfg.enable.OutputToXlsx, err = boolOf(raw, "enable", "output_to_xlsx"); err != nil {
 		return nil, err
@@ -367,6 +379,10 @@ func validateValues(cfg *settings) error {
 		if x.val < 1 {
 			return fmt.Errorf("%s", message.ValueInvalidBecause(x.name, strconv.Itoa(x.val), message.ReasonPositiveSeconds))
 		}
+	}
+	if cfg.Execution.TransferRetry < 0 {
+		return fmt.Errorf("%s", message.ValueInvalidBecause("execution.transfer_retry",
+			strconv.Itoa(cfg.Execution.TransferRetry), message.ReasonNonNegative))
 	}
 	if cfg.upload.SmallFile < 1 {
 		return fmt.Errorf("%s", message.ValueInvalidBecause("upload.small_file", strconv.Itoa(cfg.upload.SmallFile), message.ReasonPositiveBytes))
