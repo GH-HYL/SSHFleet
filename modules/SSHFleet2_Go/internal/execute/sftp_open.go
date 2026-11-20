@@ -26,9 +26,9 @@ import (
 const sftpServerProbe = `for p in /usr/lib/openssh/sftp-server /usr/libexec/openssh/sftp-server /usr/lib/ssh/sftp-server; do
 	if [ -x "$p" ]; then printf '%s\n' "$p"; exit 0; fi
 done
-p=$(command -v sftp-server 2>/dev/null) || exit 127
-[ -n "$p" ] && printf '%s\n' "$p" && exit 0
-exit 127
+p=$(command -v sftp-server 2>/dev/null) || exit 42
+[ -n "$p" ] || exit 42
+printf '%s\n' "$p"
 `
 
 // sftpConn 一条 SFTP 通道：客户端，以及提权路径下它底下那条会话。
@@ -77,17 +77,25 @@ func (c *client) probeSFTPServer() (string, error) {
 	defer func() { _ = sess.Close() }()
 
 	// 探测脚本走 stdin：免得把多行脚本套进引号里，一层转义写错就是「某几台莫名其妙失败」。
+	// stdout 只认路径、stderr 只当原文——混在一起，sudo 那句「unable to resolve host」会被
+	// 当成路径的一部分，正是这一条要防的失败。
+	stderr := &strings.Builder{}
+	sess.Stderr = stderr
 	sess.Stdin = strings.NewReader(sftpServerProbe)
-	out, err := sess.CombinedOutput("sudo -n sh")
-	text := strings.TrimSpace(string(out))
+	out, err := sess.Output("sudo -n sh")
+	path := strings.TrimSpace(string(out))
 
 	switch {
-	case err == nil && text != "":
-		return text, nil
-	case err == nil || isExitStatus(err, 127):
-		return "", errors.New(msg(envTransfer, transferClientFailed, "sftp-server not found under sudo"+detailOf(text)))
+	case err == nil && path != "":
+		return path, nil
+	case err == nil || isExitStatus(err, probeNotFound):
+		// 42 是脚本自己给的：三个候选与 PATH 里都没有；退出 0 却没有输出按同一件事算。
+		return "", errors.New(msg(envTransfer, transferClientFailed,
+			"sftp-server not found under sudo"+detailOf(strings.TrimSpace(stderr.String()))))
 	default:
-		return "", errors.New(msg(envTransfer, transferClientFailed, "sudo refused to run sftp-server"+detailOf(text)))
+		// 其余的失败都归这里：sudo 拒绝、sudo 本身跑不起来、sh 起不来。原文照附。
+		return "", errors.New(msg(envTransfer, transferClientFailed,
+			"sudo refused to run sftp-server"+detailOf(strings.TrimSpace(stderr.String()))))
 	}
 }
 
@@ -125,6 +133,10 @@ func (c *client) startSFTPServer(server string) (*sftpConn, error) {
 	}
 	return &sftpConn{Client: client, sess: sess}, nil
 }
+
+// probeNotFound 是探测脚本自己给的退出码：候选路径与 PATH 里都没有 sftp-server。
+// 不用 127——那是「远端 shell 找不到 sudo」也会给的码，两件事不能共用一句报错。
+const probeNotFound = 42
 
 // isExitStatus 判远端命令是不是以某个退出码收场。
 func isExitStatus(err error, code int) bool {

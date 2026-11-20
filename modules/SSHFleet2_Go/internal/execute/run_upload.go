@@ -44,12 +44,7 @@ func (c *client) upload(ctx context.Context, p *contract.Plan, res *contract.Nod
 
 	sftpClient, err := c.openSFTP(useSudo)
 	if err != nil {
-		// 提权探测那几种失败自己就是报文；库给的原始错误才需要套一层。
-		reason := err.Error()
-		if !isMessage(reason) {
-			reason = msg(envTransfer, transferClientFailed, reason)
-		}
-		res.ErrorText = appendText(res.ErrorText, reason)
+		res.ErrorText = appendText(res.ErrorText, openFailureText(err))
 		failTransfer(res, files)
 		return
 	}
