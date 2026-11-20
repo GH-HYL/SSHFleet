@@ -8,11 +8,8 @@ package execute
 import (
 	"fmt"
 	"math"
-	"path"
 	"strconv"
 	"strings"
-
-	"github.com/pkg/sftp"
 )
 
 // 传输一摊的环节名。
@@ -27,11 +24,8 @@ const (
 	transferLocalDirFailed    = "local_dir_failed"   // 本机建落地目录失败
 	transferRemoteFileFailed  = "remote_file_failed" // 远端建目录 / 建文件 / 写文件失败
 	transferLocalFileFailed   = "local_file_failed"  // 下载侧建本地文件 / 写本地失败
-	transferTmpFailed         = "tmp_failed"         // sudo 路径的临时目录 / 文件
-	transferSudoFailed        = "sudo_failed"        // sudo mv 到最终位置失败
 	transferRemoteExists      = "remote_exists"      // 目标机上已有同名文件
 	transferTargetSpaceShort  = "target_space_short" // 目标目录所在分区的可用量不够
-	transferTmpSpaceShort     = "tmp_space_short"    // sudo 路径的暂存目录所在分区不够
 	transferRolledBack        = "rolled_back"        // 上传失败后，本次写进去的文件已清干净
 	transferRollbackPartial   = "rollback_partial"   // 回滚没清干净：还剩哪些路径
 	transferPartialLeft       = "partial_left"       // 写到一半的文件没删掉（上传，远端）
@@ -44,9 +38,6 @@ const (
 	abortCanceled        = "canceled"         // 会话建立之后被中断
 	abortConnectCanceled = "connect_canceled" // 建连途中被中断
 )
-
-// tmpRoot sudo 模式下的远端临时目录根（上传前整体清理）。
-const tmpRoot = "/tmp/.SSHFleet_tmp/"
 
 // appendText 把一段报文追加进报错原文那一格（空的那段不加）。
 //
@@ -98,47 +89,17 @@ func localPartialLeft(paths []string) string {
 
 // —— 空间预检（ADR-0026） ——
 
-// spaceSide 判的是哪一侧：目标目录所在分区，或 sudo 的暂存目录所在分区。
-type spaceSide int
-
-const (
-	sideTarget spaceSide = iota
-	sideTmp
-)
-
-// spaceShort 两侧各探一次：哪一处不够就说那一处，够就一个字都不说。
+// spaceShort 问一次**目标目录所在分区**：装不下就给出该发的那条报文，够就一个字都不说。
 //
+// 只有这一侧：提权时文件直接写最终路径，没有暂存分区要判（ADR-0063 决定 1）。
 // beforeWrite 区分两种场景：预检（一个文件都没写，报文里要声明这一点）与失败后再查
 // （已经写过——探测发生在回滚之前，那时文件还在，只说还差多少）。
-func spaceShort(probe func(string, bool) (int64, bool), remotePath string, sudo bool, targetNeed, tmpNeed int64, beforeWrite bool) string {
-	if avail, ok := probe(remotePath, sudo); ok {
-		if m, short := judgeSpace(sideTarget, remotePath, avail, targetNeed, beforeWrite); short {
-			return m
-		}
-	}
-	if !sudo {
+func spaceShort(probe func(string, bool) (int64, bool), remotePath string, asRoot bool, need int64, beforeWrite bool) string {
+	avail, ok := probe(remotePath, asRoot)
+	if !ok || avail >= need {
 		return ""
 	}
-	// 暂存侧只在 sudo 路径上存在：非 sudo 直接写目标，没有暂存这一步。
-	probePath := tmpProbePath()
-	if avail, ok := probe(probePath, false); ok {
-		if m, short := judgeSpace(sideTmp, probePath, avail, tmpNeed, beforeWrite); short {
-			return m
-		}
-	}
-	return ""
-}
-
-// judgeSpace 硬比可用量与需要量，不够就给出该发哪条报文。
-func judgeSpace(side spaceSide, p string, avail, need int64, beforeWrite bool) (string, bool) {
-	if avail >= need {
-		return "", false
-	}
-	name := transferTargetSpaceShort
-	if side == sideTmp {
-		name = transferTmpSpaceShort
-	}
-	return msg(envTransfer, name, spaceShortDetail(p, avail, need, beforeWrite)), true
+	return msg(envTransfer, transferTargetSpaceShort, spaceShortDetail(remotePath, avail, need, beforeWrite))
 }
 
 // spaceShortDetail 报文正文：路径 + 两个数（执行侧只陈述事实）。
@@ -158,7 +119,7 @@ func spaceShortDetail(p string, avail, need int64, beforeWrite bool) string {
 //
 // 取哪个字段由「谁在写」决定：以 root 写时 root 能用保留块（Bfree），普通账号只能用
 // Bavail。块大小按 Frsize 算，有的实现只填 Bsize 时退回它。
-func sftpAvail(client *sftp.Client, p string, asRoot bool) (int64, bool) {
+func sftpAvail(client *sftpConn, p string, asRoot bool) (int64, bool) {
 	st, err := client.StatVFS(p)
 	if err != nil {
 		return 0, false
@@ -175,26 +136,8 @@ func sftpAvail(client *sftp.Client, p string, asRoot bool) (int64, bool) {
 }
 
 // sftpProbe 把这条连接的探测包成 spaceShort 要的函数值。
-func sftpProbe(client *sftp.Client) func(string, bool) (int64, bool) {
+func sftpProbe(client *sftpConn) func(string, bool) (int64, bool) {
 	return func(p string, asRoot bool) (int64, bool) { return sftpAvail(client, p, asRoot) }
-}
-
-// tmpProbePath 暂存目录所在的分区路径。
-//
-// 探的是暂存目录的父目录而不是它自己：每个文件才建一个随机子目录，预检这一刻它还不存在。
-func tmpProbePath() string {
-	return path.Dir(strings.TrimSuffix(tmpRoot, "/"))
-}
-
-// maxFileSize 本次上传里最大的那个文件（sudo 路径的暂存侧只需要容得下这一个）。
-func maxFileSize(files []fileEntry) int64 {
-	var max int64
-	for _, f := range files {
-		if f.Size > max {
-			max = f.Size
-		}
-	}
-	return max
 }
 
 // humanBytes 报文里的人读大小：按量级选单位，保留两位小数，多余的零不写。

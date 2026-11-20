@@ -2,24 +2,23 @@ package execute
 
 // 上传：把采集好的那张表写到目标目录。
 //
-// 三条硬规矩（ADR-0022）：
+// 两条硬规矩（ADR-0022）：
 //   - 远端重名不覆盖，那个文件计失败并终止本节点（目标机上那个同名文件是别人先
 //     放的，回滚一定不能碰它）；
-//   - 中途失败把**本次写成功**的那些删掉（只删清单里的路径，不扫目录、不用通配符）；
-//   - sudo 路径先写进远端暂存目录再 `mv` 到位，暂存目录用完清理。
+//   - 中途失败把**本次写成功**的那些删掉（只删清单里的路径，不扫目录、不用通配符）。
+//
+// `--sudo` 与不 sudo 走同一条写路径：提权时整条 SFTP 会话以 root 跑，直接写最终路径，
+// 没有暂存目录这一步（ADR-0063 决定 1）。
 //
 // 明细进 `terminal-output.txt`，不上屏——传输类的结果由进度面板呈现（老版同一判据）。
 
 import (
 	"context"
-	"crypto/rand"
 	"errors"
 	"fmt"
 	"os"
 	"path"
 	"time"
-
-	"github.com/pkg/sftp"
 
 	"sshfleet2/internal/contract"
 	"sshfleet2/internal/criterion"
@@ -43,14 +42,14 @@ func (c *client) upload(ctx context.Context, p *contract.Plan, res *contract.Nod
 	remotePath := p.Task.Path
 	useSudo := p.Run.Sudo && c.node.User != "root"
 
-	// 清理残留临时目录（仅 sudo 模式）
-	if useSudo {
-		_ = c.exec("sudo rm -rf " + tmpRoot)
-	}
-
-	sftpClient, err := sftp.NewClient(c.conn)
+	sftpClient, err := c.openSFTP(useSudo)
 	if err != nil {
-		res.ErrorText = appendText(res.ErrorText, msg(envTransfer, transferClientFailed, err.Error()))
+		// 提权探测那几种失败自己就是报文；库给的原始错误才需要套一层。
+		reason := err.Error()
+		if !isMessage(reason) {
+			reason = msg(envTransfer, transferClientFailed, reason)
+		}
+		res.ErrorText = appendText(res.ErrorText, reason)
 		failTransfer(res, files)
 		return
 	}
@@ -85,7 +84,8 @@ func (c *client) upload(ctx context.Context, p *contract.Plan, res *contract.Nod
 	}
 
 	// 空间预检：装不下就停在写第一个文件之前，目标机上不会有任何本次的东西。
-	if m := spaceShort(sftpProbe(sftpClient), remotePath, useSudo, totalBytes, maxFileSize(files), true); m != "" {
+	// 只有目标目录这一侧——提权时文件直接写最终路径，没有暂存分区要判（ADR-0026）。
+	if m := spaceShort(sftpProbe(sftpClient), remotePath, useSudo, totalBytes, true); m != "" {
 		res.ErrorText = appendText(res.ErrorText, m)
 		failTransfer(res, files)
 		return
@@ -141,11 +141,7 @@ func (c *client) upload(ctx context.Context, p *contract.Plan, res *contract.Nod
 			uploadErr    error
 			halfWrites   []string
 		)
-		if !useSudo {
-			writtenBytes, uploadErr, halfWrites = c.putFile(sftpClient, f.Path, remoteFilePath, perm, idx, totalBytes, len(files), onProg)
-		} else {
-			writtenBytes, uploadErr, halfWrites = c.putFileViaSudo(sftpClient, f.Path, f.Rel, remotePath, perm, idx, totalBytes, len(files), onProg)
-		}
+		writtenBytes, uploadErr, halfWrites = c.putFile(sftpClient, f.Path, remoteFilePath, perm, idx, totalBytes, len(files), onProg)
 
 		if uploadErr != nil {
 			failed++
@@ -158,7 +154,7 @@ func (c *client) upload(ctx context.Context, p *contract.Plan, res *contract.Nod
 			// 失败后再查一次空间：满不是唯一的原因，只有探出来确实不够才改口。
 			// **必须在回滚之前问**：回滚会把空间还回去，那时再探永远是「够」。
 			res.ErrorText = appendText(res.ErrorText,
-				spaceShort(sftpProbe(sftpClient), remotePath, useSudo, totalBytes-uploadedBytes, maxFileSize(files[idx:]), false))
+				spaceShort(sftpProbe(sftpClient), remotePath, useSudo, totalBytes-uploadedBytes, false))
 			res.ErrorText = appendText(res.ErrorText, c.rollback(sftpClient, written, useSudo))
 			// 半成品没删掉时照实说：它们不在回滚清单里，混进回滚计数会失真。
 			res.ErrorText = appendText(res.ErrorText, partialLeft(halfWrites))
@@ -181,8 +177,10 @@ func (c *client) upload(ctx context.Context, p *contract.Plan, res *contract.Nod
 	res.Transfer.TotalBytes = uploadedBytes
 }
 
-// putFile 直接经 SFTP 写（非 sudo 路径），返回写入字节数与没删掉的半成品。
-func (c *client) putFile(sftpClient *sftp.Client, localPath, remoteFilePath string, perm os.FileMode, seq int, totalBytes int64, totalFiles int, onProg onProgressN) (int64, error, []string) {
+// putFile 经 SFTP 写一个文件，返回写入字节数与没删掉的半成品。
+//
+// 两种身份共用这一条：提权时底层会话已是 root，中间目录同样由 SFTP 自己建。
+func (c *client) putFile(sftpClient *sftpConn, localPath, remoteFilePath string, perm os.FileMode, seq int, totalBytes int64, totalFiles int, onProg onProgressN) (int64, error, []string) {
 	// 中间目录按需创建：上传目录的相对层级要保留。目标目录（-p）本身仍必须已存在。
 	if dir := path.Dir(remoteFilePath); dir != "." {
 		if err := sftpClient.MkdirAll(dir); err != nil {
@@ -216,71 +214,11 @@ func (c *client) putFile(sftpClient *sftp.Client, localPath, remoteFilePath stri
 	return n, nil, nil
 }
 
-// putFileViaSudo 经暂存目录 + `sudo mv` 写（sudo 路径）。
-func (c *client) putFileViaSudo(sftpClient *sftp.Client, localPath, rel, remotePath string, perm os.FileMode, seq int, totalBytes int64, totalFiles int, onProg onProgressN) (int64, error, []string) {
-	remoteFilePath := path.Join(remotePath, rel)
-	if dir := path.Dir(remoteFilePath); dir != remotePath {
-		if err := c.exec(fmt.Sprintf("sudo mkdir -p '%s'", criterion.EscapeSingle(dir))); err != nil {
-			return 0, errors.New(msg(envTransfer, transferRemoteFileFailed, fmt.Sprintf("create remote dir %s: %v", dir, err))), nil
-		}
-	}
-
-	tmpDir := tmpRoot + randomHex()
-	if err := c.exec(fmt.Sprintf("sudo mkdir -p '%s' && sudo chmod 777 '%s'", tmpDir, tmpDir)); err != nil {
-		return 0, errors.New(msg(envTransfer, transferTmpFailed, err.Error())), nil
-	}
-	// 临时目录清不掉时，目标机上会留着本次的半成品——不静默。
-	var leftovers []string
-	cleanup := func() {
-		if err := c.exec(fmt.Sprintf("sudo rm -rf '%s'", tmpDir)); err != nil {
-			if len(leftovers) == 0 || leftovers[len(leftovers)-1] != tmpDir {
-				leftovers = append(leftovers, tmpDir)
-			}
-		}
-	}
-
-	src, err := os.Open(localPath)
-	if err != nil {
-		cleanup()
-		return 0, errors.New(msg(envTransfer, transferLocalUnreadable, err.Error())), leftovers
-	}
-	defer func() { _ = src.Close() }()
-
-	// 临时文件名用基名：避免相对路径里的分隔符在临时目录里再建一层。
-	tmpFilePath := tmpDir + "/" + path.Base(rel)
-	dst, err := sftpClient.Create(tmpFilePath)
-	if err != nil {
-		cleanup()
-		return 0, errors.New(msg(envTransfer, transferTmpFailed, err.Error())), leftovers
-	}
-	defer func() { _ = dst.Close() }()
-
-	n, err := copyUpload(dst, src, onProg, seq, c.node.IP, totalBytes, totalFiles)
-	if err != nil {
-		cleanup()
-		return 0, errors.New(msg(envTransfer, transferTmpFailed, err.Error())), leftovers
-	}
-	_ = sftpClient.Chmod(tmpFilePath, perm)
-
-	// 两个参数都转义：两边都含用户可控字符，任一边漏转义都会把远端命令拼坏。
-	if err := c.exec(fmt.Sprintf("sudo mv '%s' '%s'", criterion.EscapeSingle(tmpFilePath), criterion.EscapeSingle(remoteFilePath))); err != nil {
-		// 跨文件系统时 mv 退化为 copy+unlink，中途失败可能在最终位置留下半成品。
-		// 不猜：先 Stat，确认存在才报。
-		if _, statErr := sftpClient.Stat(remoteFilePath); statErr == nil {
-			leftovers = append(leftovers, remoteFilePath)
-		}
-		cleanup()
-		return 0, errors.New(msg(envTransfer, transferSudoFailed, err.Error())), leftovers
-	}
-	cleanup()
-	return n, nil, leftovers
-}
-
 // rollback 上传失败后删掉本次已写成功的文件。
 //
 // 只删清单里列的那些完整路径，不扫目录、不用通配符、不删中间目录：写每个文件之前都查过
 // 重名，所以这些路径必然都是本次自己建的。删不掉的路径照实带进报文。
-func (c *client) rollback(sftpClient *sftp.Client, writtenPaths []string, useSudo bool) string {
+func (c *client) rollback(sftpClient *sftpConn, writtenPaths []string, useSudo bool) string {
 	if len(writtenPaths) == 0 {
 		return ""
 	}
@@ -300,11 +238,4 @@ func (c *client) rollback(sftpClient *sftp.Client, writtenPaths []string, useSud
 		removed++
 	}
 	return rollbackMessage(len(writtenPaths), removed, left)
-}
-
-// randomHex 8 位随机 hex（临时目录名）。
-func randomHex() string {
-	b := make([]byte, 4)
-	_, _ = rand.Read(b)
-	return fmt.Sprintf("%x", b)
 }
