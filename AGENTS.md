@@ -1,48 +1,34 @@
 # AGENTS.md
 
-**规矩都写在 `docs/个人开发规范.md` 里，本文件只放地图。** 粗体都是那份文件里的标题，照它 grep 就能落到行号。
-
-**每次回话之前，先在心里说清核心诉求是什么，再看这一轮的想法和回答是不是服务它；它可以变，但只能明着变。**
+**这一页是入口，不装规则。** 规则平铺在 `docs/agents/` 下，分两族：`必读-` 每轮开工读，`按需-` 照动作查。这里只写一件事——什么时候读哪一份。
 
 ## 必读
 
-- **总则**——角色、谁的话算数、条款分几级、什么算废话。（动手之前读）
-- **一、约束**——红线，每条自带适用场景；拿不准时怎么问。（动手之前读）
-- **五、说话**——怎么回话、说多少；要交结果的那段，按 **3. 报结果** 的四样写。（开口之前读）
+| 时机 | 读 |
+| --- | --- |
+| 动手之前 | `docs/agents/必读-总则.md`、`docs/agents/必读-约束.md` |
 
-只答问题不动手，读 **五、说话** 就够。
+## 按需
 
-## 按需读
-
-- **跑测试、要一台目标机**——读 `docs/测试环境使用指南.md`：第一节决定你在哪跑（Windows 侧原生跑会多出两类假红；撞 360 那条在第八节），第八节是临时目录与沙盒的跑法。（每次 `go test` 之前读）
-- **二、流程**——起不起规格、规格与工单、报「做完了」前验什么、核什么。（起规格、拆工单、报「做完了」时读）
-- **三、结构**——目录与落点、代码工程、测试接缝与两区、验证环境。（动结构、选落点、起验证环境时读）
-- **四、产出**——提交信息、CHANGELOG、ADR／规格／工单的写法、使用者可见文案。（改代码顺带写 CHANGELOG、提交、写 ADR／手册时读）
-- **动 ADR、查某个决策为什么这么定**——先读 `docs/adr/0000-索引.md`，一行一篇，只翻命中那篇。（写 ADR、追某个决定的来由时读）
-- **附：触发词对照表**——触发词与技能的对照。（听到触发词时读：授权开工、拷问、spec、工单、ADR、复查、tdd、缺陷）
-
-> 动手前不必自查「我有没有越界」。
+| 触发场景 | 读 |
+| --- | --- |
+| 动手写代码、选落点、写测试 | `docs/agents/按需-写代码.md` |
+| 每次跑 `go test`、连目标机 | `docs/agents/按需-测试环境.md` |
+| 起规格、拆工单、写或改 ADR／spec／工单 | `docs/agents/按需-写文档.md` |
+| 报「做完了」、提交 | `docs/agents/按需-交付与提交.md` |
+| 写报错、提示、帮助、手册 | `docs/agents/按需-给使用者看的文字.md` |
+| 听到口述的触发词 | `docs/agents/按需-触发词表.md` |
 
 ## Agent skills
 
-主干流程与载体以规范「二、流程」为准，不另建一套：规格与工单在 `docs/issues/<slug>/`，决策在 `docs/adr/`，词表在 `GLOSSARY.md`。
-
-### Document formats
-
-写 ADR / spec / 工单时**照着内容规范办**：`docs/agents/doc-guide.md`（什么时候写、模板字段、竖切与宽重构怎么拆）。**不要靠翻旧文件猜格式。**
-
 ### Issue tracker
 
-**议题**一个功能一个目录，`docs/issues/<yyyy-MM-dd-HHmm-主题>/`，内放 `spec.md` 与 `issues/NN-*.md`；详见 `docs/agents/issue-tracker.md`。
+**议题**一个功能一个目录，`docs/issues/<yyyy-MM-dd-HHmm-主题>/`，内放 `spec.md` 与 `issues/NN-*.md`。见 `docs/agents/issue-tracker.md`。
 
 ### Triage labels
 
-六个分诊角色，标签名与角色名一致（`needs-triage`、`needs-info`、`ready-for-agent`、`ready-for-human`、`wontfix`、`done`）。详见 `docs/agents/triage-labels.md`。
-
-### Skills index
-
-**哪个环节用哪个技能，见 `docs/个人开发规范.md`「附：触发词对照表」**——表里只收执行者自己该调的；审计、交接这类由开发者自己敲，调用一律写斜杠名（如 `/my-grill`），客户端按名字自动索引。
+六个分诊角色，标签名与角色名一致（`needs-triage`、`needs-info`、`ready-for-agent`、`ready-for-human`、`wontfix`、`done`）。见 `docs/agents/triage-labels.md`。
 
 ### Domain docs
 
-单上下文（single-context）：根目录 `GLOSSARY.md` + `docs/adr/`。详见 `docs/agents/domain.md`。
+单上下文（single-context）：根目录 `GLOSSARY.md` + `docs/adr/`。见 `docs/agents/domain.md`。
