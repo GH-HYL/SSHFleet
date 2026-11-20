@@ -7,7 +7,7 @@ import (
 )
 
 // 这一份密文是**用老工程那份加密引擎**生成的（HKDF-SHA256 + AES-256-GCM，0x02 布局），
-// 不是本包自己加出来再自己解——期望值独立于被测代码，见《个人开发规范》三.3。
+// 不是本包自己加出来再自己解——期望值独立于被测代码，见 `docs/agents/按需-写代码.md` 的「测试怎么写」。
 const (
 	testMaster = "sshfleet-test-master-key-0123456789"
 	testPlain  = "Sshfleet#2026"

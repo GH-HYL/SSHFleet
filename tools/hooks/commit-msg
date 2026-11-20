@@ -1,5 +1,5 @@
 #!/bin/sh
-# 提交信息闸门：标题必须是「类型(可选作用域): 简短描述」，类型见 docs/个人开发规范.md 四·1。
+# 提交信息闸门：标题必须是「类型(可选作用域): 简短描述」，类型见 docs/agents/按需-交付与提交.md。
 #
 # 装在 .git/hooks/ 里才生效（bash tools/install-hooks.sh），本文件是它可追踪的那一份。
 # 只管标题那一行；正文不查。合并与回滚提交放行。
@@ -14,6 +14,6 @@ esac
 
 if ! printf '%s' "$subject" | grep -Eq '^(feat|fix|refactor|docs|chore|style|test)(\([^)]*\))?: .+'; then
 	echo "提交信息不合格式：$subject" >&2
-	echo "要写成「类型(可选作用域): 简短描述」，类型是 feat/fix/refactor/docs/chore/style/test，见 docs/个人开发规范.md 四·1" >&2
+	echo "要写成「类型(可选作用域): 简短描述」，类型是 feat/fix/refactor/docs/chore/style/test，见 docs/agents/按需-交付与提交.md" >&2
 	exit 1
 fi
