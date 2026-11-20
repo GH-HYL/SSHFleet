@@ -1,0 +1,8 @@
+{
+  "exclude": [
+    "modules/SSHFleet_Go_bak/**",
+    "build/**",
+    "release/**",
+    "tools/ab/**"
+  ]
+}
