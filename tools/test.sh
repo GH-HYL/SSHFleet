@@ -3,7 +3,7 @@
 # 它会转进 WSL 跑——Windows 侧原生跑会多出软链接特权与探针缺 .exe 两类假红，
 # 测试二进制还会落进 %TEMP% 被 360 删或拦（见 docs/agents/按需-测试环境.md）。
 #
-# 干的三件事：转到 WSL、把三个临时目录变量指到工作区沙盒、把参数原样交给 go test。
+# 干的三件事：转到 WSL、把四个临时目录变量指到工作区沙盒、把参数原样交给 go test。
 # 参数就是 go test 的参数：`tools/test.sh ./...`、`tools/test.sh -run TestFoo ./internal/execute/`。
 
 set -euo pipefail
@@ -28,6 +28,7 @@ esac
 sandbox="$root/build/gotmp-$(date +%Y%m%d)"
 mkdir -p "$sandbox"
 export GOTMPDIR="$sandbox"
+export TMPDIR="$sandbox"
 export TMP="$sandbox"
 export TEMP="$sandbox"
 

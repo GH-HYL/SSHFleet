@@ -30,6 +30,7 @@ root="$(cd "$here/.." && pwd)"
 sandbox="$root/build/gotmp-$(date +%Y%m%d)"
 mkdir -p "$sandbox"
 export GOTMPDIR="$sandbox"
+export TMPDIR="$sandbox"
 export TMP="$sandbox"
 export TEMP="$sandbox"
 
