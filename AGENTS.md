@@ -21,6 +21,8 @@
 
 ## Agent skills
 
+下面三样是常驻约定，不进按需表；要改它们，改各自指向的文件。
+
 ### Issue tracker
 
 **议题**一个功能一个目录，`docs/issues/<yyyy-MM-dd-HHmm-主题>/`，内放 `spec.md` 与 `issues/NN-*.md`。见 `docs/agents/issue-tracker.md`。
