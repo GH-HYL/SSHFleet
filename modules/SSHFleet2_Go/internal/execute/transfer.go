@@ -55,6 +55,17 @@ func appendText(existing, msg string) string {
 	return existing + "\n" + msg
 }
 
+// openFailureText 开传输通道失败时进报错原文的那句。
+//
+// 提权探测那几种失败自己就是报文（探不到、sudo 拒绝）；库给的原始错误才需要补上环节名。
+func openFailureText(err error) string {
+	reason := err.Error()
+	if isMessage(reason) {
+		return reason
+	}
+	return msg(envTransfer, transferClientFailed, reason)
+}
+
 // rollbackMessage 上传回滚之后那句陈述。
 //
 // 三种情形都说话——删干净了也要说，使用者在下次撞上「远程文件已存在」时要能回头看出
