@@ -29,12 +29,14 @@ type Plan struct {
 	Notices []Notice
 }
 
-// RunParams 执行参数：并发、三个超时、执行身份，加几个本阶段就要用的开关。
+// RunParams 执行参数：并发、三个超时、传输重试次数、执行身份，加几个本阶段就要用的开关。
 type RunParams struct {
 	Concurrency     int // 0 表示不填，按全部并行
 	TimeoutConnect  int
 	TimeoutExecute  int
 	TimeoutTransfer int
+	// TransferRetry 单个文件失败后重传几次；0 表示不重传（ADR-0063 决定 9）。
+	TransferRetry int
 	// Sudo 只有一问：这一次到底用不用。命令行上给了 `--sudo` 或 `--no-sudo` 就按给的算，
 	// 都没给就留着配置里的值。
 	//

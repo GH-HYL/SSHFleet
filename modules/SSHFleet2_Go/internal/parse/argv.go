@@ -129,6 +129,7 @@ func buildPlan(cfg *settings, s scanned) (*contract.Plan, *contract.KeyRun, *con
 			TimeoutConnect:  cfg.Execution.TimeoutConnect,
 			TimeoutExecute:  cfg.Execution.TimeoutExecute,
 			TimeoutTransfer: cfg.Execution.TimeoutTransfer,
+			TransferRetry:   cfg.Execution.TransferRetry,
 			Sudo:            cfg.Execution.Sudo,
 			// 下发行的材料：`[env]` 原样带上，拼装归解析站。
 			// 拷一份，不与配置共用同一张表——纸往下走，谁都不该改到配置。

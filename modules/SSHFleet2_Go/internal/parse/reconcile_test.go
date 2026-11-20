@@ -40,6 +40,15 @@ var sectionRenames = map[string]map[string]string{
 	},
 }
 
+// newOnlyKeys 新工程在重写之后新增的键：老工程那份不再动，对账时只放行这些。
+//
+// 放行的只是「新工程多出来的」；老工程有、新工程没有的照样报——这一条防的是重写时丢料。
+var newOnlyKeys = map[string][]string{
+	"SSHFleet.conf":             {"execution.transfer_retry"},
+	"SSHFleet-for-linux.conf":   {"execution.transfer_retry"},
+	"SSHFleet-for-windows.conf": {"execution.transfer_retry"},
+}
+
 // contentSet 一个配置文件拿去对账的内容集合：
 // 键值形态的文件取「节名 + 节.键」；不是键值形态的（危险规则那份是一行一条正则）
 // 取裁掉注释与空白后的原文行——对账的是「这份料一个字没少」，不是它的语法。
@@ -107,6 +116,7 @@ func TestConfigDirReconciles(t *testing.T) {
 		newKeys := contentSet(t, filepath.Join(newDir, name), sectionRenames[name])
 		oldKeys := contentSet(t, filepath.Join(oldDir, name), nil)
 		missing, extra := diff(newKeys, oldKeys)
+		extra = slices.DeleteFunc(extra, func(k string) bool { return slices.Contains(newOnlyKeys[name], k) })
 		if len(missing) > 0 || len(extra) > 0 {
 			t.Errorf("%s 的内容集合不一致：\n  新工程缺：%v\n  新工程多：%v", name, missing, extra)
 		}

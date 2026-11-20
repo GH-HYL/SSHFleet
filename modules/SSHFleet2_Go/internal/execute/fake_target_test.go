@@ -38,6 +38,30 @@ type fakeTarget struct {
 
 	ln   net.Listener
 	once sync.Once
+
+	// lieSize 枚举时报错的大小（正数加、负数减），lieTimes 是还能骗几次：
+	// 0 表示从不骗。核大小那条路只能这么造——服务端用的是真实文件系统，写不短。
+	mu       sync.Mutex
+	lieSize  int64
+	lieTimes int
+}
+
+// lieAboutSize 让接下来的 n 次枚举报出偏移 size 的大小。
+func (f *fakeTarget) lieAboutSize(size int64, n int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.lieSize, f.lieTimes = size, n
+}
+
+// sizeLie 取一次还要不要骗、骗多少；骗过就把次数减掉。
+func (f *fakeTarget) sizeLie() (int64, bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.lieTimes <= 0 {
+		return 0, false
+	}
+	f.lieTimes--
+	return f.lieSize, true
 }
 
 // startFakeTarget 起一台，测试结束自动关。
@@ -204,6 +228,8 @@ func (f *fakeTarget) run(command string) (string, string, uint32) {
 			return "", err.Error() + "\n", 1
 		}
 		return "", "", 0
+	case strings.HasPrefix(cmd, "find "):
+		return f.find(cmd)
 	case strings.HasPrefix(cmd, "test -e "):
 		// 下载的远端预检就走这一条（`test -e '<路径>'`）：存在交 0，不存在交 1。
 		if _, err := os.Stat(f.local(unquote(strings.TrimPrefix(cmd, "test -e ")))); err != nil {
@@ -218,6 +244,48 @@ func (f *fakeTarget) run(command string) (string, string, uint32) {
 		return "", "", 0
 	}
 	return "", fmt.Sprintf("假目标机不认这条命令：%s\n", cmd), 127
+}
+
+// find 应答一次枚举：`find '<路径>' \( -type f -printf 'F %s %P\n' \) -o ...`。
+//
+// 只造真文件（F）那一半——软链接过滤另有用例。大小照实报，除非 lieAboutSize 让这次说谎。
+func (f *fakeTarget) find(command string) (string, string, uint32) {
+	rest := strings.TrimPrefix(command, "find ")
+	open := strings.IndexByte(rest, '\'')
+	if open < 0 {
+		return "", "假目标机的 find 要带一个带引号的路径\n", 1
+	}
+	close := strings.IndexByte(rest[open+1:], '\'')
+	if close < 0 {
+		return "", "假目标机的 find 路径没闭合\n", 1
+	}
+	// 用例里的路径是临时目录，不含单引号，按第一段取就够。
+	root := f.local(rest[open+1 : open+1+close])
+
+	var b strings.Builder
+	lie, lying := f.sizeLie()
+	err := filepath.Walk(root, func(p string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return nil
+		}
+		rel, relErr := filepath.Rel(root, p)
+		if relErr != nil {
+			return relErr
+		}
+		size := info.Size()
+		if lying {
+			size += lie
+		}
+		fmt.Fprintf(&b, "F %d %s\n", size, filepath.ToSlash(rel))
+		return nil
+	})
+	if err != nil {
+		return "", err.Error() + "\n", 1
+	}
+	return b.String(), "", 0
 }
 
 // local 把客户端发来的远端路径落回本机路径（`/C:/…` → `C:\…`）。

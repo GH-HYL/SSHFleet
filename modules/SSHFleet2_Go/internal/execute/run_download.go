@@ -197,7 +197,19 @@ func (c *client) download(ctx context.Context, p *contract.Plan, res *contract.N
 			break
 		}
 
-		n, downloadErr, halfWrites := getFile(sftpClient, remoteFilePath, localFilePath, i, c.node.IP, totalBytes, totalFiles, onProg)
+		var (
+			n           int64
+			downloadErr error
+			halfWrites  []string
+		)
+		// 单个文件失败只重下它自己（ADR-0063 决定 9）：getFile 每次重来前会删掉本地半成品。
+		attempts := 1 + p.Run.TransferRetry
+		for attempt := 1; attempt <= attempts; attempt++ {
+			n, downloadErr, halfWrites = getFile(sftpClient, remoteFilePath, localFilePath, i, c.node.IP, totalBytes, totalFiles, file.Size, onProg)
+			if downloadErr == nil || attempt == attempts || !retryableTransferError(downloadErr) {
+				break
+			}
+		}
 		if downloadErr != nil {
 			failed++
 			// 「下载失败」只留在输出明细行；报错原文格放报文。
@@ -223,7 +235,7 @@ func (c *client) download(ctx context.Context, p *contract.Plan, res *contract.N
 }
 
 // getFile 经 SFTP 取一个文件，返回下载字节数；失败删本地半成品。
-func getFile(sftpClient *sftpConn, remoteFilePath, localFilePath string, seq int, ip string, totalBytes int64, totalFiles int, onProg onProgressN) (int64, error, []string) {
+func getFile(sftpClient *sftpConn, remoteFilePath, localFilePath string, seq int, ip string, totalBytes int64, totalFiles int, wantSize int64, onProg onProgressN) (int64, error, []string) {
 	// 打开的是**远端**文件：这一步失败是目标机那边的事（文件刚被删、权限不够），
 	// 挂 remote_file_failed——挂 local_file_failed 会让「本机写不进去」与「远端读不出来」
 	// 共用同一个环节名，按分类排查时会找错方向。
@@ -235,20 +247,39 @@ func getFile(sftpClient *sftpConn, remoteFilePath, localFilePath string, seq int
 
 	dst, err := os.Create(localFilePath)
 	if err != nil {
-		return 0, errors.New(msg(envTransfer, transferLocalFileFailed, err.Error())), nil
+		// 本机建不出文件：重试还是建不出，别等第二遍。
+		return 0, noRetry(errors.New(msg(envTransfer, transferLocalFileFailed, err.Error()))), nil
 	}
-	defer func() { _ = dst.Close() }()
 
-	n, err := copyDownload(dst, src, onProg, seq, ip, totalBytes, totalFiles)
+	n, copyErr := copyDownload(dst, src, onProg, seq, ip, totalBytes, totalFiles)
+	// 先关再问大小：没关掉之前，本机这边的写入可能还挂在缓冲里。
+	closeErr := dst.Close()
+
+	if copyErr != nil {
+		return 0, transferFail(transferLocalFileFailed, copyErr), removeLocal(localFilePath)
+	}
+	if closeErr != nil {
+		return 0, transferFail(transferLocalFileFailed, closeErr), removeLocal(localFilePath)
+	}
+
+	// 写完核大小：与枚举时远端给的那个数比（ADR-0063 决定 11）。
+	info, err := os.Stat(localFilePath)
 	if err != nil {
-		var leftovers []string
-		if rmErr := os.Remove(localFilePath); rmErr != nil {
-			// 本机半成品没删掉：下次重试会撞上这个残缺文件。
-			leftovers = append(leftovers, localFilePath)
-		}
-		return 0, errors.New(msg(envTransfer, transferLocalFileFailed, err.Error())), leftovers
+		return 0, transferFail(transferLocalFileFailed, err), removeLocal(localFilePath)
+	}
+	if info.Size() != wantSize {
+		return 0, errors.New(sizeMismatchMessage(info.Size(), wantSize)), removeLocal(localFilePath)
 	}
 	return n, nil, nil
+}
+
+// removeLocal 删掉本机这个不合格的落盘文件；删不掉就交回去照实说。
+func removeLocal(localFilePath string) []string {
+	if err := os.Remove(localFilePath); err != nil {
+		// 本机半成品没删掉：下次重试会撞上这个残缺文件。
+		return []string{localFilePath}
+	}
+	return nil
 }
 
 // localRelUsable 远端给出的名字能不能在本机原样落盘。

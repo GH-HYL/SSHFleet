@@ -50,6 +50,8 @@ const (
 	ReasonPositiveBytes ValueInvalidReason = "须为正整数，单位字节"
 	// ReasonPositive 「（须为正整数）」。
 	ReasonPositive ValueInvalidReason = "须为正整数"
+	// ReasonNonNegative 次数类取值：0 有含义（不重试），所以不套「须为正整数」。
+	ReasonNonNegative ValueInvalidReason = "须为 0 或正整数"
 )
 
 // ValueInvalidBecause 拼「<项名> 取值非法：<值>（<理由>）」——括号是全角，紧贴值。
