@@ -13,10 +13,10 @@
 | 触发场景 | 读 |
 | --- | --- |
 | 动手写代码、选落点、写测试 | `docs/agents/按需-写代码.md` |
-| 每次跑 `go test`、连目标机 | `docs/agents/按需-测试环境.md` |
+| 每次跑测试（`tools/test.sh`）、连目标机 | `docs/agents/按需-测试环境.md` |
 | 起规格、拆工单、写或改 ADR／spec／工单 | `docs/agents/按需-写文档.md` |
-| 报「做完了」、提交 | `docs/agents/按需-交付与提交.md` |
-| 写报错、提示、帮助、手册 | `docs/agents/按需-给使用者看的文字.md` |
+| 报「做完了」、提交、写 CHANGELOG、碰版本号 | `docs/agents/按需-交付与提交.md` |
+| 写报错、提示、帮助、配置注释、手册 | `docs/agents/按需-给使用者看的文字.md` |
 | 听到口述的触发词 | `docs/agents/按需-触发词表.md` |
 
 ## Agent skills
@@ -25,7 +25,7 @@
 
 ### Issue tracker
 
-**议题**一个功能一个目录，`docs/issues/<yyyy-MM-dd-HHmm-主题>/`，内放 `spec.md` 与 `issues/NN-*.md`。见 `docs/agents/issue-tracker.md`。
+**议题**一个功能一个目录，`docs/issues/<yyyy-MM-dd-HHmm-主题>/`，内放 `spec.md`；拆到工单时再加 `issues/NN-*.md`。见 `docs/agents/issue-tracker.md`。
 
 ### Triage labels
 
