@@ -2,7 +2,7 @@
 # 提交前的闸门。提交那一步由 tools/hooks/pre-commit 转进来，也可直接跑。
 #
 # 两段：
-#   一、文档检查——四样字符串级判断，判据见 docs/agents/doc-guide.md 的「零」：
+#   一、文档检查——四样字符串级判断，判据见 docs/agents/按需-写文档.md：
 #       ① 引用指向不存在的 docs 路径或目录（写路径等于承诺它明天还在）
 #       ② 新写的 ADR 有「决策人」段却没有身份标注（证据与要求混排）
 #       ③ 写了「共 N 条」这类会被正文证伪的计数
@@ -39,9 +39,9 @@ staged_docs="$(git -C "$root" -c core.quotepath=false diff --cached --name-only 
 doc_scope_empty=""
 doc_check() {
 	# 谁不进文档检查：技能正文（路径常是举例）、脚本与个人工具（不承载文档）、
-	# 以及约束类文件（照 doc-guide 零节，它们指名道姓写路径，不受本节管）。
+	# 以及约束类文件（照 docs/agents/按需-写文档.md，它们指名道姓写路径，不受这些纪律管）。
 	doc_scope_filter() {
-		grep -vE '^(skills|mattpocock-skills|\.dsh|tools|personal|docs/agents)/|^(AGENTS\.md|docs/个人开发规范\.md)$' || true
+		grep -vE '^(skills|mattpocock-skills|\.dsh|tools|personal|docs/agents)/|^AGENTS\.md$' || true
 	}
 
 	local scope
@@ -110,7 +110,7 @@ doc_check() {
 
 	if [ -n "$problems" ]; then
 		printf '%s' "$problems" >&2
-		echo "文档检查没过。判据见 docs/agents/doc-guide.md 的「零」。" >&2
+		echo "文档检查没过。判据见 docs/agents/按需-写文档.md。" >&2
 		return 1
 	fi
 	return 0

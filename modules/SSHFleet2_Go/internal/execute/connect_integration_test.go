@@ -6,7 +6,7 @@ package execute
 //
 // 变量不全就整批 skip（约定同老版：SSHFLEET_TEST_HOST / PORT / USER / PASSWORD）。
 // 过期账号那一条另要 SSHFLEET_TEST_EXPIRED_USER / SSHFLEET_TEST_EXPIRED_PASSWORD，
-// 造法见 `docs/测试环境使用指南.md` 第四节。
+// 造法见 `docs/agents/按需-测试环境.md`。
 
 import (
 	"context"
