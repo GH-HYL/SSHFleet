@@ -119,7 +119,7 @@ var rules = []Rule{
 	// 检查：只读源码，不 import 任何一站，也不 import 契约
 	{"guard", KindCheck, nil},
 
-	// testtmp 只服务测试：把测试二进制的临时根钉进工作区的 build/tmp（规范三.1）。
+	// testtmp 只服务测试：把测试二进制的临时根钉进工作区的 build/tmp（`docs/agents/按需-写代码.md`「工作区结构」）。
 	// 依赖空着是有意的——生产文件 import 它会红，只有 _test.go 的依赖方向豁免
 	// （类二）让测试进得来。它不进任何一行的依赖清单。
 	{"testtmp", KindCrosscut, nil},

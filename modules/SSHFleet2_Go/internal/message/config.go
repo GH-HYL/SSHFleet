@@ -17,7 +17,7 @@ func ConfigPathsSectionForbidden() string {
 
 // ConfigExecutionEnvSectionRenamed 是配置里的段名还是老写法：段已经挪到顶层。
 //
-// 问题行只说当下（这个段名要写成什么），不带「不再有」那种沿革——规范四.4 那一条（审计 11-J9）。
+// 问题行只说当下（这个段名要写成什么），不带「不再有」那种沿革——`docs/agents/按需-给使用者看的文字.md`「四条硬要求」的「只写当下，不写沿革」（审计 11-J9）。
 func ConfigExecutionEnvSectionRenamed() string {
 	return problemhint(
 		"配置里的 [execution.env] 段要改名为 [env]",

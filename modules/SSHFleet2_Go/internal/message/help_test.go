@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// 宽度判据用写死的字面量，不用被测代码算——期望值独立于实现（规范三.3）。
+// 宽度判据用写死的字面量，不用被测代码算——期望值独立于实现（`docs/agents/按需-写代码.md`「测试怎么写」）。
 
 func TestRuneWidthLiterals(t *testing.T) {
 	cases := []struct {
