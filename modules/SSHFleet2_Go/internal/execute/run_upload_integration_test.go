@@ -120,11 +120,16 @@ func TestRunUploadRollsBackOnExisting(t *testing.T) {
 	}
 }
 
-// TestRunUploadViaSudo 走提权路径：先写暂存目录再 mv 到位，暂存目录用完清掉。
+// TestRunUploadViaSudo 提权路径：会话以 root 跑，文件直接写最终路径，目标机上不留暂存目录。
 func TestRunUploadViaSudo(t *testing.T) {
 	node, _ := integrationTarget(t)
 	remote := remoteTempDir(t, node, remoteWritable)
 	local := localTree(t)
+
+	// 目标目录收紧到 700、属主 root：登录账号连列都列不出来，写得进去就说明会话真是 root。
+	if item := remoteRun(t, node, "sudo chown root:root "+remote+" && sudo chmod 700 "+remote); item.ExitCode == nil || *item.ExitCode != 0 {
+		t.Fatalf("把目标目录收紧到 700/root 失败：%+v", item)
+	}
 
 	p := planFor(t, []contract.Node{node}, "--sudo", "-u", local, "-p", remote)
 	if !p.Run.Sudo {
@@ -138,12 +143,16 @@ func TestRunUploadViaSudo(t *testing.T) {
 	if item.Transfer.SuccessFiles != 3 {
 		t.Fatalf("三个文件都该传成，实际 %+v", item.Transfer)
 	}
-	if got := remoteRun(t, node, "cat "+remote+"/sub/b.txt"); got.Output != "beta" {
+	// 属主变 root 是提权的直接结果（ADR-0063 决定 1 已接受，不计为代价）。
+	if got := remoteRun(t, node, "sudo stat -c %U "+remote+"/a.txt"); got.Output != "root" {
+		t.Fatalf("落位属主应为 root，实际 %q", got.Output)
+	}
+	if got := remoteRun(t, node, "sudo cat "+remote+"/sub/b.txt"); got.Output != "beta" {
 		t.Fatalf("sudo 路径落位不对：%q", got.Output)
 	}
-	// 暂存目录不留哑巴残留：里面一个文件都不该剩（根目录本身空着无妨，下次开工先整体清）。
-	if left := remoteRun(t, node, "find "+tmpRoot+" -type f 2>/dev/null | wc -l"); left.Output != "0" {
-		t.Fatalf("暂存目录里还剩文件：%q", left.Output)
+	// 直接写最终路径：暂存目录一次都没建过。
+	if left := remoteRun(t, node, "test -e /tmp/.SSHFleet_tmp && echo yes || echo no"); left.Output != "no" {
+		t.Fatalf("提权路径不该再建暂存目录，实际 %q", left.Output)
 	}
 }
 

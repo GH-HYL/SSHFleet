@@ -117,3 +117,36 @@ func TestRunDownloadAllSymlinks(t *testing.T) {
 		t.Fatalf("措辞该说「全是链接」，实际 %q", item.ErrorText)
 	}
 }
+
+// TestRunDownloadViaSudo 提权路径：目录与文件都只有 root 碰得到，照样直接读回来。
+//
+// 撤掉的是「先用 sudo 命令模式把文件搬到登录用户可读的位置」那条绕法（ADR-0063 影响）。
+func TestRunDownloadViaSudo(t *testing.T) {
+	node, _ := integrationTarget(t)
+	remote := remoteTempDir(t, node, remoteWritable)
+
+	// 文件属 root、600；目录收到 700：登录账号连列都列不出来。
+	setup := "printf secret | sudo tee " + remote + "/only-root.txt >/dev/null" +
+		" && sudo chmod 600 " + remote + "/only-root.txt && sudo chmod 700 " + remote
+	if item := remoteRun(t, node, setup); item.ExitCode == nil || *item.ExitCode != 0 {
+		t.Fatalf("摆现场失败：%+v", item)
+	}
+
+	local := t.TempDir()
+	p := planFor(t, []contract.Node{node}, "--sudo", "-d", remote, "-p", local)
+	item := runOne(t, context.Background(), p)
+
+	if item.ErrorText != "" {
+		t.Fatalf("提权下载不该有报错原文，实际 %q", item.ErrorText)
+	}
+	if item.Transfer.SuccessFiles != 1 {
+		t.Fatalf("该取回 1 个，实际 %+v（明细：%s）", item.Transfer, item.Output)
+	}
+	data, err := os.ReadFile(filepath.Join(local, node.IP, "only-root.txt"))
+	if err != nil {
+		t.Fatalf("文件没落下来：%v", err)
+	}
+	if string(data) != "secret" {
+		t.Fatalf("内容不对：%q", string(data))
+	}
+}

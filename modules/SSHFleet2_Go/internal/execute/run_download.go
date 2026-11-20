@@ -19,8 +19,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pkg/sftp"
-
 	"sshfleet2/internal/contract"
 	"sshfleet2/internal/criterion"
 	"sshfleet2/internal/message"
@@ -44,9 +42,14 @@ func (c *client) download(ctx context.Context, p *contract.Plan, res *contract.N
 		totalBytes int64
 	)
 
-	sftpClient, err := sftp.NewClient(c.conn)
+	sftpClient, err := c.openSFTP(useSudo)
 	if err != nil {
-		res.ErrorText = appendText(res.ErrorText, msg(envTransfer, transferClientFailed, err.Error()))
+		// 提权探测那几种失败自己就是报文；库给的原始错误才需要套一层。
+		reason := err.Error()
+		if !isMessage(reason) {
+			reason = msg(envTransfer, transferClientFailed, reason)
+		}
+		res.ErrorText = appendText(res.ErrorText, reason)
 		failTransfer(res, files)
 		return
 	}
@@ -225,7 +228,7 @@ func (c *client) download(ctx context.Context, p *contract.Plan, res *contract.N
 }
 
 // getFile 经 SFTP 取一个文件，返回下载字节数；失败删本地半成品。
-func getFile(sftpClient *sftp.Client, remoteFilePath, localFilePath string, seq int, ip string, totalBytes int64, totalFiles int, onProg onProgressN) (int64, error, []string) {
+func getFile(sftpClient *sftpConn, remoteFilePath, localFilePath string, seq int, ip string, totalBytes int64, totalFiles int, onProg onProgressN) (int64, error, []string) {
 	// 打开的是**远端**文件：这一步失败是目标机那边的事（文件刚被删、权限不够），
 	// 挂 remote_file_failed——挂 local_file_failed 会让「本机写不进去」与「远端读不出来」
 	// 共用同一个环节名，按分类排查时会找错方向。
