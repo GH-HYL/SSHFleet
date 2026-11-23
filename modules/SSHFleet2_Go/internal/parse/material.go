@@ -75,7 +75,9 @@ func textMaterial(data []byte, emptyKind, binaryKind contract.CannotStartKind, p
 	return nil
 }
 
-// materialDownloadDir 查 `-d` 的 `-p`：本机目录，要先建好。
+// materialDownloadDir 查 `-d` 的 `-p`：本机目录，要先建好、是目录、而且是空的。
+//
+// 「空」这一条是执行站那边的分工：下载不再逐文件查本机重名（落点冲突由这里挡在开传之前）。
 //
 // 读纸上那一格（`p.Task.Path`），不读命令行的原值：纸上的值是去过首尾空白的，
 // 自检要是另读原值，同一个 `-p` 会出现「纸面通过、自检说读不到」。
@@ -94,6 +96,21 @@ func materialDownloadDir(p *contract.Plan, vals map[string]string) *contract.Can
 	if !info.IsDir() {
 		return cliReason(contract.CannotStartReason{
 			Kind:  contract.CannotStartDownloadPathNotDir,
+			Place: p.Task.Path,
+		})
+	}
+	// 列不出内容与「读不到」同归：这时判不了空不空，说「不是空的」是瞎报。
+	entries, rerr := os.ReadDir(p.Task.Path)
+	if rerr != nil {
+		return cliReason(contract.CannotStartReason{
+			Kind:   contract.CannotStartDownloadPathUnreadable,
+			Place:  p.Task.Path,
+			Origin: criterion.SystemReason(rerr),
+		})
+	}
+	if len(entries) > 0 {
+		return cliReason(contract.CannotStartReason{
+			Kind:  contract.CannotStartDownloadPathNotEmpty,
 			Place: p.Task.Path,
 		})
 	}

@@ -137,17 +137,10 @@ func (c *client) download(ctx context.Context, p *contract.Plan, res *contract.N
 		return
 	}
 
-	// 本机重名：开传之前整批查（ADR-0063 决定 7）。查在落地目录之前——拦下时连目录都不建。
+	// 本地落地目录：开工后才建。落点按「`-p` 是空目录」办——那一条由解析站在开跑之前挡下
+	// （参数阶段只确认过 -p 存在且空，从确认屏到真正开传之间它可能已被删、被改权限，
+	// 这类失败必须落到「本地文件错误」，不能因为「前面查过了」就不报）。
 	ipDir := filepath.Join(localPath, c.node.IP)
-	if conflicts := localConflicts(ipDir, files, fi.IsDir(), remotePath); len(conflicts) > 0 {
-		res.ErrorText = appendText(res.ErrorText, msg(envTransfer, transferLocalExists,
-			"already exists locally: "+strings.Join(conflicts, ", ")))
-		failTransfer(res, files)
-		return
-	}
-
-	// 本地落地目录：开工后才建。参数阶段只确认过 -p 存在，从确认屏到真正开传之间它可能
-	// 已被删、被改权限——这类失败必须落到「本地文件错误」，不能因为「前面查过了」就不报。
 	if err := os.MkdirAll(ipDir, 0o755); err != nil {
 		res.ErrorText = appendText(res.ErrorText, msg(envTransfer, transferLocalDirFailed, err.Error()))
 		failTransfer(res, files)
@@ -318,30 +311,6 @@ func removeLocal(localFilePath string) []string {
 		return []string{localFilePath}
 	}
 	return nil
-}
-
-// localConflicts 本机已经占了名字的那些落点（相对路径，按枚举顺序）。
-//
-// 用 `Lstat` 不用 `Stat`：断掉的符号链接也算「名字被占用」，而 `Stat` 会当它不存在，
-// 紧接着的 `os.Create` 就顺着链接写到别处去了。
-//
-// 名字在本机落不下的跳过这一查：它们会在逐文件那一段按「本机文件名不可用」报出来，
-// 两条判据不重叠。
-func localConflicts(ipDir string, files []fileEntry, isDir bool, remotePath string) []string {
-	var hit []string
-	for _, f := range files {
-		name := f.Rel
-		if !isDir {
-			name = path.Base(remotePath)
-		}
-		if !localRelUsable(name) {
-			continue
-		}
-		if _, err := os.Lstat(filepath.Join(ipDir, name)); err == nil {
-			hit = append(hit, name)
-		}
-	}
-	return hit
 }
 
 // localRelUsable 远端给出的名字能不能在本机原样落盘。

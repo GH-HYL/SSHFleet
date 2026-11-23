@@ -132,6 +132,9 @@ func reasonText(r contract.CannotStartReason) string {
 			hintTail(downloadDirHint)
 	case contract.CannotStartDownloadPathNotDir:
 		return "下载模式：-p 参数指定的本地路径不是目录：" + r.Place + hintTail(downloadDirHint)
+	case contract.CannotStartDownloadPathNotEmpty:
+		return "下载模式：-p 参数指定的本地目录不是空的：" + r.Place +
+			hintTail("工具不覆盖本机已有的文件，请指向一个空目录或先把它清空")
 
 	// 材料自检与读清单共用的 `-f` 三句。
 	case contract.CannotStartCSVUnreadable:

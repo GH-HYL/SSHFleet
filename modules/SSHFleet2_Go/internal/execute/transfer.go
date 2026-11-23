@@ -28,7 +28,6 @@ const (
 	transferRemoteFileFailed  = "remote_file_failed" // 远端建目录 / 建文件 / 写文件失败
 	transferLocalFileFailed   = "local_file_failed"  // 下载侧建本地文件 / 写本地失败
 	transferRemoteExists      = "remote_exists"      // 目标机上已有同名文件
-	transferLocalExists       = "local_exists"       // 本机下载目录里已有同名文件
 	transferTargetSpaceShort  = "target_space_short" // 目标目录所在分区的可用量不够
 	transferSizeMismatch      = "size_mismatch"      // 写完核大小不一致
 	transferRolledBack        = "rolled_back"        // 上传失败后，本次写进去的文件已清干净
