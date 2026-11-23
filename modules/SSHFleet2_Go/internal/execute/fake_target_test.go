@@ -370,9 +370,15 @@ func (f *fakeTarget) run(command string) (string, string, uint32) {
 		return "", "", 0
 	case strings.HasPrefix(cmd, "find "):
 		return f.find(cmd)
-	case strings.HasPrefix(cmd, "for p in "), strings.HasPrefix(cmd, "sudo -n for p in "),
-		strings.HasPrefix(cmd, "sudo -n sh -c "):
+	case strings.HasPrefix(cmd, "for p in "):
 		return f.loop(cmd)
+	case strings.HasPrefix(cmd, "sudo -n sh -c "):
+		// 提权那一路：真机上就是 root 下跑里面那条，把它解出来再按同一条路应答。
+		return f.run(unquote(strings.TrimPrefix(cmd, "sudo -n sh -c ")))
+	case strings.HasPrefix(cmd, "sudo -n for p in "):
+		// `for` 是 shell 关键字不是可执行文件：真 bash 对这种写法是语法错、退出码 2、
+		// 一条都没执行。照实回，别让这种写法在这台假机器上蒙混过关。
+		return "", "bash: -c: line 1: syntax error near unexpected token `do'\n", 2
 	case strings.HasPrefix(cmd, "test -e "):
 		// 下载的远端预检就走这一条（`test -e '<路径>'`）：存在交 0，不存在交 1。
 		if _, err := os.Stat(f.local(unquote(strings.TrimPrefix(cmd, "test -e ")))); err != nil {
@@ -497,13 +503,6 @@ func (s *stalledChannel) Read(p []byte) (int, error) {
 // 判重的循环里带 `if [ -e`，收尾的带 `rm -f --`：按这一句分开，别让一条用例悄悄跑在
 // 另一条的应答上。
 func (f *fakeTarget) loop(command string) (string, string, uint32) {
-	// `sudo -n sh -c '<整条循环>'`：把里面那条解出来再按同一条路应答——真机上跑的就是里面那条。
-	if inner, ok := strings.CutPrefix(command, "sudo -n sh -c "); ok {
-		return f.run(unquote(inner))
-	}
-	if strings.HasPrefix(command, "sudo -n ") {
-		command = strings.TrimPrefix(command, "sudo -n ")
-	}
 	if strings.Contains(command, "if [ -e ") {
 		return f.dedupe(command)
 	}

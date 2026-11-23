@@ -55,7 +55,8 @@ func (c *client) cleanupWritten(clock *transferClock, paths []string, useSudo bo
 
 // runCleanupBatch 在收尾预算内跑一条删除命令；预算不够、命令没跑完都交回 false。
 func (c *client) runCleanupBatch(clock *transferClock, command string) (string, bool) {
-	if clock.finishRemaining() <= 0 {
+	// 预算已经用完就不再开会话；0 表示不设上限，交给 withinFinish 直接跑（与 arm 同口径）。
+	if clock.finish > 0 && clock.finishRemaining() <= 0 {
 		return "", false
 	}
 	sess, err := c.conn.NewSession()
@@ -79,7 +80,14 @@ func (c *client) runCleanupBatch(clock *transferClock, command string) (string, 
 // withinFinish 在收尾预算内等一次发起。
 //
 // 有的发起没有可关的通道（`conn.NewSession`），到点只能放弃；调用方据此记「没来得及」。
+//
+// 0 表示不设上限：配置层不许 0（`execution.timeout_connect` 至少 1 秒），这条路只留给直接
+// 拼纸的调用方——与 `arm` 里 `transfer <= 0` 那条同口径，不能因为预算缺席就把清理整段跳过。
 func (k *transferClock) withinFinish(stop func(), run func()) bool {
+	if k.finish <= 0 {
+		run()
+		return true
+	}
 	wait := k.finishRemaining()
 	if wait <= 0 {
 		return false
@@ -113,9 +121,18 @@ func cleanupLoop(paths []string, useSudo bool) string {
 	}
 	b.WriteString("; do rm -f -- \"$p\" || printf '%s\\0' \"$p\"; done")
 	if useSudo {
-		return "sudo -n " + b.String()
+		return sudoShell(b.String())
 	}
 	return b.String()
+}
+
+// sudoShell 把一条要用 root 跑的 shell 命令包起来。
+//
+// 不能写成 `sudo -n <命令>`：`for` 是 shell 关键字不是可执行文件，bash 当场报
+// `syntax error near unexpected token 'do'`、退出码 2，一条都没执行——而收尾那一路不看
+// 退出码，于是会把「什么都没删」报成「删干净了」。包一层 `sh -c` 才是真在 root 下跑这个循环。
+func sudoShell(command string) string {
+	return "sudo -n sh -c '" + criterion.EscapeSingle(command) + "'"
 }
 
 // batchPaths 按总长度把路径分批发出去：每批一条命令，上限只有一份。
