@@ -45,6 +45,20 @@ func runWithLandings(t *testing.T, p *contract.Plan) (contract.ResultPaper, stri
 	return paper, string(body)
 }
 
+// runWithContext 用给定的 ctx 跑一趟，只交回纸（中断那一路要看的是四个标志）。
+func runWithContext(t *testing.T, ctx context.Context, p *contract.Plan) contract.ResultPaper {
+	t.Helper()
+	dir := t.TempDir()
+	paper, fail := Run(ctx, p, contract.Landings{
+		Terminal: filepath.Join(dir, "terminal-output.txt"),
+		ExecLog:  filepath.Join(dir, "SSHFleetExec.log"),
+	}, nil)
+	if fail != nil {
+		t.Fatalf("不该起不来：%+v", fail)
+	}
+	return paper
+}
+
 func TestRunUploadOverFakeTarget(t *testing.T) {
 	ft := startFakeTarget(t)
 	node := fakeNode(t, ft)

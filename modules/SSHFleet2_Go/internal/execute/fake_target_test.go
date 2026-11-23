@@ -53,11 +53,15 @@ type fakeTarget struct {
 	extraRecord string
 
 	// stallSftpOn 置真后 SFTP 服务端只应答版本交换，此后不再应答（发起会一直卡着）。
+	// stallAfter 是「读到多少个字节之后停」：默认是版本交换那一个包，调大就变成「写到中途停」。
 	// stallExecOn 置真后 exec 请求不回复，客户端一直等（命令发不出去）。
 	// 两者共用一个闸门，`stop` 时放开，免得留下永远阻塞的协程。
 	stallSftpOn bool
+	stallAfter  int
 	stallExecOn bool
 	stallGate   chan struct{}
+	// refuseRemove 置真后收尾那条删除命令一条都删不掉：把路径全打回来。
+	refuseRemoveOn bool
 }
 
 // lieAboutSize 让接下来的 n 次枚举报出偏移 size 的大小。
@@ -83,9 +87,16 @@ func (f *fakeTarget) appendFindRecord(record string) {
 
 // stallSftp 让这台的 SFTP 服务端在版本交换之后不再应答：客户端的下一次发起会一直卡着。
 func (f *fakeTarget) stallSftp() {
+	f.stallSftpAfter(sftpInitBytes)
+}
+
+// stallSftpAfter 读到 after 个字节之后不再应答：调大就变成「写到中途停」，
+// 那时目标机上会留下本次写了一半的文件。
+func (f *fakeTarget) stallSftpAfter(after int) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.stallSftpOn = true
+	f.stallAfter = after
 	if f.stallGate == nil {
 		f.stallGate = make(chan struct{})
 	}
@@ -101,11 +112,25 @@ func (f *fakeTarget) stallExec() {
 	}
 }
 
-// gates 取一次这台的两个闸门状态。
-func (f *fakeTarget) gates() (sftpStalled, execStalled bool, gate <-chan struct{}) {
+// refuseRemove 让收尾那条删除命令一条都删不掉。
+func (f *fakeTarget) refuseRemove() {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return f.stallSftpOn, f.stallExecOn, f.stallGate
+	f.refuseRemoveOn = true
+}
+
+// gates 取一次这台的两个闸门状态。
+func (f *fakeTarget) gates() (sftpStalled, execStalled bool, gate <-chan struct{}, after int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.stallSftpOn, f.stallExecOn, f.stallGate, f.stallAfter
+}
+
+// removeRefused 收尾的删除要不要全部失败。
+func (f *fakeTarget) removeRefused() bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.refuseRemoveOn
 }
 
 // takeFindState 取一次这次的枚举开关：还拒不拒 `-printf`、有没有多余的一条记录。
@@ -242,7 +267,7 @@ func (f *fakeTarget) handleSession(ch ssh.Channel, reqs <-chan *ssh.Request) {
 				continue
 			}
 			// 卡住的那一档：不回复，客户端一直等（命令发不出去）。
-			if _, execStalled, gate := f.gates(); execStalled {
+			if _, execStalled, gate, _ := f.gates(); execStalled {
 				<-gate
 			}
 			_ = req.Reply(true, nil)
@@ -264,8 +289,8 @@ func (f *fakeTarget) handleSession(ch ssh.Channel, reqs <-chan *ssh.Request) {
 			}
 			_ = req.Reply(true, nil)
 			var srvCh io.ReadWriteCloser = ch
-			if sftpStalled, _, gate := f.gates(); sftpStalled {
-				srvCh = &stalledChannel{Channel: ch, gate: gate}
+			if sftpStalled, _, gate, after := f.gates(); sftpStalled {
+				srvCh = &stalledChannel{Channel: ch, gate: gate, after: after}
 			}
 			srv, err := sftp.NewServer(srvCh)
 			if err != nil {
@@ -308,6 +333,10 @@ func (f *fakeTarget) run(command string) (string, string, uint32) {
 		return "", "", 0
 	case strings.HasPrefix(cmd, "find "):
 		return f.find(cmd)
+	case strings.HasPrefix(cmd, "for p in "):
+		return f.cleanup(cmd)
+	case strings.HasPrefix(cmd, "sudo -n for p in "):
+		return f.cleanup(strings.TrimPrefix(cmd, "sudo -n "))
 	case strings.HasPrefix(cmd, "test -e "):
 		// 下载的远端预检就走这一条（`test -e '<路径>'`）：存在交 0，不存在交 1。
 		if _, err := os.Stat(f.local(unquote(strings.TrimPrefix(cmd, "test -e ")))); err != nil {
@@ -403,16 +432,17 @@ const sftpInitBytes = 9
 // 之后服务端还堵在闸门上、永远看不到 EOF，连「关通道能不能解开阻塞」这件事都测不出来。
 const stallFor = 3 * time.Second
 
-// stalledChannel 只放行版本交换的通道：读满 sftpInitBytes 之后停一次，闸门放开或到上限才继续。
+// stalledChannel 只放行前 `after` 个字节的通道：从此停一次，闸门放开或到上限才继续。
 type stalledChannel struct {
 	ssh.Channel
 	seen    int
 	stalled bool
+	after   int
 	gate    <-chan struct{}
 }
 
 func (s *stalledChannel) Read(p []byte) (int, error) {
-	if !s.stalled && s.seen >= sftpInitBytes {
+	if !s.stalled && s.seen >= s.after {
 		s.stalled = true
 		timer := time.NewTimer(stallFor)
 		defer timer.Stop()
@@ -424,6 +454,44 @@ func (s *stalledChannel) Read(p []byte) (int, error) {
 	n, err := s.Channel.Read(p)
 	s.seen += n
 	return n, err
+}
+
+// cleanup 应答收尾那条远端循环：删得掉的删掉，删不掉的把路径按 NUL 打回来。
+//
+// 真实循环的退出码是 0（最后一句是 printf），删不掉的信息只在输出里——这里照同一形态回。
+func (f *fakeTarget) cleanup(command string) (string, string, uint32) {
+	// 只取循环头 `for p in '…' '…'` 那一段：后面 printf 的格式串也是单引号，混进来会当成路径。
+	head := command
+	if i := strings.Index(command, "; do"); i >= 0 {
+		head = command[:i]
+	}
+	var out strings.Builder
+	for _, p := range quotedArgs(head) {
+		if f.removeRefused() || os.Remove(f.local(p)) != nil {
+			out.WriteString(p)
+			out.WriteString("\x00")
+		}
+	}
+	return out.String(), "", 0
+}
+
+// quotedArgs 取出命令里所有单引号参数（用例的路径不含引号，按第一段切就够）。
+func quotedArgs(command string) []string {
+	var args []string
+	for {
+		i := strings.IndexByte(command, '\'')
+		if i < 0 {
+			break
+		}
+		rest := command[i+1:]
+		j := strings.IndexByte(rest, '\'')
+		if j < 0 {
+			break
+		}
+		args = append(args, rest[:j])
+		command = rest[j+1:]
+	}
+	return args
 }
 
 // local 把客户端发来的远端路径落回本机路径（`/C:/…` → `C:\…`）。
