@@ -34,6 +34,9 @@ func (c *client) download(ctx context.Context, p *contract.Plan, res *contract.N
 	localPath := p.Task.Path
 	useSudo := p.Run.Sudo && c.node.User != "root"
 
+	// 这一台的传输预算：起点是入口，枚举、预检、逐文件取都在里面（ADR-0063 决定 6）。
+	clock := newTransferClock(ctx, seconds(p.Run.TimeoutTransfer), seconds(p.Run.TimeoutConnect))
+
 	// 早退时也要记账（与上传同口径）：这几格在枚举之前就声明，任何一条 return
 	// 都能交出一份「这次打算传几个、成了几个」。
 	var (
@@ -49,13 +52,18 @@ func (c *client) download(ctx context.Context, p *contract.Plan, res *contract.N
 		return
 	}
 	defer func() { _ = sftpClient.Close() }()
+	// 到点的动作：关掉这一刻占着连接的那条通道（ADR-0065）。远端零写入，所以没有清理要留。
+	closeSFTP := func() { _ = sftpClient.Close() }
 
 	// 远程路径预检（sudo 时用 sudo test）；路径转义规则与 find/mv 同源。
 	checkCmd := fmt.Sprintf("test -e '%s'", criterion.EscapeSingle(remotePath))
 	if useSudo {
 		checkCmd = fmt.Sprintf("sudo test -e '%s'", criterion.EscapeSingle(remotePath))
 	}
-	if err := c.exec(checkCmd); err != nil {
+	if err, end := c.execArmed(clock, checkCmd); !end.ran() {
+		c.downloadStopped(clock, res, files, 0, 0, nil)
+		return
+	} else if err != nil {
 		// 预检查是中间步骤：它自己的退出码进 Steps，不顶成结果退出码。
 		stepsOf(res, contract.StepPrecheck, err)
 		res.ErrorText = appendText(res.ErrorText, msg(envTransfer, transferRemoteMissing, "remote path not found: "+remotePath))
@@ -64,7 +72,11 @@ func (c *client) download(ctx context.Context, p *contract.Plan, res *contract.N
 	}
 	stepsOf(res, contract.StepPrecheck, nil)
 
-	fi, err := sftpClient.Stat(remotePath)
+	var fi os.FileInfo
+	if end := clock.arm(closeSFTP, func() { fi, err = sftpClient.Stat(remotePath) }); !end.ran() {
+		c.downloadStopped(clock, res, files, 0, 0, nil)
+		return
+	}
 	if err != nil {
 		res.ErrorText = appendText(res.ErrorText, msg(envTransfer, transferRemoteUnreachable, "remote path not accessible: "+remotePath))
 		failTransfer(res, files)
@@ -86,7 +98,12 @@ func (c *client) download(ctx context.Context, p *contract.Plan, res *contract.N
 	case fi.IsDir():
 		// 一次 find 同时枚举真文件（F）与软链接（L）：软链接过滤但要在结果里提示。
 		// 记录按 NUL 切，名字里带换行不会被拆开（ADR-0063 决定 4）。
-		enumFiles, enumLinks, err := enumerateRemote(c, sftpClient, remotePath, useSudo)
+		runFind := func(cmd string) (string, armEnd, error) { return c.captureArmed(clock, cmd) }
+		enumFiles, enumLinks, end, err := enumerateRemote(sftpClient, remotePath, useSudo, runFind)
+		if !end.ran() {
+			c.downloadStopped(clock, res, files, 0, 0, nil)
+			return
+		}
 		if err != nil {
 			stepsOf(res, contract.StepEnumerate, err)
 			res.ErrorText = appendText(res.ErrorText, msg(envTransfer, transferListFailed, err.Error()))
@@ -197,7 +214,14 @@ func (c *client) download(ctx context.Context, p *contract.Plan, res *contract.N
 		// 单个文件失败只重下它自己（ADR-0063 决定 9）：getFile 每次重来前会删掉本地半成品。
 		attempts := 1 + p.Run.TransferRetry
 		for attempt := 1; attempt <= attempts; attempt++ {
-			n, downloadErr, halfWrites = getFile(sftpClient, remoteFilePath, localFilePath, i, c.node.IP, totalBytes, totalFiles, file.Size, onProg)
+			// 每个文件的「取 + 写完核大小」是一次发起：到点就关掉这条通道、等它退出来。
+			end := clock.arm(closeSFTP, func() {
+				n, downloadErr, halfWrites = getFile(sftpClient, remoteFilePath, localFilePath, i, c.node.IP, totalBytes, totalFiles, file.Size, onProg)
+			})
+			if !end.ran() {
+				c.downloadStopped(clock, res, files, success, downloadedBytes, lines)
+				return
+			}
 			if downloadErr == nil || attempt == attempts || !retryableTransferError(downloadErr) {
 				break
 			}
@@ -224,6 +248,28 @@ func (c *client) download(ctx context.Context, p *contract.Plan, res *contract.N
 	res.Transfer.FailFiles = failed
 	res.Transfer.TotalBytes = downloadedBytes
 	res.Transfer.TotalFiles = totalFiles
+}
+
+// downloadStopped 传输预算到点时的收场。
+//
+// 远端零写入，所以没有残留清单这回事（ADR-0022 决定 5 不变）：本机那个写到一半的文件由
+// getFile 自己删掉，这里只报超时与四个数。
+func (c *client) downloadStopped(clock *transferClock, res *contract.NodeResult, files []fileEntry, success int, bytes int64, lines []string) {
+	failed := len(files) - success
+	res.Transfer.SuccessFiles = success
+	res.Transfer.FailFiles = failed
+	res.Transfer.TotalBytes = bytes
+	res.Transfer.TotalFiles = len(files)
+	res.Output = buildTransferOutput(len(files), success, failed, lines)
+
+	// 到点那一刻父 ctx 已取消：记的是中断，不是这一台的毛病（两者互斥）。
+	if clock.interrupted() {
+		res.Cancelled = true
+		res.ErrorText = appendText(res.ErrorText, abortMessage(true))
+		return
+	}
+	res.TimedOut = true
+	res.ErrorText = appendText(res.ErrorText, timeoutNoLeft(int(clock.transfer.Seconds())))
 }
 
 // getFile 经 SFTP 取一个文件，返回下载字节数；失败删本地半成品。
