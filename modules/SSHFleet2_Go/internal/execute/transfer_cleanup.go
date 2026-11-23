@@ -11,10 +11,7 @@ package execute
 
 import (
 	"bytes"
-	"strings"
 	"time"
-
-	"sshfleet2/internal/criterion"
 )
 
 // cleanupBatchBytes 一条命令里路径总长的上限：远端命令行长度有限，几千个长路径装不下。
@@ -81,6 +78,11 @@ func (c *client) runCleanupBatch(clock *transferClock, command string) (string, 
 //
 // 有的发起没有可关的通道（`conn.NewSession`），到点只能放弃；调用方据此记「没来得及」。
 //
+// **与 `arm` 的差别就在这一步**：`arm` 叫停之后还要等那次调用退出来，因为写还没退就去删，
+// 删的是正在写的那个（ADR-0065 决定 5）。这里不等——清理命令等不等，后果只是「打回来的
+// 清单短一点」，而等它会把下一批的预算吃光，等于让后面几批一律报「没来得及」。所以宁可
+// 到点就交卷、把没删掉的按残留报全。
+//
 // 0 表示不设上限：配置层不许 0（`execution.timeout_connect` 至少 1 秒），这条路只留给直接
 // 拼纸的调用方——与 `arm` 里 `transfer <= 0` 那条同口径，不能因为预算缺席就把清理整段跳过。
 func (k *transferClock) withinFinish(stop func(), run func()) bool {
@@ -114,25 +116,7 @@ func (k *transferClock) withinFinish(stop func(), run func()) bool {
 //
 // 不扫目录、不用通配符：清单里的路径都是本次自己建的（ADR-0022 决定 2）。
 func cleanupLoop(paths []string, useSudo bool) string {
-	var b strings.Builder
-	b.WriteString("for p in")
-	for _, p := range paths {
-		b.WriteString(" '" + criterion.EscapeSingle(p) + "'")
-	}
-	b.WriteString("; do rm -f -- \"$p\" || printf '%s\\0' \"$p\"; done")
-	if useSudo {
-		return sudoShell(b.String())
-	}
-	return b.String()
-}
-
-// sudoShell 把一条要用 root 跑的 shell 命令包起来。
-//
-// 不能写成 `sudo -n <命令>`：`for` 是 shell 关键字不是可执行文件，bash 当场报
-// `syntax error near unexpected token 'do'`、退出码 2，一条都没执行——而收尾那一路不看
-// 退出码，于是会把「什么都没删」报成「删干净了」。包一层 `sh -c` 才是真在 root 下跑这个循环。
-func sudoShell(command string) string {
-	return "sudo -n sh -c '" + criterion.EscapeSingle(command) + "'"
+	return loopOver(paths, `rm -f -- "$p" || printf '%s\0' "$p"`, useSudo)
 }
 
 // batchPaths 按总长度把路径分批发出去：每批一条命令，上限只有一份。
@@ -154,15 +138,4 @@ func batchPaths(paths []string, limit int) [][]string {
 		batches = append(batches, batch)
 	}
 	return batches
-}
-
-// splitRecords 清理命令打回来的失败路径：按 NUL 切，空段丢掉。
-func splitRecords(out string) []string {
-	var paths []string
-	for _, rec := range strings.Split(out, recordSep) {
-		if rec != "" {
-			paths = append(paths, rec)
-		}
-	}
-	return paths
 }

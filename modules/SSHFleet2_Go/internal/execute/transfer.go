@@ -128,6 +128,17 @@ func openFailureText(err error) string {
 	return msg(envTransfer, transferClientFailed, reason)
 }
 
+// removedSentence 「删了几个、还留着哪些」那句正文。
+//
+// 回滚与超时两块报文共用这一处：格式串与清单分隔符都只有一份，改措辞不必记两个地方。
+func removedSentence(removed, total int, left []string) string {
+	s := fmt.Sprintf("%d of %d written files removed", removed, total)
+	if len(left) == 0 {
+		return s
+	}
+	return s + ", left: " + strings.Join(left, " ")
+}
+
 // rollbackMessage 上传回滚之后那句陈述。
 //
 // 三种情形都说话——删干净了也要说，使用者在下次撞上「远程文件已存在」时要能回头看出
@@ -136,12 +147,11 @@ func rollbackMessage(written, removed int, left []string) string {
 	if written == 0 {
 		return ""
 	}
-	if len(left) == 0 {
-		return msg(envTransfer, transferRolledBack,
-			fmt.Sprintf("%d of %d written files removed", removed, written))
+	stage := transferRolledBack
+	if len(left) > 0 {
+		stage = transferRollbackPartial
 	}
-	return msg(envTransfer, transferRollbackPartial,
-		fmt.Sprintf("%d of %d written files removed, left: %s", removed, written, strings.Join(left, ", ")))
+	return msg(envTransfer, stage, removedSentence(removed, written, left))
 }
 
 // partialLeft 上传侧「半成品没删掉」那句。
@@ -172,8 +182,7 @@ func timeoutLeftNotAttempted(left []string) string {
 
 // timeoutLeft 传输到点、清理跑过但没删干净：删了几个、还留着哪些。
 func timeoutLeft(removed, total int, left []string) string {
-	return msg(envTransfer, transferTimeoutLeft,
-		fmt.Sprintf("%d of %d written files removed, left: %s", removed, total, strings.Join(left, " ")))
+	return msg(envTransfer, transferTimeoutLeft, removedSentence(removed, total, left))
 }
 
 // dedupePaths 残留清单按路径去重：单文件重试期间到点会把同一个路径交上来两遍。

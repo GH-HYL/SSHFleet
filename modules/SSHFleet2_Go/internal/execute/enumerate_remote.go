@@ -24,14 +24,14 @@ const (
 	findPrint0Cmd = `find '%s' \( -type f -print0 \) -o \( -type l -print0 \)`
 )
 
-// recordSep 是枚举记录的收尾符。
-const recordSep = "\x00"
-
 // findRunner 跑一条枚举命令：交回输出、这一次发起的结局、命令本身的错误。
 type findRunner func(command string) (string, armEnd, error)
 
+// lstatRunner 问一次远端路径的属性：退路拿大小与「是不是软链接」，同样归传输预算管。
+type lstatRunner func(path string) (os.FileInfo, armEnd, error)
+
 // enumerateRemote 枚举 root 下的真文件与软链接；软链接只交回相对路径。
-func enumerateRemote(sftpClient *sftpConn, root string, useSudo bool, run findRunner) ([]fileEntry, []string, armEnd, error) {
+func enumerateRemote(root string, useSudo bool, run findRunner, lstat lstatRunner) ([]fileEntry, []string, armEnd, error) {
 	cmd := fmt.Sprintf(findPrintfCmd, criterion.EscapeSingle(root))
 	if useSudo {
 		cmd = "sudo " + cmd
@@ -57,8 +57,8 @@ func enumerateRemote(sftpClient *sftpConn, root string, useSudo bool, run findRu
 		// 报退路这条：主路的失败多半只是「不认 -printf」，那是预期内的，没有信息量。
 		return nil, nil, armRan, fbErr
 	}
-	files, links, err := classifyFindNames(sftpClient, root, names)
-	return files, links, armRan, err
+	files, links, end, err := classifyFindNames(root, names, lstat)
+	return files, links, end, err
 }
 
 // parseFindRecords 主路的输出：按 NUL 切，只认真的两种记录。
@@ -67,9 +67,8 @@ func parseFindRecords(out string) ([]fileEntry, []string) {
 		files []fileEntry
 		links []string
 	)
-	for _, rec := range strings.Split(out, recordSep) {
+	for _, rec := range splitRecords(out) {
 		switch {
-		case rec == "":
 		case strings.HasPrefix(rec, "F "):
 			parts := strings.SplitN(rec[2:], " ", 2)
 			if len(parts) != 2 {
@@ -89,17 +88,17 @@ func parseFindRecords(out string) ([]fileEntry, []string) {
 
 // classifyFindNames 退路的输出：只有完整路径，大小与「是不是软链接」逐个问同一会话。
 //
+// 每一个 `Lstat` 也是一次发起，同样归传输预算管——几百个名字就是几百次，其中任何一次卡住
+// 都要能到点解开，所以问法由调用方交进来（`lstat`）。
+//
 // `Lstat` 失败按枚举失败交回去：那时不知道它多大，接着传只会在核大小那一步对不上。
-func classifyFindNames(sftpClient *sftpConn, root, out string) ([]fileEntry, []string, error) {
+func classifyFindNames(root, out string, lstat lstatRunner) ([]fileEntry, []string, armEnd, error) {
 	base := strings.TrimRight(root, "/")
 	var (
 		files []fileEntry
 		links []string
 	)
-	for _, full := range strings.Split(out, recordSep) {
-		if full == "" {
-			continue
-		}
+	for _, full := range splitRecords(out) {
 		if base != "" && !strings.HasPrefix(full, base+"/") {
 			// 不在这次枚举的根底下：远端在 stdout 上说了别的话。
 			continue
@@ -108,9 +107,12 @@ func classifyFindNames(sftpClient *sftpConn, root, out string) ([]fileEntry, []s
 		if rel == "" {
 			continue
 		}
-		info, err := sftpClient.Lstat(full)
+		info, end, err := lstat(full)
+		if !end.ran() {
+			return nil, nil, end, nil
+		}
 		if err != nil {
-			return nil, nil, fmt.Errorf("lstat %s: %w", full, err)
+			return nil, nil, armRan, fmt.Errorf("lstat %s: %w", full, err)
 		}
 		if info.Mode()&os.ModeSymlink != 0 {
 			links = append(links, rel)
@@ -118,5 +120,5 @@ func classifyFindNames(sftpClient *sftpConn, root, out string) ([]fileEntry, []s
 		}
 		files = append(files, fileEntry{Rel: rel, Size: info.Size()})
 	}
-	return files, links, nil
+	return files, links, armRan, nil
 }
