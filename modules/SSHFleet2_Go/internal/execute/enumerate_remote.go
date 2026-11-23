@@ -27,28 +27,38 @@ const (
 // recordSep 是枚举记录的收尾符。
 const recordSep = "\x00"
 
+// findRunner 跑一条枚举命令：交回输出、这一次发起的结局、命令本身的错误。
+type findRunner func(command string) (string, armEnd, error)
+
 // enumerateRemote 枚举 root 下的真文件与软链接；软链接只交回相对路径。
-func enumerateRemote(c *client, sftpClient *sftpConn, root string, useSudo bool) ([]fileEntry, []string, error) {
+func enumerateRemote(sftpClient *sftpConn, root string, useSudo bool, run findRunner) ([]fileEntry, []string, armEnd, error) {
 	cmd := fmt.Sprintf(findPrintfCmd, criterion.EscapeSingle(root))
 	if useSudo {
 		cmd = "sudo " + cmd
 	}
-	out, err := c.execCapture(cmd)
+	out, end, err := run(cmd)
+	if !end.ran() {
+		return nil, nil, end, nil
+	}
 	if err == nil {
 		files, links := parseFindRecords(out)
-		return files, links, nil
+		return files, links, armRan, nil
 	}
 
 	fallback := fmt.Sprintf(findPrint0Cmd, criterion.EscapeSingle(root))
 	if useSudo {
 		fallback = "sudo " + fallback
 	}
-	names, fbErr := c.execCapture(fallback)
+	names, end, fbErr := run(fallback)
+	if !end.ran() {
+		return nil, nil, end, nil
+	}
 	if fbErr != nil {
 		// 报退路这条：主路的失败多半只是「不认 -printf」，那是预期内的，没有信息量。
-		return nil, nil, fbErr
+		return nil, nil, armRan, fbErr
 	}
-	return classifyFindNames(sftpClient, root, names)
+	files, links, err := classifyFindNames(sftpClient, root, names)
+	return files, links, armRan, err
 }
 
 // parseFindRecords 主路的输出：按 NUL 切，只认真的两种记录。

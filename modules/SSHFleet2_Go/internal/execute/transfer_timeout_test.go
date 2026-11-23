@@ -218,3 +218,43 @@ func TestRunUploadCleansUpAfterCancel(t *testing.T) {
 		t.Fatal("清理之后目标机上不该留着那个文件")
 	}
 }
+
+// 下载卡在预检／枚举那条命令上：到点收场，本机不留东西，远端一个字节都没动。
+func TestRunDownloadTimesOutWhileCommandHangs(t *testing.T) {
+	ft := startFakeTarget(t)
+	ft.stallExec()
+	node := fakeNode(t, ft)
+
+	remoteDir := ft.path("download-timeout")
+	if err := os.MkdirAll(ft.local(remoteDir), 0o755); err != nil {
+		t.Fatalf("建目标机上的目录失败：%v", err)
+	}
+	remoteFile := filepath.Join(ft.local(remoteDir), "a.txt")
+	if err := os.WriteFile(remoteFile, []byte("alpha\n"), 0o644); err != nil {
+		t.Fatalf("在目标机上造文件失败：%v", err)
+	}
+
+	localDir := t.TempDir()
+	p := downloadPlan(node, remoteDir, localDir)
+	p.Run = contract.RunParams{TimeoutExecute: 30, TimeoutTransfer: 1, TimeoutConnect: 5}
+
+	paper, _ := runWithLandings(t, p)
+	it := paper.Items[0]
+
+	if !it.TimedOut {
+		t.Fatalf("该记超时，实际 %q", it.ErrorText)
+	}
+	if !strings.Contains(it.ErrorText, "sshfleet.transfer.timeout") {
+		t.Fatalf("该报传输超时，实际 %q", it.ErrorText)
+	}
+	if it.Transfer.TotalFiles != 0 {
+		t.Fatalf("卡在枚举之前：文件总数该是 0，实际 %+v", it.Transfer)
+	}
+	// 本机那一层目录都不该建出来（卡在预检），更不该有文件。
+	if entries, err := os.ReadDir(filepath.Join(localDir, node.IP)); err == nil && len(entries) > 0 {
+		t.Fatalf("什么都没取回来，本机不该有文件：%v", entries)
+	}
+	if data, err := os.ReadFile(remoteFile); err != nil || string(data) != "alpha\n" {
+		t.Fatalf("远端文件被动过：%q（%v）", data, err)
+	}
+}
