@@ -85,12 +85,8 @@ func (c *client) download(ctx context.Context, p *contract.Plan, res *contract.N
 
 	case fi.IsDir():
 		// 一次 find 同时枚举真文件（F）与软链接（L）：软链接过滤但要在结果里提示。
-		findCmd := fmt.Sprintf("find '%s' \\( -type f -printf 'F %%s %%P\\n' \\) -o \\( -type l -printf 'L %%P\\n' \\)",
-			criterion.EscapeSingle(remotePath))
-		if useSudo {
-			findCmd = "sudo " + findCmd
-		}
-		output, err := c.execCapture(findCmd)
+		// 记录按 NUL 切，名字里带换行不会被拆开（ADR-0063 决定 4）。
+		enumFiles, enumLinks, err := enumerateRemote(c, sftpClient, remotePath, useSudo)
 		if err != nil {
 			stepsOf(res, contract.StepEnumerate, err)
 			res.ErrorText = appendText(res.ErrorText, msg(envTransfer, transferListFailed, err.Error()))
@@ -98,22 +94,10 @@ func (c *client) download(ctx context.Context, p *contract.Plan, res *contract.N
 			return
 		}
 		stepsOf(res, contract.StepEnumerate, nil)
-		for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
-			line = strings.TrimSpace(line)
-			switch {
-			case line == "":
-			case strings.HasPrefix(line, "F "):
-				parts := strings.SplitN(line[2:], " ", 2)
-				if len(parts) != 2 {
-					continue
-				}
-				var size int64
-				_, _ = fmt.Sscanf(parts[0], "%d", &size)
-				files = append(files, fileEntry{Rel: parts[1], Size: size})
-				totalBytes += size
-			case strings.HasPrefix(line, "L "):
-				symlinks = append(symlinks, line[2:])
-			}
+		files = append(files, enumFiles...)
+		symlinks = append(symlinks, enumLinks...)
+		for _, f := range files {
+			totalBytes += f.Size
 		}
 
 	default:
@@ -136,9 +120,17 @@ func (c *client) download(ctx context.Context, p *contract.Plan, res *contract.N
 		return
 	}
 
+	// 本机重名：开传之前整批查（ADR-0063 决定 7）。查在落地目录之前——拦下时连目录都不建。
+	ipDir := filepath.Join(localPath, c.node.IP)
+	if conflicts := localConflicts(ipDir, files, fi.IsDir(), remotePath); len(conflicts) > 0 {
+		res.ErrorText = appendText(res.ErrorText, msg(envTransfer, transferLocalExists,
+			"already exists locally: "+strings.Join(conflicts, ", ")))
+		failTransfer(res, files)
+		return
+	}
+
 	// 本地落地目录：开工后才建。参数阶段只确认过 -p 存在，从确认屏到真正开传之间它可能
 	// 已被删、被改权限——这类失败必须落到「本地文件错误」，不能因为「前面查过了」就不报。
-	ipDir := filepath.Join(localPath, c.node.IP)
 	if err := os.MkdirAll(ipDir, 0o755); err != nil {
 		res.ErrorText = appendText(res.ErrorText, msg(envTransfer, transferLocalDirFailed, err.Error()))
 		failTransfer(res, files)
@@ -280,6 +272,30 @@ func removeLocal(localFilePath string) []string {
 		return []string{localFilePath}
 	}
 	return nil
+}
+
+// localConflicts 本机已经占了名字的那些落点（相对路径，按枚举顺序）。
+//
+// 用 `Lstat` 不用 `Stat`：断掉的符号链接也算「名字被占用」，而 `Stat` 会当它不存在，
+// 紧接着的 `os.Create` 就顺着链接写到别处去了。
+//
+// 名字在本机落不下的跳过这一查：它们会在逐文件那一段按「本机文件名不可用」报出来，
+// 两条判据不重叠。
+func localConflicts(ipDir string, files []fileEntry, isDir bool, remotePath string) []string {
+	var hit []string
+	for _, f := range files {
+		name := f.Rel
+		if !isDir {
+			name = path.Base(remotePath)
+		}
+		if !localRelUsable(name) {
+			continue
+		}
+		if _, err := os.Lstat(filepath.Join(ipDir, name)); err == nil {
+			hit = append(hit, name)
+		}
+	}
+	return hit
 }
 
 // localRelUsable 远端给出的名字能不能在本机原样落盘。

@@ -44,6 +44,12 @@ type fakeTarget struct {
 	mu       sync.Mutex
 	lieSize  int64
 	lieTimes int
+
+	// noPrintf 让 find 不认 `-printf`（BusyBox 一类），refuseTimes 是还能拒几次：
+	// 0 表示从不拒。用来测枚举的退路。
+	refuseTimes int
+	// extraRecord 是枚举末尾原样追加的一条记录（名字里带换行时用它钉 NUL 切分）。
+	extraRecord string
 }
 
 // lieAboutSize 让接下来的 n 次枚举报出偏移 size 的大小。
@@ -51,6 +57,27 @@ func (f *fakeTarget) lieAboutSize(size int64, n int) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.lieSize, f.lieTimes = size, n
+}
+
+// refusePrintf 让接下来这台的 find 不认 `-printf`：退 1，走 `-print0` 的那条照常应答。
+func (f *fakeTarget) refusePrintf() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.refuseTimes = 1 << 30
+}
+
+// appendFindRecord 在枚举输出末尾原样追加一条记录，收尾符与本次枚举相同。
+func (f *fakeTarget) appendFindRecord(record string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.extraRecord = record
+}
+
+// takeFindState 取一次这次的枚举开关：还拒不拒 `-printf`、有没有多余的一条记录。
+func (f *fakeTarget) takeFindState() (refuse bool, extra string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.refuseTimes > 0, f.extraRecord
 }
 
 // sizeLie 取一次还要不要骗、骗多少；骗过就把次数减掉。
@@ -246,7 +273,10 @@ func (f *fakeTarget) run(command string) (string, string, uint32) {
 	return "", fmt.Sprintf("假目标机不认这条命令：%s\n", cmd), 127
 }
 
-// find 应答一次枚举：`find '<路径>' \( -type f -printf 'F %s %P\n' \) -o ...`。
+// find 应答一次枚举。两种形态：
+//
+//	主路 `find '<路径>' \( -type f -printf 'F %s %P\0' \) -o ...`：一条一条「F 大小 相对路径」；
+//	退路 `find '<路径>' \( -type f -print0 \) -o ...`：只给起始点下的完整路径，大小由客户端自己补。
 //
 // 只造真文件（F）那一半——软链接过滤另有用例。大小照实报，除非 lieAboutSize 让这次说谎。
 func (f *fakeTarget) find(command string) (string, string, uint32) {
@@ -260,7 +290,21 @@ func (f *fakeTarget) find(command string) (string, string, uint32) {
 		return "", "假目标机的 find 路径没闭合\n", 1
 	}
 	// 用例里的路径是临时目录，不含单引号，按第一段取就够。
-	root := f.local(rest[open+1 : open+1+close])
+	quoted := unquote(rest[open : open+close+2])
+	root := f.local(quoted)
+	remoteRoot := strings.TrimRight(quoted, "/")
+
+	refuse, extra := f.takeFindState()
+	printf := strings.Contains(rest, "-printf")
+	if printf && refuse {
+		return "", "find: unrecognized: -printf\n", 1
+	}
+	// 退路只给名字；主路按命令里写的收尾符分隔（`\0` 或 `\n`）。
+	namesOnly := !printf
+	sep := "\n"
+	if namesOnly || strings.Contains(rest, `\0`) {
+		sep = "\x00"
+	}
 
 	var b strings.Builder
 	lie, lying := f.sizeLie()
@@ -275,15 +319,26 @@ func (f *fakeTarget) find(command string) (string, string, uint32) {
 		if relErr != nil {
 			return relErr
 		}
+		rel = filepath.ToSlash(rel)
+		if namesOnly {
+			b.WriteString(remoteRoot + "/" + rel)
+			b.WriteString(sep)
+			return nil
+		}
 		size := info.Size()
 		if lying {
 			size += lie
 		}
-		fmt.Fprintf(&b, "F %d %s\n", size, filepath.ToSlash(rel))
+		fmt.Fprintf(&b, "F %d %s", size, rel)
+		b.WriteString(sep)
 		return nil
 	})
 	if err != nil {
 		return "", err.Error() + "\n", 1
+	}
+	if extra != "" {
+		b.WriteString(extra)
+		b.WriteString(sep)
 	}
 	return b.String(), "", 0
 }
