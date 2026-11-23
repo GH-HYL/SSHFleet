@@ -171,6 +171,11 @@ func (c *client) upload(ctx context.Context, p *contract.Plan, res *contract.Nod
 				writtenBytes, uploadErr, halfWrites = c.putFile(sftpClient, f.Path, remoteFilePath, perm, idx, totalBytes, len(files), onProg)
 			})
 			if !end.ran() {
+				// armStuck：那次写还没退出来，putFile 没机会把它的尾巴交上来，而目标机上
+				// 这个名字已经被 Create 建出来了——算残留，宁可报全（ADR-0022 决定 1）。
+				if end == armStuck {
+					halfWrites = append(halfWrites, remoteFilePath)
+				}
 				c.uploadStopped(clock, res, files, uploadState{
 					success: success, bytes: uploadedBytes, written: written, half: halfWrites, lines: lines,
 				}, useSudo)

@@ -258,3 +258,32 @@ func TestRunDownloadTimesOutWhileCommandHangs(t *testing.T) {
 		t.Fatalf("远端文件被动过：%q（%v）", data, err)
 	}
 }
+
+// 写到一半那次调用到收尾预算用完也没退出来：那个刚建出来的文件仍算残留。
+//
+// 造法：SFTP 从 256KB 起停住且不放开闸门（假目标机停 3 秒），收尾预算压到 1 秒——于是
+// 「等它退出来」等不满，收场时手里没有它的尾巴。这时目标机上确实躺着这个名字，报文不许
+// 说「没有本次的东西」（ADR-0022 决定 1、ADR-0065 决定 5）。
+func TestRunUploadListsInFlightFileWhenWriteNeverExits(t *testing.T) {
+	ft := startFakeTarget(t)
+	ft.stallSftpAfter(256 << 10)
+	node := fakeNode(t, ft)
+
+	p, remoteFile := timeoutUploadPlan(t, ft, node)
+	p.Run.TimeoutConnect = 1
+	paper, _ := runWithLandings(t, p)
+	it := paper.Items[0]
+
+	if !it.TimedOut {
+		t.Fatalf("该记超时，实际 %q", it.ErrorText)
+	}
+	if strings.Contains(it.ErrorText, "no file left") {
+		t.Fatalf("刚建出来的那个文件还在目标机上，不该报 no file left：%q", it.ErrorText)
+	}
+	if !strings.Contains(it.ErrorText, "big.txt") {
+		t.Fatalf("残留清单该列出正在写的那个文件，实际 %q", it.ErrorText)
+	}
+	if _, err := os.Stat(remoteFile); err != nil {
+		t.Fatalf("这条路上没人去删，文件该还在：%v", err)
+	}
+}

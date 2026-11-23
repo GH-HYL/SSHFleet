@@ -14,8 +14,6 @@ package execute
 
 import (
 	"strings"
-
-	"sshfleet2/internal/criterion"
 )
 
 // dedupeLoop 一条远端循环：名字被占着的那些按 NUL 打回来。
@@ -27,16 +25,7 @@ import (
 // 提权那一路必须用 `sh -c` 包起来：`sudo -n for …` 里 `for` 是 shell 关键字、不是命令，
 // bash 当场报 `syntax error near unexpected token 'do'`（退出码 2，一个都没执行）。
 func dedupeLoop(paths []string, useSudo bool) string {
-	var b strings.Builder
-	b.WriteString("for p in")
-	for _, p := range paths {
-		b.WriteString(" '" + criterion.EscapeSingle(p) + "'")
-	}
-	b.WriteString(`; do if [ -e "$p" ] || [ -L "$p" ]; then printf '%s\0' "$p"; fi; done`)
-	if useSudo {
-		return sudoShell(b.String())
-	}
-	return b.String()
+	return loopOver(paths, `if [ -e "$p" ] || [ -L "$p" ]; then printf '%s\0' "$p"; fi`, useSudo)
 }
 
 // remoteExisting 问出这一批落点里已经被占着的那些，交回完整远端路径。
@@ -46,7 +35,7 @@ func dedupeLoop(paths []string, useSudo bool) string {
 func (c *client) remoteExisting(clock *transferClock, sftpClient *sftpConn, paths []string, useSudo bool) ([]string, armEnd) {
 	var hit []string
 	for _, batch := range batchPaths(paths, cleanupBatchBytes) {
-		out, end, err := c.captureArmed(clock, dedupeLoop(batch, useSudo))
+		out, err, end := c.execArmed(clock, dedupeLoop(batch, useSudo), true)
 		if !end.ran() {
 			return hit, end
 		}

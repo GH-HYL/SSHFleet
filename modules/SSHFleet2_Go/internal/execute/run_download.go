@@ -55,12 +55,22 @@ func (c *client) download(ctx context.Context, p *contract.Plan, res *contract.N
 	// 到点的动作：关掉这一刻占着连接的那条通道（ADR-0065）。远端零写入，所以没有清理要留。
 	closeSFTP := func() { _ = sftpClient.Close() }
 
+	// 问一次远端路径的属性按传输预算管：软链接判定与枚举退路都用这一处。
+	runLstat := func(p string) (os.FileInfo, armEnd, error) {
+		var (
+			info os.FileInfo
+			lerr error
+		)
+		end := clock.arm(closeSFTP, func() { info, lerr = sftpClient.Lstat(p) })
+		return info, end, lerr
+	}
+
 	// 远程路径预检（sudo 时用 sudo test）；路径转义规则与 find/mv 同源。
 	checkCmd := fmt.Sprintf("test -e '%s'", criterion.EscapeSingle(remotePath))
 	if useSudo {
 		checkCmd = fmt.Sprintf("sudo test -e '%s'", criterion.EscapeSingle(remotePath))
 	}
-	if err, end := c.execArmed(clock, checkCmd); !end.ran() {
+	if _, err, end := c.execArmed(clock, checkCmd, false); !end.ran() {
 		c.downloadStopped(clock, res, files, 0, 0, nil)
 		return
 	} else if err != nil {
@@ -85,7 +95,12 @@ func (c *client) download(ctx context.Context, p *contract.Plan, res *contract.N
 
 	// 远端路径本身即软链接：过滤（不下载、不当失败）。
 	rootIsLink := false
-	if lfi, lerr := sftpClient.Lstat(remotePath); lerr == nil && lfi.Mode()&os.ModeSymlink != 0 {
+	lfi, end, lerr := runLstat(remotePath)
+	if !end.ran() {
+		c.downloadStopped(clock, res, files, 0, 0, nil)
+		return
+	}
+	if lerr == nil && lfi.Mode()&os.ModeSymlink != 0 {
 		rootIsLink = true
 		// 名字按**远端**规则切：这条路径是远端的，`\` 在那边只是一个普通字符。
 		symlinks = append(symlinks, path.Base(remotePath))
@@ -98,8 +113,11 @@ func (c *client) download(ctx context.Context, p *contract.Plan, res *contract.N
 	case fi.IsDir():
 		// 一次 find 同时枚举真文件（F）与软链接（L）：软链接过滤但要在结果里提示。
 		// 记录按 NUL 切，名字里带换行不会被拆开（ADR-0063 决定 4）。
-		runFind := func(cmd string) (string, armEnd, error) { return c.captureArmed(clock, cmd) }
-		enumFiles, enumLinks, end, err := enumerateRemote(sftpClient, remotePath, useSudo, runFind)
+		runFind := func(cmd string) (string, armEnd, error) {
+			out, err, end := c.execArmed(clock, cmd, true)
+			return out, end, err
+		}
+		enumFiles, enumLinks, end, err := enumerateRemote(remotePath, useSudo, runFind, runLstat)
 		if !end.ran() {
 			c.downloadStopped(clock, res, files, 0, 0, nil)
 			return
