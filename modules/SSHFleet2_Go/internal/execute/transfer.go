@@ -171,6 +171,12 @@ func timeoutLeftNotAttempted(left []string) string {
 	return msg(envTransfer, transferTimeoutLeft, "cleanup not attempted, left: "+strings.Join(left, " "))
 }
 
+// timeoutLeft 传输到点、清理跑过但没删干净：删了几个、还留着哪些。
+func timeoutLeft(removed, total int, left []string) string {
+	return msg(envTransfer, transferTimeoutLeft,
+		fmt.Sprintf("%d of %d written files removed, left: %s", removed, total, strings.Join(left, " ")))
+}
+
 // dedupePaths 残留清单按路径去重：单文件重试期间到点会把同一个路径交上来两遍。
 func dedupePaths(groups ...[]string) []string {
 	seen := make(map[string]bool)
