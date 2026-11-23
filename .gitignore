@@ -65,18 +65,13 @@ docs/越界记录/
 !tools/**
 
 # 个人工具：只给开发者自己用，不属于工程部件，与 tools/ 分开。
-# 整个 personal/ 不进版本库，要留的逐个点名——加一项就写两行，没写的不追踪。
+# 整个 personal/ 不进版本库，要留的逐个点名；子目录逐层放行，没写的不追踪。
 !personal/
-!personal/command-description/
-!personal/command-description/**
 !personal/skill-manager/
 !personal/skill-manager/**
-!personal/CodeQuantify/
-!personal/CodeQuantify/**
-!personal/WorkBuddy后台Agent谜之设定/
-!personal/WorkBuddy后台Agent谜之设定/**
-!personal/约束文档检查经验/
-!personal/约束文档检查经验/**
+!personal/code_quantify.py
+!personal/WorkBuddy后台子agent谜之设定.md
+!personal/约束文档检查经验.md
 
 # 跑脚本生成的字节码缓存属产物。写在放行之后才生效。
 tools/**/__pycache__/
