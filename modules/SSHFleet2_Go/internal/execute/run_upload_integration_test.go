@@ -78,10 +78,11 @@ func TestRunUploadKeepsTree(t *testing.T) {
 	}
 }
 
-// TestRunUploadRollsBackOnExisting 撞重名：不覆盖别人的文件，本次已写进去的删干净。
+// TestRunUploadStopsOnExisting 撞重名：不覆盖别人的文件，整批停在开传之前。
 //
-// a.txt 先写成功、b.txt 撞名，回滚只该删 a.txt；b.txt 是别人放的，一个字节都不许动。
-func TestRunUploadRollsBackOnExisting(t *testing.T) {
+// 判重是开传之前一次性问完的，所以 a.txt 一个字节都不会写进去；撞名的那份（别人放的）
+// 原样不动。
+func TestRunUploadStopsOnExisting(t *testing.T) {
 	node, _ := integrationTarget(t)
 	remote := remoteTempDir(t, node, remoteWritable)
 	local := localTree(t)
@@ -90,33 +91,73 @@ func TestRunUploadRollsBackOnExisting(t *testing.T) {
 	if item := remoteRun(t, node, "mkdir -p "+remote+"/sub && printf original > "+remote+"/sub/b.txt"); item.ExitCode == nil || *item.ExitCode != 0 {
 		t.Fatalf("造重名文件失败：%+v", item)
 	}
-	if item := remoteRun(t, node, "test -f "+remote+"/a.txt"); item.ExitCode == nil || *item.ExitCode == 0 {
-		t.Fatalf("a.txt 事前不该存在：%+v", item)
-	}
 
 	p := planFor(t, []contract.Node{node}, "-u", local, "-p", remote)
 	item := runOne(t, context.Background(), p)
 
-	if item.Transfer.SuccessFiles != 1 || item.Transfer.FailFiles != 1 {
-		t.Fatalf("写成一个、撞名一个，实际 %+v（输出：%s）", item.Transfer, item.Output)
+	if item.Transfer.TotalFiles != 3 || item.Transfer.SuccessFiles != 0 || item.Transfer.FailFiles != 3 {
+		t.Fatalf("一个都不该传，实际 %+v（输出：%s）", item.Transfer, item.Output)
 	}
 	if !strings.Contains(item.ErrorText, "sshfleet.transfer.remote_exists: ") {
 		t.Fatalf("报错原文该说撞名，实际 %q", item.ErrorText)
 	}
-	if !strings.Contains(item.ErrorText, "sshfleet.transfer.rolled_back: ") {
-		t.Fatalf("回滚之后要照实说清，实际 %q", item.ErrorText)
+	if !strings.Contains(item.ErrorText, "sub/b.txt") {
+		t.Fatalf("该点名撞上的是哪个，实际 %q", item.ErrorText)
 	}
-	if !strings.Contains(item.Output, "sub/b.txt: 上传失败 - ") {
-		t.Fatalf("明细里该有那一行失败项，实际：\n%s", item.Output)
+	if strings.Contains(item.ErrorText, "sshfleet.transfer.rolled_back") {
+		t.Fatalf("零写入不该有回滚陈述，实际 %q", item.ErrorText)
 	}
 
 	// 别人的文件原样：一个字节都没被覆盖。
 	if got := remoteRun(t, node, "cat "+remote+"/sub/b.txt"); got.Output != "original" {
 		t.Fatalf("重名文件被动了：%q", got.Output)
 	}
-	// 本次写成功的那个已经删掉：目标机上不留半套。
+	// 零写入：其余那些一个都不该出现。
+	for _, rel := range []string{"a.txt", "sub/c.txt"} {
+		if left := remoteRun(t, node, "test -e "+remote+"/"+rel); left.ExitCode == nil || *left.ExitCode == 0 {
+			t.Fatalf("被拦下时不该写进 %s：%+v", rel, left)
+		}
+	}
+}
+
+// TestRunUploadRollsBackOnBlockedSubdir 目标机上子目录的位置被一个普通文件占着：写到那个
+// 文件时建不了目录，本次已写成功的要删干净。
+//
+// 撞名现在拦在开传之前，回滚这一路只剩「写到中途失败」能触发——这条钉的就是它。
+func TestRunUploadRollsBackOnBlockedSubdir(t *testing.T) {
+	node, _ := integrationTarget(t)
+	remote := remoteTempDir(t, node, remoteWritable)
+
+	if item := remoteRun(t, node, "printf blocker > "+remote+"/sub"); item.ExitCode == nil || *item.ExitCode != 0 {
+		t.Fatalf("造占位文件失败：%+v", item)
+	}
+
+	local := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(local, "sub"), 0o755); err != nil {
+		t.Fatalf("建本地子目录失败：%v", err)
+	}
+	for rel, body := range map[string]string{"a.txt": "alpha", "sub/b.txt": "beta"} {
+		if err := os.WriteFile(filepath.Join(local, rel), []byte(body), 0o644); err != nil {
+			t.Fatalf("写本地文件失败：%v", err)
+		}
+	}
+
+	p := planFor(t, []contract.Node{node}, "-u", local, "-p", remote)
+	item := runOne(t, context.Background(), p)
+
+	if item.Transfer.SuccessFiles != 1 || item.Transfer.FailFiles != 1 {
+		t.Fatalf("写成一个、卡住一个，实际 %+v（输出：%s）", item.Transfer, item.Output)
+	}
+	if !strings.Contains(item.ErrorText, "sshfleet.transfer.rolled_back: 1 of 1 written files removed") {
+		t.Fatalf("回滚要照实说清删了几个，实际 %q", item.ErrorText)
+	}
+	// 本次写进去的那个已经删掉：目标机上不留半套。
 	if left := remoteRun(t, node, "test -e "+remote+"/a.txt"); left.ExitCode == nil || *left.ExitCode == 0 {
 		t.Fatalf("回滚没删掉 a.txt：%+v", left)
+	}
+	// 占位文件是别人放的，一个字节都不许动。
+	if got := remoteRun(t, node, "cat "+remote+"/sub"); got.Output != "blocker" {
+		t.Fatalf("占位文件被动了：%q", got.Output)
 	}
 }
 

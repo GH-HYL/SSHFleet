@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"sshfleet2/internal/contract"
-	"sshfleet2/internal/criterion"
 	"sshfleet2/internal/message"
 )
 
@@ -140,7 +139,7 @@ func (c *client) upload(ctx context.Context, p *contract.Plan, res *contract.Nod
 			res.Transfer.SuccessFiles, res.Transfer.FailFiles = success, failed
 			res.Transfer.TotalBytes = uploadedBytes
 			res.Output = buildTransferOutput(len(files), success, failed, lines)
-			res.ErrorText = appendText(res.ErrorText, c.rollback(sftpClient, written, useSudo))
+			res.ErrorText = appendText(res.ErrorText, c.rollback(clock, written, useSudo))
 			res.ErrorText = appendText(res.ErrorText, abortMessage(true))
 			return
 		}
@@ -152,7 +151,7 @@ func (c *client) upload(ctx context.Context, p *contract.Plan, res *contract.Nod
 			failed++
 			lines = append(lines, message.TransferFailure(contract.ModeUpload, f.Rel, statErr))
 			res.ErrorText = appendText(res.ErrorText, msg(envTransfer, transferLocalUnreadable, fmt.Sprintf("%s: %v", f.Rel, statErr)))
-			res.ErrorText = appendText(res.ErrorText, c.rollback(sftpClient, written, useSudo))
+			res.ErrorText = appendText(res.ErrorText, c.rollback(clock, written, useSudo))
 			break
 		}
 		perm := localInfo.Mode().Perm()
@@ -205,7 +204,7 @@ func (c *client) upload(ctx context.Context, p *contract.Plan, res *contract.Nod
 			}
 			res.ErrorText = appendText(res.ErrorText, fmt.Sprintf("%s: %s", f.Rel, reason))
 			res.ErrorText = appendText(res.ErrorText, spaceNote)
-			res.ErrorText = appendText(res.ErrorText, c.rollback(sftpClient, written, useSudo))
+			res.ErrorText = appendText(res.ErrorText, c.rollback(clock, written, useSudo))
 			// 半成品没删掉时照实说：它们不在回滚清单里，混进回滚计数会失真。
 			res.ErrorText = appendText(res.ErrorText, partialLeft(halfWrites))
 			break
@@ -346,24 +345,14 @@ func leftoverOf(sftpClient *sftpConn, remoteFilePath string) []string {
 //
 // 只删清单里列的那些完整路径，不扫目录、不用通配符、不删中间目录：写每个文件之前都查过
 // 重名，所以这些路径必然都是本次自己建的。删不掉的路径照实带进报文。
-func (c *client) rollback(sftpClient *sftpConn, writtenPaths []string, useSudo bool) string {
+//
+// 删法与超时收尾共用同一个动作（ADR-0065）：同一条 SSH 连接上另开命令会话、一条远端循环
+// 删完，只受自己那份收尾预算约束——一次失败发生在传输快用完时，逐条删会一条条卡在死链上
+// 永远回不来，而两边口径不一致还会让「删到一半被自己的超时打断」变成假残留。
+func (c *client) rollback(clock *transferClock, writtenPaths []string, useSudo bool) string {
 	if len(writtenPaths) == 0 {
 		return ""
 	}
-	remove := func(p string) error {
-		if useSudo {
-			return c.exec(fmt.Sprintf("sudo rm -f '%s'", criterion.EscapeSingle(p)))
-		}
-		return sftpClient.Remove(p)
-	}
-	left := make([]string, 0)
-	removed := 0
-	for _, p := range writtenPaths {
-		if err := remove(p); err != nil {
-			left = append(left, p)
-			continue
-		}
-		removed++
-	}
+	removed, left, _ := c.cleanupWritten(clock, writtenPaths, useSudo)
 	return rollbackMessage(len(writtenPaths), removed, left)
 }

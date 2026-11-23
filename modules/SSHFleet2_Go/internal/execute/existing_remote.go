@@ -34,7 +34,7 @@ func dedupeLoop(paths []string, useSudo bool) string {
 	}
 	b.WriteString(`; do if [ -e "$p" ] || [ -L "$p" ]; then printf '%s\0' "$p"; fi; done`)
 	if useSudo {
-		return "sudo -n sh -c '" + criterion.EscapeSingle(b.String()) + "'"
+		return sudoShell(b.String())
 	}
 	return b.String()
 }
