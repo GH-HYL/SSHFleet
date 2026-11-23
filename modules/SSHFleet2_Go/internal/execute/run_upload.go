@@ -42,6 +42,15 @@ func (c *client) upload(ctx context.Context, p *contract.Plan, res *contract.Nod
 	remotePath := p.Task.Path
 	useSudo := p.Run.Sudo && c.node.User != "root"
 
+	// 这一台的传输预算：起点是入口，枚举（上传没有）、预检、逐文件写都在里面（ADR-0063 决定 6）。
+	clock := newTransferClock(ctx, seconds(p.Run.TimeoutTransfer), seconds(p.Run.TimeoutConnect))
+
+	// 明细行随早退一起走：被跳过的软链接在任何一种收场里都要看得见。
+	lines := make([]string, 0, len(task.Skipped)+len(files))
+	for _, s := range task.Skipped {
+		lines = append(lines, message.TransferSkipped(s))
+	}
+
 	sftpClient, err := c.openSFTP(useSudo)
 	if err != nil {
 		res.ErrorText = appendText(res.ErrorText, openFailureText(err))
@@ -49,6 +58,9 @@ func (c *client) upload(ctx context.Context, p *contract.Plan, res *contract.Nod
 		return
 	}
 	defer func() { _ = sftpClient.Close() }()
+	// 到点的动作：关掉这一刻占着连接的那条通道。只关 SFTP，不关整条 SSH 连接——连接还要
+	// 留给清理（ADR-0063 决定 6）。
+	closeSFTP := func() { _ = sftpClient.Close() }
 
 	var totalBytes int64
 	for _, f := range files {
@@ -56,7 +68,11 @@ func (c *client) upload(ctx context.Context, p *contract.Plan, res *contract.Nod
 	}
 
 	// 远程目标路径检查：必须存在且是目录（工具不建 -p 指的目录）。
-	fi, err := sftpClient.Stat(remotePath)
+	var fi os.FileInfo
+	if end := clock.arm(closeSFTP, func() { fi, err = sftpClient.Stat(remotePath) }); !end.ran() {
+		c.uploadStopped(clock, res, files, uploadState{lines: lines})
+		return
+	}
 	if err != nil {
 		// 措辞与下载侧同名——分类按报错原文匹配关键字，两处各写一套就会有一条永远归不了类。
 		res.ErrorText = appendText(res.ErrorText, msg(envTransfer, transferRemoteMissing, "remote path not found: "+remotePath))
@@ -80,8 +96,15 @@ func (c *client) upload(ctx context.Context, p *contract.Plan, res *contract.Nod
 
 	// 空间预检：装不下就停在写第一个文件之前，目标机上不会有任何本次的东西。
 	// 只有目标目录这一侧——提权时文件直接写最终路径，没有暂存分区要判（ADR-0026）。
-	if m := spaceShort(sftpProbe(sftpClient), remotePath, useSudo, totalBytes, true); m != "" {
-		res.ErrorText = appendText(res.ErrorText, m)
+	var spaceMsg string
+	if end := clock.arm(closeSFTP, func() {
+		spaceMsg = spaceShort(sftpProbe(sftpClient), remotePath, useSudo, totalBytes, true)
+	}); !end.ran() {
+		c.uploadStopped(clock, res, files, uploadState{lines: lines})
+		return
+	}
+	if spaceMsg != "" {
+		res.ErrorText = appendText(res.ErrorText, spaceMsg)
 		failTransfer(res, files)
 		return
 	}
@@ -90,10 +113,6 @@ func (c *client) upload(ctx context.Context, p *contract.Plan, res *contract.Nod
 	var uploadedBytes int64
 	// 本次已写成功的远端完整路径。失败回滚只删这些——不扫目录、不用通配符。
 	written := make([]string, 0, len(files))
-	lines := make([]string, 0, len(task.Skipped)+len(files))
-	for _, s := range task.Skipped {
-		lines = append(lines, message.TransferSkipped(s))
-	}
 	var pacer progressPacer
 
 	for idx, f := range files {
@@ -112,7 +131,12 @@ func (c *client) upload(ctx context.Context, p *contract.Plan, res *contract.Nod
 		remoteFilePath := path.Join(remotePath, f.Rel)
 
 		// 远端重名：不覆盖、计失败、终止本节点。
-		if _, err := sftpClient.Stat(remoteFilePath); err == nil {
+		var existsErr error
+		if end := clock.arm(closeSFTP, func() { _, existsErr = sftpClient.Stat(remoteFilePath) }); !end.ran() {
+			c.uploadStopped(clock, res, files, uploadState{success: success, bytes: uploadedBytes, written: written, lines: lines})
+			return
+		}
+		if existsErr == nil {
 			failed++
 			reason := msg(envTransfer, transferRemoteExists, "file already exists on the remote host")
 			lines = append(lines, message.TransferFailure(contract.ModeUpload, f.Rel, reason))
@@ -141,14 +165,30 @@ func (c *client) upload(ctx context.Context, p *contract.Plan, res *contract.Nod
 		// putFile 每次重来之前都会删掉它自己的半成品，所以这里只管再调一次。
 		attempts := 1 + p.Run.TransferRetry
 		for attempt := 1; attempt <= attempts; attempt++ {
-			writtenBytes, uploadErr, halfWrites = c.putFile(sftpClient, f.Path, remoteFilePath, perm, idx, totalBytes, len(files), onProg)
+			// 每个文件的「写 + 写完核大小」是一次发起：到点就关掉这条通道、等它退出来。
+			end := clock.arm(closeSFTP, func() {
+				writtenBytes, uploadErr, halfWrites = c.putFile(sftpClient, f.Path, remoteFilePath, perm, idx, totalBytes, len(files), onProg)
+			})
+			if !end.ran() {
+				c.uploadStopped(clock, res, files, uploadState{
+					success: success, bytes: uploadedBytes, written: written, half: halfWrites, lines: lines,
+				})
+				return
+			}
 			if uploadErr == nil {
 				break
 			}
 			// 失败后再查一次空间：满不是唯一的原因，只有探出来确实不够才改口。
 			// **必须在回滚之前问**：回滚会把空间还回去，那时再探永远是「够」。
 			// 它同时决定要不要重传——目标盘装不下，重试只是把同一个结果再等一遍。
-			spaceNote = spaceShort(sftpProbe(sftpClient), remotePath, useSudo, totalBytes-uploadedBytes, false)
+			if end := clock.arm(closeSFTP, func() {
+				spaceNote = spaceShort(sftpProbe(sftpClient), remotePath, useSudo, totalBytes-uploadedBytes, false)
+			}); !end.ran() {
+				c.uploadStopped(clock, res, files, uploadState{
+					success: success, bytes: uploadedBytes, written: written, half: halfWrites, lines: lines,
+				})
+				return
+			}
 			if attempt == attempts || spaceNote != "" || !retryableTransferError(uploadErr) {
 				break
 			}
@@ -183,6 +223,42 @@ func (c *client) upload(ctx context.Context, p *contract.Plan, res *contract.Nod
 	res.Transfer.SuccessFiles = success
 	res.Transfer.FailFiles = failed
 	res.Transfer.TotalBytes = uploadedBytes
+}
+
+// uploadState 一次上传到此刻为止的账：到点收场时照实交出去。
+type uploadState struct {
+	success int
+	bytes   int64
+	written []string // 本次已写成功的远端完整路径
+	half    []string // 写到一半、没删掉的
+	lines   []string // 明细行（含被跳过的软链接）
+}
+
+// uploadStopped 传输预算到点时的收场：这一台的所有文件一起作废，照实说目标机上还剩什么。
+//
+// 这一棒不清理——清理是下一棒的事，所以只剩「cleanup not attempted」那一档。
+func (c *client) uploadStopped(clock *transferClock, res *contract.NodeResult, files []fileEntry, st uploadState) {
+	failed := len(files) - st.success
+	res.Transfer.SuccessFiles = st.success
+	res.Transfer.FailFiles = failed
+	res.Transfer.TotalBytes = st.bytes
+	res.Transfer.TotalFiles = len(files)
+	res.Output = buildTransferOutput(len(files), st.success, failed, st.lines)
+
+	// 到点那一刻父 ctx 已取消：记的是中断，不是这一台的毛病（两者互斥，与命令模式同口径）。
+	if clock.interrupted() {
+		res.Cancelled = true
+		res.ErrorText = appendText(res.ErrorText, abortMessage(true))
+		return
+	}
+
+	res.TimedOut = true
+	left := dedupePaths(st.written, st.half)
+	if len(left) == 0 {
+		res.ErrorText = appendText(res.ErrorText, timeoutNoLeft(int(clock.transfer.Seconds())))
+		return
+	}
+	res.ErrorText = appendText(res.ErrorText, timeoutLeftNotAttempted(left))
 }
 
 // putFile 经 SFTP 写一个文件，返回写入字节数与没删掉的半成品。

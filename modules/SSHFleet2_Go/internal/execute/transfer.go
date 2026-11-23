@@ -33,6 +33,8 @@ const (
 	transferSizeMismatch      = "size_mismatch"      // 写完核大小不一致
 	transferRolledBack        = "rolled_back"        // 上传失败后，本次写进去的文件已清干净
 	transferRollbackPartial   = "rollback_partial"   // 回滚没清干净：还剩哪些路径
+	transferTimeout           = "timeout"            // 传输到点，目标机上没有本次留下的东西
+	transferTimeoutLeft       = "timeout_left"       // 传输到点，目标机上还留着哪些路径
 	transferPartialLeft       = "partial_left"       // 写到一半的文件没删掉（上传，远端）
 	transferLocalPartialLeft  = "local_partial_left" // 写到一半的文件没删掉（下载，本机）
 )
@@ -157,6 +159,32 @@ func localPartialLeft(paths []string) string {
 		return ""
 	}
 	return msg(envTransfer, transferLocalPartialLeft, "half-written file left: "+strings.Join(paths, ", "))
+}
+
+// timeoutNoLeft 传输到点，目标机上没有本次留下的东西。
+func timeoutNoLeft(secs int) string {
+	return msg(envTransfer, transferTimeout, fmt.Sprintf("%ds exceeded; no file left", secs))
+}
+
+// timeoutLeftNotAttempted 传输到点、来不及清理：报全，不假装删过。
+func timeoutLeftNotAttempted(left []string) string {
+	return msg(envTransfer, transferTimeoutLeft, "cleanup not attempted, left: "+strings.Join(left, " "))
+}
+
+// dedupePaths 残留清单按路径去重：单文件重试期间到点会把同一个路径交上来两遍。
+func dedupePaths(groups ...[]string) []string {
+	seen := make(map[string]bool)
+	var out []string
+	for _, g := range groups {
+		for _, p := range g {
+			if p == "" || seen[p] {
+				continue
+			}
+			seen[p] = true
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 // —— 空间预检（ADR-0026） ——

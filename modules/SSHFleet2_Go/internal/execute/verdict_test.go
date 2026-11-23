@@ -18,6 +18,9 @@ func classifyTables() contract.Tables {
 		Categories: []contract.Category{
 			{Name: "连接失败", Keywords: []string{"sshfleet.connect."}},
 			{Name: "认证失败", Keywords: []string{"permission denied"}},
+			// 传输超时那两条：「未清干净」必须排在「传输超时」之前，后者是前者关键词的子串。
+			{Name: "传输超时未清干净", Keywords: []string{"sshfleet.transfer.timeout_left"}},
+			{Name: "传输超时", Keywords: []string{"sshfleet.transfer.timeout"}},
 			{Name: "传输后大小不符", Keywords: []string{"sshfleet.transfer.size_mismatch"}},
 			// 两条方向不同的「不覆盖」：本机那条排在前面，且只认自己的报文前缀，
 			// 免得被「远程文件已存在」那条的通用串吃掉。
@@ -66,6 +69,16 @@ func TestCategoryOfCommandMode(t *testing.T) {
 			name: "超时：报文进第一组",
 			res:  contract.NodeResult{TimedOut: true, ErrorText: "sshfleet.run.timeout: exceeded 30s"},
 			want: "执行超时",
+		},
+		{
+			name: "传输到点、没清：未清干净那一档先命中",
+			res:  contract.NodeResult{ErrorText: "sshfleet.transfer.timeout_left: cleanup not attempted, left: /a /b"},
+			want: "传输超时未清干净",
+		},
+		{
+			name: "传输到点、目标机干净：不是未清干净",
+			res:  contract.NodeResult{ErrorText: "sshfleet.transfer.timeout: 300s exceeded; no file left"},
+			want: "传输超时",
 		},
 		{
 			name: "写完核大小不符：按报文归类",

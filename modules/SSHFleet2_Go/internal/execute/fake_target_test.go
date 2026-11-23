@@ -26,6 +26,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
@@ -50,6 +51,13 @@ type fakeTarget struct {
 	refuseTimes int
 	// extraRecord 是枚举末尾原样追加的一条记录（名字里带换行时用它钉 NUL 切分）。
 	extraRecord string
+
+	// stallSftpOn 置真后 SFTP 服务端只应答版本交换，此后不再应答（发起会一直卡着）。
+	// stallExecOn 置真后 exec 请求不回复，客户端一直等（命令发不出去）。
+	// 两者共用一个闸门，`stop` 时放开，免得留下永远阻塞的协程。
+	stallSftpOn bool
+	stallExecOn bool
+	stallGate   chan struct{}
 }
 
 // lieAboutSize 让接下来的 n 次枚举报出偏移 size 的大小。
@@ -71,6 +79,33 @@ func (f *fakeTarget) appendFindRecord(record string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.extraRecord = record
+}
+
+// stallSftp 让这台的 SFTP 服务端在版本交换之后不再应答：客户端的下一次发起会一直卡着。
+func (f *fakeTarget) stallSftp() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.stallSftpOn = true
+	if f.stallGate == nil {
+		f.stallGate = make(chan struct{})
+	}
+}
+
+// stallExec 让这台的 exec 请求不回复：客户端的命令一直等不到应答。
+func (f *fakeTarget) stallExec() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.stallExecOn = true
+	if f.stallGate == nil {
+		f.stallGate = make(chan struct{})
+	}
+}
+
+// gates 取一次这台的两个闸门状态。
+func (f *fakeTarget) gates() (sftpStalled, execStalled bool, gate <-chan struct{}) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.stallSftpOn, f.stallExecOn, f.stallGate
 }
 
 // takeFindState 取一次这次的枚举开关：还拒不拒 `-printf`、有没有多余的一条记录。
@@ -123,9 +158,17 @@ func startFakeTarget(t *testing.T) *fakeTarget {
 	return ft
 }
 
-// stop 关掉监听；已经在跑的连接由各自的会话收尾。
+// stop 关掉监听，并放开卡住的闸门；已经在跑的连接由各自的会话收尾。
 func (f *fakeTarget) stop() {
-	f.once.Do(func() { _ = f.ln.Close() })
+	f.once.Do(func() {
+		_ = f.ln.Close()
+		f.mu.Lock()
+		if f.stallGate != nil {
+			close(f.stallGate)
+			f.stallGate = nil
+		}
+		f.mu.Unlock()
+	})
 }
 
 // path 把远端根里的一条相对路径拼成客户端要发的形状：`/C:/…`（Windows）或 `/tmp/…`。
@@ -198,6 +241,10 @@ func (f *fakeTarget) handleSession(ch ssh.Channel, reqs <-chan *ssh.Request) {
 				_ = req.Reply(false, nil)
 				continue
 			}
+			// 卡住的那一档：不回复，客户端一直等（命令发不出去）。
+			if _, execStalled, gate := f.gates(); execStalled {
+				<-gate
+			}
 			_ = req.Reply(true, nil)
 			out, errOut, code := f.run(p.Command)
 			if out != "" {
@@ -216,7 +263,11 @@ func (f *fakeTarget) handleSession(ch ssh.Channel, reqs <-chan *ssh.Request) {
 				continue
 			}
 			_ = req.Reply(true, nil)
-			srv, err := sftp.NewServer(ch)
+			var srvCh io.ReadWriteCloser = ch
+			if sftpStalled, _, gate := f.gates(); sftpStalled {
+				srvCh = &stalledChannel{Channel: ch, gate: gate}
+			}
+			srv, err := sftp.NewServer(srvCh)
 			if err != nil {
 				return
 			}
@@ -341,6 +392,38 @@ func (f *fakeTarget) find(command string) (string, string, uint32) {
 		b.WriteString(sep)
 	}
 	return b.String(), "", 0
+}
+
+// sftpInitBytes 版本交换那一个包的字节数：4 字节长度 + 1 字节类型 + 4 字节版本号。
+//
+// 服务端读满这么多字节就说明握手已经完成；从此不再读，客户端的下一次请求自然没人应答。
+const sftpInitBytes = 9
+
+// stallFor 卡住的上限。真实世界里是永远不应答；这里留一个上限，否则客户端关掉 SFTP 通道
+// 之后服务端还堵在闸门上、永远看不到 EOF，连「关通道能不能解开阻塞」这件事都测不出来。
+const stallFor = 3 * time.Second
+
+// stalledChannel 只放行版本交换的通道：读满 sftpInitBytes 之后停一次，闸门放开或到上限才继续。
+type stalledChannel struct {
+	ssh.Channel
+	seen    int
+	stalled bool
+	gate    <-chan struct{}
+}
+
+func (s *stalledChannel) Read(p []byte) (int, error) {
+	if !s.stalled && s.seen >= sftpInitBytes {
+		s.stalled = true
+		timer := time.NewTimer(stallFor)
+		defer timer.Stop()
+		select {
+		case <-s.gate:
+		case <-timer.C:
+		}
+	}
+	n, err := s.Channel.Read(p)
+	s.seen += n
+	return n, err
 }
 
 // local 把客户端发来的远端路径落回本机路径（`/C:/…` → `C:\…`）。
