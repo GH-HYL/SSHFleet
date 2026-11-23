@@ -13,15 +13,13 @@
 | 触发场景 | 读 |
 | --- | --- |
 | 动手写代码、选落点、写测试 | `docs/agents/按需-写代码.md` |
-| 派子 agent、等它的回报、停它 | `docs/agents/按需-派子agent.md` |
+| 派子 agent、等它的回报、停它（仅 WorkBuddy 的 subagent 有这些事） | `docs/agents/按需-派子agent.md` |
 | 每次跑测试（`tools/test.sh`）、连目标机 | `docs/agents/按需-测试环境.md` |
 | 起规格、拆工单、写或改 ADR／spec／工单 | `docs/agents/按需-写文档.md` |
 | 复查、改约束类文件与技能正文 | `docs/agents/按需-文档检查.md` |
 | 报「做完了」、提交、写 CHANGELOG、碰版本号 | `docs/agents/按需-交付与提交.md` |
 | 写报错、提示、帮助、配置注释、手册 | `docs/agents/按需-给使用者看的文字.md` |
 | 听到口述的触发词 | `docs/agents/按需-触发词表.md` |
-
-**派子 agent 那一份只管 WorkBuddy 这一个 agent。** 后台 subagent 的回执、落盘、轮询是它自己的形状；别的 agent 的 subagent 没这些事，照搬只会多出一层用不上的步骤。
 
 ## Agent skills
 
