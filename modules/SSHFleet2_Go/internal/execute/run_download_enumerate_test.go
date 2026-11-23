@@ -1,14 +1,14 @@
 package execute
 
-// 下载枚举与开传前的本机重名（ADR-0063 决定 4、决定 7）。
+// 下载枚举与开传前的空目录假定（ADR-0063 决定 4）。
 //
-// 两件都住 `run_download.go` 的同一段：先枚举、再查本机落点，然后才开传。
+// 枚举住 `run_download.go` 的那一段；落点是不是空目录不在这里判——解析站在开跑之前挡下，
+// 执行站按「一定是空目录」办。
 // 接缝仍是 `execute.Run`——递一张纸、收一张纸；假目标机只加开关，不另造假件。
 
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"sshfleet2/internal/contract"
@@ -104,65 +104,5 @@ func TestRunDownloadKeepsRecordWithNewlineInName(t *testing.T) {
 	}
 	if string(got) != "alpha\n" {
 		t.Fatalf("取回的内容不对：%q", got)
-	}
-}
-
-// 本机已有同名文件：整批拦下，报名字、一个字节都不写。
-func TestRunDownloadRefusesExistingLocalFile(t *testing.T) {
-	ft := startFakeTarget(t)
-	node := fakeNode(t, ft)
-
-	remoteDir := ft.path("conflict")
-	if err := os.MkdirAll(ft.local(remoteDir), 0o755); err != nil {
-		t.Fatalf("建目标机上的目录失败：%v", err)
-	}
-	for _, name := range []string{"a.txt", "b.txt"} {
-		if err := os.WriteFile(filepath.Join(ft.local(remoteDir), name), []byte("remote-"+name), 0o644); err != nil {
-			t.Fatalf("在目标机上造文件失败：%v", err)
-		}
-	}
-
-	local := t.TempDir()
-	ipDir := filepath.Join(local, node.IP)
-	if err := os.MkdirAll(ipDir, 0o755); err != nil {
-		t.Fatalf("建本机落地目录失败：%v", err)
-	}
-	const kept = "local-keep"
-	if err := os.WriteFile(filepath.Join(ipDir, "a.txt"), []byte(kept), 0o644); err != nil {
-		t.Fatalf("预置本机同名文件失败：%v", err)
-	}
-
-	paper, _ := runWithLandings(t, downloadPlan(node, remoteDir, local))
-	it := paper.Items[0]
-
-	if !strings.Contains(it.ErrorText, "sshfleet.transfer.local_exists") {
-		t.Fatalf("该报本机已存在，实际 %q", it.ErrorText)
-	}
-	if !strings.Contains(it.ErrorText, "a.txt") {
-		t.Fatalf("该点名是哪个文件，实际 %q", it.ErrorText)
-	}
-	// 一个文件都没开始传：整批计失败。
-	if it.Transfer.TotalFiles != 2 || it.Transfer.FailFiles != 2 || it.Transfer.SuccessFiles != 0 {
-		t.Fatalf("四个数不对：%+v（错误原文 %q）", it.Transfer, it.ErrorText)
-	}
-
-	// 本机那份一个字节没变，也没有多出别的文件。
-	got, err := os.ReadFile(filepath.Join(ipDir, "a.txt"))
-	if err != nil || string(got) != kept {
-		t.Fatalf("本机同名文件被改了：%q（%v）", got, err)
-	}
-	entries, err := os.ReadDir(ipDir)
-	if err != nil {
-		t.Fatalf("读本机落地目录失败：%v", err)
-	}
-	if len(entries) != 1 {
-		t.Fatalf("被拦下时不该多写文件，实际目录里有 %d 个", len(entries))
-	}
-
-	// 远端那两个文件仍在：这一趟只读不写。
-	for _, name := range []string{"a.txt", "b.txt"} {
-		if _, err := os.Stat(filepath.Join(ft.local(remoteDir), name)); err != nil {
-			t.Fatalf("远端 %s 被动了：%v", name, err)
-		}
 	}
 }

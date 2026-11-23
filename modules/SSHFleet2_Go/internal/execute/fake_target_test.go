@@ -54,14 +54,18 @@ type fakeTarget struct {
 
 	// stallSftpOn 置真后 SFTP 服务端只应答版本交换，此后不再应答（发起会一直卡着）。
 	// stallAfter 是「读到多少个字节之后停」：默认是版本交换那一个包，调大就变成「写到中途停」。
-	// stallExecOn 置真后 exec 请求不回复，客户端一直等（命令发不出去）。
+	// stallExecOn 置真后 exec 请求不回复，客户端一直等（命令发不出去）；stallExecMatch 非空时
+	// 只有命令里带这个片段的才卡住。
 	// 两者共用一个闸门，`stop` 时放开，免得留下永远阻塞的协程。
-	stallSftpOn bool
-	stallAfter  int
-	stallExecOn bool
-	stallGate   chan struct{}
+	stallSftpOn    bool
+	stallAfter     int
+	stallExecOn    bool
+	stallExecMatch string
+	stallGate      chan struct{}
 	// refuseRemove 置真后收尾那条删除命令一条都删不掉：把路径全打回来。
 	refuseRemoveOn bool
+	// refuseDedupe 置真后判重那条循环退非 0（像壳不认这条）：用来验退回逐文件问那一路。
+	refuseDedupeOn bool
 }
 
 // lieAboutSize 让接下来的 n 次枚举报出偏移 size 的大小。
@@ -104,9 +108,18 @@ func (f *fakeTarget) stallSftpAfter(after int) {
 
 // stallExec 让这台的 exec 请求不回复：客户端的命令一直等不到应答。
 func (f *fakeTarget) stallExec() {
+	f.stallExecMatching("")
+}
+
+// stallExecMatching 只卡住命令里带 sub 的那些 exec 请求（sub 为空即全部）。
+//
+// 传输那一路在开传之前也会发命令（判重那条循环），要造「写完了、收尾的命令却发不出去」，
+// 只能卡收尾那一条——卡全部就轮不到写。
+func (f *fakeTarget) stallExecMatching(sub string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.stallExecOn = true
+	f.stallExecMatch = sub
 	if f.stallGate == nil {
 		f.stallGate = make(chan struct{})
 	}
@@ -126,11 +139,35 @@ func (f *fakeTarget) gates() (sftpStalled, execStalled bool, gate <-chan struct{
 	return f.stallSftpOn, f.stallExecOn, f.stallGate, f.stallAfter
 }
 
+// execStallMatches 这条命令要不要卡住：设了匹配片段就只卡带它的那些。
+func (f *fakeTarget) execStallMatches(command string) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if !f.stallExecOn {
+		return false
+	}
+	return f.stallExecMatch == "" || strings.Contains(command, f.stallExecMatch)
+}
+
 // removeRefused 收尾的删除要不要全部失败。
 func (f *fakeTarget) removeRefused() bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.refuseRemoveOn
+}
+
+// refuseDedupe 让判重那条循环退非 0：客户端该退回逐文件问。
+func (f *fakeTarget) refuseDedupe() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.refuseDedupeOn = true
+}
+
+// dedupeRefused 判重那条循环要不要装成跑不起来。
+func (f *fakeTarget) dedupeRefused() bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.refuseDedupeOn
 }
 
 // takeFindState 取一次这次的枚举开关：还拒不拒 `-printf`、有没有多余的一条记录。
@@ -267,7 +304,7 @@ func (f *fakeTarget) handleSession(ch ssh.Channel, reqs <-chan *ssh.Request) {
 				continue
 			}
 			// 卡住的那一档：不回复，客户端一直等（命令发不出去）。
-			if _, execStalled, gate, _ := f.gates(); execStalled {
+			if _, _, gate, _ := f.gates(); f.execStallMatches(p.Command) {
 				<-gate
 			}
 			_ = req.Reply(true, nil)
@@ -333,10 +370,9 @@ func (f *fakeTarget) run(command string) (string, string, uint32) {
 		return "", "", 0
 	case strings.HasPrefix(cmd, "find "):
 		return f.find(cmd)
-	case strings.HasPrefix(cmd, "for p in "):
-		return f.cleanup(cmd)
-	case strings.HasPrefix(cmd, "sudo -n for p in "):
-		return f.cleanup(strings.TrimPrefix(cmd, "sudo -n "))
+	case strings.HasPrefix(cmd, "for p in "), strings.HasPrefix(cmd, "sudo -n for p in "),
+		strings.HasPrefix(cmd, "sudo -n sh -c "):
+		return f.loop(cmd)
 	case strings.HasPrefix(cmd, "test -e "):
 		// 下载的远端预检就走这一条（`test -e '<路径>'`）：存在交 0，不存在交 1。
 		if _, err := os.Stat(f.local(unquote(strings.TrimPrefix(cmd, "test -e ")))); err != nil {
@@ -456,23 +492,78 @@ func (s *stalledChannel) Read(p []byte) (int, error) {
 	return n, err
 }
 
+// loop 应答远处的两条「for p in …」循环：判重那条与收尾那条，形状不同、结果也不同。
+//
+// 判重的循环里带 `if [ -e`，收尾的带 `rm -f --`：按这一句分开，别让一条用例悄悄跑在
+// 另一条的应答上。
+func (f *fakeTarget) loop(command string) (string, string, uint32) {
+	// `sudo -n sh -c '<整条循环>'`：把里面那条解出来再按同一条路应答——真机上跑的就是里面那条。
+	if inner, ok := strings.CutPrefix(command, "sudo -n sh -c "); ok {
+		return f.run(unquote(inner))
+	}
+	if strings.HasPrefix(command, "sudo -n ") {
+		command = strings.TrimPrefix(command, "sudo -n ")
+	}
+	if strings.Contains(command, "if [ -e ") {
+		return f.dedupe(command)
+	}
+	return f.cleanup(command)
+}
+
+// dedupe 应答判重那条循环：名字被占着的按 NUL 打回来。
+//
+// 谓词照命令里真写的那些算：`-e` 跟随链接（`Stat`），`-L` 只看名字（`Lstat`）。
+// 这样「少写一个谓词」在这台假机器上会真的漏——不跟着命令装样子。
+// refuseDedupe 打开时退非 0，用来验「这条命令坏了就退回逐文件问」那一路。
+func (f *fakeTarget) dedupe(command string) (string, string, uint32) {
+	if f.dedupeRefused() {
+		return "", "sh: syntax error\n", 2
+	}
+	followsLink := strings.Contains(command, "[ -e ")
+	seesLink := strings.Contains(command, "[ -L ")
+
+	var out strings.Builder
+	for _, p := range quotedArgs(loopHead(command)) {
+		taken := false
+		if followsLink {
+			if _, err := os.Stat(f.local(p)); err == nil {
+				taken = true
+			}
+		}
+		if !taken && seesLink {
+			if _, err := os.Lstat(f.local(p)); err == nil {
+				taken = true
+			}
+		}
+		if taken {
+			out.WriteString(p)
+			out.WriteString("\x00")
+		}
+	}
+	return out.String(), "", 0
+}
+
 // cleanup 应答收尾那条远端循环：删得掉的删掉，删不掉的把路径按 NUL 打回来。
 //
 // 真实循环的退出码是 0（最后一句是 printf），删不掉的信息只在输出里——这里照同一形态回。
 func (f *fakeTarget) cleanup(command string) (string, string, uint32) {
-	// 只取循环头 `for p in '…' '…'` 那一段：后面 printf 的格式串也是单引号，混进来会当成路径。
-	head := command
-	if i := strings.Index(command, "; do"); i >= 0 {
-		head = command[:i]
-	}
 	var out strings.Builder
-	for _, p := range quotedArgs(head) {
+	for _, p := range quotedArgs(loopHead(command)) {
 		if f.removeRefused() || os.Remove(f.local(p)) != nil {
 			out.WriteString(p)
 			out.WriteString("\x00")
 		}
 	}
 	return out.String(), "", 0
+}
+
+// loopHead 只取循环头 `for p in '…' '…'` 那一段：后面 printf 的格式串也是单引号，
+// 混进来会当成路径。
+func loopHead(command string) string {
+	if i := strings.Index(command, "; do"); i >= 0 {
+		return command[:i]
+	}
+	return command
 }
 
 // quotedArgs 取出命令里所有单引号参数（用例的路径不含引号，按第一段切就够）。

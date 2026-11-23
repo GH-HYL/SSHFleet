@@ -22,9 +22,7 @@ func classifyTables() contract.Tables {
 			{Name: "传输超时未清干净", Keywords: []string{"sshfleet.transfer.timeout_left"}},
 			{Name: "传输超时", Keywords: []string{"sshfleet.transfer.timeout"}},
 			{Name: "传输后大小不符", Keywords: []string{"sshfleet.transfer.size_mismatch"}},
-			// 两条方向不同的「不覆盖」：本机那条排在前面，且只认自己的报文前缀，
-			// 免得被「远程文件已存在」那条的通用串吃掉。
-			{Name: "本机文件已存在", Keywords: []string{"sshfleet.transfer.local_exists"}},
+			// 只认自己的报文前缀：`file already exists` 那种通用串会被别的分类抢着认。
 			{Name: "远程文件已存在", Keywords: []string{"file already exists", "sshfleet.transfer.remote_exists"}},
 			{Name: "执行超时", Keywords: []string{"sshfleet.run.timeout"}},
 			{Name: "命令失败", Keywords: []string{"ssh: command * failed"}},
@@ -86,12 +84,7 @@ func TestCategoryOfCommandMode(t *testing.T) {
 			want: "传输后大小不符",
 		},
 		{
-			name: "本机已有同名文件：与远程重名分开认",
-			res:  contract.NodeResult{ErrorText: "sshfleet.transfer.local_exists: already exists locally: a.txt"},
-			want: "本机文件已存在",
-		},
-		{
-			name: "远程已有同名文件：通用串仍归远程那条",
+			name: "远程已有同名文件：归远程那条",
 			res:  contract.NodeResult{ErrorText: "sshfleet.transfer.remote_exists: file already exists on the remote host"},
 			want: "远程文件已存在",
 		},

@@ -83,6 +83,10 @@ const (
 	CannotStartDownloadPathUnreadable CannotStartKind = "cli_download_path_unreadable"
 	// CannotStartDownloadPathNotDir 是下载模式下 `-p` 指到了文件：Place 是路径。
 	CannotStartDownloadPathNotDir CannotStartKind = "cli_download_path_not_dir"
+	// CannotStartDownloadPathNotEmpty 是下载模式下 `-p` 的目录里已经有东西：Place 是路径。
+	//
+	// 下载按「落点一定是空目录」办，不再逐文件查本机重名——这条自检就是那个前提。
+	CannotStartDownloadPathNotEmpty CannotStartKind = "cli_download_path_not_empty"
 
 	// CannotStartCSVUnreadable 是 `-f` 的清单文件读不到：Place 是路径，Origin 是系统原话。
 	CannotStartCSVUnreadable CannotStartKind = "cli_csv_unreadable"

@@ -3,8 +3,8 @@ package execute
 // 上传：把采集好的那张表写到目标目录。
 //
 // 两条硬规矩（ADR-0022）：
-//   - 远端重名不覆盖，那个文件计失败并终止本节点（目标机上那个同名文件是别人先
-//     放的，回滚一定不能碰它）；
+//   - 远端重名不覆盖：开传之前整批问一次，命中就零写入、整批计失败（目标机上那个同名文件
+//     是别人先放的，回滚一定不能碰它——现在根本没有需要回滚的东西）；
 //   - 中途失败把**本次写成功**的那些删掉（只删清单里的路径，不扫目录、不用通配符）。
 //
 // `--sudo` 与不 sudo 走同一条写路径：提权时整条 SFTP 会话以 root 跑，直接写最终路径，
@@ -109,6 +109,23 @@ func (c *client) upload(ctx context.Context, p *contract.Plan, res *contract.Nod
 		return
 	}
 
+	// 远端重名：开传之前整批问一次。命中即零写入——一个字节都不传，所以没有回滚这回事。
+	remotePaths := make([]string, 0, len(files))
+	for _, f := range files {
+		remotePaths = append(remotePaths, path.Join(remotePath, f.Rel))
+	}
+	existing, end := c.remoteExisting(clock, sftpClient, remotePaths, useSudo)
+	if !end.ran() {
+		c.uploadStopped(clock, res, files, uploadState{lines: lines}, useSudo)
+		return
+	}
+	if len(existing) > 0 {
+		failTransfer(res, files)
+		res.ErrorText = appendText(res.ErrorText, msg(envTransfer, transferRemoteExists,
+			"file already exists on the remote host: "+remoteNames(existing, remotePath)))
+		return
+	}
+
 	success, failed := 0, 0
 	var uploadedBytes int64
 	// 本次已写成功的远端完整路径。失败回滚只删这些——不扫目录、不用通配符。
@@ -129,21 +146,6 @@ func (c *client) upload(ctx context.Context, p *contract.Plan, res *contract.Nod
 		}
 
 		remoteFilePath := path.Join(remotePath, f.Rel)
-
-		// 远端重名：不覆盖、计失败、终止本节点。
-		var existsErr error
-		if end := clock.arm(closeSFTP, func() { _, existsErr = sftpClient.Stat(remoteFilePath) }); !end.ran() {
-			c.uploadStopped(clock, res, files, uploadState{success: success, bytes: uploadedBytes, written: written, lines: lines}, useSudo)
-			return
-		}
-		if existsErr == nil {
-			failed++
-			reason := msg(envTransfer, transferRemoteExists, "file already exists on the remote host")
-			lines = append(lines, message.TransferFailure(contract.ModeUpload, f.Rel, reason))
-			res.ErrorText = appendText(res.ErrorText, fmt.Sprintf("%s: %s", f.Rel, reason))
-			res.ErrorText = appendText(res.ErrorText, c.rollback(sftpClient, written, useSudo))
-			break
-		}
 
 		localInfo, statErr := os.Stat(f.Path)
 		if statErr != nil {

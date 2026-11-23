@@ -166,7 +166,7 @@ func TestRunUploadReportsLeftoversWhenCleanupFails(t *testing.T) {
 func TestRunUploadReportsCleanupNotAttempted(t *testing.T) {
 	ft := startFakeTarget(t)
 	ft.stallSftpAfter(256 << 10)
-	ft.stallExec()
+	ft.stallExecMatching("rm -f")
 	node := fakeNode(t, ft)
 
 	p, remoteFile := timeoutUploadPlan(t, ft, node)
