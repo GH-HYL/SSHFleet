@@ -4,6 +4,7 @@ package execute
 
 import (
 	"bytes"
+	"io"
 	"strings"
 	"testing"
 	"time"
@@ -52,5 +53,34 @@ func TestScreenPlainWritesStraight(t *testing.T) {
 
 	if got, want := buf.String(), "【10.0.0.1】 连接: 成功 - 0.123s\n"; got != want {
 		t.Fatalf("直通那一路应原样落流。\n期望：%q\n实际：%q", want, got)
+	}
+}
+
+// 读侧读到流末尾要补一帧：文件小、字节级回调太稀时，面板靠这一帧落到终值。
+func TestProgressCounterFlushesOnEOF(t *testing.T) {
+	var frames []nodeProgress
+	c := newProgressCounter(func(p nodeProgress) { frames = append(frames, p) }, 7, "10.0.0.9", 6, 1)
+
+	if _, err := io.CopyBuffer(io.Discard, countingReader{Reader: strings.NewReader("abcdef"), c: c}, make([]byte, 2)); err != nil {
+		t.Fatalf("拷贝失败：%v", err)
+	}
+
+	if len(frames) < 2 {
+		t.Fatalf("节流期间报一帧、读到末尾再补一帧，至少两帧，实际 %d", len(frames))
+	}
+	last := frames[len(frames)-1]
+	if last.Bytes != 6 || last.TotalBytes != 6 || last.Seq != 7 || last.TotalFiles != 1 {
+		t.Fatalf("末尾那一帧该是终值，实际 %+v", last)
+	}
+}
+
+// 无回调时直通：不套包装，照样拷完。
+func TestCopyStreamWithoutCallbackCopiesStraight(t *testing.T) {
+	var buf bytes.Buffer
+	if _, err := copyStream(sending, &buf, strings.NewReader("hello"), nil, 0, "", 5, 1); err != nil {
+		t.Fatalf("拷贝失败：%v", err)
+	}
+	if buf.String() != "hello" {
+		t.Fatalf("该原样拷过去，实际 %q", buf.String())
 	}
 }

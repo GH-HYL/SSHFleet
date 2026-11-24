@@ -3,7 +3,7 @@ package execute
 // 传输类的进度：节点侧的回调节流、跨节点的聚合，以及那块逐节点的面板。
 //
 // 三层各管一件事（与老版同一套分工）：
-//   - 字节／文件级回调（progressWriter／progressReader／pacer）只管「把数报上去」，500ms 节流；
+//   - 字节／文件级回调（progressCounter／pacer）只管「把数报上去」，500ms 节流；
 //   - 聚合器把各节点的数汇总成一份快照，200ms 节流（节点完成时立即渲染一帧）；
 //   - 面板只管「怎么画」。
 
@@ -167,76 +167,101 @@ func (p *progressPacer) allow() bool {
 	return false
 }
 
-// progressWriter 带进度回调的写入器（上传路径）。
-type progressWriter struct {
-	dst          io.Writer
-	uploaded     int64
-	lastCallback time.Time
-	seq          int
-	ip           string
-	totalBytes   int64
-	totalFiles   int
-	callback     func(nodeProgress)
-	mu           sync.Mutex
+// progressCounter 逐字节的回调计数：包在「读出来」或「写进去」的那一头上，按节流间隔报一次。
+//
+// 上传数进去的、下载数出来的，两边只差数的是哪一头，所以判断与计数只有这一处。读侧还要在
+// 流到了头时补一帧：文件小、字节级回调太稀时，面板靠这一帧落到终值；写侧看不见「到头」，
+// 那一帧只属于读侧。
+type progressCounter struct {
+	done       int64
+	last       time.Time
+	seq        int
+	ip         string
+	totalBytes int64
+	totalFiles int
+	callback   func(nodeProgress)
+	mu         sync.Mutex
 }
 
-func (pw *progressWriter) Write(p []byte) (int, error) {
-	n, err := pw.dst.Write(p)
-	pw.mu.Lock()
-	pw.uploaded += int64(n)
-	if pw.callback != nil && time.Since(pw.lastCallback) >= progressThrottle {
-		pw.lastCallback = time.Now()
-		pw.callback(nodeProgress{Seq: pw.seq, IP: pw.ip, Bytes: pw.uploaded, TotalBytes: pw.totalBytes, TotalFiles: pw.totalFiles})
+func newProgressCounter(cb func(nodeProgress), seq int, ip string, totalBytes int64, totalFiles int) *progressCounter {
+	return &progressCounter{seq: seq, ip: ip, totalBytes: totalBytes, totalFiles: totalFiles, callback: cb}
+}
+
+// add 记下这次读／写的字节数；到点就报一帧。
+func (c *progressCounter) add(n int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.done += int64(n)
+	if time.Since(c.last) < progressThrottle {
+		return
 	}
-	pw.mu.Unlock()
+	c.last = time.Now()
+	c.frame()
+}
+
+// flush 立刻报一帧：读侧读到流末尾时用，不看节流。
+func (c *progressCounter) flush() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.last = time.Now()
+	c.frame()
+}
+
+func (c *progressCounter) frame() {
+	if c.callback == nil {
+		return
+	}
+	c.callback(nodeProgress{
+		Seq: c.seq, IP: c.ip, Bytes: c.done, TotalBytes: c.totalBytes, TotalFiles: c.totalFiles,
+	})
+}
+
+// countingWriter 把写进 dst 的字节数报上去（上传那一头）。
+type countingWriter struct {
+	io.Writer
+	c *progressCounter
+}
+
+func (w countingWriter) Write(p []byte) (int, error) {
+	n, err := w.Writer.Write(p)
+	w.c.add(n)
 	return n, err
 }
 
-// progressReader 带进度回调的读取器（下载路径）。
-type progressReader struct {
-	src          io.Reader
-	downloaded   int64
-	lastCallback time.Time
-	seq          int
-	ip           string
-	totalBytes   int64
-	totalFiles   int
-	callback     func(nodeProgress)
-	mu           sync.Mutex
+// countingReader 把从 src 读到的字节数报上去，读到末尾补一帧（下载那一头）。
+type countingReader struct {
+	io.Reader
+	c *progressCounter
 }
 
-func (pr *progressReader) Read(p []byte) (int, error) {
-	n, err := pr.src.Read(p)
-	pr.mu.Lock()
-	pr.downloaded += int64(n)
-	should := time.Since(pr.lastCallback) >= progressThrottle
+func (r countingReader) Read(p []byte) (int, error) {
+	n, err := r.Reader.Read(p)
+	r.c.add(n)
 	if err == io.EOF {
-		should = true
+		r.c.flush()
 	}
-	if should && pr.callback != nil {
-		pr.lastCallback = time.Now()
-		pr.callback(nodeProgress{Seq: pr.seq, IP: pr.ip, Bytes: pr.downloaded, TotalBytes: pr.totalBytes, TotalFiles: pr.totalFiles})
-	}
-	pr.mu.Unlock()
 	return n, err
 }
 
-// copyUpload 1MB 缓冲流式上传；无回调时直通（不走进度包裹）。
-func copyUpload(dst io.Writer, src io.Reader, cb onProgressN, seq int, ip string, totalBytes int64, totalFiles int) (int64, error) {
-	buf := make([]byte, 1024*1024)
-	if cb == nil {
-		return io.CopyBuffer(dst, src, buf)
-	}
-	return io.CopyBuffer(&progressWriter{dst: dst, seq: seq, ip: ip, totalBytes: totalBytes, totalFiles: totalFiles, callback: cb}, src, buf)
-}
+// transDirection 这一趟的字节往哪边走：客户端写给目标机，还是目标机给到本机。
+type transDirection int
 
-// copyDownload 1MB 缓冲流式下载；无回调时直通。
-func copyDownload(dst io.Writer, src io.Reader, cb onProgressN, seq int, ip string, totalBytes int64, totalFiles int) (int64, error) {
+const (
+	sending   transDirection = iota // 往目标机送（上传）
+	receiving                       // 从目标机收（下载）
+)
+
+// copyStream 1MB 缓冲流式拷贝；无回调时直通（不走进度包裹）。
+func copyStream(dir transDirection, dst io.Writer, src io.Reader, cb onProgressN, seq int, ip string, totalBytes int64, totalFiles int) (int64, error) {
 	buf := make([]byte, 1024*1024)
 	if cb == nil {
 		return io.CopyBuffer(dst, src, buf)
 	}
-	return io.CopyBuffer(dst, &progressReader{src: src, seq: seq, ip: ip, totalBytes: totalBytes, totalFiles: totalFiles, callback: cb}, buf)
+	c := newProgressCounter(cb, seq, ip, totalBytes, totalFiles)
+	if dir == sending {
+		return io.CopyBuffer(countingWriter{Writer: dst, c: c}, src, buf)
+	}
+	return io.CopyBuffer(dst, countingReader{Reader: src, c: c}, buf)
 }
 
 // onProgressN 给上传／下载用的便捷回调：把逐文件的四个数与字节一起报上去。
@@ -251,14 +276,4 @@ func reportTransfer(cb onProgressN, seq int, ip string, uploaded, totalBytes int
 		Seq: seq, IP: ip, Bytes: uploaded, TotalBytes: totalBytes,
 		TotalFiles: totalFiles, SuccessFiles: success, FailedFiles: failed,
 	})
-}
-
-// failTransfer 是一次传输没能跑成时的记账：这次打算传的文件全都算没传成。
-//
-// 上传与下载共用这一处：早退的路各五六条，各写一遍必有一边漏——下载侧此前一条都没写，
-// 报告与日志里的文件数、字节数永远印 0。判定不靠这四个数兜底（成功规则要求成功项大于 0），
-// 这里补的是「这一台到底打算传几个、成了几个」这个事实。
-func failTransfer(res *contract.NodeResult, files []fileEntry) {
-	res.Transfer.TotalFiles = len(files)
-	res.Transfer.FailFiles = len(files)
 }

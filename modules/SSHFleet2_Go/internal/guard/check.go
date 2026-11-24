@@ -30,6 +30,8 @@ func CheckAll(m *Module) []Violation {
 	var vs []Violation
 	vs = append(vs, CheckTerminal(m)...) // 类一
 	vs = append(vs, CheckDeps(m)...)     // 类二
+	// 类二那条「两份清单对不对得上」的兄弟：环节名与随包的判据表。
+	vs = append(vs, CheckStages(m)...)
 	vs = append(vs, CheckExit(m)...)     // 类三
 	vs = append(vs, CheckContract(m)...) // 类四
 	vs = append(vs, CheckFailure(m)...)  // 类五

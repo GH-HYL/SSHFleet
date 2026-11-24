@@ -45,10 +45,14 @@ func (c *client) download(ctx context.Context, p *contract.Plan, res *contract.N
 		totalBytes int64
 	)
 
+	// 枚举之前就失败的那几条路一个文件都数不出来，账上记 0；清单定下来之后再补总数。
+	acct := newTransferAccount(0, nil)
+
 	sftpClient, err := c.openSFTP(useSudo)
 	if err != nil {
 		res.ErrorText = appendText(res.ErrorText, openFailureText(err))
-		failTransfer(res, files)
+		acct.allFailed()
+		acct.settle(res)
 		return
 	}
 	defer func() { _ = sftpClient.Close() }()
@@ -71,25 +75,27 @@ func (c *client) download(ctx context.Context, p *contract.Plan, res *contract.N
 		checkCmd = fmt.Sprintf("sudo test -e '%s'", criterion.EscapeSingle(remotePath))
 	}
 	if _, err, end := c.execArmed(clock, checkCmd, false); !end.ran() {
-		c.downloadStopped(clock, res, files, 0, 0, nil)
+		c.downloadStopped(clock, res, acct)
 		return
 	} else if err != nil {
 		// 预检查是中间步骤：它自己的退出码进 Steps，不顶成结果退出码。
 		stepsOf(res, contract.StepPrecheck, err)
 		res.ErrorText = appendText(res.ErrorText, msg(envTransfer, transferRemoteMissing, "remote path not found: "+remotePath))
-		failTransfer(res, files)
+		acct.allFailed()
+		acct.settle(res)
 		return
 	}
 	stepsOf(res, contract.StepPrecheck, nil)
 
 	var fi os.FileInfo
 	if end := clock.arm(closeSFTP, func() { fi, err = sftpClient.Stat(remotePath) }); !end.ran() {
-		c.downloadStopped(clock, res, files, 0, 0, nil)
+		c.downloadStopped(clock, res, acct)
 		return
 	}
 	if err != nil {
 		res.ErrorText = appendText(res.ErrorText, msg(envTransfer, transferRemoteUnreachable, "remote path not accessible: "+remotePath))
-		failTransfer(res, files)
+		acct.allFailed()
+		acct.settle(res)
 		return
 	}
 
@@ -97,7 +103,7 @@ func (c *client) download(ctx context.Context, p *contract.Plan, res *contract.N
 	rootIsLink := false
 	lfi, end, lerr := runLstat(remotePath)
 	if !end.ran() {
-		c.downloadStopped(clock, res, files, 0, 0, nil)
+		c.downloadStopped(clock, res, acct)
 		return
 	}
 	if lerr == nil && lfi.Mode()&os.ModeSymlink != 0 {
@@ -119,13 +125,14 @@ func (c *client) download(ctx context.Context, p *contract.Plan, res *contract.N
 		}
 		enumFiles, enumLinks, end, err := enumerateRemote(remotePath, useSudo, runFind, runLstat)
 		if !end.ran() {
-			c.downloadStopped(clock, res, files, 0, 0, nil)
+			c.downloadStopped(clock, res, acct)
 			return
 		}
 		if err != nil {
 			stepsOf(res, contract.StepEnumerate, err)
 			res.ErrorText = appendText(res.ErrorText, msg(envTransfer, transferListFailed, err.Error()))
-			failTransfer(res, files)
+			acct.allFailed()
+			acct.settle(res)
 			return
 		}
 		stepsOf(res, contract.StepEnumerate, nil)
@@ -144,6 +151,7 @@ func (c *client) download(ctx context.Context, p *contract.Plan, res *contract.N
 	sort.Strings(symlinks)
 
 	totalFiles := len(files)
+	acct.count(totalFiles)
 	if totalFiles == 0 {
 		// 过滤后没有任何可下载文件才报错（全是链接与目录本就为空，措辞分开）。
 		if len(symlinks) > 0 {
@@ -161,23 +169,19 @@ func (c *client) download(ctx context.Context, p *contract.Plan, res *contract.N
 	ipDir := filepath.Join(localPath, c.node.IP)
 	if err := os.MkdirAll(ipDir, 0o755); err != nil {
 		res.ErrorText = appendText(res.ErrorText, msg(envTransfer, transferLocalDirFailed, err.Error()))
-		failTransfer(res, files)
+		acct.allFailed()
+		acct.settle(res)
 		return
 	}
 
-	success, failed := 0, 0
-	var downloadedBytes int64
-	lines := make([]string, 0, len(symlinks)+len(files))
 	for _, s := range symlinks {
-		lines = append(lines, message.TransferSkipped(s))
+		acct.line(message.TransferSkipped(s))
 	}
 
 	for i, file := range files {
 		if ctx.Err() != nil {
 			res.Cancelled = true
-			res.Transfer.SuccessFiles, res.Transfer.FailFiles = success, failed
-			res.Transfer.TotalBytes, res.Transfer.TotalFiles = downloadedBytes, totalFiles
-			res.Output = buildTransferOutput(totalFiles, success, failed, lines)
+			acct.settle(res)
 			res.ErrorText = appendText(res.ErrorText, abortMessage(true))
 			return
 		}
@@ -202,17 +206,17 @@ func (c *client) download(ctx context.Context, p *contract.Plan, res *contract.N
 			// 悄悄改名落盘会让人以为远端那个文件叫这名；多建一层目录更糟。
 			// 一个错误就全部终止：同批剩下的（含当前这个）一并计失败，否则 total 与
 			// 「成功 + 失败」对不上。
-			failed += len(files) - i
+			acct.failed(len(files) - i)
 			reason := msg(envTransfer, transferLocalFileFailed, "name not usable as a local file name: "+badName)
-			lines = append(lines, message.TransferFailure(contract.ModeDownload, badName, reason))
+			acct.line(message.TransferFailure(contract.ModeDownload, badName, reason))
 			res.ErrorText = appendText(res.ErrorText, fmt.Sprintf("%s: %s", badName, reason))
 			break
 		}
 
 		if err := os.MkdirAll(filepath.Dir(localFilePath), 0o755); err != nil {
-			failed += len(files) - i
+			acct.failed(len(files) - i)
 			reason := msg(envTransfer, transferLocalDirFailed, err.Error())
-			lines = append(lines, message.TransferFailure(contract.ModeDownload, file.Rel, reason))
+			acct.line(message.TransferFailure(contract.ModeDownload, file.Rel, reason))
 			res.ErrorText = appendText(res.ErrorText, fmt.Sprintf("%s: %s", file.Rel, reason))
 			break
 		}
@@ -230,7 +234,7 @@ func (c *client) download(ctx context.Context, p *contract.Plan, res *contract.N
 				n, downloadErr, halfWrites = getFile(sftpClient, remoteFilePath, localFilePath, i, c.node.IP, totalBytes, totalFiles, file.Size, onProg)
 			})
 			if !end.ran() {
-				c.downloadStopped(clock, res, files, success, downloadedBytes, lines)
+				c.downloadStopped(clock, res, acct)
 				return
 			}
 			if downloadErr == nil || attempt == attempts || !retryableTransferError(downloadErr) {
@@ -238,9 +242,9 @@ func (c *client) download(ctx context.Context, p *contract.Plan, res *contract.N
 			}
 		}
 		if downloadErr != nil {
-			failed++
+			acct.failed(1)
 			// 「下载失败」只留在输出明细行；报错原文格放报文。
-			lines = append(lines, message.TransferFailure(contract.ModeDownload, file.Rel, downloadErr))
+			acct.line(message.TransferFailure(contract.ModeDownload, file.Rel, downloadErr))
 			reason := downloadErr.Error()
 			if !isMessage(reason) {
 				reason = msg(envTransfer, transferLocalFileFailed, reason)
@@ -249,29 +253,20 @@ func (c *client) download(ctx context.Context, p *contract.Plan, res *contract.N
 			res.ErrorText = appendText(res.ErrorText, localPartialLeft(halfWrites))
 			break
 		}
-		success++
-		downloadedBytes += n
+		acct.wrote(n)
 	}
 
-	res.Output = buildTransferOutput(totalFiles, success, failed, lines)
 	// 传输不是命令执行：不写任何退出码；有成有败由结果判定按四个数给。
-	res.Transfer.SuccessFiles = success
-	res.Transfer.FailFiles = failed
-	res.Transfer.TotalBytes = downloadedBytes
-	res.Transfer.TotalFiles = totalFiles
+	acct.settle(res)
 }
 
 // downloadStopped 传输预算到点时的收场。
 //
 // 远端零写入，所以没有残留清单这回事（ADR-0022 决定 5 不变）：本机那个写到一半的文件由
 // getFile 自己删掉，这里只报超时与四个数。
-func (c *client) downloadStopped(clock *transferClock, res *contract.NodeResult, files []fileEntry, success int, bytes int64, lines []string) {
-	failed := len(files) - success
-	res.Transfer.SuccessFiles = success
-	res.Transfer.FailFiles = failed
-	res.Transfer.TotalBytes = bytes
-	res.Transfer.TotalFiles = len(files)
-	res.Output = buildTransferOutput(len(files), success, failed, lines)
+func (c *client) downloadStopped(clock *transferClock, res *contract.NodeResult, acct *transferAccount) {
+	acct.failedRest()
+	acct.settle(res)
 
 	// 到点那一刻父 ctx 已取消：记的是中断，不是这一台的毛病（两者互斥）。
 	if clock.interrupted() {
@@ -300,7 +295,7 @@ func getFile(sftpClient *sftpConn, remoteFilePath, localFilePath string, seq int
 		return 0, noRetry(errors.New(msg(envTransfer, transferLocalFileFailed, err.Error()))), nil
 	}
 
-	n, copyErr := copyDownload(dst, src, onProg, seq, ip, totalBytes, totalFiles)
+	n, copyErr := copyStream(receiving, dst, src, onProg, seq, ip, totalBytes, totalFiles)
 	// 先关再问大小：没关掉之前，本机这边的写入可能还挂在缓冲里。
 	closeErr := dst.Close()
 
