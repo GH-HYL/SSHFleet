@@ -13,7 +13,8 @@
 | 触发场景 | 读 |
 | --- | --- |
 | 动手写代码、选落点、写测试 | `docs/agents/按需-写代码.md` |
-| 派子 agent、等它的回报、停它（仅 WorkBuddy 的 subagent 有这些事） | `docs/agents/按需-派子agent.md` |
+| 定位符号、查调用方、沿调用链追上下游 | `docs/agents/按需-查引用.md` |
+| 派子 agent、等它的回报、停它 | `docs/agents/按需-子agent.md` |
 | 每次跑测试（`tools/test.sh`）、连目标机 | `docs/agents/按需-测试环境.md` |
 | 起规格、拆工单、写或改 ADR／spec／工单 | `docs/agents/按需-写文档.md` |
 | 复查、改约束类文件与技能正文 | `docs/agents/按需-文档检查.md` |
