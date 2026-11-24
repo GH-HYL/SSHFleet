@@ -162,23 +162,32 @@ func (c *client) upload(ctx context.Context, p *contract.Plan, res *contract.Nod
 			writtenBytes int64
 			uploadErr    error
 			halfWrites   []string
-			spaceNote    string
+			// leftover 这个名字上「可能还在」的残留，跨重试累积：下一趟把文件重新建出来了，
+			// 就以它自己的交待为准；下一趟在建之前就失败（碰都没碰这个名字），前几趟留下的
+			// 名字仍然算数——目标机上躺着的正是它。
+			leftover  []string
+			spaceNote string
 		)
 		// 单个文件失败只重传它自己：已传好的文件一个字节都不重发（ADR-0063 决定 9）。
 		// putFile 每次重来之前都会删掉它自己的半成品，所以这里只管再调一次。
 		attempts := 1 + p.Run.TransferRetry
 		for attempt := 1; attempt <= attempts; attempt++ {
+			var created bool
 			// 每个文件的「写 + 写完核大小」是一次发起：到点就关掉这条通道、等它退出来。
 			end := clock.arm(closeSFTP, func() {
-				writtenBytes, uploadErr, halfWrites = c.putFile(sftpClient, f.Path, remoteFilePath, perm, idx, totalBytes, len(files), onProg)
+				writtenBytes, uploadErr, halfWrites, created = c.putFile(sftpClient, f.Path, remoteFilePath, perm, idx, totalBytes, len(files), onProg)
 			})
+			// armStuck 时 putFile 还在跑，闭包里那几个变量不能读（并发写）；退出来了才拿它的交待。
+			if end != armStuck && created {
+				leftover = halfWrites
+			}
 			if !end.ran() {
 				// armStuck：那次写还没退出来，putFile 没机会把它的尾巴交上来，而目标机上
 				// 这个名字已经被 Create 建出来了——算残留，宁可报全（ADR-0022 决定 1）。
 				if end == armStuck {
-					halfWrites = append(halfWrites, remoteFilePath)
+					leftover = append(leftover, remoteFilePath)
 				}
-				c.uploadStopped(clock, res, acct, written, halfWrites, useSudo)
+				c.uploadStopped(clock, res, acct, written, leftover, useSudo)
 				return
 			}
 			if uploadErr == nil {
@@ -190,7 +199,7 @@ func (c *client) upload(ctx context.Context, p *contract.Plan, res *contract.Nod
 			if end := clock.arm(closeSFTP, func() {
 				spaceNote = spaceShort(sftpProbe(sftpClient), remotePath, useSudo, totalBytes-acct.stat.TotalBytes, false)
 			}); !end.ran() {
-				c.uploadStopped(clock, res, acct, written, halfWrites, useSudo)
+				c.uploadStopped(clock, res, acct, written, leftover, useSudo)
 				return
 			}
 			if attempt == attempts || spaceNote != "" || !retryableTransferError(uploadErr) {
@@ -209,7 +218,7 @@ func (c *client) upload(ctx context.Context, p *contract.Plan, res *contract.Nod
 			res.ErrorText = appendText(res.ErrorText, spaceNote)
 			res.ErrorText = appendText(res.ErrorText, c.rollback(clock, written, useSudo))
 			// 半成品没删掉时照实说：它们不在回滚清单里，混进回滚计数会失真。
-			res.ErrorText = appendText(res.ErrorText, partialLeft(halfWrites))
+			res.ErrorText = appendText(res.ErrorText, partialLeft(leftover))
 			break
 		}
 		acct.wrote(writtenBytes)
@@ -269,32 +278,35 @@ func (c *client) uploadStopped(clock *transferClock, res *contract.NodeResult, a
 	}
 }
 
-// putFile 经 SFTP 写一个文件，返回写入字节数与没删掉的半成品。
+// putFile 经 SFTP 写一个文件，返回写入字节数、没删掉的半成品，以及「远端这个名字建出来过没有」。
+//
+// 最后那个 bool 给重试那一段用：建出来过，这一次的交待就是这个名字的全貌；没建出来
+// （在建之前就失败）时，前面几趟留下的名字还在目标机上，不能拿这一次的空手把它顶掉。
 //
 // 两种身份共用这一条：提权时底层会话已是 root，中间目录同样由 SFTP 自己建。
-func (c *client) putFile(sftpClient *sftpConn, localPath, remoteFilePath string, perm os.FileMode, seq int, totalBytes int64, totalFiles int, onProg onProgressN) (int64, error, []string) {
+func (c *client) putFile(sftpClient *sftpConn, localPath, remoteFilePath string, perm os.FileMode, seq int, totalBytes int64, totalFiles int, onProg onProgressN) (int64, error, []string, bool) {
 	// 中间目录按需创建：上传目录的相对层级要保留。目标目录（-p）本身仍必须已存在。
 	if dir := path.Dir(remoteFilePath); dir != "." {
 		if err := sftpClient.MkdirAll(dir); err != nil {
-			return 0, errors.New(msg(envTransfer, transferRemoteFileFailed, fmt.Sprintf("create remote dir %s: %v", dir, err))), nil
+			return 0, errors.New(msg(envTransfer, transferRemoteFileFailed, fmt.Sprintf("create remote dir %s: %v", dir, err))), nil, false
 		}
 	}
 
 	src, err := os.Open(localPath)
 	if err != nil {
-		return 0, noRetry(errors.New(msg(envTransfer, transferLocalUnreadable, err.Error()))), nil
+		return 0, noRetry(errors.New(msg(envTransfer, transferLocalUnreadable, err.Error()))), nil, false
 	}
 	defer func() { _ = src.Close() }()
 	// 本机这一份多大：写完要拿它跟目标机对（ADR-0063 决定 11）。
 	info, err := src.Stat()
 	if err != nil {
-		return 0, noRetry(errors.New(msg(envTransfer, transferLocalUnreadable, err.Error()))), nil
+		return 0, noRetry(errors.New(msg(envTransfer, transferLocalUnreadable, err.Error()))), nil, false
 	}
 
 	dst, err := sftpClient.Create(remoteFilePath)
 	if err != nil {
 		// 原始错误要留着：没有权限、文件不存在这类状态码决定要不要重试。
-		return 0, transferFail(transferRemoteFileFailed, err), nil
+		return 0, transferFail(transferRemoteFileFailed, err), nil, false
 	}
 
 	n, copyErr := copyStream(sending, dst, src, onProg, seq, c.node.IP, totalBytes, totalFiles)
@@ -302,25 +314,25 @@ func (c *client) putFile(sftpClient *sftpConn, localPath, remoteFilePath string,
 	closeErr := dst.Close()
 
 	if copyErr != nil {
-		return 0, transferFail(transferRemoteFileFailed, copyErr), leftoverOf(sftpClient, remoteFilePath)
+		return 0, transferFail(transferRemoteFileFailed, copyErr), leftoverOf(sftpClient, remoteFilePath), true
 	}
 	if closeErr != nil {
-		return 0, transferFail(transferRemoteFileFailed, closeErr), leftoverOf(sftpClient, remoteFilePath)
+		return 0, transferFail(transferRemoteFileFailed, closeErr), leftoverOf(sftpClient, remoteFilePath), true
 	}
 
 	// 写完核大小：只比字节数，不比内容（ADR-0063 决定 11 的取舍）。
 	remoteInfo, err := sftpClient.Stat(remoteFilePath)
 	if err != nil {
-		return 0, transferFail(transferRemoteFileFailed, fmt.Errorf("stat after write: %w", err)), leftoverOf(sftpClient, remoteFilePath)
+		return 0, transferFail(transferRemoteFileFailed, fmt.Errorf("stat after write: %w", err)), leftoverOf(sftpClient, remoteFilePath), true
 	}
 	if remoteInfo.Size() != info.Size() {
 		// 删掉它自己：留着会让这次重传撞「远程文件已存在」。
-		return 0, errors.New(sizeMismatchMessage(info.Size(), remoteInfo.Size())), leftoverOf(sftpClient, remoteFilePath)
+		return 0, errors.New(sizeMismatchMessage(info.Size(), remoteInfo.Size())), leftoverOf(sftpClient, remoteFilePath), true
 	}
 
 	// 权限设置失败不阻断（老版同口径）。
 	_ = sftpClient.Chmod(remoteFilePath, perm)
-	return n, nil, nil
+	return n, nil, nil, true
 }
 
 // leftoverOf 删掉本次写坏的那个远端文件；删不掉就把它交回去，照实写进报文。

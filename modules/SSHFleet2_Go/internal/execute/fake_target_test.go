@@ -64,6 +64,10 @@ type fakeTarget struct {
 	stallGate      chan struct{}
 	// refuseRemove 置真后收尾那条删除命令一条都删不掉：把路径全打回来。
 	refuseRemoveOn bool
+	// sftpDropOn 置真后这条 SFTP 通道读到 dropAfter 个字节就关掉（不是不应答）：
+	// 在飞的那次写当场拿到连接已失，之后每一次发起也失败。传输半途掉线是这个形状。
+	sftpDropOn bool
+	dropAfter  int
 	// refuseDedupe 置真后判重那条循环退非 0（像壳不认这条）：用来验退回逐文件问那一路。
 	refuseDedupeOn bool
 }
@@ -130,6 +134,22 @@ func (f *fakeTarget) refuseRemove() {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.refuseRemoveOn = true
+}
+
+// dropSftpAfter 读到 after 个字节就把那条 SFTP 通道断掉：在飞的请求当场失效，
+// 之后每一次发起也失败。与 stallSftpAfter 的差别是「断了」而不是「不应答」。
+func (f *fakeTarget) dropSftpAfter(after int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.sftpDropOn = true
+	f.dropAfter = after
+}
+
+// sftpDrop 这条通道要不要在读到某个字节数之后断掉。
+func (f *fakeTarget) sftpDrop() (bool, int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.sftpDropOn, f.dropAfter
 }
 
 // gates 取一次这台的两个闸门状态。
@@ -328,6 +348,8 @@ func (f *fakeTarget) handleSession(ch ssh.Channel, reqs <-chan *ssh.Request) {
 			var srvCh io.ReadWriteCloser = ch
 			if sftpStalled, _, gate, after := f.gates(); sftpStalled {
 				srvCh = &stalledChannel{Channel: ch, gate: gate, after: after}
+			} else if drop, after := f.sftpDrop(); drop {
+				srvCh = &droppedChannel{Channel: ch, after: after}
 			}
 			srv, err := sftp.NewServer(srvCh)
 			if err != nil {
@@ -495,6 +517,30 @@ func (s *stalledChannel) Read(p []byte) (int, error) {
 	}
 	n, err := s.Channel.Read(p)
 	s.seen += n
+	return n, err
+}
+
+// droppedChannel 读到 `after` 个字节就把通道关掉：此后这条通道上的一切都失败。
+//
+// 与 stalledChannel 差在最后那一下——那个是「不应答」（客户端一直等），这个是「断了」
+// （客户端当场拿到连接已失）。传输半途掉线、之后连建文件都建不出来，走的是这一条。
+type droppedChannel struct {
+	ssh.Channel
+	seen  int
+	after int
+	dead  bool
+}
+
+func (d *droppedChannel) Read(p []byte) (int, error) {
+	if d.dead {
+		return 0, io.EOF
+	}
+	n, err := d.Channel.Read(p)
+	d.seen += n
+	if d.seen >= d.after {
+		d.dead = true
+		_ = d.Channel.Close()
+	}
 	return n, err
 }
 
