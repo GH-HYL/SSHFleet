@@ -36,7 +36,6 @@ func (c *client) upload(ctx context.Context, p *contract.Plan, res *contract.Nod
 	for _, f := range task.Files {
 		files = append(files, fileEntry{Path: f.Path, Rel: f.Rel, Size: f.Size})
 	}
-	res.Transfer.TotalFiles = len(files)
 
 	remotePath := p.Task.Path
 	useSudo := p.Run.Sudo && c.node.User != "root"
@@ -49,11 +48,13 @@ func (c *client) upload(ctx context.Context, p *contract.Plan, res *contract.Nod
 	for _, s := range task.Skipped {
 		lines = append(lines, message.TransferSkipped(s))
 	}
+	acct := newTransferAccount(len(files), lines)
 
 	sftpClient, err := c.openSFTP(useSudo)
 	if err != nil {
 		res.ErrorText = appendText(res.ErrorText, openFailureText(err))
-		failTransfer(res, files)
+		acct.allFailed()
+		acct.settle(res)
 		return
 	}
 	defer func() { _ = sftpClient.Close() }()
@@ -69,25 +70,28 @@ func (c *client) upload(ctx context.Context, p *contract.Plan, res *contract.Nod
 	// 远程目标路径检查：必须存在且是目录（工具不建 -p 指的目录）。
 	var fi os.FileInfo
 	if end := clock.arm(closeSFTP, func() { fi, err = sftpClient.Stat(remotePath) }); !end.ran() {
-		c.uploadStopped(clock, res, files, uploadState{lines: lines}, useSudo)
+		c.uploadStopped(clock, res, acct, nil, nil, useSudo)
 		return
 	}
 	if err != nil {
 		// 措辞与下载侧同名——分类按报错原文匹配关键字，两处各写一套就会有一条永远归不了类。
 		res.ErrorText = appendText(res.ErrorText, msg(envTransfer, transferRemoteMissing, "remote path not found: "+remotePath))
-		failTransfer(res, files)
+		acct.allFailed()
+		acct.settle(res)
 		return
 	}
 	if !fi.IsDir() {
 		res.ErrorText = appendText(res.ErrorText, msg(envTransfer, transferRemoteNotDir, "remote target is not a directory: "+remotePath))
-		failTransfer(res, files)
+		acct.allFailed()
+		acct.settle(res)
 		return
 	}
 
 	// 本地文件预检：本地读不了是更近、更确定的原因，不该被「磁盘满」抢先报出来。
 	for _, f := range files {
 		if _, err := os.Stat(f.Path); err != nil {
-			failTransfer(res, files)
+			acct.allFailed()
+			acct.settle(res)
 			res.ErrorText = appendText(res.ErrorText, msg(envTransfer, transferLocalUnreadable, fmt.Sprintf("%s: %v", f.Rel, err)))
 			return
 		}
@@ -99,12 +103,13 @@ func (c *client) upload(ctx context.Context, p *contract.Plan, res *contract.Nod
 	if end := clock.arm(closeSFTP, func() {
 		spaceMsg = spaceShort(sftpProbe(sftpClient), remotePath, useSudo, totalBytes, true)
 	}); !end.ran() {
-		c.uploadStopped(clock, res, files, uploadState{lines: lines}, useSudo)
+		c.uploadStopped(clock, res, acct, nil, nil, useSudo)
 		return
 	}
 	if spaceMsg != "" {
 		res.ErrorText = appendText(res.ErrorText, spaceMsg)
-		failTransfer(res, files)
+		acct.allFailed()
+		acct.settle(res)
 		return
 	}
 
@@ -115,18 +120,17 @@ func (c *client) upload(ctx context.Context, p *contract.Plan, res *contract.Nod
 	}
 	existing, end := c.remoteExisting(clock, sftpClient, remotePaths, useSudo)
 	if !end.ran() {
-		c.uploadStopped(clock, res, files, uploadState{lines: lines}, useSudo)
+		c.uploadStopped(clock, res, acct, nil, nil, useSudo)
 		return
 	}
 	if len(existing) > 0 {
-		failTransfer(res, files)
+		acct.allFailed()
+		acct.settle(res)
 		res.ErrorText = appendText(res.ErrorText, msg(envTransfer, transferRemoteExists,
 			"file already exists on the remote host: "+remoteNames(existing, remotePath)))
 		return
 	}
 
-	success, failed := 0, 0
-	var uploadedBytes int64
 	// 本次已写成功的远端完整路径。失败回滚只删这些——不扫目录、不用通配符。
 	written := make([]string, 0, len(files))
 	var pacer progressPacer
@@ -136,9 +140,7 @@ func (c *client) upload(ctx context.Context, p *contract.Plan, res *contract.Nod
 			// 被中断同样算「这次没传完」：已经写成功的照样回滚，不能因为「是用户按的
 			// 中断」就把残留留在目标机上。
 			res.Cancelled = true
-			res.Transfer.SuccessFiles, res.Transfer.FailFiles = success, failed
-			res.Transfer.TotalBytes = uploadedBytes
-			res.Output = buildTransferOutput(len(files), success, failed, lines)
+			acct.settle(res)
 			res.ErrorText = appendText(res.ErrorText, c.rollback(clock, written, useSudo))
 			res.ErrorText = appendText(res.ErrorText, abortMessage(true))
 			return
@@ -148,8 +150,8 @@ func (c *client) upload(ctx context.Context, p *contract.Plan, res *contract.Nod
 
 		localInfo, statErr := os.Stat(f.Path)
 		if statErr != nil {
-			failed++
-			lines = append(lines, message.TransferFailure(contract.ModeUpload, f.Rel, statErr))
+			acct.failed(1)
+			acct.line(message.TransferFailure(contract.ModeUpload, f.Rel, statErr))
 			res.ErrorText = appendText(res.ErrorText, msg(envTransfer, transferLocalUnreadable, fmt.Sprintf("%s: %v", f.Rel, statErr)))
 			res.ErrorText = appendText(res.ErrorText, c.rollback(clock, written, useSudo))
 			break
@@ -176,9 +178,7 @@ func (c *client) upload(ctx context.Context, p *contract.Plan, res *contract.Nod
 				if end == armStuck {
 					halfWrites = append(halfWrites, remoteFilePath)
 				}
-				c.uploadStopped(clock, res, files, uploadState{
-					success: success, bytes: uploadedBytes, written: written, half: halfWrites, lines: lines,
-				}, useSudo)
+				c.uploadStopped(clock, res, acct, written, halfWrites, useSudo)
 				return
 			}
 			if uploadErr == nil {
@@ -188,11 +188,9 @@ func (c *client) upload(ctx context.Context, p *contract.Plan, res *contract.Nod
 			// **必须在回滚之前问**：回滚会把空间还回去，那时再探永远是「够」。
 			// 它同时决定要不要重传——目标盘装不下，重试只是把同一个结果再等一遍。
 			if end := clock.arm(closeSFTP, func() {
-				spaceNote = spaceShort(sftpProbe(sftpClient), remotePath, useSudo, totalBytes-uploadedBytes, false)
+				spaceNote = spaceShort(sftpProbe(sftpClient), remotePath, useSudo, totalBytes-acct.stat.TotalBytes, false)
 			}); !end.ran() {
-				c.uploadStopped(clock, res, files, uploadState{
-					success: success, bytes: uploadedBytes, written: written, half: halfWrites, lines: lines,
-				}, useSudo)
+				c.uploadStopped(clock, res, acct, written, halfWrites, useSudo)
 				return
 			}
 			if attempt == attempts || spaceNote != "" || !retryableTransferError(uploadErr) {
@@ -201,8 +199,8 @@ func (c *client) upload(ctx context.Context, p *contract.Plan, res *contract.Nod
 		}
 
 		if uploadErr != nil {
-			failed++
-			lines = append(lines, message.TransferFailure(contract.ModeUpload, f.Rel, uploadErr))
+			acct.failed(1)
+			acct.line(message.TransferFailure(contract.ModeUpload, f.Rel, uploadErr))
 			reason := uploadErr.Error()
 			if !isMessage(reason) {
 				reason = msg(envTransfer, transferRemoteFileFailed, reason)
@@ -214,45 +212,32 @@ func (c *client) upload(ctx context.Context, p *contract.Plan, res *contract.Nod
 			res.ErrorText = appendText(res.ErrorText, partialLeft(halfWrites))
 			break
 		}
-		success++
+		acct.wrote(writtenBytes)
 		// 只有**写成功**的才进清单——回滚删的就是这份清单，多记一条就多一分误删风险。
 		written = append(written, remoteFilePath)
-		uploadedBytes += writtenBytes
 
 		// 逐文件进展也报上去：文件小、字节级回调太稀时，面板靠它动。
 		if pacer.allow() {
-			reportTransfer(onProg, idx, c.node.IP, uploadedBytes, totalBytes, len(files), success, failed)
+			reportTransfer(onProg, idx, c.node.IP, acct.stat.TotalBytes, totalBytes, len(files),
+				acct.stat.SuccessFiles, acct.stat.FailFiles)
 		}
 	}
 
-	res.Output = buildTransferOutput(len(files), success, failed, lines)
-	res.Transfer.SuccessFiles = success
-	res.Transfer.FailFiles = failed
-	res.Transfer.TotalBytes = uploadedBytes
-}
-
-// uploadState 一次上传到此刻为止的账：到点收场时照实交出去。
-type uploadState struct {
-	success int
-	bytes   int64
-	written []string // 本次已写成功的远端完整路径
-	half    []string // 写到一半、没删掉的
-	lines   []string // 明细行（含被跳过的软链接）
+	acct.settle(res)
 }
 
 // uploadStopped 传输预算到点时的收场：这一台的所有文件一起作废，照实说目标机上还剩什么。
 //
 // 先清理再报（ADR-0065）：本次写成功的与当前写到一半的一起删，删不掉的照实列出来。
 // 清理只看自己那份收尾预算，超时与中断都停不下它。
-func (c *client) uploadStopped(clock *transferClock, res *contract.NodeResult, files []fileEntry, st uploadState, useSudo bool) {
-	failed := len(files) - st.success
-	res.Transfer.SuccessFiles = st.success
-	res.Transfer.FailFiles = failed
-	res.Transfer.TotalBytes = st.bytes
-	res.Transfer.TotalFiles = len(files)
-	res.Output = buildTransferOutput(len(files), st.success, failed, st.lines)
+//
+// written／half 由上传自己交进来：它们是「目标机上现在可能有什么」，下载用不上，
+// 所以不进那本共用的账。
+func (c *client) uploadStopped(clock *transferClock, res *contract.NodeResult, acct *transferAccount, written, half []string, useSudo bool) {
+	acct.failedRest()
+	acct.settle(res)
 
-	left := dedupePaths(st.written, st.half)
+	left := dedupePaths(written, half)
 
 	// 到点那一刻父 ctx 已取消：记的是中断，不是这一台的毛病（两者互斥，与命令模式同口径）。
 	// 清理照做——中断不是清理的停止条件。
@@ -312,7 +297,7 @@ func (c *client) putFile(sftpClient *sftpConn, localPath, remoteFilePath string,
 		return 0, transferFail(transferRemoteFileFailed, err), nil
 	}
 
-	n, copyErr := copyUpload(dst, src, onProg, seq, c.node.IP, totalBytes, totalFiles)
+	n, copyErr := copyStream(sending, dst, src, onProg, seq, c.node.IP, totalBytes, totalFiles)
 	// 先关再问大小：没关掉之前，目标机那边的写入可能还挂在缓冲里。
 	closeErr := dst.Close()
 

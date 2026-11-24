@@ -111,6 +111,9 @@ var redline = []RedLineEntry{
 	{"TestCheckFatalBody", []string{"CheckTerminal", "ClassTerminal"}, 4},
 	// 检查器按语义补判据：不经 import 的边也报（新增不算改）
 	{"TestCheckLinkEdges", []string{"CheckDeps", "ClassDeps", "Report"}, 5},
+	// 环节名对照判据表（2026-11-24，新增不算改）
+	{"TestCheckStagesListsEveryProducedName", []string{"CheckStages", "Report", "stagePairs"}, 2},
+	{"TestCheckStagesFailsOnMissingEntry", []string{"CheckStages", "ClassDeps"}, 4},
 }
 
 // RedLine 返回名单的一份拷贝。检查读它；改返回值影响不到名单本身。
@@ -139,6 +142,7 @@ type HelperEntry struct {
 // 那由测试自己的断言接住（ADR-0046 决定二）。
 var helperAsserts = []HelperEntry{
 	{"loadFixture", 1},
+	{"loadStageFixture", 1},
 	{"wantOne", 4},
 	// 以下五个是落地时扫全包才露出来的：几条红线的边界测试各自带了一个喊失败的 helper。
 	{"closedPort", 3},
