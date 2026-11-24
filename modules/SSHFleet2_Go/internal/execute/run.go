@@ -193,10 +193,9 @@ func visit(ctx context.Context, p *contract.Plan, idx int, ag *aggregator) contr
 		res.AuthMethod = c.authMethodDesc()
 
 		// 连上之后按模式分派（建站 05 的第五节）：每一支一个文件，不在这里堆 if。
-		// 建连、收尾、分类仍由本函数收口——那是 04 定的，不动。
-		if err := c.step(ctx, p, &res, ag); err != nil {
-			res.ErrorText = c.mergeBanner(err.Error())
-		}
+		// 建连、收尾、分类仍由本函数收口——那是 04 定的，不动。失败原文由各支自己并进
+		// `res.ErrorText`，这里只管往下走。
+		c.step(ctx, p, &res, ag)
 
 		c.close()
 	}
