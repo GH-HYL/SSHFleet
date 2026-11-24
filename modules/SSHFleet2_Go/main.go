@@ -154,7 +154,9 @@ func main() {
 		if note.Text() != "" {
 			execLog, lerr := log.InitExec(paths.ExecLog)
 			if lerr != nil {
-				// 开执行期日志两处现在同一个口径：开不出来就停（审计 09-3）。原先这里把错误吞掉，
+				// 开执行期日志两处现在同一个口径：启动段开不出来就停（审计 09-3），另一处是
+				// 执行站起来那一下。收尾那一行不在此列——那时执行已经结束，停不下来，只补
+				// 一句留痕（见步骤 9、10 之后那一段）。原先这里把错误吞掉，
 				// 结果是一轮跑完、这几条留痕悄悄没了，事后对账才发现少了一截。
 				fatal(contract.WhereOutput, message.CannotStartBody(contract.CannotStart{
 					Reason: contract.CannotStartReason{
@@ -186,6 +188,9 @@ func main() {
 		if execLog, lerr := log.InitExec(paths.ExecLog); lerr == nil {
 			execLog.Info(message.ExecSummaryLog(ledger))
 			_ = execLog.Close()
+		} else {
+			// 开不出来不再停机（执行已经结束，停也停不回来），但也不许悄悄没了。
+			lg.Warn(message.TraceExecLogSummaryLost(paths.ExecLog, lerr.Error()).Plain())
 		}
 
 		// 被中断那次要多两句，次序照老版：屏幕那句在前、日志那句在后，都排在统计块之前。
