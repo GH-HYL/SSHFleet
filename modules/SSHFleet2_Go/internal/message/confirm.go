@@ -122,15 +122,8 @@ func confirmRows(p *contract.Plan, manifest, maskedPassword string, concurrencyA
 //
 // 代填会直接改远端行为，按下确认之前得看得见这次配了什么。
 func answerRows(p *contract.Plan) [][2]string {
-	var answers []contract.Answer
-	switch {
-	case p.Task.Command != nil:
-		answers = p.Task.Command.Answers
-	case p.Task.Script != nil:
-		answers = p.Task.Script.Answers
-	}
-	rows := make([][2]string, 0, len(answers))
-	for i, entry := range answers {
+	rows := make([][2]string, 0, len(p.Answers))
+	for i, entry := range p.Answers {
 		rows = append(rows, [2]string{"代填 " + strconv.Itoa(i+1), AnswerDescribe(entry)})
 	}
 	return rows

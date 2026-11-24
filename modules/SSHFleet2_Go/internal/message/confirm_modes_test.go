@@ -121,12 +121,10 @@ func TestConfirmScreenPasswd(t *testing.T) {
 // 有代填就多几行「代填 N：内容 → 触发词」，内容为空时写「（回车）」。
 func TestConfirmScreenAnswerRows(t *testing.T) {
 	p := plainPlan(contract.ModeCommand)
-	p.Task.Command = &contract.CommandTask{
-		Text: "install.sh",
-		Answers: []contract.Answer{
-			{Value: "y", Triggers: []string{"是否继续", "continue"}},
-			{Value: "", Triggers: []string{"按回车"}},
-		},
+	p.Task.Command = &contract.CommandTask{Text: "install.sh"}
+	p.Answers = []contract.Answer{
+		{Value: "y", Triggers: []string{"是否继续", "continue"}},
+		{Value: "", Triggers: []string{"按回车"}},
 	}
 	got := stripANSI(ConfirmScreen(p, "ok.csv", "", false).Text())
 	for _, want := range []string{

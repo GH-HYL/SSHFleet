@@ -75,14 +75,15 @@ func runMetaBodyOf(p *contract.Plan, argv []string, cfg *settings) contract.RunM
 
 		// 代填的原值：备份原料时报告站要拿它判「是不是一份文件」。
 		AnswerRaw: p.Run.Answer,
+
+		// 这次生效的代填表：纸上只有一格，命令与脚本都从这里取（不再各挂一份）。
+		Answers: p.Answers,
 	}
 	switch {
 	case p.Task.Command != nil:
 		body.Command = p.Task.Command.Text
-		body.Answers = p.Task.Command.Answers
 	case p.Task.Script != nil:
 		body.ScriptPath = p.Task.Script.Path
-		body.Answers = p.Task.Script.Answers
 	case p.Task.Upload != nil:
 		body.Source = p.Task.Upload.Source
 		body.Target = p.Task.Path

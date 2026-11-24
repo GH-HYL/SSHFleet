@@ -60,7 +60,7 @@ func uploadSkipped(p *contract.Plan) []string {
 //	命令或脚本 + 代填   → 代填表 + 原始命令（脚本）/ 处理方式 / 最终命令
 //	上传、下载、改密    → 没有「交给谁解释」这件事，不记这一块
 func sendBlock(p *contract.Plan) []string {
-	if answers := answersOf(p); len(answers) > 0 {
+	if answers := p.Answers; len(answers) > 0 {
 		return answersBlock(p, answers)
 	}
 	if p.Task.Script != nil {

@@ -8,13 +8,14 @@ package message
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 
 	"sshfleet2/internal/contract"
 )
 
-// Bytes 把字节数写成大小：`12.3KB`、`1.0MB`，小于 1KB 写 `512 B`。
+// Bytes 把字节数写成大小：`12.3 KB`、`1.0 MB`，小于 1KB 写 `512 B`。
 //
 // 口径照老版 `common.FormatBytes`：1024 进制、一位小数、单位字母大写。
 func Bytes(n int64) string {
@@ -28,6 +29,33 @@ func Bytes(n int64) string {
 		exp++
 	}
 	return fmt.Sprintf("%.1f %cB", float64(n)/float64(div), "KMGTPE"[exp])
+}
+
+// BytesExact 是报文里的大小：与 Bytes 同一套进制与单位，保留两位小数、多余的零不写。
+//
+// 与 Bytes 只差精度，不是第二种写法：屏上的版面用一位小数，报文里的「还差多少、装不装得下」
+// 要精确值。两个入口都在这里，改口径只改这个包。
+func BytesExact(n int64) string {
+	const (
+		kb = int64(1024)
+		mb = 1024 * kb
+		gb = 1024 * mb
+	)
+	switch {
+	case n >= gb:
+		return trimFloat(float64(n)/float64(gb)) + " GB"
+	case n >= mb:
+		return trimFloat(float64(n)/float64(mb)) + " MB"
+	case n >= kb:
+		return trimFloat(float64(n)/float64(kb)) + " KB"
+	default:
+		return strconv.FormatInt(n, 10) + " B"
+	}
+}
+
+// trimFloat 四舍五入到两位小数，并用最短表示输出（"3" 而不是 "3.00"）。
+func trimFloat(v float64) string {
+	return strconv.FormatFloat(math.Round(v*100)/100, 'f', -1, 64)
 }
 
 // AnswerDescribe 一条代填的呈现形态：内容 → 触发词，参数屏与报告共用。
@@ -156,7 +184,7 @@ func ChineseAnswerWarning(p *contract.Plan, indexes []int) Line {
 	var b strings.Builder
 	b.WriteString(ansiYellow + "⚠ [locale] english = true，但代填值里有中文" + ansiReset + "\n")
 	b.WriteString("  english = true 时目标机的提示语一律英文，代填值（第 1 列）按英文准备才对：\n")
-	answers := planAnswers(p)
+	answers := p.Answers
 	for _, i := range indexes {
 		if i < 0 || i >= len(answers) {
 			continue
@@ -181,17 +209,6 @@ func ChineseAnswerCancelled() Line {
 // ChineseAnswerTrace 是取消时写进工具日志的那一句。
 func ChineseAnswerTrace() Line {
 	return Line{s: "执行已取消（english = true 与中文代填值同时给出）"}
-}
-
-// planAnswers 这张纸上配的代填表（命令与脚本载荷各一份，其余模式没有）。
-func planAnswers(p *contract.Plan) []contract.Answer {
-	switch {
-	case p.Task.Command != nil:
-		return p.Task.Command.Answers
-	case p.Task.Script != nil:
-		return p.Task.Script.Answers
-	}
-	return nil
 }
 
 // baseName 取路径最后一段：三种路径规则混着来（本机、远端、Windows 反斜杠），

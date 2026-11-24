@@ -8,9 +8,9 @@ package execute
 import (
 	"errors"
 	"fmt"
-	"math"
-	"strconv"
 	"strings"
+
+	"sshfleet2/internal/message"
 
 	"github.com/pkg/sftp"
 )
@@ -224,9 +224,9 @@ func spaceShortDetail(p string, avail, need int64, beforeWrite bool) string {
 	}
 	if beforeWrite {
 		return fmt.Sprintf("%s: %s available, %s needed; no file written",
-			p, humanBytes(avail), humanBytes(need))
+			p, message.BytesExact(avail), message.BytesExact(need))
 	}
-	return fmt.Sprintf("%s: %s available, %s left to send", p, humanBytes(avail), humanBytes(need))
+	return fmt.Sprintf("%s: %s available, %s left to send", p, message.BytesExact(avail), message.BytesExact(need))
 }
 
 // sftpAvail 问一次某条路径所在分区还能用多少字节；探不出来就返回 false。
@@ -252,30 +252,6 @@ func sftpAvail(client *sftpConn, p string, asRoot bool) (int64, bool) {
 // sftpProbe 把这条连接的探测包成 spaceShort 要的函数值。
 func sftpProbe(client *sftpConn) func(string, bool) (int64, bool) {
 	return func(p string, asRoot bool) (int64, bool) { return sftpAvail(client, p, asRoot) }
-}
-
-// humanBytes 报文里的人读大小：按量级选单位，保留两位小数，多余的零不写。
-func humanBytes(n int64) string {
-	const (
-		kb = int64(1024)
-		mb = 1024 * kb
-		gb = 1024 * mb
-	)
-	switch {
-	case n >= gb:
-		return trimFloat(float64(n)/float64(gb)) + " GB"
-	case n >= mb:
-		return trimFloat(float64(n)/float64(mb)) + " MB"
-	case n >= kb:
-		return trimFloat(float64(n)/float64(kb)) + " KB"
-	default:
-		return strconv.FormatInt(n, 10) + " B"
-	}
-}
-
-// trimFloat 四舍五入到两位小数，并用最短表示输出（"3" 而不是 "3.00"）。
-func trimFloat(v float64) string {
-	return strconv.FormatFloat(math.Round(v*100)/100, 'f', -1, 64)
 }
 
 // buildTransferOutput 传输明细文本：头部统计 + 逐文件行。

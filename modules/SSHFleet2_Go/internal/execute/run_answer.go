@@ -16,20 +16,9 @@ import (
 	"sshfleet2/internal/message"
 )
 
-// answersOf 这次配的代填表（命令与脚本载荷各一份）。
-func answersOf(p *contract.Plan) []contract.Answer {
-	switch {
-	case p.Task.Command != nil:
-		return p.Task.Command.Answers
-	case p.Task.Script != nil:
-		return p.Task.Script.Answers
-	}
-	return nil
-}
-
 // runAnswer 走交互分支跑这次的任务。
 func (c *client) runAnswer(ctx context.Context, p *contract.Plan, res *contract.NodeResult) {
-	answers := answersOf(p)
+	answers := p.Answers
 	out := &lockedBuffer{}
 	hook := newAnswerHook(out, answers, MatchOptions{Regex: p.Run.MatchRegex, CaseSensitive: p.Run.MatchCaseSensitive}, c.abortKeywords(p))
 	outcome, ok := c.runPTY(ctx, res, hook, len(answers)+1, p.Run.Downlink, seconds(p.Run.TimeoutExecute))
