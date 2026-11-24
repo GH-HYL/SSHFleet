@@ -142,16 +142,16 @@ func TestAnswerTableLandsOnPaper(t *testing.T) {
 	if fail != nil {
 		t.Fatalf("命令模式不该走到「起不来」：%v", message.CannotStartBody(*fail).Text())
 	}
-	if cmd.Task.Command == nil || len(cmd.Task.Command.Answers) != 1 {
-		t.Fatalf("命令载荷上没带代填表：%+v", cmd.Task.Command)
+	if cmd.Task.Command == nil || len(cmd.Answers) != 1 {
+		t.Fatalf("纸上没带代填表：%+v", cmd)
 	}
 
 	sh, _, fail := buildPlan(cfg, scan([]string{"sshfleet2", "-f", manifest, "-s", script, "-a", "y,继续"}))
 	if fail != nil {
 		t.Fatalf("脚本模式不该走到「起不来」：%v", message.CannotStartBody(*fail).Text())
 	}
-	if sh.Task.Script == nil || len(sh.Task.Script.Answers) != 1 {
-		t.Fatalf("脚本载荷上没带代填表：%+v", sh.Task.Script)
+	if sh.Task.Script == nil || len(sh.Answers) != 1 {
+		t.Fatalf("纸上没带代填表：%+v", sh)
 	}
 	// 给了 -a 之后 stdin 整条让给代填：下发行的正文已经编进命令行。
 	if sh.Run.Stdin != "" {

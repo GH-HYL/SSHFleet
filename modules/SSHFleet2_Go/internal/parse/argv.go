@@ -354,7 +354,7 @@ func materials(p *contract.Plan, cfg *settings, given map[string]bool, vals map[
 	// 上传并发建议：按总大小与配置阈值算，再按节点数封顶——所以它排在读清单之后。
 	applyUploadAdvice(p, cfg)
 
-	// 代填表（建站 05 的 05 号单）：`-a` 的值读成一行一条的表，装进命令／脚本载荷。
+	// 代填表（建站 05 的 05 号单）：`-a` 的值读成一行一条的表，归一进纸上的 `Answers` 那一格。
 	//
 	// 只在两种模式里读：`-a` 与上传、下载互斥，那两种搭配先由闸门报「互斥」——
 	// 在解析站抢先报「代填文件读不到」会把真正要说的那句话顶掉。
@@ -363,11 +363,7 @@ func materials(p *contract.Plan, cfg *settings, given map[string]bool, vals map[
 		if afail != nil {
 			return afail
 		}
-		if p.Task.Command != nil {
-			p.Task.Command.Answers = answers
-		} else {
-			p.Task.Script.Answers = answers
-		}
+		p.Answers = answers
 	}
 	return nil
 }

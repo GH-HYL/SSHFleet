@@ -172,7 +172,7 @@ func chineseAnswerGate(p *contract.Plan) (Refusal, message.Line) {
 		return nil, message.Line{}
 	}
 	var hit []int
-	for i, entry := range answersOf(p) {
+	for i, entry := range p.Answers {
 		if hasHan(entry.Value) {
 			hit = append(hit, i)
 		}
@@ -246,17 +246,6 @@ func concurrencyInEffect(p *contract.Plan) int {
 		return p.Run.Concurrency
 	}
 	return len(p.Nodes)
-}
-
-// answersOf 这次配的代填表（命令与脚本载荷各一份，其余模式没有）。
-func answersOf(p *contract.Plan) []contract.Answer {
-	switch {
-	case p.Task.Command != nil:
-		return p.Task.Command.Answers
-	case p.Task.Script != nil:
-		return p.Task.Script.Answers
-	}
-	return nil
 }
 
 // hasHan 字符串里有没有汉字（含扩展 A 区）。全角字母数字与标点不算。

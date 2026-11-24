@@ -30,19 +30,17 @@ type Task struct {
 	Path string
 }
 
-// CommandTask 命令模式：一条命令原文，外加这次要喂进去的代填表。
+// CommandTask 命令模式：一条命令原文。
 //
-// Answers 为空表示没给 `-a`（表在解析站按 `-a` 的原值解析一次放上来）。
+// 代填表不挂在载荷上：命令与脚本共用的那一份，随 `Plan.Answers` 走（一条来源）。
 type CommandTask struct {
-	Text    string
-	Answers []Answer
+	Text string
 }
 
 // ScriptTask 脚本模式：本地脚本路径与它的正文（正文只读一次，危险检测与下发用同一份）。
 type ScriptTask struct {
-	Path    string
-	Body    string
-	Answers []Answer
+	Path string
+	Body string
 }
 
 // UploadTask 上传模式：本机源路径，加上确认屏之前就采集好的那张表。

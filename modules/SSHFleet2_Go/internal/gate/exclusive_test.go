@@ -215,10 +215,8 @@ func TestNoShellDropsSudoUnderYes(t *testing.T) {
 // english 开着而代填值里有汉字：非交互直接取消（放行就是整批白跑）。
 func TestChineseAnswerCancelledUnderYes(t *testing.T) {
 	plan := planOf(contract.ModeCommand, func(p *contract.Plan) {
-		p.Task.Command = &contract.CommandTask{
-			Text:    "install.sh",
-			Answers: []contract.Answer{{Value: "是", Triggers: []string{"continue"}}},
-		}
+		p.Task.Command = &contract.CommandTask{Text: "install.sh"}
+		p.Answers = []contract.Answer{{Value: "是", Triggers: []string{"continue"}}}
 		p.Run.English = true
 	})
 	r, note := Run(plan, false)
@@ -233,10 +231,8 @@ func TestChineseAnswerCancelledUnderYes(t *testing.T) {
 // 触发词里有中文不算：服务端报文不受 english 影响，仍可能是中文。
 func TestChineseTriggerIsFine(t *testing.T) {
 	plan := planOf(contract.ModeCommand, func(p *contract.Plan) {
-		p.Task.Command = &contract.CommandTask{
-			Text:    "install.sh",
-			Answers: []contract.Answer{{Value: "y", Triggers: []string{"是否继续"}}},
-		}
+		p.Task.Command = &contract.CommandTask{Text: "install.sh"}
+		p.Answers = []contract.Answer{{Value: "y", Triggers: []string{"是否继续"}}}
 		p.Run.English = true
 	})
 	if r, _ := Run(plan, false); r != nil {

@@ -111,8 +111,8 @@ func TestLogSessionScriptAnswer(t *testing.T) {
 	p := sessionPlan(contract.ModeScript)
 	p.Task.Script = &contract.ScriptTask{
 		Path: "ask1.sh", Body: "#!/bin/bash\nread -p \"Continue? \" a\n",
-		Answers: []contract.Answer{{Value: "y", Triggers: []string{"Continue?", "Press enter to go on:"}}},
 	}
+	p.Answers = []contract.Answer{{Value: "y", Triggers: []string{"Continue?", "Press enter to go on:"}}}
 	p.Run.Answer = "y,Continue?,Press enter to go on:"
 	p.Run.Stdin = ""
 	p.Run.Downlink = "sh -c '... sudo bash -c \"$(printf %s IyEvYmlu | base64 -d)\" '\"'\"'ask1.sh'\"'\"''"
@@ -133,9 +133,9 @@ func TestLogSessionScriptAnswer(t *testing.T) {
 func TestLogSessionCommandAnswer(t *testing.T) {
 	p := sessionPlan(contract.ModeCommand)
 	p.Task.Command = &contract.CommandTask{
-		Text:    `read -p "Continue? " a; echo answer=$a`,
-		Answers: []contract.Answer{{Value: "y", Triggers: []string{"Continue?"}}},
+		Text: `read -p "Continue? " a; echo answer=$a`,
 	}
+	p.Answers = []contract.Answer{{Value: "y", Triggers: []string{"Continue?"}}}
 	p.Run.Answer = "y,Continue?"
 	p.Run.Stdin = ""
 
