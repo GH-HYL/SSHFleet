@@ -15,47 +15,45 @@ import (
 	"sshfleet2/internal/contract"
 )
 
+// sizeUnits 是 1024 进制的单位字母：K、M、G、T、P、E。
+const sizeUnits = "KMGTPE"
+
+// sizeString 把字节数写成大小：只此一套阶梯、一套「数值 + 空格 + 单位」的拼法。
+//
+// decimals 是小数位；trim 为真时去掉多余的零；ceiling 是最高单位档（0 只到 KB，2 到 GB，
+// len(sizeUnits)-1 到 EB）。小于 1KB 一律写整数加 ` B`——两档共用这一条。
+func sizeString(n int64, decimals int, trim bool, ceiling int) string {
+	const unit = int64(1024)
+	if n < unit {
+		return strconv.FormatInt(n, 10) + " B"
+	}
+	div, exp := unit, 0
+	for m := n / unit; m >= unit && exp < ceiling; m /= unit {
+		div *= unit
+		exp++
+	}
+	v := float64(n) / float64(div)
+	if trim {
+		scale := math.Pow(10, float64(decimals))
+		v = math.Round(v*scale) / scale
+		return strconv.FormatFloat(v, 'f', -1, 64) + " " + string(sizeUnits[exp]) + "B"
+	}
+	return strconv.FormatFloat(v, 'f', decimals, 64) + " " + string(sizeUnits[exp]) + "B"
+}
+
 // Bytes 把字节数写成大小：`12.3 KB`、`1.0 MB`，小于 1KB 写 `512 B`。
 //
 // 口径照老版 `common.FormatBytes`：1024 进制、一位小数、单位字母大写。
 func Bytes(n int64) string {
-	const unit = 1024
-	if n < unit {
-		return fmt.Sprintf("%d B", n)
-	}
-	div, exp := int64(unit), 0
-	for m := n / unit; m >= unit; m /= unit {
-		div *= unit
-		exp++
-	}
-	return fmt.Sprintf("%.1f %cB", float64(n)/float64(div), "KMGTPE"[exp])
+	return sizeString(n, 1, false, len(sizeUnits)-1)
 }
 
-// BytesExact 是报文里的大小：与 Bytes 同一套进制与单位，保留两位小数、多余的零不写。
+// BytesExact 是报文里的大小：`1.54 MB`、`3 MB`，小于 1KB 写 `512 B`。
 //
-// 与 Bytes 只差精度，不是第二种写法：屏上的版面用一位小数，报文里的「还差多少、装不装得下」
-// 要精确值。两个入口都在这里，改口径只改这个包。
+// 与 Bytes 共用同一套阶梯与拼法，只差两处：小数位（两位、去零）与最高单位档（到 GB——
+// 报文只判「还差多少」，再往上爬一格不会更好读）。
 func BytesExact(n int64) string {
-	const (
-		kb = int64(1024)
-		mb = 1024 * kb
-		gb = 1024 * mb
-	)
-	switch {
-	case n >= gb:
-		return trimFloat(float64(n)/float64(gb)) + " GB"
-	case n >= mb:
-		return trimFloat(float64(n)/float64(mb)) + " MB"
-	case n >= kb:
-		return trimFloat(float64(n)/float64(kb)) + " KB"
-	default:
-		return strconv.FormatInt(n, 10) + " B"
-	}
-}
-
-// trimFloat 四舍五入到两位小数，并用最短表示输出（"3" 而不是 "3.00"）。
-func trimFloat(v float64) string {
-	return strconv.FormatFloat(math.Round(v*100)/100, 'f', -1, 64)
+	return sizeString(n, 2, true, 2)
 }
 
 // AnswerDescribe 一条代填的呈现形态：内容 → 触发词，参数屏与报告共用。
