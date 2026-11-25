@@ -68,7 +68,7 @@ func TestKeyRunRefusesTwoTools(t *testing.T) {
 	}
 	for _, want := range []string{
 		"选项/参数合规性检查未通过：",
-		"--gen-key、--key-status 只能给一个——它们是三个独立命令，一次做一件事",
+		"--gen-key、--key-status 只能给一个：它们是三个独立命令",
 	} {
 		if !strings.Contains(message.CannotStartBody(*fail).Text(), want) {
 			t.Fatalf("那一屏缺「%s」：%q", want, message.CannotStartBody(*fail).Text())

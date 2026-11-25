@@ -14,7 +14,7 @@ import (
 
 // AnswerFileUnreadable `-a` 给的路径读不到（问题 / 原因 / 提示三段）。
 func answerfileunreadable(path, reason string) string {
-	return problem("-a 参数指定的文件读不到："+path, reason,
+	return problem("-a 参数指定的代填文件读不到："+path, reason,
 		"请检查文件是否存在、当前用户有没有读权限")
 }
 
@@ -32,7 +32,7 @@ func answerinlinehasnewline() string {
 
 // AnswerGone 既不是文件、也不像一条代填记录。原因取系统那一句（ADR-0025 决定六）。
 func answergone(raw, reason string) string {
-	return problem("-a 参数指定的文件读不到："+raw, reason,
+	return problem("-a 参数指定的代填文件读不到："+raw, reason,
 		"直接写代填内容就用逗号分隔：代填内容,触发词,触发词")
 }
 
@@ -81,7 +81,7 @@ func answerempty(where string) string {
 // AnswerMissingTrigger 整表复查时发现第 n 条缺触发词。
 func answermissingtrigger(n int, value string) string {
 	return problemhint("-a 第 "+itoa(n)+" 条代填缺少触发词："+value,
-		"触发词是唯一的门控，没有它等于无条件盲填")
+		"触发词决定什么时候填；不写，这一条碰到什么提示都会填")
 }
 
 // AnswerBadRegex 正则口径下触发词写不成一个合法正则：本地就拦下，不留到运行期静默不匹配。

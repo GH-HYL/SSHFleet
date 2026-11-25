@@ -112,7 +112,7 @@ func RefuseModeNone() FatalBody {
 func RefuseModeMultiple() FatalBody {
 	return shell(HeadCompliance, problemhint(
 		modeMutual,
-		"一次只能做一件事，请只保留一个模式"))
+		"请只保留一个模式"))
 }
 
 // RefuseNoShellWithOtherMode `--no-shell` 只和 `-c` 一起用。

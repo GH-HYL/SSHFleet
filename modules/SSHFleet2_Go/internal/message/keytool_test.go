@@ -95,7 +95,7 @@ func TestKeyPrecheckTrace(t *testing.T) {
 // 命令不合规那两句：与老版逐字相同。
 func TestKeyToolComplaints(t *testing.T) {
 	if got, want := keytoolneedalone("--gen-key、--key-status"),
-		"--gen-key、--key-status 只能给一个——它们是三个独立命令，一次做一件事"; got != want {
+		"--gen-key、--key-status 只能给一个：它们是三个独立命令"; got != want {
 		t.Fatalf("互斥那句不对：\n got %q\nwant %q", got, want)
 	}
 	if got, want := keytoolwithbatch("--key-status", "-c、-r"),
@@ -142,7 +142,7 @@ func TestKeyGenSavedBothPlatforms(t *testing.T) {
 	posix := KeyGenSaved(false, facts, contract.PersistResult{Where: "/home/u/.bashrc"}, "44444444").Text()
 	wantPosix := "主密钥已生成，并自动保存到 /home/u/.bashrc\n" +
 		"请执行 source /home/u/.bashrc 或重新打开终端后生效\n" +
-		keyEscYellow + "注意：在此之前，本次运行读到的仍是旧密钥，执行 --convert-secret 会被拦下（避免加密出将来看不开的文件）" + keyEscReset + "\n" +
+		keyEscYellow + "注意：在此之前，本次运行读到的仍是旧密钥，执行 --convert-secret 会被拦下（避免加密出将来解不开的文件）" + keyEscReset + "\n" +
 		"  新密钥指纹：44444444\n"
 	if posix != wantPosix {
 		t.Fatalf("POSIX 收尾不对：\n got %q\nwant %q", posix, wantPosix)
@@ -154,7 +154,7 @@ func TestKeyGenSavedBothPlatforms(t *testing.T) {
 	win := KeyGenSaved(true, winFacts, contract.PersistResult{Where: `注册表 HKCU\Environment`}, "55555555").Text()
 	wantWin := "主密钥已重新生成，并写入本机（HKCU\\Environment）\n" +
 		"请重新打开终端后再使用：当前终端的环境变量仍是旧密钥\n" +
-		keyEscYellow + "注意：在此之前，本次运行读到的仍是旧密钥，执行 --convert-secret 会被拦下（避免加密出将来看不开的文件）" + keyEscReset + "\n" +
+		keyEscYellow + "注意：在此之前，本次运行读到的仍是旧密钥，执行 --convert-secret 会被拦下（避免加密出将来解不开的文件）" + keyEscReset + "\n" +
 		"  新密钥指纹：55555555\n"
 	if win != wantWin {
 		t.Fatalf("Windows 收尾不对：\n got %q\nwant %q", win, wantWin)
@@ -170,7 +170,7 @@ func TestKeyConvertScreens(t *testing.T) {
 		t.Fatalf("已是明文那句不对：got %q want %q", got, want)
 	}
 	if got, want := KeyConvertDone("明文", "密文", "/x/sec", 9).Text(),
-		"转换成功：明文 → 密文：/x/sec\n内容长度：9 字符，请用编辑器打开该文件确认结果\n"; got != want {
+		"转换成功：明文 → 密文，文件：/x/sec\n内容长度：9 字符，请用编辑器打开该文件确认结果\n"; got != want {
 		t.Fatalf("成功那两行不对：\n got %q\nwant %q", got, want)
 	}
 	cases := map[contract.CredFileProblem]string{

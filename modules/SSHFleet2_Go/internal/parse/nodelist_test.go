@@ -159,7 +159,7 @@ func TestBuildNodesCollectsAllErrors(t *testing.T) {
 		"发现以下错误:",
 		"行 1 (IP: 10.0.0.1): - 端口必须是1-65535之间的整数",
 		"行 2 (IP: 10.0.0.300): - IP格式不正确",
-		"行 3 (IP: 空值): - IP必须存在",
+		"行 3 (IP: 空值): - IP 没写",
 	} {
 		if !strings.Contains(say, want) {
 			t.Fatalf("少了这一段：%q\n实际：%s", want, say)

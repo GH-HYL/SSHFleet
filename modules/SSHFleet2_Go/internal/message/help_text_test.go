@@ -42,7 +42,7 @@ func TestHelpDescNoSudoFollowsConfig(t *testing.T) {
 	if got, _ := HelpDesc("--no-sudo", false); got != "这次以登录用户身份执行" {
 		t.Fatalf("配置关时 --no-sudo：%q", got)
 	}
-	if got, _ := HelpDesc("--no-sudo", true); got != "这次以登录用户身份执行（配置是开时用它改回来）" {
+	if got, _ := HelpDesc("--no-sudo", true); got != "这次以登录用户身份执行（配置里 sudo 开着时，用它临时改回来）" {
 		t.Fatalf("配置开时 --no-sudo：%q", got)
 	}
 }

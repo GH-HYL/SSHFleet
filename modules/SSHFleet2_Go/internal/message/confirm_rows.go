@@ -189,7 +189,7 @@ func ChineseAnswerWarning(p *contract.Plan, indexes []int) Line {
 		}
 		b.WriteString("    第 " + strconv.Itoa(i+1) + " 条代填值是「" + answers[i].Value + "」\n")
 	}
-	b.WriteString("  触发词不受此限——服务端报文（如密码过期）不受 english 影响，仍可能是中文。\n")
+	b.WriteString("  触发词不受此限——目标机回的原话（如密码过期）不受 english 影响，仍可能是中文。\n")
 	b.WriteString("  要跑中文代填值，请把配置里 [locale] 的 english 改成 false。\n")
 	return Line{s: b.String()}
 }

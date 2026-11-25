@@ -53,7 +53,7 @@ func reasonText(r contract.CannotStartReason) string {
 	case contract.CannotStartPasswdEmptyStep:
 		return "改密配置里一条 step 都没有：" + r.Origin + hintTail("至少留一条 [[step]]")
 	case contract.CannotStartPasswdNoSignal:
-		return "改密缺少入场信号" + reasonTail("判据文件里「密码过期」分类没有关键词，工具认不出哪台机器要改密") +
+		return "改密缺少触发条件" + reasonTail("判据文件里「密码过期」分类没有关键词，工具认不出哪台机器要改密") +
 			hintTail("该分类在 config/keywords_error.conf，别删它")
 
 	// 改密提示词表的条目层：前缀是「改密配置第 N 条 step：」。
@@ -111,7 +111,7 @@ func reasonText(r contract.CannotStartReason) string {
 	case contract.CannotStartNoNodeParsed:
 		return NoNodeParsed
 	case contract.CannotStartManifestRead:
-		return "读取内容时发生错误: " + r.Origin
+		return "读取 CSV 失败：" + r.Origin
 
 	// 材料自检：`-s` 那份脚本。
 	case contract.CannotStartScriptIsDir:
@@ -164,9 +164,9 @@ func reasonText(r contract.CannotStartReason) string {
 	case contract.CannotStartUploadRootIsLink:
 		return "没有可上传的文件：-u 指定的路径本身是软链接/快捷方式：" + r.Place
 	case contract.CannotStartUploadSpecialType:
-		return "不支持的文件类型: " + r.Place + " (FIFO/device/socket)"
+		return "-u 参数指定的路径不是普通文件（是管道、设备或套接字）：" + r.Place
 	case contract.CannotStartUploadFileUnreadable:
-		return "文件不可读: " + r.Place + ": " + r.Origin
+		return "-u 参数指定的文件读不了：" + r.Place + reasonTail(r.Origin)
 	case contract.CannotStartUploadDirUnreadable:
 		return "-u 参数指定的上传目录读不了：" + r.Place + reasonTail(r.Origin) +
 			hintTail("请检查目录的读权限")
@@ -329,7 +329,7 @@ func rowItemsText(items []contract.CannotStartReason) string {
 func rowItemText(r contract.CannotStartReason) string {
 	switch r.Kind {
 	case contract.CannotStartRowIPMissing:
-		return "IP必须存在"
+		return "IP 没写"
 	case contract.CannotStartRowIPBad:
 		return "IP格式不正确"
 	case contract.CannotStartRowPortBad:

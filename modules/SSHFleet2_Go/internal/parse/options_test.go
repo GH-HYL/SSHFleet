@@ -72,7 +72,7 @@ func TestHelpEntriesTagsFollowConfig(t *testing.T) {
 		if e.Long == "--sudo" && e.Tag != "[当前配置: 开]" {
 			t.Errorf("配置开时 sudo 标记：%q", e.Tag)
 		}
-		if e.Long == "--no-sudo" && e.Desc != "这次以登录用户身份执行（配置是开时用它改回来）" {
+		if e.Long == "--no-sudo" && e.Desc != "这次以登录用户身份执行（配置里 sudo 开着时，用它临时改回来）" {
 			t.Errorf("配置开时 no-sudo 说明：%q", e.Desc)
 		}
 		if e.Long == "--timeout" && e.Tag != "[默认: 60/300]" {
@@ -102,7 +102,7 @@ func TestHelpEntriesVerbatim(t *testing.T) {
 		"--csv-file":        "节点清单：CSV 文件路径，或直接写一行节点信息（必填）",
 		"--number":          "并发数：同时操作几台，不填=全部并行",
 		"--answer":          "代填：看到触发词就自动填内容（一条写成「代填内容,触发词,触发词」），多条写进 CSV 文件再指向它",
-		"--key":             "密钥登录：不写=只用密码；写了=用清单或配置里的私钥",
+		"--key":             "密钥登录：不加只用密码；加了就用清单或配置里的私钥",
 		"--gen-key":         "生成主密钥（打开加密之后才会用到），密钥存进环境变量 SSHFLEET_KEY",
 		"--convert-secret":  "转换凭据文件（后面跟要转的文件路径）：按配置里的加密开关，转成明文或密文",
 	}

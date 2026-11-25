@@ -27,7 +27,7 @@ const ManifestGoneHint = "请检查路径是否写对；如果是内联写法，
 // 这一处不是「这一行的写法错了」，是配置缺了一项：所以句子只说找谁配、或改写成绝对路径，
 // 不催使用者去改清单。
 func CredentialRelativeWithoutSecretDir() string {
-	return "写的是相对路径，但配置里没配 credential.secret_dir（提示：在配置的 [credential] 段配上 secret_dir，或这一格改写本机绝对路径）"
+	return "写的是相对路径，但配置里没配 credential.secret_dir；在配置的 [credential] 段配上 secret_dir，或把这一格改写成本机绝对路径"
 }
 
 // ManifestHeaderDropped 是「第一行不是 IP，已当表头移除」那一行提示。
@@ -36,7 +36,6 @@ func CredentialRelativeWithoutSecretDir() string {
 // 解站自己不写终端，这一屏挂在纸上，由塔尖打出去（Plan.Notices）。
 func manifestheaderdropped() Line {
 	s := ansiCyan + "[INFO]" + ansiReset +
-		ansiYellow + " [function:read_nodes_infos]" + ansiReset +
 		" 第一行不是IP格式，已移除表头行\n"
 	return Line{s: s}
 }

@@ -35,7 +35,7 @@ var helpDescs = map[string]string{
 	"--no-shell":        "不套工具的外壳、不设环境：命令原样下发；只能和 -c 一起用",
 	"--timeout":         "命令跑完、文件传完的最长等待（秒）",
 	"--connect-timeout": "连上服务器的最长等待（秒）",
-	"--key":             "密钥登录：不写=只用密码；写了=用清单或配置里的私钥",
+	"--key":             "密钥登录：不加只用密码；加了就用清单或配置里的私钥",
 	"--gen-key":         "生成主密钥（打开加密之后才会用到），密钥存进环境变量 SSHFLEET_KEY",
 	"--key-status":      "查看主密钥状态：读到哪把、已存哪把、是否一致",
 	"--convert-secret":  "转换凭据文件（后面跟要转的文件路径）：按配置里的加密开关，转成明文或密文",
@@ -58,7 +58,7 @@ func HelpDesc(long string, sudoOn bool) (string, bool) {
 // noSudoDesc 是 `--no-sudo` 那一句的两版。
 func noSudoDesc(sudoOn bool) string {
 	if sudoOn {
-		return "这次以登录用户身份执行（配置是开时用它改回来）"
+		return "这次以登录用户身份执行（配置里 sudo 开着时，用它临时改回来）"
 	}
 	return "这次以登录用户身份执行"
 }

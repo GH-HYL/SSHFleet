@@ -32,7 +32,7 @@ func KeyModeEntered(which contract.KeyTool) Line {
 //
 // 这句走「起不来」，环节名 cli，外壳句由调用方套（选项/参数合规性检查未通过）。
 func keytoolneedalone(names string) string {
-	return names + " 只能给一个——它们是三个独立命令，一次做一件事"
+	return names + " 只能给一个：它们是三个独立命令"
 }
 
 // KeyToolWithBatch 是密钥命令与批量执行参数一起给那句。given 是给出来的那几个选项名。
@@ -60,7 +60,7 @@ func KeyStatusReport(f contract.KeyFacts) Line {
 	case contract.KeyStateStaleShell:
 		b.WriteString(ansiYellow + "主密钥状态：已保存，但当前终端没读到" + ansiReset + "\n")
 		b.WriteString(keySourceLines(f))
-		b.WriteString("  原因：生成密钥后忘了让它生效（这就是「改了密钥反而不能用」的典型场景）\n")
+		b.WriteString("  原因：生成密钥后忘了让它生效\n")
 		b.WriteString("  下一步：" + keyReloadHint(f) + "；本机已有密钥，不需要 --gen-key\n")
 	case contract.KeyStateUnpersisted:
 		b.WriteString(ansiYellow + "主密钥状态：未持久化" + ansiReset + "\n")
@@ -248,7 +248,7 @@ func KeyGenSaved(regenerated bool, f contract.KeyFacts, res contract.PersistResu
 		}
 		b.WriteString(fmt.Sprintf("请执行 source %s 或重新打开终端后生效\n", res.Where))
 	}
-	b.WriteString(ansiYellow + "注意：在此之前，本次运行读到的仍是旧密钥，执行 --convert-secret 会被拦下（避免加密出将来看不开的文件）" + ansiReset + "\n")
+	b.WriteString(ansiYellow + "注意：在此之前，本次运行读到的仍是旧密钥，执行 --convert-secret 会被拦下（避免加密出将来解不开的文件）" + ansiReset + "\n")
 	b.WriteString(fmt.Sprintf("  新密钥指纹：%s\n", print))
 	return Line{s: b.String()}
 }
@@ -333,6 +333,6 @@ func keyconvertverifyfailed(path, reason string) string {
 
 // KeyConvertDone 是转换成功那两行：方向与路径、内容长度（不回显内容本体）。
 func KeyConvertDone(from, to, path string, length int) Line {
-	return Line{s: fmt.Sprintf("转换成功：%s → %s：%s\n内容长度：%d 字符，请用编辑器打开该文件确认结果\n",
+	return Line{s: fmt.Sprintf("转换成功：%s → %s，文件：%s\n内容长度：%d 字符，请用编辑器打开该文件确认结果\n",
 		from, to, path, length)}
 }
