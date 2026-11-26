@@ -6,14 +6,22 @@
    否则不要跑本脚本、不要动 release/、也不要因为「产物没更新」而去重跑它。
 
 用法：
-    python tools/release/release.py            # 交互选档位，回车即发布
-    python tools/release/release.py --dry-run  # 只打印将要做什么，不落地
-    python tools/release/release.py --pack-only     # 只按当前树打包
-    python tools/release/release.py --publish-only  # 只推 tag 并建 Release
+    python tools/release/release.py     # 不带参数，跑起来按屏幕上的 1/2/3 选
 
-它做的事，按顺序：校验 → 定号 → 封段 → 插新未发布区 → 改入口版本常量
-→ 提交 → 打 tag → 两个平台编译打包 → 校验产物非空 → 推 tag 到两个远端
-→ GitHub 建 Release 传附件 → Gitee 建 Release 传附件。
+第一问是「这一轮做到哪一步」：
+
+1) 定版并发布：校验 → 定号 → 封段 → 插新未发布区 → 改入口版本常量
+   → 提交 → 打 tag → 两个平台编译打包 → 校验产物非空 → 推 tag 到两个远端
+   → GitHub 建 Release 传附件 → Gitee 建 Release 传附件。选完这一项才问档位，
+   再问先演一遍还是真做。
+2) 只打包：编译 + 在 release/ 出两只快照包，全程不碰仓库——不提交、不打 tag、
+   不推、不建 Release。号取 CHANGELOG 顶部最近一个已发布段，包名在这个号后面
+   紧跟 `-dev`：SSHFleet_1.0.1-dev_<时间戳>_windows.zip，与正式包
+   SSHFleet_1.0.1_<时间戳>_windows.zip 分得开。
+3) 只发布：老线收尾用。封版与打 tag 在 tag 那棵树上做，包也在那棵树上编，而主线
+   上的 CHANGELOG 已是封好段的样子；这一项取顶部号与 release/ 里已有的正式包，
+   只推 tag、建两个 Release。
+0) 看完整说明。
 
 令牌两处都认，优先级：环境变量 GITHUB_TOKEN / GITEE_TOKEN，
 其次 ~/.git-credentials 里 https://<user>:<token>@<host> 那行的密码位。
@@ -47,7 +55,6 @@ GitHub 要「Contents: Read and write」，Gitee 要 projects 权限。
 
 from __future__ import annotations
 
-import argparse
 import json
 import os
 import re
@@ -75,6 +82,11 @@ MAIN_GO = MOD / "main.go"
 APP_NAME = "SSHFleet"
 PLATFORMS = ("windows", "linux")
 DEFAULT_VER = "1.0.0"
+# 快照包与正式包靠这一段分开：正式包名是 SSHFleet_<号>_<时间戳>_<平台>，
+# 快照包是 SSHFleet_<号>-dev_<时间戳>_<平台>。号后面的位置一改，
+# collect_assets 按 `<号>_*` 就挑不到快照包，不会误当正式附件发出去。
+DEV_SUFFIX = "-dev"
+TS_FMT = "%Y-%m-%d_%H-%M-%S"
 
 # 包里要放哪几份配置：**一处定**，前置检查与打包都读它。
 # 漏一份的下场不一样：前置检查没查到的，打包时 shutil.copy2 抛 traceback，
@@ -321,15 +333,15 @@ def package(go: str, version: str, ts: str) -> list[Path]:
     for plat in PLATFORMS:
         name = f"{APP_NAME}_{version}_{ts}_{plat}"
         pkg = REL / name
-        step(f"[发布] 组装 release/{name} ...")
+        step(f"[打包] 组装 release/{name} ...")
         stage_pkg(pkg, plat)
         if plat == "windows":
             dst = REL / f"{name}.zip"
-            step(f"[发布] 打包 {dst.name} ...")
+            step(f"[打包] 打包 {dst.name} ...")
             make_zip(pkg, dst)
         else:
             dst = REL / f"{name}.tar.gz"
-            step(f"[发布] 打包 {dst.name} ...")
+            step(f"[打包] 打包 {dst.name} ...")
             make_targz(pkg, dst)
         check_size(dst)
         made.append(dst)
@@ -521,8 +533,8 @@ def publish(version: str, assets: list[Path]) -> None:
 
 
 # ---- 单独跑其中一段 --------------------------------------------------------
-# 老线收尾时用：封版与打 tag 在 tag 那棵树上做，包也得在那棵树上编，
-# 而主线上的 CHANGELOG 已经是封好段的样子。所以拆成「只打包」「只发布」两个入口。
+# 菜单里的第 2、3 项走这里。老线收尾时用：封版与打 tag 在 tag 那棵树上做，
+# 包也得在那棵树上编，而主线上的 CHANGELOG 已经是封好段的样子。
 
 
 def top_version() -> str:
@@ -580,57 +592,69 @@ def choose_tier(base: tuple[int, int, int]) -> int:
     return int(s)
 
 
-def main() -> None:
-    ap = argparse.ArgumentParser(add_help=False)
-    ap.add_argument("--dry-run", action="store_true")
-    ap.add_argument("--pack-only", action="store_true",
-                    help="只按当前树打包，不封段、不提交、不打 tag、不推")
-    ap.add_argument("--publish-only", action="store_true",
-                    help="只推 tag 并建 Release，包取 release/ 下已有的")
-    ap.add_argument("-h", "--help", action="store_true")
-    args = ap.parse_args()
-    if args.help:
-        print(__doc__)
-        return
+def ask_mode() -> str:
+    """第一问：这一轮做到哪一步。返回 1/2/3。"""
+    while True:
+        print("\n这一轮做到哪一步？")
+        print("  1) 定版并发布   封段、改号、提交、打 tag、打包，推两个远端并建 Release")
+        print(f"  2) 只打包       编译 + 在 release/ 出两只 {DEV_SUFFIX} 快照包，不碰仓库")
+        print("  3) 只发布       用 release/ 里已有的正式包，推 tag、建两个 Release")
+        print("  0) 看完整说明")
+        s = input("> ").strip()
+        if s == "0":
+            print("\n" + (__doc__ or ""))
+            continue
+        if s in ("1", "2", "3"):
+            return s
+        die(f"没看懂这个选项：{s}")
 
-    try:
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[attr-defined]
-    except Exception:
-        pass
 
-    # 老线收尾用：封版在 tag 那棵树上，主线只留封好段的 CHANGELOG。
-    # 这时整条链走不通，拆成两段分别跑。
-    if args.publish_only:
-        ver = top_version()
-        assets = collect_assets(ver)
-        step(f"发布 v{ver}，附件：{', '.join(a.name for a in assets)}")
-        publish(ver, assets)
-        return
+def ask_simulate() -> bool:
+    """定版并发布之前：先演一遍，还是真做。"""
+    print("\n1) 先演一遍（只打印将要做什么，不改文件、不碰仓库）")
+    print("2) 真做")
+    s = input("> ").strip()
+    if s not in ("1", "2"):
+        die(f"没看懂这个选项：{s}")
+    return s == "1"
 
-    if args.pack_only:
-        ver = top_version()
-        check_app_version(ver)
-        go = pick_go()
-        made = package(go, ver, datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
-        print(f"\n打包完成（{REL}）：")
-        for p in made:
-            print(f"  {p.name}  {p.stat().st_size / 1024 / 1024:.1f} MB")
-        return
 
+def run_pack_only() -> None:
+    """只打包：编译 + 出两只快照包，不带任何仓库动作。"""
+    ver = top_version()
+    check_app_version(ver)
+    go = pick_go()
+    made = package(go, f"{ver}{DEV_SUFFIX}", datetime.now().strftime(TS_FMT))
+    print(f"\n打包完成（{REL}）：")
+    for p in made:
+        print(f"  {p.name}  {p.stat().st_size / 1024 / 1024:.1f} MB")
+    print(f"[完成] 快照包 v{ver}{DEV_SUFFIX}：没提交、没打 tag、没推")
+
+
+def run_publish_only() -> None:
+    """只发布：取顶部号与 release/ 里已有的正式包，推 tag、建两个 Release。"""
+    ver = top_version()
+    assets = collect_assets(ver)
+    step(f"发布 v{ver}，附件：{', '.join(a.name for a in assets)}")
+    publish(ver, assets)
+
+
+def run_release(dry: bool) -> None:
+    """定版并发布：封段 → 改号 → 提交打 tag → 打包 → 推 tag → 建两个 Release。"""
     base, undone, days = read_state()
     items = len(RE_ITEM.findall(undone))
-    if items == 0 and not args.dry_run:
+    if items == 0 and not dry:
         if undone.strip():
             die("`## 未发布` 区里有内容，但没有一条以 `- ` 开头的条目。\n"
                 "      写法：`### yyyy-MM-dd` 单独一行写日期，条目一律以 `- ` 开头。")
         die("`## 未发布` 区里没有条目，没东西可发")
 
     precheck()
-    go = pick_go() if not args.dry_run else "go"
+    go = pick_go() if not dry else "go"
 
     span = f"，覆盖 {len(days)} 天" if days else ""
     print(f"\n未发布区：{items} 条{span}")
-    if not args.dry_run:
+    if not dry:
         precheck_publish()  # 缺远端、缺令牌要在封段之前死，别发出半个版
     tier = choose_tier(base)
 
@@ -643,12 +667,12 @@ def main() -> None:
         print("已取消，什么都没改。")
         return
 
-    if args.dry_run:
+    if dry:
         gh_remote = remote_for_host("github.com") or "<未配>"
         ge_remote = remote_for_host("gitee.com") or "<未配>"
         gh_token = "已获取" if resolve_token("GITHUB_TOKEN", "github.com") else "未找到"
         ge_token = "已获取" if resolve_token("GITEE_TOKEN", "gitee.com") else "未找到"
-        print("\n[dry-run] 只演不练，以下动作未执行：")
+        print("\n[演一遍] 只演不练，以下动作未执行：")
         print(f"  封段：## 未发布 → ## [{version}] - {today}，并在其上插入新的 ## 未发布")
         print(f"  改号：main.go 的 appVersion → {version}")
         print(f"  提交：chore(发布): 定版 {version}")
@@ -659,7 +683,7 @@ def main() -> None:
         print("  传附件：上面打出来的两只包")
         return
 
-    ts = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    ts = datetime.now().strftime(TS_FMT)
 
     seal_changelog(version, today)
     set_app_version(version)
@@ -675,6 +699,25 @@ def main() -> None:
     for p in made:
         print(f"  {p.name}  {p.stat().st_size / 1024 / 1024:.1f} MB")
     print(f"[完成] {version} 已推 tag、两个远端都已建 Release 并传附件")
+
+
+def main() -> None:
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[attr-defined]
+    except Exception:
+        pass
+
+    # 不收参数：老习惯敲 --pack-only / --dry-run 的，这句直接指回菜单，免得它干等输入。
+    if len(sys.argv) > 1:
+        die("这个脚本不收参数：直接跑起来，按屏幕上的 1/2/3 选。")
+
+    mode = ask_mode()
+    if mode == "2":
+        run_pack_only()
+    elif mode == "3":
+        run_publish_only()
+    else:
+        run_release(ask_simulate())
 
 
 if __name__ == "__main__":
