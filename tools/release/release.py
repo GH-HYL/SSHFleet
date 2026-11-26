@@ -78,6 +78,8 @@ OUT = ROOT / "build"
 REL = ROOT / "release"
 CHANGELOG = ROOT / "CHANGELOG.md"
 MAIN_GO = MOD / "main.go"
+INSTALL_SH = ROOT / "tools" / "release" / "install.sh"
+OPTIONS_GO = MOD / "internal" / "parse" / "options.go"
 
 APP_NAME = "SSHFleet"
 PLATFORMS = ("windows", "linux")
@@ -100,6 +102,12 @@ RE_NEXT_H2 = re.compile(r"^## ", re.M)
 RE_DAY = re.compile(r"^### (\d{4}-\d{2}-\d{2})\s*$", re.M)
 RE_ITEM = re.compile(r"^- ", re.M)
 RE_APPVER = re.compile(r'^const appVersion = "([^"]*)"', re.M)
+# 选项表：块里的每一行都是 `{"-c", "--command", true, 1},`，短名可能为空。
+# 补全脚本里的候选从这张表现取，不再另抄一份选项名。
+RE_OPTIONS_BLOCK = re.compile(r"var options = \[\]option\{\n(.*?)\n\}", re.S)
+RE_OPTION_ROW = re.compile(
+    r'^\s*\{\s*"([^"]*)"\s*,\s*"(--[^"]+)"\s*,\s*(?:true|false)\s*,\s*\d+\s*\},?\s*$'
+)
 
 
 def die(msg: str) -> "NoReturn":  # noqa: F821
@@ -261,6 +269,40 @@ def copy_or_die(src: Path, dst: Path) -> None:
     shutil.copy2(src, dst)
 
 
+def read_option_words() -> str:
+    """从选项表取命令行上能敲的那些名字，按表的顺序拼成一行，给补全脚本当候选。"""
+    text = read_text(OPTIONS_GO).replace("\r\n", "\n")
+    m = RE_OPTIONS_BLOCK.search(text)
+    if not m:
+        die(f"读不出选项表：{OPTIONS_GO}")
+
+    words: list[str] = []
+    for line in m.group(1).split("\n"):
+        s = line.strip()
+        if not s or s.startswith("//"):
+            continue
+        r = RE_OPTION_ROW.match(line)
+        if not r:
+            die(f"选项表这一行认不出，补全没法生成：{s}")
+        if r.group(1):
+            words.append(r.group(1))
+        words.append(r.group(2))
+
+    if not words:
+        die(f"选项表是空的：{OPTIONS_GO}")
+    return " ".join(words)
+
+
+def stage_linux_install(pkg: Path) -> None:
+    """按 options.go 生成这一份安装脚本，放进 Linux 包。"""
+    tpl = read_text(INSTALL_SH).replace("\r\n", "\n")
+    if "@OPTIONS@" not in tpl:
+        die(f"安装脚本里没有 @OPTIONS@ 占位：{INSTALL_SH}")
+    body = tpl.replace("@OPTIONS@", read_option_words())
+    with open(pkg / "install.sh", "w", encoding="utf-8", newline="\n") as f:
+        f.write(body)
+
+
 def stage_pkg(pkg: Path, platform: str) -> None:
     (pkg / "config").mkdir(parents=True, exist_ok=True)
     (pkg / "docs").mkdir(parents=True, exist_ok=True)
@@ -276,6 +318,10 @@ def stage_pkg(pkg: Path, platform: str) -> None:
     shutil.copy2(OUT / binname, pkg / binname)
     # 出厂配置按平台取模板；工作区里那份 config/SSHFleet.conf 是作者本机在用的，不随包发布
     copy_or_die(CFG / PKG_PROFILE.format(platform=platform), pkg / "config" / "SSHFleet.conf")
+
+    # 安装脚本只进 Linux 包：Windows 包照老样子解压即用
+    if platform == "linux":
+        stage_linux_install(pkg)
 
 
 def make_zip(src: Path, dst: Path) -> None:

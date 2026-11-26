@@ -10,6 +10,12 @@
 
 ## 未发布
 
+### 2026-11-26
+
+#### Added
+
+- **Linux 包带一键安装脚本**：解压后执行 `./install.sh`，root 装到 `/bin`、普通用户装到 `~/.local/bin`（不在 PATH 时自动加好），并装好 `SSHFleet` 的 Tab 补全；Windows 包不变。
+
 ### 2026-11-25
 
 #### Changed

@@ -85,6 +85,8 @@ SSHFleet 是一个 **SSH 批量运维工具**：一条命令，批量操作清�
    docs/                         # 六册手册
    ```
 
+   Linux 包解压后，在解压出来的目录里执行 `./install.sh`：root 装到 `/bin/SSHFleet`、普通用户装到 `~/.local/bin/SSHFleet`，并顺带装好命令补全。Windows 包不需要这一步。
+
 3. 修改 `config/SSHFleet.conf` 里的登录用户、SSH 端口、密码三项（都在基础配置），详见 [2 基础配置手册](docs/2-基础配置手册.md) 的「1 基础配置」。
 4. **在这个目录里**运行它。最小用法就是连一台机器、跑一条命令：
 
@@ -99,8 +101,6 @@ SSHFleet 是一个 **SSH 批量运维工具**：一条命令，批量操作清�
    ```bat
    SSHFleet.exe -f 192.168.1.10 -c "uptime"
    ```
-
-   想把 `SSHFleet` 装成随处能敲的命令：复制到 `PATH` 里的目录（如 `/usr/local/bin`）再 `chmod +x`。
 
 > [!IMPORTANT]
 > **关于配置文件**
