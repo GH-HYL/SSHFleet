@@ -58,19 +58,32 @@ _sshfleet() {
     local prev=${COMP_WORDS[COMP_CWORD-1]}
     local cur=${COMP_WORDS[COMP_CWORD]}
 
+    # 第一个参数位置还什么都没敲：不出候选
+    if [ "$COMP_CWORD" -eq 1 ] && [ -z "$cur" ]; then
+        COMPREPLY=()
+        return 0
+    fi
+
     case "$prev" in
+        # 要本机文件的位置：自己列文件，不靠回落
         -f|--csv-file|-s|--script|-u|--upload|-a|--answer|--change-password|--convert-secret)
-            return 1 ;;
+            compopt -o filenames
+            mapfile -t COMPREPLY < <(compgen -f -- "$cur")
+            return 0 ;;
+        # 自由填写的位置：一条都不出
         -c|--command|-d|--download|-r|--remark|-t|--timeout|-T|--connect-timeout|-n|--number)
-            COMPREPLY=(); return 0 ;;
+            COMPREPLY=()
+            return 0 ;;
+        # 下载的落点：只补目录
         -p|--path)
-            local IFS=$'\n'
-            COMPREPLY=($(compgen -d -- "$cur")); return 0 ;;
+            compopt -o filenames
+            mapfile -t COMPREPLY < <(compgen -d -- "$cur")
+            return 0 ;;
     esac
 
     COMPREPLY=($(compgen -W "@OPTIONS@" -- "$cur"))
 }
-complete -o bashdefault -o default -F _sshfleet SSHFleet
+complete -F _sshfleet SSHFleet
 EOF
 
 path_added=0
