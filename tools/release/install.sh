@@ -115,13 +115,14 @@ _sshfleet() {
     fi
 
     case "$prev" in
-        # 要本机文件的位置：自己列文件，不靠回落
-        -s|--script|-u|--upload|-f|--csv-file|--convert-secret)
+        # 要本机文件的位置：自己列文件，不靠回落。
+        # -a 两种写法都收：一条写「内容,触发词,触发词」，多条写进 CSV 再指向它。
+        -s|--script|-u|--upload|-f|--csv-file|--convert-secret|-a|--answer)
             compopt -o filenames
             mapfile -t COMPREPLY < <(compgen -f -- "$cur")
             return 0 ;;
-        # 自由填写的位置（命令、远端路径、秒数、节点号、备注、密码、代填内容）：一条都不出
-        -c|--command|-d|--download|-p|--path|-r|--remark|-t|--timeout|-T|--connect-timeout|-n|--number|--change-password|-a|--answer)
+        # 自由填写的位置（命令、远端路径、秒数、节点号、备注、新密码）：一条都不出
+        -c|--command|-d|--download|-p|--path|-r|--remark|-t|--timeout|-T|--connect-timeout|-n|--number|--change-password)
             COMPREPLY=()
             return 0 ;;
     esac
