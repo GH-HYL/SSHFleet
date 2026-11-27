@@ -10,6 +10,13 @@
 
 ## 未发布
 
+### 2026-11-27
+
+#### Changed
+
+- **Tab 补全不再列出与已给参数冲突的选项**：`-c` 之后按 Tab，`-s`、`-u`、`-d`、`-p`、`--change-password` 不再出现；`--sudo` 之后不再出现 `--no-sudo`；`--gen-key`、`--key-status`、`--convert-secret` 与批量参数互不相见。已给过的选项也不再重复列出。
+- **取值位置按内容给候选**：`-s`、`-u`、`-f`、`--convert-secret` 补本机文件；`-c`、`-d`、`-p`、`-r`、`-t`、`-T`、`-n`、`--change-password`、`-a` 一个候选都不出——`--change-password`、`-a`、`-p` 以前会弹本机文件路径，那是错的。
+
 ### 2026-11-26
 
 #### Added

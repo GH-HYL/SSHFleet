@@ -106,7 +106,7 @@ RE_APPVER = re.compile(r'^const appVersion = "([^"]*)"', re.M)
 # 补全脚本里的候选从这张表现取，不再另抄一份选项名。
 RE_OPTIONS_BLOCK = re.compile(r"var options = \[\]option\{\n(.*?)\n\}", re.S)
 RE_OPTION_ROW = re.compile(
-    r'^\s*\{\s*"([^"]*)"\s*,\s*"(--[^"]+)"\s*,\s*(?:true|false)\s*,\s*\d+\s*\},?\s*$'
+    r'^\s*\{\s*"([^"]*)"\s*,\s*"(--[^"]+)"\s*,\s*(?:true|false)\s*,\s*(\d+)\s*\},?\s*$'
 )
 
 
@@ -269,14 +269,14 @@ def copy_or_die(src: Path, dst: Path) -> None:
     shutil.copy2(src, dst)
 
 
-def read_option_words() -> str:
-    """从选项表取命令行上能敲的那些名字，按表的顺序拼成一行，给补全脚本当候选。"""
+def read_options() -> list[dict]:
+    """读选项表：短名、长名、批量次序（0 表示不算批量参数）。"""
     text = read_text(OPTIONS_GO).replace("\r\n", "\n")
     m = RE_OPTIONS_BLOCK.search(text)
     if not m:
         die(f"读不出选项表：{OPTIONS_GO}")
 
-    words: list[str] = []
+    rows: list[dict] = []
     for line in m.group(1).split("\n"):
         s = line.strip()
         if not s or s.startswith("//"):
@@ -284,21 +284,78 @@ def read_option_words() -> str:
         r = RE_OPTION_ROW.match(line)
         if not r:
             die(f"选项表这一行认不出，补全没法生成：{s}")
-        if r.group(1):
-            words.append(r.group(1))
-        words.append(r.group(2))
+        rows.append({"short": r.group(1), "long": r.group(2), "batch": int(r.group(3))})
 
-    if not words:
+    if not rows:
         die(f"选项表是空的：{OPTIONS_GO}")
-    return " ".join(words)
+    return rows
+
+
+def _names(rows: list[dict]) -> list[str]:
+    out: list[str] = []
+    for r in rows:
+        if r["short"]:
+            out.append(r["short"])
+        out.append(r["long"])
+    return out
+
+
+def option_words(rows: list[dict]) -> str:
+    """命令行上能敲的全部名字，按表的顺序。"""
+    return " ".join(_names(rows))
+
+
+def option_modes(rows: list[dict]) -> str:
+    """五种执行模式：选项表里 batch 次序 1-5 的那几条。"""
+    modes = sorted((r for r in rows if 1 <= r["batch"] <= 5), key=lambda r: r["batch"])
+    if len(modes) != 5:
+        die(f"选项表里次序 1-5 的应是五种模式，实际 {len(modes)} 条：{OPTIONS_GO}")
+    return " ".join(_names(modes))
+
+
+def option_batch(rows: list[dict]) -> str:
+    """批量执行参数：batch 次序非零的那些，按次序排。"""
+    batch = sorted((r for r in rows if r["batch"] > 0), key=lambda r: r["batch"])
+    if not batch:
+        die(f"选项表里没有标批量次序的选项：{OPTIONS_GO}")
+    return " ".join(_names(batch))
+
+
+def option_keytools(rows: list[dict]) -> str:
+    """三条单独使用的密钥命令，名字改了要在这里跟上。"""
+    want = ("--gen-key", "--key-status", "--convert-secret")
+    have = {r["long"] for r in rows}
+    missing = [w for w in want if w not in have]
+    if missing:
+        die(f"选项表里找不到密钥命令 {', '.join(missing)}：{OPTIONS_GO}")
+    return " ".join(want)
+
+
+def option_alias_map(rows: list[dict]) -> str:
+    """短名到长名的映射，写进 bash 关联数组的赋值片段。"""
+    parts = [f'["{r["short"]}"]={r["long"]}' for r in rows if r["short"]]
+    if not parts:
+        die(f"选项表里没有短名：{OPTIONS_GO}")
+    return " ".join(parts)
 
 
 def stage_linux_install(pkg: Path) -> None:
     """按 options.go 生成这一份安装脚本，放进 Linux 包。"""
     tpl = read_text(INSTALL_SH).replace("\r\n", "\n")
-    if "@OPTIONS@" not in tpl:
-        die(f"安装脚本里没有 @OPTIONS@ 占位：{INSTALL_SH}")
-    body = tpl.replace("@OPTIONS@", read_option_words())
+    rows = read_options()
+    fills = {
+        "@OPTIONS@": option_words(rows),
+        "@MODES@": option_modes(rows),
+        "@BATCH@": option_batch(rows),
+        "@KEYTOOLS@": option_keytools(rows),
+        "@ALIAS_MAP@": option_alias_map(rows),
+    }
+    for key in fills:
+        if key not in tpl:
+            die(f"安装脚本里没有 {key} 占位：{INSTALL_SH}")
+    body = tpl
+    for key, val in fills.items():
+        body = body.replace(key, val)
     with open(pkg / "install.sh", "w", encoding="utf-8", newline="\n") as f:
         f.write(body)
 

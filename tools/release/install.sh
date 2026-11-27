@@ -54,6 +54,56 @@ fi
 
 cat > "$COMP_DIR/$APP" <<'EOF'
 # SSHFleet 的命令补全，由安装脚本生成。
+# 互斥关系与 internal/gate/run.go 的 argumentRefusal 对应：那边改了，这里一起改。
+
+declare -A _sshfleet_long=(@ALIAS_MAP@)
+
+# 已给的一项与候选是否互斥；同一个选项的两种写法算重复，也返回真
+_sshfleet_clash() {
+    local g=${_sshfleet_long[$1]:-$1} c=${_sshfleet_long[$2]:-$2}
+    [ "$g" = "$c" ] && return 0
+
+    # 五种执行模式互斥
+    case " @MODES@ " in
+        *" $g "*)
+            case " @MODES@ " in *" $c "*) return 0 ;; esac ;;
+    esac
+
+    # 三条密钥命令之间互斥，且与批量执行参数互斥
+    case " @KEYTOOLS@ " in
+        *" $g "*)
+            case " @KEYTOOLS@ @BATCH@ " in *" $c "*) return 0 ;; esac ;;
+    esac
+    case " @KEYTOOLS@ " in
+        *" $c "*)
+            case " @BATCH@ " in *" $g "*) return 0 ;; esac ;;
+    esac
+
+    case "$g" in
+        --change-password)
+            case "$c" in --answer|--path|--key|--no-shell|--sudo|--no-sudo) return 0 ;; esac ;;
+        --no-shell)
+            case "$c" in --script|--upload|--download|--change-password) return 0 ;; esac ;;
+        --script)
+            case "$c" in --path|--no-shell|--answer) return 0 ;; esac ;;
+        --upload|--download)
+            case "$c" in --no-shell|--answer) return 0 ;; esac ;;
+        --answer)
+            case "$c" in --upload|--download|--no-shell|--change-password) return 0 ;; esac ;;
+        --command)
+            case "$c" in --path) return 0 ;; esac ;;
+        --path)
+            case "$c" in --command|--script|--change-password) return 0 ;; esac ;;
+        --key)
+            [ "$c" = --change-password ] && return 0 ;;
+        --sudo)
+            case "$c" in --no-sudo|--change-password) return 0 ;; esac ;;
+        --no-sudo)
+            case "$c" in --sudo|--change-password) return 0 ;; esac ;;
+    esac
+    return 1
+}
+
 _sshfleet() {
     local prev=${COMP_WORDS[COMP_CWORD-1]}
     local cur=${COMP_WORDS[COMP_CWORD]}
@@ -66,22 +116,29 @@ _sshfleet() {
 
     case "$prev" in
         # 要本机文件的位置：自己列文件，不靠回落
-        -f|--csv-file|-s|--script|-u|--upload|-a|--answer|--change-password|--convert-secret)
+        -s|--script|-u|--upload|-f|--csv-file|--convert-secret)
             compopt -o filenames
             mapfile -t COMPREPLY < <(compgen -f -- "$cur")
             return 0 ;;
-        # 自由填写的位置：一条都不出
-        -c|--command|-d|--download|-r|--remark|-t|--timeout|-T|--connect-timeout|-n|--number)
+        # 自由填写的位置（命令、远端路径、秒数、节点号、备注、密码、代填内容）：一条都不出
+        -c|--command|-d|--download|-p|--path|-r|--remark|-t|--timeout|-T|--connect-timeout|-n|--number|--change-password|-a|--answer)
             COMPREPLY=()
-            return 0 ;;
-        # 下载的落点：只补目录
-        -p|--path)
-            compopt -o filenames
-            mapfile -t COMPREPLY < <(compgen -d -- "$cur")
             return 0 ;;
     esac
 
-    COMPREPLY=($(compgen -W "@OPTIONS@" -- "$cur"))
+    # 选项位：剔掉已给过的和跟它互斥的
+    local given="" o w out="" bad
+    for w in "${COMP_WORDS[@]:1:COMP_CWORD-1}"; do
+        case "$w" in -*) given="$given $w" ;; esac
+    done
+    for o in @OPTIONS@; do
+        bad=0
+        for w in $given; do
+            _sshfleet_clash "$w" "$o" && { bad=1; break; }
+        done
+        [ "$bad" -eq 0 ] && out="$out $o"
+    done
+    COMPREPLY=($(compgen -W "$out" -- "$cur"))
 }
 complete -F _sshfleet SSHFleet
 EOF
